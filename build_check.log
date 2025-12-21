@@ -1,0 +1,4 @@
+Command line invocation:
+    /Users/hectorgarcia/Downloads/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project Lyo.xcodeproj -scheme Lyo -destination "platform=iOS Simulator,name=iPhone 17" build
+
+Resolve Package Graph

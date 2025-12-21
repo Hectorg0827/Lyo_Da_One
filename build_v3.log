@@ -1,0 +1,694 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme Lyo -destination "generic/platform=iOS Simulator" build
+
+2025-11-24 21:43:19.498 xcodebuild[69206:2024864] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'Lyo' in project 'Lyo' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/hectorgarcia/LYO_Da_ONE/Sources/Resources/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: fde1ced6407b7fb0b8f3de3dcbb26df7
+Build description path: /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/XCBuildData/fde1ced6407b7fb0b8f3de3dcbb26df7.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache
+    cd /Users/hectorgarcia/LYO_Da_ONE/Lyo.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Endpoint.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Endpoint.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/EnhancedLyoHomeView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/EnhancedLyoHomeView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ErrorView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ErrorView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/FeedView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/FeedView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/FeedViewModel.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/FeedViewModel.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/HomeView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/HomeView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ImagePickerView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ImagePickerView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/LoginView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/LoginView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/LyoError.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/LyoError.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/NetworkCache.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/NetworkCache.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/NetworkClient.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/NetworkClient.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/NetworkLogger.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/NetworkLogger.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/OfflineIndicator.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/OfflineIndicator.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/OnboardingView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/OnboardingView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ProfileView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ProfileView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/QuizView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/QuizView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/QuizViewModel.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/QuizViewModel.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/RegisterView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/RegisterView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/RepositoryProtocols.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/RepositoryProtocols.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/RootViewModel.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/RootViewModel.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/SettingsView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/SettingsView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/StreamingResponseManager.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/StreamingResponseManager.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/TTSView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/TTSView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/TTSViewModel.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/TTSViewModel.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/TokenManager.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/TokenManager.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/VisionService.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/VisionService.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/WebSocketManager.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/WebSocketManager.swiftconstvalues'
+
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/AppConfig.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Errors/LyoError.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/Endpoint.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkCache.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkClient.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkLogger.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/StreamingResponseManager.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/WebSocketManager.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Security/TokenManager.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Chat.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Community.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAIRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAuthRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultCommunityRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultGamificationRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultLearningRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultSocialRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultTTSRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/RepositoryProtocols.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/VisionService.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ChatViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/CommunityViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/FeedViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/QuizViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/RootViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/TTSViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/EditProfileView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/LoginView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/OnboardingView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/RegisterView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Community/CommunityMapView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/HomeView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/QuizView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/TTSView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/ProfileView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/SettingsView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Social/ChatView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Social/FeedView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Errors/ErrorView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Errors/OfflineIndicator.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Vision/ImagePickerView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/AppConfig.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Errors/LyoError.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/Endpoint.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkCache.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkClient.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkLogger.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/StreamingResponseManager.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/WebSocketManager.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Security/TokenManager.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Chat.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Community.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAIRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAuthRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultCommunityRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultGamificationRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultLearningRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultSocialRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultTTSRepository.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/RepositoryProtocols.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/VisionService.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ChatViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/CommunityViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/FeedViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/QuizViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/RootViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/TTSViewModel.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/EditProfileView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/LoginView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/OnboardingView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/RegisterView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Community/CommunityMapView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/HomeView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/QuizView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/TTSView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/ProfileView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/SettingsView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Social/ChatView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Social/FeedView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Errors/ErrorView.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Errors/OfflineIndicator.swift (in target 'Lyo' from project 'Lyo')
+warning: Skipping duplicate build file in Compile Sources build phase: /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Vision/ImagePickerView.swift (in target 'Lyo' from project 'Lyo')
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.SwiftFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.SwiftFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftConstValuesFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.SwiftConstValuesFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.LinkFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.LinkFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.LinkFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.LinkFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-OutputFileMap.json (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-OutputFileMap.json (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-OutputFileMap.json
+
+CompileAssetCatalogVariant thinned /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator/Lyo.app /Users/hectorgarcia/LYO_Da_ONE/Sources/Resources/Assets.xcassets (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/hectorgarcia/LYO_Da_ONE/Sources/Resources/Assets.xcassets --compile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+
+SwiftDriver Lyo normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Lyo -Onone -enforce-exclusivity\=checked @/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -F /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -output-file-map /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo_const_extract_protocols.json -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources-normal/x86_64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/x86_64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-Swift.h -working-directory /Users/hectorgarcia/LYO_Da_ONE -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver Lyo normal arm64 com.apple.xcode.tools.swift.compiler (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Lyo -Onone -enforce-exclusivity\=checked @/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -F /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -output-file-map /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo_const_extract_protocols.json -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources-normal/arm64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/arm64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-Swift.h -working-directory /Users/hectorgarcia/LYO_Da_ONE -experimental-emit-module-separately -disable-cmo
+
+SwiftCompile normal arm64 Compiling\ StreakCalendarView.swift,\ SuggestionChipsBar.swift,\ TTSVoiceBubbleView.swift,\ User.swift,\ LyoError.swift,\ NetworkLogger.swift,\ StreamingResponseManager.swift,\ DefaultTTSRepository.swift,\ VisionService.swift,\ CommunityViewModel.swift,\ RootViewModel.swift,\ RegisterView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/StreakCalendarView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/SuggestionChipsBar.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/TTSVoiceBubbleView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/User.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Errors/LyoError.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkLogger.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/StreamingResponseManager.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultTTSRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/VisionService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/CommunityViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/RootViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/RegisterView.swift (in target 'Lyo' from project 'Lyo')
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/StreakCalendarView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/SuggestionChipsBar.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/TTSVoiceBubbleView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/User.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Errors/LyoError.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkLogger.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/StreamingResponseManager.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultTTSRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/VisionService.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/CommunityViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/RootViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/RegisterView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 Compiling\ DesignTokens.swift,\ HapticManager.swift,\ ShimmerModifier.swift,\ HybridLyoHomeView.swift,\ HeroSectionView.swift,\ SocialFeedSection.swift,\ FloatingOrbView.swift,\ ChatOverlayView.swift,\ OpenAIService.swift,\ AchievementBadgeView.swift,\ BattleCardView.swift,\ Challenge.swift,\ ChallengeCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/DesignTokens.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/HapticManager.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Utils/ShimmerModifier.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/HybridLyoHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/HeroSectionView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/SocialFeedSection.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/FloatingOrbView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/ChatOverlayView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/OpenAIService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/AchievementBadgeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/BattleCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Challenge.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/ChallengeCardView.swift (in target 'Lyo' from project 'Lyo')
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/DesignTokens.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/HapticManager.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Utils/ShimmerModifier.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/HybridLyoHomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/HeroSectionView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/SocialFeedSection.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/FloatingOrbView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/ChatOverlayView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/OpenAIService.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/AchievementBadgeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/BattleCardView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Challenge.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/ChallengeCardView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 Compiling\ ChallengesHomeView.swift,\ ChallengesViewModel.swift,\ Classroom.swift,\ ClassroomView.swift,\ ClassroomViewModel.swift,\ ComposerBar.swift,\ ControlsOverlay.swift,\ CourseCardView.swift,\ LyoAvatarState.swift,\ CourseDrawerView.swift,\ LeaderboardRowView.swift,\ LyoAIViewModel.swift,\ LyoApp.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Challenges/ChallengesHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ChallengesViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Classroom.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Classroom/ClassroomView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ClassroomViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/ComposerBar.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ControlsOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/CourseCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LyoAvatarState.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/CourseDrawerView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LeaderboardRowView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/LyoAIViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/LyoApp.swift (in target 'Lyo' from project 'Lyo')
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Challenges/ChallengesHomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ChallengesViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Classroom.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Classroom/ClassroomView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ClassroomViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/ComposerBar.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ControlsOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/CourseCardView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LyoAvatarState.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/CourseDrawerView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LeaderboardRowView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/LyoAIViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/LyoApp.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 Compiling\ CommunityMapView.swift,\ HomeView.swift,\ QuizView.swift,\ TTSView.swift,\ Community.swift,\ RepositoryProtocols.swift,\ DefaultSocialRepository.swift,\ DefaultAuthRepository.swift,\ Endpoint.swift,\ Chat.swift,\ DefaultGamificationRepository.swift,\ DefaultLearningRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Community/CommunityMapView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/HomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/QuizView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/TTSView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Community.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/RepositoryProtocols.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultSocialRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAuthRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/Endpoint.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Chat.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultGamificationRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultLearningRepository.swift (in target 'Lyo' from project 'Lyo')
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Community/CommunityMapView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/HomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/QuizView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/TTSView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Community.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/RepositoryProtocols.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultSocialRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAuthRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/Endpoint.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Chat.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultGamificationRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultLearningRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ Lyo (in target 'Lyo' from project 'Lyo')
+
+EmitSwiftModule normal arm64 (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 Compiling\ Secrets.swift,\ StackModels.swift,\ FeedModels.swift,\ CampusModels.swift,\ StackService.swift,\ AuthService.swift,\ RepositoryTests.swift,\ FocusView.swift,\ DiscoverView.swift,\ CampusView.swift,\ StackDrawerView.swift,\ GeneratedAssetSymbols.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/Secrets.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/StackModels.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/FeedModels.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/CampusModels.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/StackService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/AuthService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/FocusView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/DiscoverView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/CampusView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/StackDrawerView.swift /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'Lyo' from project 'Lyo')
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/DesignTokens.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/HapticManager.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Utils/ShimmerModifier.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/HybridLyoHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/HeroSectionView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/SocialFeedSection.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/FloatingOrbView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Hybrid/ChatOverlayView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/OpenAIService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/AchievementBadgeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/BattleCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Challenge.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/ChallengeCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Challenges/ChallengesHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ChallengesViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Classroom.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Classroom/ClassroomView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ClassroomViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/ComposerBar.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ControlsOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/CourseCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LyoAvatarState.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/CourseDrawerView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LeaderboardRowView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/LyoAIViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/LyoApp.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/LyoChat.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/LyoHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/LyoRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/MainTabView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LyoAnimatedAvatarView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/MessageBubbleView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ModuleCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ModuleGridView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/OrientationHintOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Profile/ProfileHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/QuickCheckOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ReteachOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/StreakCalendarView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/SuggestionChipsBar.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/TTSVoiceBubbleView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/User.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Errors/LyoError.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkLogger.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/StreamingResponseManager.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultTTSRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/VisionService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/CommunityViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/RootViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/RegisterView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Community/CommunityMapView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/HomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/QuizView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Learning/TTSView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Community.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/RepositoryProtocols.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultSocialRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAuthRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/Endpoint.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/Chat.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultGamificationRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultLearningRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultAIRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkClient.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/NetworkCache.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Networking/WebSocketManager.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Security/TokenManager.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Errors/OfflineIndicator.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Errors/ErrorView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/Repositories/DefaultCommunityRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/QuizViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/TTSViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/AppConfig.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/ChatViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/ViewModels/FeedViewModel.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/EditProfileView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/LoginView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Auth/OnboardingView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/ProfileView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/SettingsView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Social/ChatView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Social/FeedView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Vision/ImagePickerView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Common/GlassmorphicCard.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Common/FlowLayout.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/Secrets.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/StackModels.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/FeedModels.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/CampusModels.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/StackService.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/AuthService.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/FocusView.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/DiscoverView.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/CampusView.swift -primary-file /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/StackDrawerView.swift -primary-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift -supplementary-output-file-map /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/supplementaryOutputs-8 -target arm64-apple-ios17.0-simulator -module-can-import-version DeveloperToolsSupport 23.0.4 23.0.4 -disable-cross-import-overlay-search -swift-module-cross-import AuthenticationServices /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Cryptexes/OS/System/Library/Frameworks/AuthenticationServices.framework/Modules/AuthenticationServices.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import AuthenticationServices /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/AuthenticationServices.framework/Modules/AuthenticationServices.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import MapKit /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/MapKit.framework/Modules/MapKit.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/WidgetKit.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/WidgetKit.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-dependencies-1.json -Xllvm -aarch64-use-tbi -enable-objc-interop -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -I /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -F /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -swift-version 5 -enforce-exclusivity\=checked -Onone -D DEBUG -serialize-debugging-options -const-gather-protocols-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo_const_extract_protocols.json -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/hectorgarcia/LYO_Da_ONE -enable-anonymous-context-mangled-names -file-compilation-dir /Users/hectorgarcia/LYO_Da_ONE -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/swift-overrides.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources-normal/arm64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/arm64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name Lyo -frontend-parseable-output -disable-clang-spi -target-sdk-version 26.1 -target-sdk-name iphonesimulator26.1 -clang-target arm64-apple-ios26.1-simulator -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Secrets.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/StackModels.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/FeedModels.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/CampusModels.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/StackService.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/AuthService.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/RepositoryTests.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/FocusView.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/DiscoverView.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/CampusView.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/StackDrawerView.o -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/GeneratedAssetSymbols.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Secrets.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/StackModels.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/FeedModels.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/CampusModels.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/StackService.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/AuthService.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/RepositoryTests.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/FocusView.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/DiscoverView.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/CampusView.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/StackDrawerView.o -index-unit-output-path /Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/GeneratedAssetSymbols.o -index-store-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Index.noindex/DataStore -index-system-modules
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/Secrets.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/StackModels.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/FeedModels.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/CampusModels.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/StackService.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/AuthService.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Services/AuthService.swift:63:21: warning: initialization of immutable value 'fullName' was never used; consider replacing with assignment to '_' or removing it
+                let fullName = appleIDCredential.fullName
+                ~~~~^~~~~~~~
+                _
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift:69:29: error: value of type 'Int' has no member 'isEmpty'
+            assert(!user.id.isEmpty, "User ID should not be empty")
+                    ~~~~~~~ ^~~~~~~
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift:82:29: error: value of type 'Int' has no member 'isEmpty'
+            assert(!user.id.isEmpty, "User ID should not be empty")
+                    ~~~~~~~ ^~~~~~~
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift:302:13: warning: initialization of immutable value 'service' was never used; consider replacing with assignment to '_' or removing it
+        let service = VisionService.shared
+        ~~~~^~~~~~~
+        _
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift:429:59: warning: left side of nil coalescing operator '??' has non-optional type 'Int', so the right side is never used
+        print("✅ Profile fetched: Level \(profile.level ?? 0), XP: \(profile.xp ?? 0)")
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift:429:83: warning: left side of nil coalescing operator '??' has non-optional type 'Int', so the right side is never used
+        print("✅ Profile fetched: Level \(profile.level ?? 0), XP: \(profile.xp ?? 0)")
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/FocusView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/DiscoverView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/CampusView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/CampusView.swift:17:17: warning: 'init(coordinateRegion:interactionModes:showsUserLocation:userTrackingMode:annotationItems:annotationContent:)' was deprecated in iOS 17.0: Use Map initializers that take a MapContentBuilder instead.
+                Map(coordinateRegion: $region, annotationItems: viewModel.beacons) { beacon in
+                ^
+/Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/CampusView.swift:18:21: warning: 'MapAnnotation' was deprecated in iOS 17.0: Use Annotation along with Map initializers that take a MapContentBuilder instead.
+                    MapAnnotation(coordinate: CLLocationCoordinate2D(latitude: beacon.latitude, longitude: beacon.longitude)) {
+                    ^
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/StackDrawerView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 Compiling\ LyoChat.swift,\ LyoHomeView.swift,\ LyoRepository.swift,\ MainTabView.swift,\ LyoAnimatedAvatarView.swift,\ MessageBubbleView.swift,\ ModuleCardView.swift,\ ModuleGridView.swift,\ OrientationHintOverlay.swift,\ ProfileHomeView.swift,\ QuickCheckOverlay.swift,\ ReteachOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/LyoChat.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/LyoHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/LyoRepository.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/MainTabView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LyoAnimatedAvatarView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/MessageBubbleView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ModuleCardView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ModuleGridView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/OrientationHintOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Profile/ProfileHomeView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/QuickCheckOverlay.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ReteachOverlay.swift (in target 'Lyo' from project 'Lyo')
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/LyoChat.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/AITutor/LyoHomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/LyoRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/MainTabView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Challenges/LyoAnimatedAvatarView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/AITutor/MessageBubbleView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ModuleCardView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ModuleGridView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/OrientationHintOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/Profile/ProfileHomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/QuickCheckOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Components/Classroom/ReteachOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ Lyo (in target 'Lyo' from project 'Lyo')
+
+EmitSwiftModule normal x86_64 (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for Lyo (in target 'Lyo' from project 'Lyo')
+
+SwiftDriver\ Compilation\ Requirements Lyo normal arm64 com.apple.xcode.tools.swift.compiler (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO_Da_ONE
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Lyo -Onone -enforce-exclusivity\=checked @/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -F /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -output-file-map /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo_const_extract_protocols.json -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources-normal/arm64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/arm64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/arm64/Lyo-Swift.h -working-directory /Users/hectorgarcia/LYO_Da_ONE -experimental-emit-module-separately -disable-cmo
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/AppConfig.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/AppConfig.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Chat.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Chat.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ChatView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ChatView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ChatViewModel.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/ChatViewModel.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Community.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Community.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/CommunityMapView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/CommunityMapView.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/CommunityViewModel.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/CommunityViewModel.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultAIRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultAIRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultAuthRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultAuthRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultCommunityRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultCommunityRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultGamificationRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultGamificationRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultLearningRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultLearningRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultSocialRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultSocialRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultTTSRepository.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/DefaultTTSRepository.swiftconstvalues'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/EditProfileView.o'
+
+note: Removed stale file '/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/EditProfileView.swiftconstvalues'
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	SwiftCompile normal arm64 Compiling\ Secrets.swift,\ StackModels.swift,\ FeedModels.swift,\ CampusModels.swift,\ StackService.swift,\ AuthService.swift,\ RepositoryTests.swift,\ FocusView.swift,\ DiscoverView.swift,\ CampusView.swift,\ StackDrawerView.swift,\ GeneratedAssetSymbols.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Core/Configuration/Secrets.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/StackModels.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/FeedModels.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Models/CampusModels.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/StackService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Services/AuthService.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/FocusView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/DiscoverView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/CampusView.swift /Users/hectorgarcia/LYO_Da_ONE/Sources/Views/Main/StackDrawerView.swift /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-eagkiegzrakogpczynhkaholsscs/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'Lyo' from project 'Lyo')
+	SwiftCompile normal arm64 /Users/hectorgarcia/LYO_Da_ONE/Sources/Tests/RepositoryTests.swift (in target 'Lyo' from project 'Lyo')
+	Building project Lyo with scheme Lyo
+(3 failures)

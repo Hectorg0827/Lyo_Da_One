@@ -1,0 +1,32 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project Lyo.xcodeproj -scheme Lyo -configuration Debug -destination generic/platform=iOS -derivedDataPath build/lyo_sim_dd build
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  InteropForGoogle: https://github.com/google/interop-ios-for-google-sdks.git @ 100.0.0
+  abseil: https://github.com/google/abseil-cpp-binary.git @ 1.2024011602.0
+  nanopb: https://github.com/firebase/nanopb.git @ 2.30910.0
+  Firebase: https://github.com/firebase/firebase-ios-sdk.git @ 10.29.0
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 7.1.0
+  SwiftProtobuf: https://github.com/apple/swift-protobuf.git @ 1.33.3
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 4.1.1
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  GoogleDataTransport: https://github.com/google/GoogleDataTransport.git @ 9.4.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 7.13.3
+  AppCheck: https://github.com/google/app-check.git @ 10.19.2
+  GoogleAppMeasurement: https://github.com/google/GoogleAppMeasurement.git @ 10.28.0
+  leveldb: https://github.com/firebase/leveldb.git @ 1.22.5
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 1.7.6
+  gRPC: https://github.com/google/grpc-binary.git @ 1.62.2
+
+2025-12-13 08:56:08.469 xcodebuild[60633:814512] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+2025-12-13 08:56:08.520 xcodebuild[60633:814512] Writing error result bundle to /var/folders/52/3qn7_llj0f1bbqvxh5z9_20h0000gn/T/ResultBundle_2025-13-12_08-56-0008.xcresult
+xcodebuild: error: Unable to find a destination matching the provided destination specifier:
+		{ generic:1, platform:iOS }
+
+	Ineligible destinations for the "Lyo" scheme:
+		{ platform:iOS, arch:arm64e, id:00008110-001C5C603EE1801E, name:Hector’s iPhone, error:iOS 26.2 is not installed. Please download and install the platform from Xcode > Settings > Components. }
+		{ platform:iOS, id:dvtdevice-DVTiPhonePlaceholder-iphoneos:placeholder, name:Any iOS Device, error:iOS 26.2 is not installed. Please download and install the platform from Xcode > Settings > Components. }

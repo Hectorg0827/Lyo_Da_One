@@ -1,0 +1,2068 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme Lyo -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 17" clean build
+
+Build settings from command line:
+    SDKROOT = iphonesimulator26.1
+
+2025-11-09 01:23:39.135 xcodebuild[75308:10131157] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+** CLEAN SUCCEEDED **
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'Lyo' in project 'Lyo' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/hectorgarcia/LYO Da ONE /Sources/Resources/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 59241d8494fc57a99c76bfdc96c9ee44
+Build description path: /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/XCBuildData/59241d8494fc57a99c76bfdc96c9ee44.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache
+
+CreateBuildDirectory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    builtin-create-build-directory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex
+
+CreateBuildDirectory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    builtin-create-build-directory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products
+
+CreateBuildDirectory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    builtin-create-build-directory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+CreateBuildDirectory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/ExplicitPrecompiledModules
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    builtin-create-build-directory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+CreateBuildDirectory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    builtin-create-build-directory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo-bbd64440b6994385d1fe7db0e422d1b1-VFS-iphonesimulator/all-product-headers.yaml
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo-bbd64440b6994385d1fe7db0e422d1b1-VFS-iphonesimulator/all-product-headers.yaml
+
+CreateBuildDirectory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ /Lyo.xcodeproj
+    builtin-create-build-directory /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.DependencyStaticMetadataFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.hmap (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.hmap
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-OutputFileMap.json (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftConstValuesFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.LinkFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.LinkFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo_const_extract_protocols.json (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.DependencyMetadataFileList (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-non-framework-target-headers.hmap (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-non-framework-target-headers.hmap
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-DebugDylibPath-normal-x86_64.txt (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-DebugDylibPath-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-DebugDylibInstallName-normal-x86_64.txt (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-DebugDylibInstallName-normal-x86_64.txt
+
+MkDir /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/Lyo.app (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /bin/mkdir -p /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/Lyo.app
+
+WriteAuxiliaryFile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/Entitlements-Simulated.plist (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    write-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/Entitlements-Simulated.plist
+
+ProcessProductPackaging "" /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+    Entitlements:
+    
+    {
+    "application-identifier" = "5QZDMJGN7B.com.lyo.app";
+}
+    
+    builtin-productPackagingUtility -entitlements -format xml -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent
+
+ProcessProductPackagingDER /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent.der (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /usr/bin/derq query -f xml -i /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent.der --raw
+
+Ld /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/Lyo.app/__preview.dylib normal (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target x86_64-apple-ios17.0-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -O0 -L/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator -F/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator -install_name @rpath/Lyo.debug.dylib -dead_strip -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo_dependency_info.dat -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo.app-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/Lyo.app/__preview.dylib
+
+GenerateAssetSymbols /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Resources/Assets.xcassets (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Resources/Assets.xcassets --compile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/Lyo.app --output-format human-readable-text --notices --warnings --export-dependency-info /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_dependencies --output-partial-info-plist /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_generated_info.plist --app-icon AppIcon --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator --bundle-identifier com.lyo.app --generate-swift-asset-symbol-extensions NO --generate-swift-asset-symbols /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift --generate-objc-asset-symbols /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.h --generate-asset-symbol-index /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+/* com.apple.actool.document.warnings */
+/Users/hectorgarcia/LYO Da ONE /Sources/Resources/Assets.xcassets:./LyoAvatar.imageset/[universal][][][2x][][][][][][][][][][]: warning: The file "lyo-avatar@2x.png" for the image set "LyoAvatar" does not exist.
+/Users/hectorgarcia/LYO Da ONE /Sources/Resources/Assets.xcassets:./LyoAvatar.imageset/[universal][][][3x][][][][][][][][][][]: warning: The file "lyo-avatar@3x.png" for the image set "LyoAvatar" does not exist.
+/Users/hectorgarcia/LYO Da ONE /Sources/Resources/Assets.xcassets:./LyoAvatar.imageset/[universal][][][2x][][][][][][][][][][]: warning: The file "lyo-avatar@2x.png" for the image set "LyoAvatar" does not exist.
+/Users/hectorgarcia/LYO Da ONE /Sources/Resources/Assets.xcassets:./LyoAvatar.imageset/[universal][][][3x][][][][][][][][][][]: warning: The file "lyo-avatar@3x.png" for the image set "LyoAvatar" does not exist.
+/* com.apple.actool.compilation-results */
+/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.h
+/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift
+
+
+MkDir /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_output/unthinned (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /bin/mkdir -p /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_output/unthinned
+
+MkDir /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_output/thinned (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /bin/mkdir -p /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_output/thinned
+
+CompileAssetCatalogVariant thinned /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/Lyo.app /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Resources/Assets.xcassets (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Resources/Assets.xcassets --compile /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --compress-pngs --enable-on-demand-resources YES --filter-for-thinning-device-configuration iPhone18,3 --filter-for-device-os-version 26.1 --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+
+SwiftDriver Lyo normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Lyo -Onone -enforce-exclusivity\=checked @/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator -F /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -output-file-map /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo_const_extract_protocols.json -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources-normal/x86_64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/x86_64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-Swift.h -working-directory /Users/hectorgarcia/LYO\ Da\ ONE\  -experimental-emit-module-separately -disable-cmo
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/MapKit-CS5ZAAYXWABHTDSDHGH7BKF3K.pcm
+
+SwiftCompile normal x86_64 Compiling\ EnhancedLyoHomeView.swift,\ ProfileView.swift,\ SettingsView.swift,\ ChatView.swift,\ FeedView.swift,\ ErrorView.swift,\ OfflineIndicator.swift,\ ImagePickerView.swift,\ GeneratedAssetSymbols.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/ProfileView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/SettingsView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Social/ChatView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Social/FeedView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Errors/ErrorView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Errors/OfflineIndicator.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Vision/ImagePickerView.swift /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'Lyo' from project 'Lyo')
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/ProfileView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/SettingsView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Social/ChatView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Social/FeedView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Errors/ErrorView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Errors/OfflineIndicator.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Vision/ImagePickerView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 Compiling\ TTSViewModel.swift,\ EditProfileView.swift,\ LoginView.swift,\ OnboardingView.swift,\ RegisterView.swift,\ CommunityMapView.swift,\ HomeView.swift,\ QuizView.swift,\ TTSView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/TTSViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/EditProfileView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/LoginView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/OnboardingView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/RegisterView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Community/CommunityMapView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/HomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Learning/QuizView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Learning/TTSView.swift (in target 'Lyo' from project 'Lyo')
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/TTSViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/EditProfileView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/LoginView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/OnboardingView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/RegisterView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Community/CommunityMapView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/HomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Learning/QuizView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Learning/TTSView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 Compiling\ DefaultSocialRepository.swift,\ DefaultTTSRepository.swift,\ RepositoryProtocols.swift,\ VisionService.swift,\ RepositoryTests.swift,\ ChatViewModel.swift,\ CommunityViewModel.swift,\ FeedViewModel.swift,\ QuizViewModel.swift,\ RootViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultSocialRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultTTSRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/RepositoryProtocols.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/VisionService.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Tests/RepositoryTests.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/ChatViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/CommunityViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/FeedViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/QuizViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/RootViewModel.swift (in target 'Lyo' from project 'Lyo')
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultSocialRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultTTSRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/RepositoryProtocols.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/VisionService.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Tests/RepositoryTests.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/ChatViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/CommunityViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/FeedViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/QuizViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/RootViewModel.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 Compiling\ StreakCalendarView.swift,\ SuggestionChipsBar.swift,\ TTSVoiceBubbleView.swift,\ User.swift,\ AppConfig.swift,\ LyoError.swift,\ Endpoint.swift,\ NetworkCache.swift,\ NetworkClient.swift,\ NetworkLogger.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/StreakCalendarView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/SuggestionChipsBar.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/TTSVoiceBubbleView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/User.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Configuration/AppConfig.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Errors/LyoError.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/Endpoint.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkCache.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkClient.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkLogger.swift (in target 'Lyo' from project 'Lyo')
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/StreakCalendarView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/SuggestionChipsBar.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/TTSVoiceBubbleView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/User.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Configuration/AppConfig.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Errors/LyoError.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/Endpoint.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkCache.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkClient.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkLogger.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 Compiling\ StreamingResponseManager.swift,\ WebSocketManager.swift,\ TokenManager.swift,\ Chat.swift,\ Community.swift,\ DefaultAIRepository.swift,\ DefaultAuthRepository.swift,\ DefaultCommunityRepository.swift,\ DefaultGamificationRepository.swift,\ DefaultLearningRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/StreamingResponseManager.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/WebSocketManager.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Security/TokenManager.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Chat.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Community.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultAIRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultAuthRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultCommunityRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultGamificationRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultLearningRepository.swift (in target 'Lyo' from project 'Lyo')
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/StreamingResponseManager.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/WebSocketManager.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Security/TokenManager.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Chat.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Community.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultAIRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultAuthRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultCommunityRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultGamificationRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultLearningRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 Compiling\ LyoRepository.swift,\ MainTabView.swift,\ LyoAnimatedAvatarView.swift,\ MessageBubbleView.swift,\ ModuleCardView.swift,\ ModuleGridView.swift,\ OrientationHintOverlay.swift,\ ProfileHomeView.swift,\ QuickCheckOverlay.swift,\ ReteachOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/LyoRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/MainTabView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LyoAnimatedAvatarView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/MessageBubbleView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ModuleCardView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ModuleGridView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/OrientationHintOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/Profile/ProfileHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/QuickCheckOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ReteachOverlay.swift (in target 'Lyo' from project 'Lyo')
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/LyoRepository.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/MainTabView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LyoAnimatedAvatarView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/MessageBubbleView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ModuleCardView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ModuleGridView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/OrientationHintOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/Profile/ProfileHomeView.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/QuickCheckOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftCompile normal x86_64 /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ReteachOverlay.swift (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ Lyo (in target 'Lyo' from project 'Lyo')
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -emit-module -experimental-skip-non-inlinable-function-bodies-without-types /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/AchievementBadgeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/AuthViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/BattleCardView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Challenge.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/ChallengeCardView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/Challenges/ChallengesHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/ChallengesViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Classroom.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/Classroom/ClassroomView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/ClassroomViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/ComposerBar.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ControlsOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/CourseCardView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LyoAvatarState.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/CourseDrawerView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LeaderboardRowView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/LyoAIViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/LyoApp.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/LyoChat.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/LyoHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/LyoRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/MainTabView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LyoAnimatedAvatarView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/MessageBubbleView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ModuleCardView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ModuleGridView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/OrientationHintOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/Profile/ProfileHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/QuickCheckOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ReteachOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/StreakCalendarView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/SuggestionChipsBar.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/TTSVoiceBubbleView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/User.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Configuration/AppConfig.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Errors/LyoError.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/Endpoint.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkCache.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkClient.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/NetworkLogger.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/StreamingResponseManager.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Networking/WebSocketManager.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Core/Security/TokenManager.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Chat.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/Community.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultAIRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultAuthRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultCommunityRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultGamificationRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultLearningRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultSocialRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/DefaultTTSRepository.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/Repositories/RepositoryProtocols.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Services/VisionService.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Tests/RepositoryTests.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/ChatViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/CommunityViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/FeedViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/QuizViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/RootViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/TTSViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/EditProfileView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/LoginView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/OnboardingView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Auth/RegisterView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Community/CommunityMapView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/HomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Learning/QuizView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Learning/TTSView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/ProfileView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/SettingsView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Social/ChatView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Social/FeedView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Errors/ErrorView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Errors/OfflineIndicator.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Vision/ImagePickerView.swift /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/GeneratedAssetSymbols.swift -target x86_64-apple-ios17.0-simulator -module-can-import-version DeveloperToolsSupport 23.0.4 23.0.4 -disable-cross-import-overlay-search -swift-module-cross-import MapKit /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/MapKit.framework/Modules/MapKit.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/WidgetKit.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/SwiftUI.swiftoverlay -swift-module-cross-import PhotosUI /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk/System/Library/Frameworks/PhotosUI.framework/Modules/PhotosUI.swiftcrossimport/WidgetKit.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-dependencies-1.json -enable-objc-interop -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.1.sdk -I /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator -F /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -module-cache-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -swift-version 5 -enforce-exclusivity\=checked -Onone -D DEBUG -serialize-debugging-options -const-gather-protocols-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo_const_extract_protocols.json -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/hectorgarcia/LYO\ Da\ ONE\  -enable-anonymous-context-mangled-names -file-compilation-dir /Users/hectorgarcia/LYO\ Da\ ONE\  -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator26.1-23B77-90cf18a4295e390e64c810bc6bd7acbc.sdkstatcache -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/swift-overrides.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-generated-files.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-own-target-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-all-target-headers.hmap -Xcc -iquote -Xcc /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Lyo-project-headers.hmap -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources-normal/x86_64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources/x86_64 -Xcc -I/Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/DerivedSources -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name Lyo -frontend-parseable-output -disable-clang-spi -target-sdk-version 26.1 -target-sdk-name iphonesimulator26.1 -clang-target x86_64-apple-ios26.1-simulator -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -emit-module-doc-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.swiftdoc -emit-module-source-info-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.swiftsourceinfo -emit-objc-header-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-Swift.h -serialize-diagnostics-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-primary-emit-module.dia -emit-dependencies-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo-primary-emit-module.d -o /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.swiftmodule -emit-abi-descriptor-path /Users/hectorgarcia/Library/Developer/Xcode/DerivedData/Lyo-asyxjlrfduhcdeehztnvplttnqhj/Build/Intermediates.noindex/Lyo.build/Debug-iphonesimulator/Lyo.build/Objects-normal/x86_64/Lyo.abi.json
+
+EmitSwiftModule normal x86_64 (in target 'Lyo' from project 'Lyo')
+    cd /Users/hectorgarcia/LYO\ Da\ ONE\ 
+    
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/Challenges/AchievementBadgeView.swift:4:22: error: 'Achievement' is ambiguous for type lookup in this context
+    let achievement: Achievement
+                     ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/AuthViewModel.swift:6:33: error: 'User' is ambiguous for type lookup in this context
+    @Published var currentUser: User?
+                                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/Challenges/BattleCardView.swift:4:17: error: 'Battle' is ambiguous for type lookup in this context
+    let battle: Battle
+                ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: error: invalid redeclaration of 'Challenge'
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: 'Challenge' previously declared here
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: 'Challenge' previously declared here
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: error: invalid redeclaration of 'LeaderboardEntry'
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: 'LeaderboardEntry' previously declared here
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: 'LeaderboardEntry' previously declared here
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: error: invalid redeclaration of 'Battle'
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: 'Battle' previously declared here
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: 'Battle' previously declared here
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: error: invalid redeclaration of 'Achievement'
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: 'Achievement' previously declared here
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: 'Achievement' previously declared here
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/Challenges/ChallengeCardView.swift:4:20: error: 'Challenge' is ambiguous for type lookup in this context
+    let challenge: Challenge
+                   ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:7:38: error: 'Challenge' is ambiguous for type lookup in this context
+    @Published var dailyChallenges: [Challenge] = []
+                                     ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:8:37: error: 'Challenge' is ambiguous for type lookup in this context
+    @Published var weeklyChallenge: Challenge?
+                                    ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:9:36: error: 'Battle' is ambiguous for type lookup in this context
+    @Published var activeBattles: [Battle] = []
+                                   ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:11:34: error: 'LeaderboardEntry' is ambiguous for type lookup in this context
+    @Published var leaderboard: [LeaderboardEntry] = []
+                                 ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: note: found this candidate
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: found this candidate
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:12:35: error: 'Achievement' is ambiguous for type lookup in this context
+    @Published var achievements: [Achievement] = []
+                                  ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:59:38: error: 'Challenge' is ambiguous for type lookup in this context
+    func startChallenge(_ challenge: Challenge) {
+                                     ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:64:41: error: 'Challenge' is ambiguous for type lookup in this context
+    func completeChallenge(_ challenge: Challenge) async {
+                                        ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:90:33: error: 'Battle' is ambiguous for type lookup in this context
+    func acceptBattle(_ battle: Battle) {
+                                ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChallengesViewModel.swift:105:34: error: 'Battle' is ambiguous for type lookup in this context
+    func declineBattle(_ battle: Battle) {
+                                 ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: error: invalid redeclaration of 'LessonProgress'
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: 'LessonProgress' previously declared here
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: 'LessonProgress' previously declared here
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:196:19: error: 'LessonProgress' is ambiguous for type lookup in this context
+    var progress: LessonProgress
+                  ^~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:191:8: error: type 'ClassroomSession' does not conform to protocol 'Decodable'
+struct ClassroomSession: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:196:9: note: cannot automatically synthesize 'Decodable' because 'LessonProgress' does not conform to 'Decodable'
+    var progress: LessonProgress
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:191:8: error: type 'ClassroomSession' does not conform to protocol 'Encodable'
+struct ClassroomSession: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:196:9: note: cannot automatically synthesize 'Encodable' because 'LessonProgress' does not conform to 'Encodable'
+    var progress: LessonProgress
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/ComposerBar.swift:5:32: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    @Binding var attachments: [MessageAttachment]
+                               ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/ComposerBar.swift:9:30: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    let onRemoveAttachment: (MessageAttachment) -> Void
+                             ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/ComposerBar.swift:112:21: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    let attachment: MessageAttachment
+                    ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/ComposerBar.swift:142:38: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    private func iconForType(_ type: MessageAttachment.AttachmentType) -> String {
+                                     ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/Challenges/LeaderboardRowView.swift:4:16: error: 'LeaderboardEntry' is ambiguous for type lookup in this context
+    let entry: LeaderboardEntry
+               ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: note: found this candidate
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: found this candidate
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/LyoAIViewModel.swift:27:34: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    @Published var attachments: [MessageAttachment] = []
+                                 ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/LyoAIViewModel.swift:189:38: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    func addAttachment(_ attachment: MessageAttachment) {
+                                     ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/LyoAIViewModel.swift:194:41: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    func removeAttachment(_ attachment: MessageAttachment) {
+                                        ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:10:23: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    var attachments: [MessageAttachment]?
+                      ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:5:8: error: type 'LyoMessage' does not conform to protocol 'Decodable'
+struct LyoMessage: Identifiable, Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:10:9: note: cannot automatically synthesize 'Decodable' because '[MessageAttachment]?' does not conform to 'Decodable'
+    var attachments: [MessageAttachment]?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:5:8: error: type 'LyoMessage' does not conform to protocol 'Encodable'
+struct LyoMessage: Identifiable, Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:10:9: note: cannot automatically synthesize 'Encodable' because '[MessageAttachment]?' does not conform to 'Encodable'
+    var attachments: [MessageAttachment]?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: error: invalid redeclaration of 'MessageAttachment'
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: 'MessageAttachment' previously declared here
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: 'MessageAttachment' previously declared here
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:104:18: error: 'ChatContext' is ambiguous for type lookup in this context
+    var context: ChatContext?
+                 ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:102:8: error: type 'LyoChatRequest' does not conform to protocol 'Decodable'
+struct LyoChatRequest: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:104:9: note: cannot automatically synthesize 'Decodable' because 'ChatContext?' does not conform to 'Decodable'
+    var context: ChatContext?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:102:8: error: type 'LyoChatRequest' does not conform to protocol 'Encodable'
+struct LyoChatRequest: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:104:9: note: cannot automatically synthesize 'Encodable' because 'ChatContext?' does not conform to 'Encodable'
+    var context: ChatContext?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: error: invalid redeclaration of 'ChatContext'
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: 'ChatContext' previously declared here
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: 'ChatContext' previously declared here
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/AITutor/LyoHomeView.swift:515:32: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    @Binding var attachments: [MessageAttachment]
+                               ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/AITutor/LyoHomeView.swift:521:30: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    let onRemoveAttachment: (MessageAttachment) -> Void
+                             ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/AITutor/LyoHomeView.swift:595:8: error: invalid redeclaration of 'AnimatedLyoAvatar'
+struct AnimatedLyoAvatar: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift:507:8: note: 'AnimatedLyoAvatar' previously declared here
+struct AnimatedLyoAvatar: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/AITutor/EnhancedLyoHomeView.swift:507:8: note: 'AnimatedLyoAvatar' previously declared here
+struct AnimatedLyoAvatar: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:18:65: error: 'User' is ambiguous for type lookup in this context
+    func login(email: String, password: String) async throws -> User {
+                                                                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:39:82: error: 'User' is ambiguous for type lookup in this context
+    func register(email: String, password: String, name: String) async throws -> User {
+                                                                                 ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:91:83: error: 'ChatContext' is ambiguous for type lookup in this context
+    func sendLyoMessage(message: String, attachmentIds: [String]? = nil, context: ChatContext? = nil) async throws -> LyoChatResponse {
+                                                                                  ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:124:47: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    func uploadFile(url: URL) async throws -> MessageAttachment {
+                                              ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:222:42: error: 'ChallengesResponse' is ambiguous for type lookup in this context
+    func getChallenges() async throws -> ChallengesResponse {
+                                         ^~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:226:56: error: 'Challenge' is ambiguous for type lookup in this context
+    func completeChallenge(id: String) async throws -> Challenge {
+                                                       ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:236:59: error: 'LeaderboardEntry' is ambiguous for type lookup in this context
+    func getLeaderboard(limit: Int = 50) async throws -> [LeaderboardEntry] {
+                                                          ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: note: found this candidate
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: found this candidate
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:242:45: error: 'Achievement' is ambiguous for type lookup in this context
+    func getAchievements() async throws -> [Achievement] {
+                                            ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:248:40: error: 'Battle' is ambiguous for type lookup in this context
+    func getBattles() async throws -> [Battle] {
+                                       ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:252:79: error: 'Battle' is ambiguous for type lookup in this context
+    func startBattle(opponentId: String, challengeId: String) async throws -> Battle {
+                                                                              ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:257:51: error: 'Battle' is ambiguous for type lookup in this context
+    func acceptBattle(id: String) async throws -> Battle {
+                                                  ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:276:61: error: 'LessonProgress' is ambiguous for type lookup in this context
+    func saveClassroomProgress(sessionId: String, progress: LessonProgress) async throws {
+                                                            ^~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:289:15: error: 'User' is ambiguous for type lookup in this context
+    let user: User
+              ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:288:8: error: type 'LoginResponse' does not conform to protocol 'Decodable'
+struct LoginResponse: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:289:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let user: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:288:8: error: type 'LoginResponse' does not conform to protocol 'Encodable'
+struct LoginResponse: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:289:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let user: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:319:27: error: 'Challenge' is ambiguous for type lookup in this context
+    let dailyChallenges: [Challenge]
+                          ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:320:26: error: 'Challenge' is ambiguous for type lookup in this context
+    let weeklyChallenge: Challenge?
+                         ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: error: type 'ChallengesResponse' does not conform to protocol 'Decodable'
+struct ChallengesResponse: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:319:9: note: cannot automatically synthesize 'Decodable' because '[Challenge]' does not conform to 'Decodable'
+    let dailyChallenges: [Challenge]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:320:9: note: cannot automatically synthesize 'Decodable' because 'Challenge?' does not conform to 'Decodable'
+    let weeklyChallenge: Challenge?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: error: type 'ChallengesResponse' does not conform to protocol 'Encodable'
+struct ChallengesResponse: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:319:9: note: cannot automatically synthesize 'Encodable' because '[Challenge]' does not conform to 'Encodable'
+    let dailyChallenges: [Challenge]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:320:9: note: cannot automatically synthesize 'Encodable' because 'Challenge?' does not conform to 'Encodable'
+    let weeklyChallenge: Challenge?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: error: invalid redeclaration of 'ChallengesResponse'
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: note: 'ChallengesResponse' previously declared here
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: note: 'ChallengesResponse' previously declared here
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/MessageBubbleView.swift:3:8: error: invalid redeclaration of 'MessageBubbleView'
+struct MessageBubbleView: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Social/ChatView.swift:364:8: note: 'MessageBubbleView' previously declared here
+struct MessageBubbleView: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Social/ChatView.swift:364:8: note: 'MessageBubbleView' previously declared here
+struct MessageBubbleView: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/MessageBubbleView.swift:81:21: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    let attachment: MessageAttachment
+                    ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Components/AITutor/MessageBubbleView.swift:111:38: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    private func iconForType(_ type: MessageAttachment.AttachmentType) -> String {
+                                     ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/Profile/ProfileHomeView.swift:9:23: error: 'User' is ambiguous for type lookup in this context
+    private var user: User? {
+                      ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/Main/Profile/ProfileHomeView.swift:280:8: error: invalid redeclaration of 'StatCard'
+struct StatCard: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/HomeView.swift:112:8: note: 'StatCard' previously declared here
+struct StatCard: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/HomeView.swift:112:8: note: 'StatCard' previously declared here
+struct StatCard: View {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: error: invalid redeclaration of 'User'
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: 'User' previously declared here
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: 'User' previously declared here
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:149:68: error: 'ChatContext' is ambiguous for type lookup in this context
+        case chat(message: String, provider: AIProvider?, context: ChatContext?)
+                                                                   ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:156:59: error: 'ChatContext' is ambiguous for type lookup in this context
+        case mentorConversation(message: String, context: ChatContext?, attachments: [String]?)
+                                                          ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:250:58: error: 'LessonProgress' is ambiguous for type lookup in this context
+        case saveCheckpoint(sessionId: String, progress: LessonProgress)
+                                                         ^~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:540:66: error: cannot find type 'CLLocationCoordinate2D' in scope
+        case getStudyGroups(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
+                                                                 ^~~~~~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:547:61: error: cannot find type 'CLLocationCoordinate2D' in scope
+        case getEvents(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
+                                                            ^~~~~~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:554:63: error: cannot find type 'CLLocationCoordinate2D' in scope
+        case getListings(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
+                                                              ^~~~~~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:561:67: error: cannot find type 'CLLocationCoordinate2D' in scope
+        case getInstitutions(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
+                                                                  ^~~~~~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Core/Networking/Endpoint.swift:563:58: error: cannot find type 'CLLocationCoordinate2D' in scope
+        case searchInstitutions(query: String, location: CLLocationCoordinate2D?)
+                                                         ^~~~~~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:75:17: error: 'User' is ambiguous for type lookup in this context
+    let seller: User
+                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:40:20: error: 'User' is ambiguous for type lookup in this context
+    let organizer: User
+                   ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:45:27: error: 'User' is ambiguous for type lookup in this context
+    var registeredUsers: [User]
+                          ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:12:20: error: 'User' is ambiguous for type lookup in this context
+    let organizer: User
+                   ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:16:28: error: 'User' is ambiguous for type lookup in this context
+    var currentAttendees: [User]
+                           ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:9:24: error: 'User' is ambiguous for type lookup in this context
+    let participants: [User]
+                       ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:7:8: error: type 'ChatConversation' does not conform to protocol 'Decodable'
+struct ChatConversation: Identifiable, Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:9:9: note: cannot automatically synthesize 'Decodable' because '[User]' does not conform to 'Decodable'
+    let participants: [User]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:22:27: error: 'User' is ambiguous for type lookup in this context
+    var otherParticipant: User? {
+                          ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:48:17: error: 'User' is ambiguous for type lookup in this context
+    let sender: User
+                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:51:23: error: 'MessageAttachment' is ambiguous for type lookup in this context
+    let attachments: [MessageAttachment]?
+                      ^~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:21:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:77:8: note: found this candidate
+struct MessageAttachment: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:7:8: error: type 'ChatConversation' does not conform to protocol 'Encodable'
+struct ChatConversation: Identifiable, Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:9:9: note: cannot automatically synthesize 'Encodable' because '[User]' does not conform to 'Encodable'
+    let participants: [User]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:45:8: error: type 'ChatMessage' does not conform to protocol 'Decodable'
+struct ChatMessage: Identifiable, Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:48:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let sender: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:51:9: note: cannot automatically synthesize 'Decodable' because '[MessageAttachment]?' does not conform to 'Decodable'
+    let attachments: [MessageAttachment]?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:45:8: error: type 'ChatMessage' does not conform to protocol 'Encodable'
+struct ChatMessage: Identifiable, Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:48:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let sender: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:51:9: note: cannot automatically synthesize 'Encodable' because '[MessageAttachment]?' does not conform to 'Encodable'
+    let attachments: [MessageAttachment]?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Chat.swift:134:17: error: 'User' is ambiguous for type lookup in this context
+    let sender: User
+                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:8:8: error: type 'StudyGroup' does not conform to protocol 'Decodable'
+struct StudyGroup: Identifiable, Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:12:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let organizer: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:16:9: note: cannot automatically synthesize 'Decodable' because '[User]' does not conform to 'Decodable'
+    var currentAttendees: [User]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:8:8: error: type 'StudyGroup' does not conform to protocol 'Encodable'
+struct StudyGroup: Identifiable, Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:12:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let organizer: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:16:9: note: cannot automatically synthesize 'Encodable' because '[User]' does not conform to 'Encodable'
+    var currentAttendees: [User]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:36:8: error: type 'EducationalEvent' does not conform to protocol 'Decodable'
+struct EducationalEvent: Identifiable, Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:40:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let organizer: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:45:9: note: cannot automatically synthesize 'Decodable' because '[User]' does not conform to 'Decodable'
+    var registeredUsers: [User]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:36:8: error: type 'EducationalEvent' does not conform to protocol 'Encodable'
+struct EducationalEvent: Identifiable, Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:40:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let organizer: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:45:9: note: cannot automatically synthesize 'Encodable' because '[User]' does not conform to 'Encodable'
+    var registeredUsers: [User]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:73:8: error: type 'MarketplaceListing' does not conform to protocol 'Decodable'
+struct MarketplaceListing: Identifiable, Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:75:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let seller: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:73:8: error: type 'MarketplaceListing' does not conform to protocol 'Encodable'
+struct MarketplaceListing: Identifiable, Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:75:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let seller: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:413:1: warning: extension declares a conformance of imported type 'CLLocationCoordinate2D' to imported protocols 'Decodable', 'Encodable'; this will not behave correctly if the owners of '_LocationEssentials' introduce this conformance in the future
+extension CLLocationCoordinate2D: Codable {
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Community.swift:413:1: note: add '@retroactive' to silence this warning
+extension CLLocationCoordinate2D: Codable {
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAIRepository.swift:14:70: error: 'ChatContext' is ambiguous for type lookup in this context
+    func chat(message: String, provider: AIProvider? = nil, context: ChatContext? = nil) async throws -> ChatResponse {
+                                                                     ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAIRepository.swift:24:55: error: 'ChatContext' is ambiguous for type lookup in this context
+    func mentorConversation(message: String, context: ChatContext? = nil, attachments: [String]? = nil) async throws -> ChatResponse {
+                                                      ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:19:64: error: 'ChatContext' is ambiguous for type lookup in this context
+    func chat(message: String, provider: AIProvider?, context: ChatContext?) async throws -> ChatResponse
+                                                               ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:20:55: error: 'ChatContext' is ambiguous for type lookup in this context
+    func mentorConversation(message: String, context: ChatContext?, attachments: [String]?) async throws -> ChatResponse
+                                                      ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAIRepository.swift:119:64: error: 'ChatContext' is ambiguous for type lookup in this context
+    func chat(message: String, provider: AIProvider?, context: ChatContext?) async throws -> ChatResponse {
+                                                               ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAIRepository.swift:130:55: error: 'ChatContext' is ambiguous for type lookup in this context
+    func mentorConversation(message: String, context: ChatContext?, attachments: [String]?) async throws -> ChatResponse {
+                                                      ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/LyoChat.swift:108:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:117:8: note: found this candidate
+struct ChatContext: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:14:65: error: 'User' is ambiguous for type lookup in this context
+    func login(email: String, password: String) async throws -> User {
+                                                                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:43:82: error: 'User' is ambiguous for type lookup in this context
+    func register(email: String, password: String, name: String) async throws -> User {
+                                                                                 ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:116:43: error: 'User' is ambiguous for type lookup in this context
+    func getCurrentUser() async throws -> User {
+                                          ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:126:72: error: 'User' is ambiguous for type lookup in this context
+    func updateProfile(name: String?, avatar: String?) async throws -> User {
+                                                                       ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:8:65: error: 'User' is ambiguous for type lookup in this context
+    func login(email: String, password: String) async throws -> User
+                                                                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:9:82: error: 'User' is ambiguous for type lookup in this context
+    func register(email: String, password: String, name: String) async throws -> User
+                                                                                 ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:12:43: error: 'User' is ambiguous for type lookup in this context
+    func getCurrentUser() async throws -> User
+                                          ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:13:72: error: 'User' is ambiguous for type lookup in this context
+    func updateProfile(name: String?, avatar: String?) async throws -> User
+                                                                       ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:141:30: error: 'User' is ambiguous for type lookup in this context
+    private var currentUser: User?
+                             ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:143:65: error: 'User' is ambiguous for type lookup in this context
+    func login(email: String, password: String) async throws -> User {
+                                                                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:160:82: error: 'User' is ambiguous for type lookup in this context
+    func register(email: String, password: String, name: String) async throws -> User {
+                                                                                 ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:188:43: error: 'User' is ambiguous for type lookup in this context
+    func getCurrentUser() async throws -> User {
+                                          ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:198:72: error: 'User' is ambiguous for type lookup in this context
+    func updateProfile(name: String?, avatar: String?) async throws -> User {
+                                                                       ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:16:23: error: 'User' is ambiguous for type lookup in this context
+            let user: User
+                      ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:15:16: error: type 'LoginResponse' does not conform to protocol 'Decodable'
+        struct LoginResponse: Codable {
+               ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:16:17: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+            let user: User
+                ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:15:16: error: type 'LoginResponse' does not conform to protocol 'Encodable'
+        struct LoginResponse: Codable {
+               ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:16:17: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+            let user: User
+                ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:45:23: error: 'User' is ambiguous for type lookup in this context
+            let user: User
+                      ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:44:16: error: type 'RegisterResponse' does not conform to protocol 'Decodable'
+        struct RegisterResponse: Codable {
+               ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:45:17: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+            let user: User
+                ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:44:16: error: type 'RegisterResponse' does not conform to protocol 'Encodable'
+        struct RegisterResponse: Codable {
+               ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultAuthRepository.swift:45:17: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+            let user: User
+                ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:26:84: error: 'LeaderboardEntry' is ambiguous for type lookup in this context
+    func getLeaderboard(type: String = "weekly", limit: Int = 50) async throws -> [LeaderboardEntry] {
+                                                                                   ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: note: found this candidate
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: found this candidate
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:48:45: error: 'Achievement' is ambiguous for type lookup in this context
+    func getAchievements() async throws -> [Achievement] {
+                                            ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:58:66: error: 'Achievement' is ambiguous for type lookup in this context
+    func claimAchievement(achievementId: String) async throws -> Achievement {
+                                                                 ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:70:42: error: 'ChallengesResponse' is ambiguous for type lookup in this context
+    func getChallenges() async throws -> ChallengesResponse {
+                                         ^~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:80:65: error: 'Challenge' is ambiguous for type lookup in this context
+    func completeChallenge(challengeId: String) async throws -> Challenge {
+                                                                ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:92:40: error: 'Battle' is ambiguous for type lookup in this context
+    func getBattles() async throws -> [Battle] {
+                                       ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:102:79: error: 'Battle' is ambiguous for type lookup in this context
+    func startBattle(opponentId: String, challengeId: String) async throws -> Battle {
+                                                                              ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:112:57: error: 'Battle' is ambiguous for type lookup in this context
+    func acceptBattle(battleId: String) async throws -> Battle {
+                                                        ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:81:68: error: 'LeaderboardEntry' is ambiguous for type lookup in this context
+    func getLeaderboard(type: String, limit: Int) async throws -> [LeaderboardEntry]
+                                                                   ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: note: found this candidate
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: found this candidate
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:85:45: error: 'Achievement' is ambiguous for type lookup in this context
+    func getAchievements() async throws -> [Achievement]
+                                            ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:86:66: error: 'Achievement' is ambiguous for type lookup in this context
+    func claimAchievement(achievementId: String) async throws -> Achievement
+                                                                 ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:89:42: error: 'ChallengesResponse' is ambiguous for type lookup in this context
+    func getChallenges() async throws -> ChallengesResponse
+                                         ^~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:90:65: error: 'Challenge' is ambiguous for type lookup in this context
+    func completeChallenge(challengeId: String) async throws -> Challenge
+                                                                ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:93:40: error: 'Battle' is ambiguous for type lookup in this context
+    func getBattles() async throws -> [Battle]
+                                       ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:94:79: error: 'Battle' is ambiguous for type lookup in this context
+    func startBattle(opponentId: String, challengeId: String) async throws -> Battle
+                                                                              ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:95:57: error: 'Battle' is ambiguous for type lookup in this context
+    func acceptBattle(battleId: String) async throws -> Battle
+                                                        ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:136:68: error: 'LeaderboardEntry' is ambiguous for type lookup in this context
+    func getLeaderboard(type: String, limit: Int) async throws -> [LeaderboardEntry] {
+                                                                   ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:83:8: note: found this candidate
+struct LeaderboardEntry: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: note: found this candidate
+struct LeaderboardEntry: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:160:45: error: 'Achievement' is ambiguous for type lookup in this context
+    func getAchievements() async throws -> [Achievement] {
+                                            ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:186:66: error: 'Achievement' is ambiguous for type lookup in this context
+    func claimAchievement(achievementId: String) async throws -> Achievement {
+                                                                 ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:200:42: error: 'ChallengesResponse' is ambiguous for type lookup in this context
+    func getChallenges() async throws -> ChallengesResponse {
+                                         ^~~~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/LyoRepository.swift:318:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: note: found this candidate
+struct ChallengesResponse: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:228:65: error: 'Challenge' is ambiguous for type lookup in this context
+    func completeChallenge(challengeId: String) async throws -> Challenge {
+                                                                ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:242:40: error: 'Battle' is ambiguous for type lookup in this context
+    func getBattles() async throws -> [Battle] {
+                                       ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:273:79: error: 'Battle' is ambiguous for type lookup in this context
+    func startBattle(opponentId: String, challengeId: String) async throws -> Battle {
+                                                                              ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultGamificationRepository.swift:302:57: error: 'Battle' is ambiguous for type lookup in this context
+    func acceptBattle(battleId: String) async throws -> Battle {
+                                                        ^~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:107:8: note: found this candidate
+struct Battle: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: note: found this candidate
+struct Battle: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultLearningRepository.swift:43:54: error: 'LessonProgress' is ambiguous for type lookup in this context
+    func saveCheckpoint(sessionId: String, progress: LessonProgress) async throws {
+                                                     ^~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:44:54: error: 'LessonProgress' is ambiguous for type lookup in this context
+    func saveCheckpoint(sessionId: String, progress: LessonProgress) async throws
+                                                     ^~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/DefaultLearningRepository.swift:132:54: error: 'LessonProgress' is ambiguous for type lookup in this context
+    func saveCheckpoint(sessionId: String, progress: LessonProgress) async throws {
+                                                     ^~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Classroom.swift:171:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:217:8: note: found this candidate
+struct LessonProgress: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:55:32: error: cannot find type 'UIImage' in scope
+    func analyzeImage(_ image: UIImage, type: VisionAnalysisType) async throws -> VisionAnalysisResult
+                               ^~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:56:34: error: cannot find type 'UIImage' in scope
+    func extractText(from image: UIImage) async throws -> OCRResult
+                                 ^~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:57:33: error: cannot find type 'UIImage' in scope
+    func solveHomework(_ image: UIImage, subject: String?) async throws -> HomeworkSolution
+                                ^~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:58:34: error: cannot find type 'UIImage' in scope
+    func explainDiagram(_ image: UIImage) async throws -> DiagramExplanation
+                                 ^~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:59:32: error: cannot find type 'UIImage' in scope
+    func analyzeChart(_ image: UIImage) async throws -> ChartAnalysis
+                               ^~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:60:31: error: cannot find type 'UIImage' in scope
+    func analyzeCode(_ image: UIImage) async throws -> CodeAnalysis
+                              ^~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:240:17: error: 'User' is ambiguous for type lookup in this context
+    let author: User
+                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:237:8: error: type 'Post' does not conform to protocol 'Decodable'
+struct Post: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:240:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let author: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:237:8: error: type 'Post' does not conform to protocol 'Encodable'
+struct Post: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:240:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let author: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:260:17: error: 'User' is ambiguous for type lookup in this context
+    let author: User
+                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:257:8: error: type 'Comment' does not conform to protocol 'Decodable'
+struct Comment: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:260:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let author: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:257:8: error: type 'Comment' does not conform to protocol 'Encodable'
+struct Comment: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:260:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let author: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:275:15: error: 'User' is ambiguous for type lookup in this context
+    let user: User
+              ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: error: type 'LeaderboardEntry' does not conform to protocol 'Decodable'
+struct LeaderboardEntry: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:275:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let user: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:273:8: error: type 'LeaderboardEntry' does not conform to protocol 'Encodable'
+struct LeaderboardEntry: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:275:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let user: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:310:27: error: 'Challenge' is ambiguous for type lookup in this context
+    let dailyChallenges: [Challenge]
+                          ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:311:26: error: 'Challenge' is ambiguous for type lookup in this context
+    let weeklyChallenge: Challenge?
+                         ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: error: type 'ChallengesResponse' does not conform to protocol 'Decodable'
+struct ChallengesResponse: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:310:9: note: cannot automatically synthesize 'Decodable' because '[Challenge]' does not conform to 'Decodable'
+    let dailyChallenges: [Challenge]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:311:9: note: cannot automatically synthesize 'Decodable' because 'Challenge?' does not conform to 'Decodable'
+    let weeklyChallenge: Challenge?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:309:8: error: type 'ChallengesResponse' does not conform to protocol 'Encodable'
+struct ChallengesResponse: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:310:9: note: cannot automatically synthesize 'Encodable' because '[Challenge]' does not conform to 'Encodable'
+    let dailyChallenges: [Challenge]
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:311:9: note: cannot automatically synthesize 'Encodable' because 'Challenge?' does not conform to 'Encodable'
+    let weeklyChallenge: Challenge?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:316:21: error: 'User' is ambiguous for type lookup in this context
+    let challenger: User
+                    ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:317:19: error: 'User' is ambiguous for type lookup in this context
+    let opponent: User?
+                  ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:318:20: error: 'Challenge' is ambiguous for type lookup in this context
+    let challenge: Challenge
+                   ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: error: type 'Battle' does not conform to protocol 'Decodable'
+struct Battle: Codable {
+       ^
+Swift.Decodable.init:2:1: note: protocol requires initializer 'init(from:)' with type 'Decodable'
+init(from decoder: any Decoder) throws}
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:316:9: note: cannot automatically synthesize 'Decodable' because 'User' does not conform to 'Decodable'
+    let challenger: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:317:9: note: cannot automatically synthesize 'Decodable' because 'User?' does not conform to 'Decodable'
+    let opponent: User?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:318:9: note: cannot automatically synthesize 'Decodable' because 'Challenge' does not conform to 'Decodable'
+    let challenge: Challenge
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:314:8: error: type 'Battle' does not conform to protocol 'Encodable'
+struct Battle: Codable {
+       ^
+Swift.Encodable.encode:2:6: note: protocol requires function 'encode(to:)' with type 'Encodable'
+func encode(to encoder: any Encoder) throws}
+     ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:316:9: note: cannot automatically synthesize 'Encodable' because 'User' does not conform to 'Encodable'
+    let challenger: User
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:317:9: note: cannot automatically synthesize 'Encodable' because 'User?' does not conform to 'Encodable'
+    let opponent: User?
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:318:9: note: cannot automatically synthesize 'Encodable' because 'Challenge' does not conform to 'Encodable'
+    let challenge: Challenge
+        ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChatViewModel.swift:74:47: error: cannot find type 'WebSocketMessage' in scope
+    private func handleChatMessage(_ message: WebSocketMessage) {
+                                              ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChatViewModel.swift:103:51: error: cannot find type 'WebSocketMessage' in scope
+    private func handleTypingIndicator(_ message: WebSocketMessage) {
+                                                  ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/ChatViewModel.swift:120:47: error: cannot find type 'WebSocketMessage' in scope
+    private func handleMessageRead(_ message: WebSocketMessage) {
+                                              ^~~~~~~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:20:35: error: type 'CommunityFilter' does not conform to protocol 'Hashable'
+    @Published var activeFilters: Set<CommunityFilter> = [.all]
+                                  ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:414:31: warning: conformance of 'CommunityViewModel' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode
+extension CommunityViewModel: CLLocationManagerDelegate {
+                              ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:414:31: note: isolate this conformance to the main actor with '@MainActor'
+extension CommunityViewModel: CLLocationManagerDelegate {
+                              ^
+                              @MainActor 
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:414:1: note: mark all declarations used in the conformance 'nonisolated'
+extension CommunityViewModel: CLLocationManagerDelegate {
+^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:414:31: note: turn data races into runtime errors with '@preconcurrency'
+extension CommunityViewModel: CLLocationManagerDelegate {
+                              ^
+                              @preconcurrency 
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:435:10: note: main actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+         ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:456:10: note: main actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+         ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/CommunityViewModel.swift:416:10: note: main actor-isolated instance method 'locationManagerDidChangeAuthorization' cannot satisfy nonisolated requirement
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+         ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/QuizViewModel.swift:232:26: error: cannot find type 'Question' in scope
+    var currentQuestion: Question? {
+                         ^~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/RootViewModel.swift:14:33: error: 'User' is ambiguous for type lookup in this context
+    @Published var currentUser: User?
+                                ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/ViewModels/RootViewModel.swift:100:36: error: 'User' is ambiguous for type lookup in this context
+    func updateUser(_ updatedUser: User) {
+                                   ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/HomeView.swift:382:36: error: 'Challenge' is ambiguous for type lookup in this context
+    @Published var dailyChallenge: Challenge?
+                                   ^~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:5:8: note: found this candidate
+struct Challenge: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:298:8: note: found this candidate
+struct Challenge: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/ProfileView.swift:64:15: error: 'User' is ambiguous for type lookup in this context
+    let user: User?
+              ^~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/User.swift:3:8: note: found this candidate
+struct User: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:248:8: note: found this candidate
+struct User: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/ProfileView.swift:205:24: error: 'Achievement' is ambiguous for type lookup in this context
+    let achievements: [Achievement]
+                       ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/ProfileView.swift:245:22: error: 'Achievement' is ambiguous for type lookup in this context
+    let achievement: Achievement
+                     ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Views/ProfileView.swift:367:41: error: 'Achievement' is ambiguous for type lookup in this context
+    @Published var recentAchievements: [Achievement] = []
+                                        ^~~~~~~~~~~
+/Users/hectorgarcia/LYO Da ONE /Sources/Models/Challenge.swift:140:8: note: found this candidate
+struct Achievement: Identifiable, Codable {
+       ^
+/Users/hectorgarcia/LYO Da ONE /Sources/Services/Repositories/RepositoryProtocols.swift:287:8: note: found this candidate
+struct Achievement: Codable {
+       ^
+
+SwiftCompile normal x86_64 Compiling\ ComposerBar.swift,\ ControlsOverlay.swift,\ CourseCardView.swift,\ LyoAvatarState.swift,\ CourseDrawerView.swift,\ LeaderboardRowView.swift,\ LyoAIViewModel.swift,\ LyoApp.swift,\ LyoChat.swift,\ LyoHomeView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/ComposerBar.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Classroom/ControlsOverlay.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/AITutor/CourseCardView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LyoAvatarState.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/CourseDrawerView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Components/Challenges/LeaderboardRowView.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/ViewModels/LyoAIViewModel.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/LyoApp.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Models/LyoChat.swift /Users/hectorgarcia/LYO\ Da\ ONE\ /Sources/Views/Main/AITutor/LyoHomeView.swift (in target 'Lyo' from project 'Lyo')
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	SwiftEmitModule normal x86_64 Emitting\ module\ for\ Lyo (in target 'Lyo' from project 'Lyo')
+	EmitSwiftModule normal x86_64 (in target 'Lyo' from project 'Lyo')
+	Building project Lyo with scheme Lyo
+(3 failures)

@@ -1,0 +1,1887 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0041454849867A8C24EEC7AE /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9793EECAFF67A8F1002513DE /* HapticManager.swift */; };
+		00B4F222F58E8135442A2C1D /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F32D09C218E85B21A29F5F9 /* HomeView.swift */; };
+		01B31E74773604890DF43991 /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363CFDA6D1153271F3050044 /* Community.swift */; };
+		01D132B07B2975A1EBB24F6C /* StreamingResponseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66315549DD0DF6BF1EF6B47 /* StreamingResponseManager.swift */; };
+		0247300F5C6EAEA5AAFC994E /* LearningModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1880BA6E7FEC86C12C48E49 /* LearningModels.swift */; };
+		0258EB9FE072246516F459D4 /* LearningModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CB64F1C209CEFEAFD0C0140 /* LearningModels.swift */; };
+		0360F9CAC4A11747C2647505 /* DiscoverReelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3773C4873A63BDF8DEA2722F /* DiscoverReelView.swift */; };
+		0437DE115886467E2F14CB3C /* LyoAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 367F78EBB224065BD7E00DB2 /* LyoAvatarView.swift */; };
+		05396162AC28F4F5DA497319 /* LearningModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D400F26B70E3F2E435676C62 /* LearningModels.swift */; };
+		067C2CFFC12BABEB4CF2D56A /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BD67F285ACFE8302B5E4FA4 /* AVKit.framework */; };
+		06FD7324C27EC1DFB1AC66BE /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8296767A56109F55ABBE04A /* ErrorView.swift */; };
+		07831BE36C728232BB27860D /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 296807BE9324582CE3961771 /* ChatView.swift */; };
+		08F20285BA2DAECC2C1DB0D7 /* TTSVoiceBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F8FF247C761F5B12B550C0 /* TTSVoiceBubbleView.swift */; };
+		0CE07777488BE5E91EC51AFE /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6802F9F52AAFFAB4A0E460AE /* LoginView.swift */; };
+		10E10DA45EBC5E64B1482F39 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0CEEC86F9CF727ACAF369C5A /* AVFoundation.framework */; };
+		111D8C98F32F82AA8880C703 /* CloudStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C6A0A38ADCB78842CCE2991 /* CloudStorageService.swift */; };
+		11280253C9AB5BA7A492A4F0 /* PremiumHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8983410096FBA6AFB9E2AFC4 /* PremiumHomeView.swift */; };
+		12703673FCEEF0AD1EC1E5D7 /* NetworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAF76048A749D471B4347C5 /* NetworkCache.swift */; };
+		137C280CF6DDA87C5288D2CB /* DefaultAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7D5B50DDD36DEEA15A4A528 /* DefaultAuthRepository.swift */; };
+		14E2B356C89D10EEE3711C62 /* StreamingResponseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F5880F4F8F9DF94B8CE6FF /* StreamingResponseManager.swift */; };
+		157804452A1276E0CD5D444A /* ChallengeCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E2FCF8FE247DBD51B2677D /* ChallengeCardView.swift */; };
+		15937220EE14EC6890B51787 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762A9E5F69A4574997DE5E2E /* SettingsView.swift */; };
+		17C69DFEA231B3F9CAD03404 /* NetworkLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19F2CF95A29EAC3D9C6D0F9C /* NetworkLogger.swift */; };
+		188EDBAFAE1A2083FBDD8E56 /* VisionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A656992362DA885DCE0A6E38 /* VisionService.swift */; };
+		1B0113798A4A501C9A636895 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1E40E7083296EB3382B725 /* EditProfileView.swift */; };
+		1BE1F80CE70FC2028D478359 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4EA011F490164405EC9B64 /* DesignSystem.swift */; };
+		1C560AB2CD9D55A8B3458E7C /* LiveLessonModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6458303375BE0A98563FC93E /* LiveLessonModels.swift */; };
+		1CE957CB8326420D54692E14 /* TokenManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CC5C8E29A4935C69BD2F3C /* TokenManager.swift */; };
+		2329211178B3D21074B0596E /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 519DB7C718DB8C9B5A1669F8 /* Chat.swift */; };
+		2355903B7FCE43FEEF1416BF /* CampusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2A6B615E5AF90C9154801F /* CampusViewModel.swift */; };
+		2361CA77F932D8048B3E30C9 /* FocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161804752459CF24FA0F8275 /* FocusView.swift */; };
+		2437128BFA25C8F0546CEC72 /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2DFF5F5B8EB3D701AD9D4B7 /* Community.swift */; };
+		24CADF9904E2B96A163E0F67 /* ClassroomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33832FDAA99B80AA76642070 /* ClassroomView.swift */; };
+		255FF345FB32BADC2E031DD3 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4283984ED6762997ACD620 /* FeedView.swift */; };
+		257A2B2AC39A3E4F623CB138 /* LyoError.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAFEF01FB6009E8A6B579E81 /* LyoError.swift */; };
+		282BFC6E6D05211243CF5A4B /* VisionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A066C884DEB429D14670EF58 /* VisionService.swift */; };
+		2960EF2822082BD7D80CEC76 /* LeaderboardRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F476EA06E209E75812B6DCBA /* LeaderboardRowView.swift */; };
+		2BB79D3F36DD9A11943ADB78 /* ProfileHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF91DA74F74FB6560B4A35F3 /* ProfileHomeView.swift */; };
+		2BF1D7BAB19978B3DEAD47C4 /* LyoAvatarState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64F4BBD8658CEB8B4CA9985C /* LyoAvatarState.swift */; };
+		2E04934F0BA1FA18276D9432 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F838E09330A333226089099A /* DesignSystem.swift */; };
+		2E683C5D41614F3FAC8AF745 /* DefaultSocialRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2920FA658FA996C408CD12A /* DefaultSocialRepository.swift */; };
+		2F82186BC827DBA1CC43FC11 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3458F40371444132AEBBD87E /* RepositoryProtocols.swift */; };
+		2FAE6C3CC8611E69076A2CEE /* ControlsOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D3A2B6FCDBD3943C228BEC6 /* ControlsOverlay.swift */; };
+		318FF24C88F7670935301907 /* StackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F093FE58E5A60642EE566F2 /* StackService.swift */; };
+		342FDB3F2EDD51FC0071EA38 /* TopHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB3E2EDD51FC0071EA38 /* TopHeaderView.swift */; };
+		342FDB412EE06ADB0071EA38 /* SocialModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB402EE06ADA0071EA38 /* SocialModels.swift */; };
+		342FDB432EE07EB40071EA38 /* CreateEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB422EE07EB30071EA38 /* CreateEventView.swift */; };
+		342FDB482EE07F260071EA38 /* VideoRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB462EE07F260071EA38 /* VideoRecorderView.swift */; };
+		342FDB492EE07F260071EA38 /* CreationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB442EE07F260071EA38 /* CreationSheet.swift */; };
+		342FDB4A2EE07F260071EA38 /* PostEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB452EE07F260071EA38 /* PostEditorView.swift */; };
+		342FDB4C2EE1DFD60071EA38 /* PostService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB4B2EE1DFD60071EA38 /* PostService.swift */; };
+		342FDB4E2EE1DFE20071EA38 /* StoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB4D2EE1DFE20071EA38 /* StoryService.swift */; };
+		342FDB502EE1DFE50071EA38 /* DiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 342FDB4F2EE1DFE50071EA38 /* DiscoveryService.swift */; };
+		34C214332EDBDD3700BDE6F8 /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214322EDBDD3700BDE6F8 /* FirebaseAI */; };
+		34C214352EDBDD3700BDE6F8 /* FirebaseAILogic in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214342EDBDD3700BDE6F8 /* FirebaseAILogic */; };
+		34C214372EDBDD3700BDE6F8 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214362EDBDD3700BDE6F8 /* FirebaseAnalytics */; };
+		34C214392EDBDD3700BDE6F8 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214382EDBDD3700BDE6F8 /* FirebaseAnalyticsCore */; };
+		34C2143B2EDBDD3700BDE6F8 /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2143A2EDBDD3700BDE6F8 /* FirebaseAnalyticsIdentitySupport */; };
+		34C2143D2EDBDD3700BDE6F8 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2143C2EDBDD3700BDE6F8 /* FirebaseAppCheck */; };
+		34C2143F2EDBDD3700BDE6F8 /* FirebaseAppDistribution-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2143E2EDBDD3700BDE6F8 /* FirebaseAppDistribution-Beta */; };
+		34C214412EDBDD3700BDE6F8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214402EDBDD3700BDE6F8 /* FirebaseAuth */; };
+		34C214432EDBDD3700BDE6F8 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214422EDBDD3700BDE6F8 /* FirebaseAuthCombine-Community */; };
+		34C214452EDBDD3700BDE6F8 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214442EDBDD3700BDE6F8 /* FirebaseCore */; };
+		34C214472EDBDD3700BDE6F8 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214462EDBDD3700BDE6F8 /* FirebaseCrashlytics */; };
+		34C214492EDBDD3700BDE6F8 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214482EDBDD3700BDE6F8 /* FirebaseDatabase */; };
+		34C2144B2EDBDD3700BDE6F8 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2144A2EDBDD3700BDE6F8 /* FirebaseFirestore */; };
+		34C2144D2EDBDD3700BDE6F8 /* FirebaseFirestoreCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2144C2EDBDD3700BDE6F8 /* FirebaseFirestoreCombine-Community */; };
+		34C2144F2EDBDD3700BDE6F8 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2144E2EDBDD3700BDE6F8 /* FirebaseFunctions */; };
+		34C214512EDBDD3700BDE6F8 /* FirebaseFunctionsCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214502EDBDD3700BDE6F8 /* FirebaseFunctionsCombine-Community */; };
+		34C214532EDBDD3700BDE6F8 /* FirebaseInAppMessaging-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214522EDBDD3700BDE6F8 /* FirebaseInAppMessaging-Beta */; };
+		34C214552EDBDD3700BDE6F8 /* FirebaseInstallations in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214542EDBDD3700BDE6F8 /* FirebaseInstallations */; };
+		34C214572EDBDD3700BDE6F8 /* FirebaseMLModelDownloader in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214562EDBDD3700BDE6F8 /* FirebaseMLModelDownloader */; };
+		34C214592EDBDD3700BDE6F8 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214582EDBDD3700BDE6F8 /* FirebaseMessaging */; };
+		34C2145B2EDBDD3700BDE6F8 /* FirebasePerformance in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2145A2EDBDD3700BDE6F8 /* FirebasePerformance */; };
+		34C2145D2EDBDD3700BDE6F8 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2145C2EDBDD3700BDE6F8 /* FirebaseRemoteConfig */; };
+		34C2145F2EDBDD3800BDE6F8 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 34C2145E2EDBDD3800BDE6F8 /* FirebaseStorage */; };
+		34C214612EDBDD3800BDE6F8 /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 34C214602EDBDD3800BDE6F8 /* FirebaseStorageCombine-Community */; };
+		35A3C32CE06C9A76DEFDC87D /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E42D5596E2AC7C1E4A56FC2 /* AuthViewModel.swift */; };
+		3617F564FBA223BE1CB8C99D /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EFBF566950FB121EABCBCCB /* AuthService.swift */; };
+		38F91C27B570FE0E34A266D2 /* OfflineIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F330071C7BC015276CA7DC1 /* OfflineIndicator.swift */; };
+		3ADCC393F46C3179C416687F /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92AEB8ECBD06B8247DFB00A6 /* TTSViewModel.swift */; };
+		3AFD78ED34146C4DBE325C32 /* AnimatedGradient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1624D490DA83F9DCF10B23C /* AnimatedGradient.swift */; };
+		3C2949641FCF1473BBF519C2 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6297CA1DC713DB88D501FFC /* HomeView.swift */; };
+		3C3247C44F956869E3AB24CB /* CampusItemDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC511E206CE6BC76BAE1EADE /* CampusItemDetailSheet.swift */; };
+		3CC75E4EE47CB42D2EA7BEB8 /* LiveClassroomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F660E75765DF39F0AFE4CB38 /* LiveClassroomView.swift */; };
+		41144AE2E34F9AFDA20623BD /* StackDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524867601320037FEC41C25F /* StackDrawerView.swift */; };
+		4136639C26A85D95515DB60E /* ClassroomViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3ABC070DDBFEB27A7EF4B1 /* ClassroomViewModel.swift */; };
+		415AC948E5D21104798EFAB5 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B3891E54EB0BF535BA3CEC /* Secrets.swift */; };
+		424B9F105B85A33C73B8C3BD /* HeroSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9D03B4E7833F37BA7A4117 /* HeroSectionView.swift */; };
+		4284122F26C4776DE31E6FAB /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F011E253648D93692AC6826 /* RepositoryProtocols.swift */; };
+		428E50D04E8E4B22E66609C9 /* EnhancedLyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D19F543FE091E7D874DB29 /* EnhancedLyoHomeView.swift */; };
+		432FF11B7E19F597DFF4C979 /* CommunityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E588F23B4CD971E561EBA997 /* CommunityViewModel.swift */; };
+		43E17D9DE77132354BBD810E /* FeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADABF921ED0990E4EA95FEA /* FeedModels.swift */; };
+		44716BDAE6E28C2ECF3FF29C /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2DB3EA9286F0EED6EC1F9E8 /* ChatView.swift */; };
+		44FB1388A6D9A4C421D60F57 /* CommunityMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCFB63C1E631953F6362DFC2 /* CommunityMapView.swift */; };
+		45ADE4C36A7AEF6804F94134 /* StackDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4146A8FFF79D99BC67BE9083 /* StackDrawerView.swift */; };
+		45F95565EFE94850F75C26A4 /* DefaultAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5291E6397AF59E9E39828CC8 /* DefaultAuthRepository.swift */; };
+		47341520455D9BC9E063D4D2 /* DefaultCommunityRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B94FA9370ED069CA0296FC8 /* DefaultCommunityRepository.swift */; };
+		4762DEE0A282ED000476B21E /* NetworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C57359EC004F498D4E3C01 /* NetworkCache.swift */; };
+		47E0931D2036367FE541E57F /* NetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF5E2CD98FF1F95E794D6733 /* NetworkClient.swift */; };
+		486023EA867BF97EBFB5C156 /* CampusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB567D8EF4541A48120D293 /* CampusView.swift */; };
+		49599F172AC54DEF7E6ED4AC /* LyoAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4822F19FCB0BB18A376519CB /* LyoAPIClient.swift */; };
+		4973DE75686E02CA0FA451FE /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28096EBD3269B134A22C238E /* DiscoverView.swift */; };
+		499C8B0AC23D6EA8AC25A803 /* StreakCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 583894E89D97399DE1EFDB32 /* StreakCalendarView.swift */; };
+		4AB802F7E987AFFF68B39738 /* VisionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70718EA61D3E50C6C1C8EFB5 /* VisionService.swift */; };
+		4AD9434F31894CB691401446 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 839B048A71404C17A0D9256A /* KeychainHelper.swift */; };
+		4AE35C67CFE9EA0F6158F9A5 /* DefaultAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A64206100D318D2689C3960 /* DefaultAuthRepository.swift */; };
+		4B57D9E1032FD67063CFE578 /* EnhancedLyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5335665A170233B4F3B56AED /* EnhancedLyoHomeView.swift */; };
+		4CA4A8AF28758C2593B943A4 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4442EBF99D96CDBEF049AFD6 /* DesignTokens.swift */; };
+		4D223E471688D542CACF5465 /* ImagePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43F2925CD82B096A7800247 /* ImagePickerView.swift */; };
+		4D36FA8D7260BB304E2CDFB2 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9994D2F76877B291D38CD9F /* ProfileView.swift */; };
+		4D9D2F83A675B4D7B05AAB06 /* DefaultLearningRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954DEB4237E999469F8BD36F /* DefaultLearningRepository.swift */; };
+		4DC273D007A610DCFCFBD41F /* DefaultLearningRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F9C15344320964971CD2D8 /* DefaultLearningRepository.swift */; };
+		4E3AF259D760B98761301BDB /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B6C2176719561A9DF08FE6 /* ChatViewModel.swift */; };
+		4FF54502C2D02635B06C320B /* RepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D6A22DA8650F8B59F63AB1 /* RepositoryTests.swift */; };
+		50FF5814A5F0C6C516294FBB /* DefaultTTSRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3E861D4FF108BF36579BF2 /* DefaultTTSRepository.swift */; };
+		52A25A38C6D05D8401A18340 /* BattleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409D6BD15A706A91FCB8446B /* BattleCardView.swift */; };
+		52D1518DCF59729DD64422DE /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B735290EB0B38467045BDD /* MessageBubbleView.swift */; };
+		52F013E2B8F6D24D2E6838C5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B536C7CD10E8A4EDE0DEDBEC /* OnboardingView.swift */; };
+		53EBD3B9759CA7877538AE05 /* StackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E4D2DB4F8BA748C18C877E /* StackModels.swift */; };
+		5470BD3BC5FB18803F353AD1 /* ShimmerModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F7A40E3E29C9931F7ED90E /* ShimmerModifier.swift */; };
+		5719F5FF8B890644167EC4C1 /* OfflineIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D9F866F6800DFCD4FBD7BA1 /* OfflineIndicator.swift */; };
+		58A08B60309616AA10A69FB6 /* DiscoverViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6F2E23917EB9A90488143D /* DiscoverViewModel.swift */; };
+		5A9AF9CFD9B0E7E0DFF7E762 /* ModuleGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCC51D88385B991B206FBFA1 /* ModuleGridView.swift */; };
+		5BD747462CEC407EF12AF528 /* NetworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E8CC52CF653B05F58EF43F /* NetworkCache.swift */; };
+		5CBC54C1AF5EDB317F8D40C2 /* QuizViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2016386988945951811E12DC /* QuizViewModel.swift */; };
+		5ECD9B5F2AB94CFDAE8527B9 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8370E40F79E83D2F9791E3FA /* WebSocketManager.swift */; };
+		5F3043380F49620B2F2F090E /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF8FCCC7F005AC31E023B6A9 /* RegisterView.swift */; };
+		5F54903D49C62211E25A5FF0 /* TTSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F61BB0B00820BBFD5937E6 /* TTSView.swift */; };
+		6154F06ACBF80797C825ACFA /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DED05F775C3EE99543AD5BE6 /* SubscriptionView.swift */; };
+		621AE0F3572DF2BEF0A97441 /* FeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25DA099EBCF9DB2BB2D902EE /* FeedModels.swift */; };
+		63BE157BC71AB485AF0E4A48 /* DefaultSocialRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15920EB95AE0C7AFC1922271 /* DefaultSocialRepository.swift */; };
+		63CF8E055AFA4D946EF6C21C /* NewFeatureServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0B633F7F1A8807D36894F0 /* NewFeatureServices.swift */; };
+		669F24AAB7EE46F582490E8F /* DefaultGamificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A6A2389713973743BFDDD0 /* DefaultGamificationRepository.swift */; };
+		6776249393C6CAD07B149B36 /* CampusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C95EFBA56DF973980156DC4B /* CampusView.swift */; };
+		68D3DEA4F4BF7B8A45EA7982 /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4AEB21C14B4F48AD6A3EDA /* Community.swift */; };
+		69DE64F4DF6442D1FE7ACD1E /* FocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622C9E39024928022E7829FB /* FocusView.swift */; };
+		6A00D4DB215BB65065B18C64 /* LyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7D94D2885CAB9768DC0D58 /* LyoHomeView.swift */; };
+		6C0D1DE480AB4C5A311E5851 /* CommunityMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DC628CC4F5D7DD8B7C190EF /* CommunityMapView.swift */; };
+		6CAFEAE9370506D8DD1B0EE4 /* AchievementBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D473BB5C2FB3D1D62B6FD37 /* AchievementBadgeView.swift */; };
+		6EC5389A86A78F80B5C7ACA6 /* QuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB7D120BF23AE24FAFF964E /* QuizView.swift */; };
+		70C7C9F56A13F58DA731544A /* LyoError.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8FBEEAC93A49801332D1135 /* LyoError.swift */; };
+		710BE61908CD9FF8BDD2DDBE /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95A6BFCD58B2C9A35A5FE137 /* LoginView.swift */; };
+		71ED2DA9E05DF51619194259 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050E7D3E65B6026332E4199 /* ChatViewModel.swift */; };
+		7321BCD6A8D5E23039F8A8B0 /* Challenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC14D897015706EE4D5DA4A2 /* Challenge.swift */; };
+		73AF2F997555FF69A1447CDB /* Endpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C8BE1A99AE42F6D26F0462 /* Endpoint.swift */; };
+		746034F1B6EC1CD9960ADDAA /* Endpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20840D4298B8B7523C3D8DD2 /* Endpoint.swift */; };
+		79DB2BC985795D231EEDF095 /* DefaultTTSRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F67500EDB27324B6EB120734 /* DefaultTTSRepository.swift */; };
+		7A5B6669D488E4B28B02448B /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DD2E5B89D5F9C9705EC35D /* WebSocketManager.swift */; };
+		7A82AF5BD6C0A8AC20610F4B /* LioOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F36D9DE49A9D8074894B3F3 /* LioOrbView.swift */; };
+		7AB117530198CD314DEAA7B6 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D930D96567841208479F7BBA /* FeedView.swift */; };
+		7C46A3688CA3D2CBBB62D7D4 /* OfflineIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A3A444E9CB775199AA1726 /* OfflineIndicator.swift */; };
+		7C8B67DAECD8AB0BEF4D082E /* ChallengesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCE61F32A32DA120A31A6381 /* ChallengesHomeView.swift */; };
+		7D9CAEE8F13DFBE2577575B3 /* ShimmerEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B018ECCB943A9CE5F65A38B /* ShimmerEffect.swift */; };
+		7DBD7DFF24FB5561E338CE40 /* TutorModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52031AAE8354B3F9D8DFBDCD /* TutorModeView.swift */; };
+		7DC5F2B9F9F80F994FE91F11 /* RepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41484B38CAC7218653EE4C31 /* RepositoryTests.swift */; };
+		7DEED86BF5E4AD9BA43E1A6E /* ComposerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62954DB1DAEE514B6D0DC80D /* ComposerBar.swift */; };
+		7DF77F82DFD3EC2E86F60C95 /* CourseDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2DCE22F743DD0A8E680A96 /* CourseDrawerView.swift */; };
+		7E14E2F6B91CDC0D9A84F68D /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7D9ABF9D9031000CA42563C /* HomeView.swift */; };
+		7EF00D525A942CCCAC6B5443 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434E505EB9076ED24F4C86F4 /* GlassCard.swift */; };
+		7EF5D7B2EEF9C725BB21FC17 /* HybridLyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 448752348ABA6200849DDAF9 /* HybridLyoHomeView.swift */; };
+		7F9B7B797FBD5E1B91D8CED4 /* PushNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB39C4692766D950B95BA31 /* PushNotificationService.swift */; };
+		8012020A4BBFC0959B0EF27D /* QuizViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CD69DD4BBE6890413A33AE7 /* QuizViewModel.swift */; };
+		84AA1E4E013260775835EA0A /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9846F93E8D6EC453095A4A66 /* FeedViewModel.swift */; };
+		84FE38AAAD22C7AF3003424F /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019D7B8838645438D21B973F /* AuthService.swift */; };
+		85243333C7F49D4D09021092 /* OpenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C559270D45A48F2DA435BE /* OpenAIService.swift */; };
+		86DFC1F594A1C7FA5D8FFD18 /* QuickCheckOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F786A1594D66697581220A1 /* QuickCheckOverlay.swift */; };
+		8765129631D109290B24E7B1 /* AnimatedLioOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930E4A3FFE956FCE3BB76799 /* AnimatedLioOrb.swift */; };
+		88015EF2C082A7A926C6E451 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C40687012A57E03ACE84E6 /* AuthService.swift */; };
+		88C2AA976FA8578A2F994035 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238D9E6B9AC4FC212283194E /* SettingsView.swift */; };
+		89BDA4F1BB119B8E92BA1A4E /* LyoError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 446DCA1A8910EFF3CCADEFFB /* LyoError.swift */; };
+		8ABA12F24A958FC36766AF41 /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8CBE16658257F152ADBEC4 /* RegisterView.swift */; };
+		8CD5BFD9FA7DBF14C0FAFEB3 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = FF34AD9B78C1183EAAF40EA4 /* GoogleSignIn */; };
+		8CDEEAE7CCC02AFA6CBD2F7D /* DiscoverCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF0A776CE6FEDA447611481 /* DiscoverCardView.swift */; };
+		8DCA4DD1A0600492A9ADDDE5 /* StackDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32C8B8DDCD692A141C83E69D /* StackDrawerView.swift */; };
+		90A49122922FA72E7F6A26A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 401DD669DA91A56503EB1CF1 /* Assets.xcassets */; };
+		93C4AE38D93851599361CD07 /* AppUIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D315C086762FBBF8225712E /* AppUIState.swift */; };
+		93D030B08BB64C229F7B0290 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8906B73F509FB8DC3AE7C0EA /* User.swift */; };
+		955F9E52460108D7E28F58FC /* StackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE751B4A93847FB8E9BFD7EB /* StackModels.swift */; };
+		96C28D6557C0E070AE8C6EC0 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CC8E7D4E0B5A1F0F81E5A67 /* MainTabView.swift */; };
+		97B10DCF894CD89D9F0B72D5 /* LioChatSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B9237D79C40F7D1A0BA5FE2 /* LioChatSheet.swift */; };
+		99C8CD9897C00E20DDD9D938 /* RootViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C98440AC4C720FFD0E88BD41 /* RootViewModel.swift */; };
+		9AD516F2372D54CAD2D860A9 /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE99C0F2E4B3B65D700EFA19 /* Chat.swift */; };
+		9B25E787CE0F88FF16F96EFB /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6DB6D612B48829C6C59804B /* EditProfileView.swift */; };
+		9DBDB1166256605441E61665 /* DefaultGamificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D153027C3F1C563FFC559C99 /* DefaultGamificationRepository.swift */; };
+		9F511277A05265D1D5F5F85A /* FloatingOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A981C81186E1EDBDE1C235 /* FloatingOrbView.swift */; };
+		9F8F4035B1F8C3DC3DE3C05B /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4F3165F47E420637428A56 /* OnboardingView.swift */; };
+		A02F0FBF50F83B6E0E41E664 /* UIStackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2499CAC305E0D3FBF41934B /* UIStackStore.swift */; };
+		A0FAC8F89EDAB21F12292C0E /* FeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66CC9520CF79A80FAB9E4A91 /* FeedModels.swift */; };
+		A3291597780FBBB4E8BE3445 /* RootViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A27DE9F53B74B8433B1316E /* RootViewModel.swift */; };
+		A3A98676FD6EA60FCBC81340 /* OrientationHintOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0371FBF158043B45B24C0231 /* OrientationHintOverlay.swift */; };
+		A5839961C49574ACB849FF88 /* LioChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653AF7B3538339B65F0F5EA0 /* LioChatService.swift */; };
+		A69176811555599E61877554 /* StackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1053A12BA2898B81984243E8 /* StackService.swift */; };
+		A7B7A59F4D97E1BAA6064ED4 /* CourseGenerationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5588F78E92016AB43BBA7239 /* CourseGenerationCard.swift */; };
+		A84AD804CB15D52308DE0242 /* ReteachOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D366A70E5B000502F2371D /* ReteachOverlay.swift */; };
+		A87FFE0DAB0CC41F7E239171 /* TTSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC6FAA8E1427219D3FCA66B /* TTSView.swift */; };
+		A92ACA7255D7DD29ADD3DBAF /* DefaultTTSRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21938E2004A1D3F262105260 /* DefaultTTSRepository.swift */; };
+		AA45A9CE5CFCEFEFF24E3E41 /* GlassmorphicCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA52D1C086191FD1CF3BE08B /* GlassmorphicCard.swift */; };
+		AA598F7F776F634EDC27EB3E /* Classroom.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54F7F127060FD18EB0D80BF /* Classroom.swift */; };
+		AA99FAFC279028E559E90DCD /* TutorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138DADB848E1A09D8B3524C6 /* TutorModels.swift */; };
+		AB0C6974506BEE95EE8ECAE8 /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EFE51044AF5D93AB657A3A3 /* RegisterView.swift */; };
+		ABF1AA3EDA26425212FC33E8 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89622DC3E07FE16633ABA444 /* ProfileView.swift */; };
+		ABF3DE0A50F2F26C6CE2FADC /* ChatBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E05FA53F9D8CD74DF9C5297 /* ChatBubbleView.swift */; };
+		AC905857A033A26DC9DA0442 /* DefaultAIRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C259644DF96F0746ABFCA6A1 /* DefaultAIRepository.swift */; };
+		AD851D15A8ECFA6CDE0419CD /* RootViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF66F8F4566451D62240143 /* RootViewModel.swift */; };
+		ADA2F8D70FCE16468AB1DC8F /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A067949F16F1E1B8B09FB185 /* DesignSystem.swift */; };
+		AE56D55128660C9ED7C45E19 /* EnhancedLyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BDBF22F721B79ACAE8FDE9 /* EnhancedLyoHomeView.swift */; };
+		AE6CBCAEAE085DEDC141411E /* NetworkLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6DFB9B6B3AD3834EF04E07 /* NetworkLogger.swift */; };
+		B009EDFDB8DD88E0912DBA6F /* CampusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCE4430BB6040AF31533C61 /* CampusView.swift */; };
+		B0FFC594DC9F9E5E66424165 /* LyoChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C973FB61F64360F2E5F8EA /* LyoChat.swift */; };
+		B3256A206D29FC70654BC533 /* ShapeExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA0266A051A72D7790BAB2D /* ShapeExtensions.swift */; };
+		B3328EC8E0EF6442EC84E4D8 /* UIStackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 468F4636A36C2560D5C10EDE /* UIStackModels.swift */; };
+		B438B12B6C4F4259F6C27705 /* LyoOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FED8E1D8BC4697309831D2 /* LyoOverlayView.swift */; };
+		B4502712F1B444403122D33E /* StackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CA3036D92205FE8DF678E5 /* StackModels.swift */; };
+		B53943A7702E7C542D3C19C8 /* CourseGenerationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D95954E23D5C5FB8026E8F13 /* CourseGenerationService.swift */; };
+		B5BE8A2CB0E37FBCCFFB7AE6 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532AD8931650A03C81E366F7 /* FlowLayout.swift */; };
+		B996BC5C70461730AC90B1B5 /* CampusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091836189165E0283D5396C0 /* CampusModels.swift */; };
+		BAD386B5D3D1E83310F38741 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CEEC8925DB1FB9AE1B91BD /* SettingsView.swift */; };
+		BB55DA15A6E2878A8DD3E0C3 /* DefaultCommunityRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96C81D098993604472EF0591 /* DefaultCommunityRepository.swift */; };
+		BD0B6437FDD2D035C5010CA9 /* CampusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087DADD1BE224DE276C1CAE2 /* CampusModels.swift */; };
+		BD14F72ECB9C07B6BF475B8E /* TokenManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D629860551AD0CBB95BDE6E /* TokenManager.swift */; };
+		BD8549C14C7ED92E02B1100D /* ModuleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E10D4E02151B921DBFD613 /* ModuleCardView.swift */; };
+		C025D11CFDABA9971C0414FC /* ImagePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 976C42EBCE5E596B558D6411 /* ImagePickerView.swift */; };
+		C037E8F15B48B65B6385F0BA /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7921128188A98605142E8B15 /* TTSViewModel.swift */; };
+		C05E00B2B761315B0933066A /* DefaultAIRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C2AFDED27627C2303DF24B /* DefaultAIRepository.swift */; };
+		C3C5824E6CBD906B021B3D65 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5FC3579AD034D1F0D22148E /* AppConfig.swift */; };
+		C3ECE9A5BC29119708C532C4 /* FocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C748EEBD16A8CC0F24CB473E /* FocusView.swift */; };
+		C49E9E4386DF6B19A42E5ECC /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21D4E545C6DACA4DCA69764 /* DiscoverView.swift */; };
+		C60C43E7BAF1E77FCE34A6DA /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B328C7B505A68011D586035E /* Chat.swift */; };
+		C6AFAA6EFDA1FC7CD9E3F860 /* StackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DEC95DAB811DCF82A42EB1 /* StackService.swift */; };
+		C80DBCFA2B3B027172EBE3CD /* PremiumButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90B099CC9CE1FCF711540E1 /* PremiumButton.swift */; };
+		C945669AC1ABE0694DE5F85E /* NetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1514D708C6B9B6D1B17EA89E /* NetworkClient.swift */; };
+		C9E6453E8DF6E0C856F26700 /* LyoRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42C3F05ABD7F0CA4EF1D287 /* LyoRepository.swift */; };
+		CA43EC65488C9A96E4CC7D76 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03B434DBB6B9BEF159527A4B /* RepositoryProtocols.swift */; };
+		CA8001E2CF989EF222B834DD /* ChatOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF87D127ED13977BA4D5D9E /* ChatOverlayView.swift */; };
+		CD71F8F5AAA9EB8B38BE4938 /* Endpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE15273338B5371C0E51FF65 /* Endpoint.swift */; };
+		CD8C1E0584F1E07D7E9DB59C /* QuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99DADA92F789F49C9F923576 /* QuizView.swift */; };
+		CE753224CB8A7C3E04839476 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E3BACA79CFBD7525F540FA /* WebSocketManager.swift */; };
+		CF294A0A613B091300A57FEB /* TutorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B849CEA9567D3B1CC08C4737 /* TutorService.swift */; };
+		CFDFB27C56C7FBC6C4D71F59 /* DefaultLearningRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E1FAC759AED64D24E43B4A /* DefaultLearningRepository.swift */; };
+		D32F024B1F787FD0B3C7CD50 /* LyoOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950CBA4EE0E1ECD15CADA4B5 /* LyoOverlayView.swift */; };
+		D3DB1F347B0770F20F710266 /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AB5AC67748757944FFD28C /* DiscoverView.swift */; };
+		D4348C3CE55C260E94FF623E /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8118EEAB5035196300BC63C /* ErrorView.swift */; };
+		D4A5114DDDC17A61B3EF6070 /* LyoAIViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FDBF88DB1D8E03769527EFB /* LyoAIViewModel.swift */; };
+		D5F332B09CDB45D95F3EE42F /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19103A0B5619B645E11F2DA /* ErrorView.swift */; };
+		D620F9D142CE161191FAD34E /* QuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168407AB8CE25C366C7FD86F /* QuizView.swift */; };
+		D8414401A499421EBFBB54E5 /* DataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60562B31C6844518FE15BFC /* DataService.swift */; };
+		D8467585FF4000F7E0B6780A /* ChallengesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF907342E2CA311B323D6AA5 /* ChallengesViewModel.swift */; };
+		D8D3677AAB7A30343F5DB907 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 636452B6AC09466677916EB7 /* EditProfileView.swift */; };
+		D92C558EE335C66E0D4684B0 /* TokenManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27EA88AE6B41DED277B42CC /* TokenManager.swift */; };
+		D98A246D4783150E6B398DFA /* TTSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03191DFD3F16F58093FA9206 /* TTSView.swift */; };
+		D9EB1506FF405057371A733C /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 215B416CE4843E1BF908001F /* FeedView.swift */; };
+		DA605159B802E86354F1D10B /* CourseCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE53D23E02BC53FC4D5E5296 /* CourseCardView.swift */; };
+		DA6F00598094D852D5A4C322 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F70C77C2AE9D407A4004F939 /* GoogleService-Info.plist */; };
+		DAC3132E4C56CE57A04D7C24 /* TranscriptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C3E2493103E3F4088BEB92 /* TranscriptSheet.swift */; };
+		DBB73C18125930CF5B107AC3 /* StackPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF3644210EF40C1E2C85BBF5 /* StackPanelView.swift */; };
+		E0755958C2FEA68ABD29A5CA /* NetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EAAFA5C5D2F19BE3EBFCE8 /* NetworkClient.swift */; };
+		E3E46A623E82F02B3D7CAA39 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B1217ACE511ED9F5362B37 /* AppConfig.swift */; };
+		E47708861B4732B438DE145F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A3EBC02F7CA90FCDEA65F02 /* LoginView.swift */; };
+		E5ED7D51C1DA2B9AB8BCB1DB /* LyoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06F9D8FAFA7242BABEFBC929 /* LyoApp.swift */; };
+		E75B58DAED01D6EAD3E0E0C6 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0017B93C860EEFFCAA3B772 /* AppConfig.swift */; };
+		E814F8B75E640CA2399F209C /* StreamingResponseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF13A1725D373634E92D93BE /* StreamingResponseManager.swift */; };
+		E960D257ECD7CEA329AC2616 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A314961FC6FFAE3E8A115C2F /* OnboardingView.swift */; };
+		E9DD2B7ACD6BDE62AE05499D /* StackCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E16E63D11D726BDD723A04 /* StackCardView.swift */; };
+		EC35BAF7CEC3A8C3CE5A6B00 /* BackendAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39AF112C748C895399712568 /* BackendAIService.swift */; };
+		EC3B7E96E5FE790787B7F387 /* SocialFeedSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9E5D53D0BC4FCB1C5252B7 /* SocialFeedSection.swift */; };
+		EC4F090256C09F4425E578A8 /* CampusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CAB4B440EC6164BE3DD816 /* CampusModels.swift */; };
+		ECE1DE6528F7076F431A79DA /* ImagePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50A4525A24EB73610FBC4B4 /* ImagePickerView.swift */; };
+		ED3AC5B17E202D75AF2A8C56 /* DefaultSocialRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A9B4D54698E82D63872E6BD /* DefaultSocialRepository.swift */; };
+		ED920030786E62694AE4FFB1 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E62B05A48739F0E95AA9D8 /* ChatViewModel.swift */; };
+		EE7CAA6D15F4CB0B9AD1E2F5 /* LyoAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68FCE950A58E95E2FDAAA03D /* LyoAvatarView.swift */; };
+		EF068F7F1A41CDEABDAFB065 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F5BFF7CF6D719D22DAEE8FC /* ProfileView.swift */; };
+		EF153DF1CBB46FF856F19830 /* CommunityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21610BEA809C97B17A54574B /* CommunityViewModel.swift */; };
+		F0473DD90F1C8E8077945DC9 /* DiscoverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C3EF0C7B7E467773E12845E /* DiscoverModels.swift */; };
+		F0793E65BCEEA1B99DAF1B2F /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58BC9E6AEC3F5E0762862B5C /* ChatView.swift */; };
+		F1213532EE86C4D39F8E77BE /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 226D49A697A8C590F26296C5 /* APIModels.swift */; };
+		F57ED1C4810C127F6E8CFCC6 /* NetworkLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF0E1860F1DD82286B1714B /* NetworkLogger.swift */; };
+		F59AFC4DA5CA5EF793168084 /* CommunityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A4B3C725E72A7FDB2D1373 /* CommunityViewModel.swift */; };
+		F5BEB7FCC434FF02D06CBC33 /* LiveClassroomViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0692C4C5FE5F88B3347F32 /* LiveClassroomViewModel.swift */; };
+		F6E38D22D014FFEAC04B3290 /* APIClientTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210AFD89C7327B19698887DC /* APIClientTypes.swift */; };
+		F7321A6C65ABB33ADCDCE649 /* ChatBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42169FAD7F595581884DFBF7 /* ChatBubbleView.swift */; };
+		F7F67DA476E6DF2EB21084A9 /* DefaultGamificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A30D7C7C505117576F88DE /* DefaultGamificationRepository.swift */; };
+		F87F01F43CC25E95E2A54755 /* SuggestionChipsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CCBE002F2CD3D286056A1A9 /* SuggestionChipsBar.swift */; };
+		F8C87EE9B1D760C6812A91A3 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9A328C25E104B977BCB316 /* FeedViewModel.swift */; };
+		F9280AE70A4FBC18F24CE01E /* DefaultAIRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CF638F3BB670D289A0C977 /* DefaultAIRepository.swift */; };
+		F9A722C96B1D2B8614E7F84C /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F77165D3167E849983994965 /* TTSViewModel.swift */; };
+		FADF123318FADB3F96A6E087 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D007F3FC20995FC7CB085E68 /* FeedViewModel.swift */; };
+		FE7846168C414DCEEBB3D8E6 /* QuizViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63B57DE112AF979280024191 /* QuizViewModel.swift */; };
+		FFAB4E615F66D208D401C826 /* LyoAnimatedAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EAA341E6A5636A5E4E343F9 /* LyoAnimatedAvatarView.swift */; };
+		FFD1F70E46C38F27E863DEC8 /* DefaultCommunityRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E18217DB04393F3C51E8DEA /* DefaultCommunityRepository.swift */; };
+		FFDB08AB224EA41C1C313CE1 /* CommunityMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58DF3D7C7EB76AC4EC5B82D /* CommunityMapView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		019D7B8838645438D21B973F /* AuthService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		03191DFD3F16F58093FA9206 /* TTSView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TTSView.swift; sourceTree = "<group>"; };
+		0371FBF158043B45B24C0231 /* OrientationHintOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationHintOverlay.swift; sourceTree = "<group>"; };
+		03B434DBB6B9BEF159527A4B /* RepositoryProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryProtocols.swift; sourceTree = "<group>"; };
+		04E8CC52CF653B05F58EF43F /* NetworkCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NetworkCache.swift; sourceTree = "<group>"; };
+		05E3BACA79CFBD7525F540FA /* WebSocketManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
+		06F9D8FAFA7242BABEFBC929 /* LyoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoApp.swift; sourceTree = "<group>"; };
+		087DADD1BE224DE276C1CAE2 /* CampusModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusModels.swift; sourceTree = "<group>"; };
+		091836189165E0283D5396C0 /* CampusModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CampusModels.swift; sourceTree = "<group>"; };
+		0A0B633F7F1A8807D36894F0 /* NewFeatureServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFeatureServices.swift; sourceTree = "<group>"; };
+		0AF87D127ED13977BA4D5D9E /* ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatOverlayView.swift; sourceTree = "<group>"; };
+		0B018ECCB943A9CE5F65A38B /* ShimmerEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerEffect.swift; sourceTree = "<group>"; };
+		0BD67F285ACFE8302B5E4FA4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
+		0C3EF0C7B7E467773E12845E /* DiscoverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverModels.swift; sourceTree = "<group>"; };
+		0CD69DD4BBE6890413A33AE7 /* QuizViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuizViewModel.swift; sourceTree = "<group>"; };
+		0CEEC86F9CF727ACAF369C5A /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		0D315C086762FBBF8225712E /* AppUIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUIState.swift; sourceTree = "<group>"; };
+		0E9E5D53D0BC4FCB1C5252B7 /* SocialFeedSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialFeedSection.swift; sourceTree = "<group>"; };
+		0F093FE58E5A60642EE566F2 /* StackService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StackService.swift; sourceTree = "<group>"; };
+		0FDBF88DB1D8E03769527EFB /* LyoAIViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoAIViewModel.swift; sourceTree = "<group>"; };
+		1053A12BA2898B81984243E8 /* StackService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StackService.swift; sourceTree = "<group>"; };
+		138DADB848E1A09D8B3524C6 /* TutorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorModels.swift; sourceTree = "<group>"; };
+		1514D708C6B9B6D1B17EA89E /* NetworkClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NetworkClient.swift; sourceTree = "<group>"; };
+		15920EB95AE0C7AFC1922271 /* DefaultSocialRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultSocialRepository.swift; sourceTree = "<group>"; };
+		161804752459CF24FA0F8275 /* FocusView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FocusView.swift; sourceTree = "<group>"; };
+		168407AB8CE25C366C7FD86F /* QuizView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuizView.swift; sourceTree = "<group>"; };
+		18D366A70E5B000502F2371D /* ReteachOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReteachOverlay.swift; sourceTree = "<group>"; };
+		19F2CF95A29EAC3D9C6D0F9C /* NetworkLogger.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NetworkLogger.swift; sourceTree = "<group>"; };
+		1ADABF921ED0990E4EA95FEA /* FeedModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedModels.swift; sourceTree = "<group>"; };
+		1B8CBE16658257F152ADBEC4 /* RegisterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
+		1BF66F8F4566451D62240143 /* RootViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootViewModel.swift; sourceTree = "<group>"; };
+		1D473BB5C2FB3D1D62B6FD37 /* AchievementBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AchievementBadgeView.swift; sourceTree = "<group>"; };
+		1E05FA53F9D8CD74DF9C5297 /* ChatBubbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
+		1F36D9DE49A9D8074894B3F3 /* LioOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LioOrbView.swift; sourceTree = "<group>"; };
+		2016386988945951811E12DC /* QuizViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuizViewModel.swift; sourceTree = "<group>"; };
+		20840D4298B8B7523C3D8DD2 /* Endpoint.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Endpoint.swift; sourceTree = "<group>"; };
+		210AFD89C7327B19698887DC /* APIClientTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTypes.swift; sourceTree = "<group>"; };
+		215B416CE4843E1BF908001F /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		21610BEA809C97B17A54574B /* CommunityViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CommunityViewModel.swift; sourceTree = "<group>"; };
+		21938E2004A1D3F262105260 /* DefaultTTSRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultTTSRepository.swift; sourceTree = "<group>"; };
+		226D49A697A8C590F26296C5 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		22C3E2493103E3F4088BEB92 /* TranscriptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSheet.swift; sourceTree = "<group>"; };
+		22E1FAC759AED64D24E43B4A /* DefaultLearningRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultLearningRepository.swift; sourceTree = "<group>"; };
+		238D9E6B9AC4FC212283194E /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		25CAB4B440EC6164BE3DD816 /* CampusModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CampusModels.swift; sourceTree = "<group>"; };
+		25DA099EBCF9DB2BB2D902EE /* FeedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedModels.swift; sourceTree = "<group>"; };
+		28096EBD3269B134A22C238E /* DiscoverView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		296807BE9324582CE3961771 /* ChatView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		2A3EBC02F7CA90FCDEA65F02 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		2A6DFB9B6B3AD3834EF04E07 /* NetworkLogger.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NetworkLogger.swift; sourceTree = "<group>"; };
+		2A9A328C25E104B977BCB316 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		2B9237D79C40F7D1A0BA5FE2 /* LioChatSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LioChatSheet.swift; sourceTree = "<group>"; };
+		2C6A0A38ADCB78842CCE2991 /* CloudStorageService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudStorageService.swift; sourceTree = "<group>"; };
+		2EC6FAA8E1427219D3FCA66B /* TTSView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TTSView.swift; sourceTree = "<group>"; };
+		2F330071C7BC015276CA7DC1 /* OfflineIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OfflineIndicator.swift; sourceTree = "<group>"; };
+		30B3891E54EB0BF535BA3CEC /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
+		30C40687012A57E03ACE84E6 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		31C559270D45A48F2DA435BE /* OpenAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIService.swift; sourceTree = "<group>"; };
+		32C8B8DDCD692A141C83E69D /* StackDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StackDrawerView.swift; sourceTree = "<group>"; };
+		33832FDAA99B80AA76642070 /* ClassroomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassroomView.swift; sourceTree = "<group>"; };
+		342FDB3E2EDD51FC0071EA38 /* TopHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopHeaderView.swift; sourceTree = "<group>"; };
+		342FDB402EE06ADA0071EA38 /* SocialModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialModels.swift; sourceTree = "<group>"; };
+		342FDB422EE07EB30071EA38 /* CreateEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEventView.swift; sourceTree = "<group>"; };
+		342FDB442EE07F260071EA38 /* CreationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationSheet.swift; sourceTree = "<group>"; };
+		342FDB452EE07F260071EA38 /* PostEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEditorView.swift; sourceTree = "<group>"; };
+		342FDB462EE07F260071EA38 /* VideoRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecorderView.swift; sourceTree = "<group>"; };
+		342FDB4B2EE1DFD60071EA38 /* PostService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostService.swift; sourceTree = "<group>"; };
+		342FDB4D2EE1DFE20071EA38 /* StoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryService.swift; sourceTree = "<group>"; };
+		342FDB4F2EE1DFE50071EA38 /* DiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryService.swift; sourceTree = "<group>"; };
+		3458F40371444132AEBBD87E /* RepositoryProtocols.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RepositoryProtocols.swift; sourceTree = "<group>"; };
+		34E62B05A48739F0E95AA9D8 /* ChatViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		363CFDA6D1153271F3050044 /* Community.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Community.swift; sourceTree = "<group>"; };
+		367F78EBB224065BD7E00DB2 /* LyoAvatarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LyoAvatarView.swift; sourceTree = "<group>"; };
+		3773C4873A63BDF8DEA2722F /* DiscoverReelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverReelView.swift; sourceTree = "<group>"; };
+		39AF112C748C895399712568 /* BackendAIService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackendAIService.swift; sourceTree = "<group>"; };
+		3A2A6B615E5AF90C9154801F /* CampusViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusViewModel.swift; sourceTree = "<group>"; };
+		3A4F3165F47E420637428A56 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		3A64206100D318D2689C3960 /* DefaultAuthRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultAuthRepository.swift; sourceTree = "<group>"; };
+		3E18217DB04393F3C51E8DEA /* DefaultCommunityRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultCommunityRepository.swift; sourceTree = "<group>"; };
+		3EFE51044AF5D93AB657A3A3 /* RegisterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
+		3F011E253648D93692AC6826 /* RepositoryProtocols.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RepositoryProtocols.swift; sourceTree = "<group>"; };
+		401DD669DA91A56503EB1CF1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4050E7D3E65B6026332E4199 /* ChatViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		409D6BD15A706A91FCB8446B /* BattleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BattleCardView.swift; sourceTree = "<group>"; };
+		40D19F543FE091E7D874DB29 /* EnhancedLyoHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnhancedLyoHomeView.swift; sourceTree = "<group>"; };
+		4146A8FFF79D99BC67BE9083 /* StackDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackDrawerView.swift; sourceTree = "<group>"; };
+		41484B38CAC7218653EE4C31 /* RepositoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RepositoryTests.swift; sourceTree = "<group>"; };
+		41DEC95DAB811DCF82A42EB1 /* StackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackService.swift; sourceTree = "<group>"; };
+		41E16E63D11D726BDD723A04 /* StackCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackCardView.swift; sourceTree = "<group>"; };
+		42169FAD7F595581884DFBF7 /* ChatBubbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatBubbleView.swift; sourceTree = "<group>"; };
+		434E505EB9076ED24F4C86F4 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		4442EBF99D96CDBEF049AFD6 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		446DCA1A8910EFF3CCADEFFB /* LyoError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoError.swift; sourceTree = "<group>"; };
+		448752348ABA6200849DDAF9 /* HybridLyoHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridLyoHomeView.swift; sourceTree = "<group>"; };
+		468F4636A36C2560D5C10EDE /* UIStackModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIStackModels.swift; sourceTree = "<group>"; };
+		4822F19FCB0BB18A376519CB /* LyoAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoAPIClient.swift; sourceTree = "<group>"; };
+		4AB567D8EF4541A48120D293 /* CampusView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CampusView.swift; sourceTree = "<group>"; };
+		4EFBF566950FB121EABCBCCB /* AuthService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		519DB7C718DB8C9B5A1669F8 /* Chat.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		51A3A444E9CB775199AA1726 /* OfflineIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineIndicator.swift; sourceTree = "<group>"; };
+		52031AAE8354B3F9D8DFBDCD /* TutorModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorModeView.swift; sourceTree = "<group>"; };
+		524867601320037FEC41C25F /* StackDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StackDrawerView.swift; sourceTree = "<group>"; };
+		5291E6397AF59E9E39828CC8 /* DefaultAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultAuthRepository.swift; sourceTree = "<group>"; };
+		52E4D2DB4F8BA748C18C877E /* StackModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StackModels.swift; sourceTree = "<group>"; };
+		532AD8931650A03C81E366F7 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
+		5335665A170233B4F3B56AED /* EnhancedLyoHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnhancedLyoHomeView.swift; sourceTree = "<group>"; };
+		54F9C15344320964971CD2D8 /* DefaultLearningRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultLearningRepository.swift; sourceTree = "<group>"; };
+		5588F78E92016AB43BBA7239 /* CourseGenerationCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CourseGenerationCard.swift; sourceTree = "<group>"; };
+		56A6A2389713973743BFDDD0 /* DefaultGamificationRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultGamificationRepository.swift; sourceTree = "<group>"; };
+		583894E89D97399DE1EFDB32 /* StreakCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakCalendarView.swift; sourceTree = "<group>"; };
+		58BC9E6AEC3F5E0762862B5C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		5CC8E7D4E0B5A1F0F81E5A67 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		5D629860551AD0CBB95BDE6E /* TokenManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TokenManager.swift; sourceTree = "<group>"; };
+		5F0692C4C5FE5F88B3347F32 /* LiveClassroomViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveClassroomViewModel.swift; sourceTree = "<group>"; };
+		5F32D09C218E85B21A29F5F9 /* HomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		622C9E39024928022E7829FB /* FocusView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FocusView.swift; sourceTree = "<group>"; };
+		62954DB1DAEE514B6D0DC80D /* ComposerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerBar.swift; sourceTree = "<group>"; };
+		62CEEC8925DB1FB9AE1B91BD /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		636452B6AC09466677916EB7 /* EditProfileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		63B57DE112AF979280024191 /* QuizViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuizViewModel.swift; sourceTree = "<group>"; };
+		6458303375BE0A98563FC93E /* LiveLessonModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLessonModels.swift; sourceTree = "<group>"; };
+		64F4BBD8658CEB8B4CA9985C /* LyoAvatarState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoAvatarState.swift; sourceTree = "<group>"; };
+		653AF7B3538339B65F0F5EA0 /* LioChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LioChatService.swift; sourceTree = "<group>"; };
+		66CC9520CF79A80FAB9E4A91 /* FeedModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedModels.swift; sourceTree = "<group>"; };
+		67BDBF22F721B79ACAE8FDE9 /* EnhancedLyoHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnhancedLyoHomeView.swift; sourceTree = "<group>"; };
+		6802F9F52AAFFAB4A0E460AE /* LoginView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		68E10D4E02151B921DBFD613 /* ModuleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleCardView.swift; sourceTree = "<group>"; };
+		68FCE950A58E95E2FDAAA03D /* LyoAvatarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LyoAvatarView.swift; sourceTree = "<group>"; };
+		6A7D94D2885CAB9768DC0D58 /* LyoHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoHomeView.swift; sourceTree = "<group>"; };
+		6B1E40E7083296EB3382B725 /* EditProfileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		6CB64F1C209CEFEAFD0C0140 /* LearningModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
+		6CCBE002F2CD3D286056A1A9 /* SuggestionChipsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionChipsBar.swift; sourceTree = "<group>"; };
+		6D4AEB21C14B4F48AD6A3EDA /* Community.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Community.swift; sourceTree = "<group>"; };
+		70718EA61D3E50C6C1C8EFB5 /* VisionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionService.swift; sourceTree = "<group>"; };
+		71A4B3C725E72A7FDB2D1373 /* CommunityViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityViewModel.swift; sourceTree = "<group>"; };
+		762A9E5F69A4574997DE5E2E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		76C973FB61F64360F2E5F8EA /* LyoChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoChat.swift; sourceTree = "<group>"; };
+		7921128188A98605142E8B15 /* TTSViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TTSViewModel.swift; sourceTree = "<group>"; };
+		7A27DE9F53B74B8433B1316E /* RootViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootViewModel.swift; sourceTree = "<group>"; };
+		7C4EA011F490164405EC9B64 /* DesignSystem.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		7D9F866F6800DFCD4FBD7BA1 /* OfflineIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OfflineIndicator.swift; sourceTree = "<group>"; };
+		7DB7D120BF23AE24FAFF964E /* QuizView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuizView.swift; sourceTree = "<group>"; };
+		7DC628CC4F5D7DD8B7C190EF /* CommunityMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CommunityMapView.swift; sourceTree = "<group>"; };
+		7EAA341E6A5636A5E4E343F9 /* LyoAnimatedAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoAnimatedAvatarView.swift; sourceTree = "<group>"; };
+		7F5BFF7CF6D719D22DAEE8FC /* ProfileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		81B1217ACE511ED9F5362B37 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		8370E40F79E83D2F9791E3FA /* WebSocketManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
+		839B048A71404C17A0D9256A /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		8906B73F509FB8DC3AE7C0EA /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		89622DC3E07FE16633ABA444 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		8983410096FBA6AFB9E2AFC4 /* PremiumHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumHomeView.swift; sourceTree = "<group>"; };
+		89A981C81186E1EDBDE1C235 /* FloatingOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingOrbView.swift; sourceTree = "<group>"; };
+		8D3A2B6FCDBD3943C228BEC6 /* ControlsOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlsOverlay.swift; sourceTree = "<group>"; };
+		8E42D5596E2AC7C1E4A56FC2 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		8EF0E1860F1DD82286B1714B /* NetworkLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkLogger.swift; sourceTree = "<group>"; };
+		92AEB8ECBD06B8247DFB00A6 /* TTSViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSViewModel.swift; sourceTree = "<group>"; };
+		930E4A3FFE956FCE3BB76799 /* AnimatedLioOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedLioOrb.swift; sourceTree = "<group>"; };
+		94E2FCF8FE247DBD51B2677D /* ChallengeCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeCardView.swift; sourceTree = "<group>"; };
+		950CBA4EE0E1ECD15CADA4B5 /* LyoOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LyoOverlayView.swift; sourceTree = "<group>"; };
+		954DEB4237E999469F8BD36F /* DefaultLearningRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultLearningRepository.swift; sourceTree = "<group>"; };
+		95A6BFCD58B2C9A35A5FE137 /* LoginView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		96C81D098993604472EF0591 /* DefaultCommunityRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultCommunityRepository.swift; sourceTree = "<group>"; };
+		96DD2E5B89D5F9C9705EC35D /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
+		976C42EBCE5E596B558D6411 /* ImagePickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePickerView.swift; sourceTree = "<group>"; };
+		9793EECAFF67A8F1002513DE /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
+		9846F93E8D6EC453095A4A66 /* FeedViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		99DADA92F789F49C9F923576 /* QuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuizView.swift; sourceTree = "<group>"; };
+		9A9B4D54698E82D63872E6BD /* DefaultSocialRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultSocialRepository.swift; sourceTree = "<group>"; };
+		9AA0266A051A72D7790BAB2D /* ShapeExtensions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShapeExtensions.swift; sourceTree = "<group>"; };
+		9B94FA9370ED069CA0296FC8 /* DefaultCommunityRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultCommunityRepository.swift; sourceTree = "<group>"; };
+		9F3ABC070DDBFEB27A7EF4B1 /* ClassroomViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassroomViewModel.swift; sourceTree = "<group>"; };
+		9F786A1594D66697581220A1 /* QuickCheckOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCheckOverlay.swift; sourceTree = "<group>"; };
+		A066C884DEB429D14670EF58 /* VisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VisionService.swift; sourceTree = "<group>"; };
+		A067949F16F1E1B8B09FB185 /* DesignSystem.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		A1CA3036D92205FE8DF678E5 /* StackModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StackModels.swift; sourceTree = "<group>"; };
+		A2F7A40E3E29C9931F7ED90E /* ShimmerModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerModifier.swift; sourceTree = "<group>"; };
+		A314961FC6FFAE3E8A115C2F /* OnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		A4D6A22DA8650F8B59F63AB1 /* RepositoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RepositoryTests.swift; sourceTree = "<group>"; };
+		A4F8FF247C761F5B12B550C0 /* TTSVoiceBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSVoiceBubbleView.swift; sourceTree = "<group>"; };
+		A50A4525A24EB73610FBC4B4 /* ImagePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePickerView.swift; sourceTree = "<group>"; };
+		A60562B31C6844518FE15BFC /* DataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataService.swift; sourceTree = "<group>"; };
+		A656992362DA885DCE0A6E38 /* VisionService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VisionService.swift; sourceTree = "<group>"; };
+		A7D5B50DDD36DEEA15A4A528 /* DefaultAuthRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultAuthRepository.swift; sourceTree = "<group>"; };
+		A7D9ABF9D9031000CA42563C /* HomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		AC14D897015706EE4D5DA4A2 /* Challenge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Challenge.swift; sourceTree = "<group>"; };
+		AC511E206CE6BC76BAE1EADE /* CampusItemDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusItemDetailSheet.swift; sourceTree = "<group>"; };
+		AE99C0F2E4B3B65D700EFA19 /* Chat.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		AF3644210EF40C1E2C85BBF5 /* StackPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackPanelView.swift; sourceTree = "<group>"; };
+		AF8FCCC7F005AC31E023B6A9 /* RegisterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
+		AFCE4430BB6040AF31533C61 /* CampusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusView.swift; sourceTree = "<group>"; };
+		B1624D490DA83F9DCF10B23C /* AnimatedGradient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedGradient.swift; sourceTree = "<group>"; };
+		B1C57359EC004F498D4E3C01 /* NetworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCache.swift; sourceTree = "<group>"; };
+		B2920FA658FA996C408CD12A /* DefaultSocialRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultSocialRepository.swift; sourceTree = "<group>"; };
+		B328C7B505A68011D586035E /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		B42C3F05ABD7F0CA4EF1D287 /* LyoRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoRepository.swift; sourceTree = "<group>"; };
+		B536C7CD10E8A4EDE0DEDBEC /* OnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		B54F7F127060FD18EB0D80BF /* Classroom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Classroom.swift; sourceTree = "<group>"; };
+		B8296767A56109F55ABBE04A /* ErrorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
+		B849CEA9567D3B1CC08C4737 /* TutorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorService.swift; sourceTree = "<group>"; };
+		B93007B25800E073B866A7C9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		BB2DCE22F743DD0A8E680A96 /* CourseDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseDrawerView.swift; sourceTree = "<group>"; };
+		BF5E2CD98FF1F95E794D6733 /* NetworkClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NetworkClient.swift; sourceTree = "<group>"; };
+		BF91DA74F74FB6560B4A35F3 /* ProfileHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHomeView.swift; sourceTree = "<group>"; };
+		C19103A0B5619B645E11F2DA /* ErrorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
+		C21D4E545C6DACA4DCA69764 /* DiscoverView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		C2499CAC305E0D3FBF41934B /* UIStackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIStackStore.swift; sourceTree = "<group>"; };
+		C259644DF96F0746ABFCA6A1 /* DefaultAIRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultAIRepository.swift; sourceTree = "<group>"; };
+		C6EAAFA5C5D2F19BE3EBFCE8 /* NetworkClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkClient.swift; sourceTree = "<group>"; };
+		C748EEBD16A8CC0F24CB473E /* FocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusView.swift; sourceTree = "<group>"; };
+		C7C2AFDED27627C2303DF24B /* DefaultAIRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultAIRepository.swift; sourceTree = "<group>"; };
+		C8118EEAB5035196300BC63C /* ErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
+		C8FBEEAC93A49801332D1135 /* LyoError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LyoError.swift; sourceTree = "<group>"; };
+		C90B099CC9CE1FCF711540E1 /* PremiumButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumButton.swift; sourceTree = "<group>"; };
+		C95EFBA56DF973980156DC4B /* CampusView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CampusView.swift; sourceTree = "<group>"; };
+		C98440AC4C720FFD0E88BD41 /* RootViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootViewModel.swift; sourceTree = "<group>"; };
+		C9C8BE1A99AE42F6D26F0462 /* Endpoint.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Endpoint.swift; sourceTree = "<group>"; };
+		CA52D1C086191FD1CF3BE08B /* GlassmorphicCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassmorphicCard.swift; sourceTree = "<group>"; };
+		CBAF76048A749D471B4347C5 /* NetworkCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NetworkCache.swift; sourceTree = "<group>"; };
+		CCFB63C1E631953F6362DFC2 /* CommunityMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityMapView.swift; sourceTree = "<group>"; };
+		CE53D23E02BC53FC4D5E5296 /* CourseCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseCardView.swift; sourceTree = "<group>"; };
+		CE751B4A93847FB8E9BFD7EB /* StackModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackModels.swift; sourceTree = "<group>"; };
+		CFB39C4692766D950B95BA31 /* PushNotificationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushNotificationService.swift; sourceTree = "<group>"; };
+		D0017B93C860EEFFCAA3B772 /* AppConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		D007F3FC20995FC7CB085E68 /* FeedViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		D153027C3F1C563FFC559C99 /* DefaultGamificationRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultGamificationRepository.swift; sourceTree = "<group>"; };
+		D1880BA6E7FEC86C12C48E49 /* LearningModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
+		D2CF638F3BB670D289A0C977 /* DefaultAIRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultAIRepository.swift; sourceTree = "<group>"; };
+		D2DB3EA9286F0EED6EC1F9E8 /* ChatView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		D3B6C2176719561A9DF08FE6 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		D400F26B70E3F2E435676C62 /* LearningModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
+		D43F2925CD82B096A7800247 /* ImagePickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePickerView.swift; sourceTree = "<group>"; };
+		D58DF3D7C7EB76AC4EC5B82D /* CommunityMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CommunityMapView.swift; sourceTree = "<group>"; };
+		D5FC3579AD034D1F0D22148E /* AppConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		D6297CA1DC713DB88D501FFC /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		D6DB6D612B48829C6C59804B /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		D930D96567841208479F7BBA /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		D95954E23D5C5FB8026E8F13 /* CourseGenerationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CourseGenerationService.swift; sourceTree = "<group>"; };
+		DB7E1D60D8537B1725823FB3 /* Lyo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lyo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DCC51D88385B991B206FBFA1 /* ModuleGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleGridView.swift; sourceTree = "<group>"; };
+		DCE61F32A32DA120A31A6381 /* ChallengesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesHomeView.swift; sourceTree = "<group>"; };
+		DE15273338B5371C0E51FF65 /* Endpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Endpoint.swift; sourceTree = "<group>"; };
+		DED05F775C3EE99543AD5BE6 /* SubscriptionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SubscriptionView.swift; sourceTree = "<group>"; };
+		DF6F2E23917EB9A90488143D /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
+		DF907342E2CA311B323D6AA5 /* ChallengesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengesViewModel.swift; sourceTree = "<group>"; };
+		E27EA88AE6B41DED277B42CC /* TokenManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TokenManager.swift; sourceTree = "<group>"; };
+		E2FED8E1D8BC4697309831D2 /* LyoOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LyoOverlayView.swift; sourceTree = "<group>"; };
+		E588F23B4CD971E561EBA997 /* CommunityViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CommunityViewModel.swift; sourceTree = "<group>"; };
+		E5B735290EB0B38467045BDD /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
+		E5F5880F4F8F9DF94B8CE6FF /* StreamingResponseManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingResponseManager.swift; sourceTree = "<group>"; };
+		E66315549DD0DF6BF1EF6B47 /* StreamingResponseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingResponseManager.swift; sourceTree = "<group>"; };
+		E6A30D7C7C505117576F88DE /* DefaultGamificationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultGamificationRepository.swift; sourceTree = "<group>"; };
+		E6CC5C8E29A4935C69BD2F3C /* TokenManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenManager.swift; sourceTree = "<group>"; };
+		E9F61BB0B00820BBFD5937E6 /* TTSView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSView.swift; sourceTree = "<group>"; };
+		EA3E861D4FF108BF36579BF2 /* DefaultTTSRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultTTSRepository.swift; sourceTree = "<group>"; };
+		EA4283984ED6762997ACD620 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		EAFEF01FB6009E8A6B579E81 /* LyoError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LyoError.swift; sourceTree = "<group>"; };
+		F0AB5AC67748757944FFD28C /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		F2DFF5F5B8EB3D701AD9D4B7 /* Community.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Community.swift; sourceTree = "<group>"; };
+		F476EA06E209E75812B6DCBA /* LeaderboardRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardRowView.swift; sourceTree = "<group>"; };
+		F660E75765DF39F0AFE4CB38 /* LiveClassroomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveClassroomView.swift; sourceTree = "<group>"; };
+		F67500EDB27324B6EB120734 /* DefaultTTSRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultTTSRepository.swift; sourceTree = "<group>"; };
+		F70C77C2AE9D407A4004F939 /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		F77165D3167E849983994965 /* TTSViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TTSViewModel.swift; sourceTree = "<group>"; };
+		F838E09330A333226089099A /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		F9994D2F76877B291D38CD9F /* ProfileView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		FCF0A776CE6FEDA447611481 /* DiscoverCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverCardView.swift; sourceTree = "<group>"; };
+		FF13A1725D373634E92D93BE /* StreamingResponseManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingResponseManager.swift; sourceTree = "<group>"; };
+		FF9D03B4E7833F37BA7A4117 /* HeroSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroSectionView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		342A32E4B6844511BB53C8BE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34C214492EDBDD3700BDE6F8 /* FirebaseDatabase in Frameworks */,
+				34C2143B2EDBDD3700BDE6F8 /* FirebaseAnalyticsIdentitySupport in Frameworks */,
+				10E10DA45EBC5E64B1482F39 /* AVFoundation.framework in Frameworks */,
+				34C214592EDBDD3700BDE6F8 /* FirebaseMessaging in Frameworks */,
+				34C2144F2EDBDD3700BDE6F8 /* FirebaseFunctions in Frameworks */,
+				34C214332EDBDD3700BDE6F8 /* FirebaseAI in Frameworks */,
+				34C214472EDBDD3700BDE6F8 /* FirebaseCrashlytics in Frameworks */,
+				34C2144B2EDBDD3700BDE6F8 /* FirebaseFirestore in Frameworks */,
+				34C214572EDBDD3700BDE6F8 /* FirebaseMLModelDownloader in Frameworks */,
+				34C214372EDBDD3700BDE6F8 /* FirebaseAnalytics in Frameworks */,
+				067C2CFFC12BABEB4CF2D56A /* AVKit.framework in Frameworks */,
+				8CD5BFD9FA7DBF14C0FAFEB3 /* GoogleSignIn in Frameworks */,
+				34C214392EDBDD3700BDE6F8 /* FirebaseAnalyticsCore in Frameworks */,
+				34C214512EDBDD3700BDE6F8 /* FirebaseFunctionsCombine-Community in Frameworks */,
+				34C2145B2EDBDD3700BDE6F8 /* FirebasePerformance in Frameworks */,
+				34C214432EDBDD3700BDE6F8 /* FirebaseAuthCombine-Community in Frameworks */,
+				34C214612EDBDD3800BDE6F8 /* FirebaseStorageCombine-Community in Frameworks */,
+				34C2144D2EDBDD3700BDE6F8 /* FirebaseFirestoreCombine-Community in Frameworks */,
+				34C214452EDBDD3700BDE6F8 /* FirebaseCore in Frameworks */,
+				34C214552EDBDD3700BDE6F8 /* FirebaseInstallations in Frameworks */,
+				34C2145D2EDBDD3700BDE6F8 /* FirebaseRemoteConfig in Frameworks */,
+				34C214412EDBDD3700BDE6F8 /* FirebaseAuth in Frameworks */,
+				34C2145F2EDBDD3800BDE6F8 /* FirebaseStorage in Frameworks */,
+				34C2143F2EDBDD3700BDE6F8 /* FirebaseAppDistribution-Beta in Frameworks */,
+				34C2143D2EDBDD3700BDE6F8 /* FirebaseAppCheck in Frameworks */,
+				34C214352EDBDD3700BDE6F8 /* FirebaseAILogic in Frameworks */,
+				34C214532EDBDD3700BDE6F8 /* FirebaseInAppMessaging-Beta in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0013C737D8576BCCFB962735 /* Stack */ = {
+			isa = PBXGroup;
+			children = (
+				AF3644210EF40C1E2C85BBF5 /* StackPanelView.swift */,
+			);
+			path = Stack;
+			sourceTree = "<group>";
+		};
+		06740CC2C1478492E3DF903F /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				E6CC5C8E29A4935C69BD2F3C /* TokenManager.swift */,
+				E27EA88AE6B41DED277B42CC /* TokenManager.swift */,
+				5D629860551AD0CBB95BDE6E /* TokenManager.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		11570E556E9EC582C3F86C0B /* Errors */ = {
+			isa = PBXGroup;
+			children = (
+				C8118EEAB5035196300BC63C /* ErrorView.swift */,
+				51A3A444E9CB775199AA1726 /* OfflineIndicator.swift */,
+				C19103A0B5619B645E11F2DA /* ErrorView.swift */,
+				2F330071C7BC015276CA7DC1 /* OfflineIndicator.swift */,
+				B8296767A56109F55ABBE04A /* ErrorView.swift */,
+				7D9F866F6800DFCD4FBD7BA1 /* OfflineIndicator.swift */,
+			);
+			path = Errors;
+			sourceTree = "<group>";
+		};
+		11BA24D018677A36F450F635 /* Vision */ = {
+			isa = PBXGroup;
+			children = (
+				A50A4525A24EB73610FBC4B4 /* ImagePickerView.swift */,
+				D43F2925CD82B096A7800247 /* ImagePickerView.swift */,
+				976C42EBCE5E596B558D6411 /* ImagePickerView.swift */,
+			);
+			path = Vision;
+			sourceTree = "<group>";
+		};
+		1249DE298BDC632FCCA51E1C /* AITutor */ = {
+			isa = PBXGroup;
+			children = (
+				BB2DCE22F743DD0A8E680A96 /* CourseDrawerView.swift */,
+				40D19F543FE091E7D874DB29 /* EnhancedLyoHomeView.swift */,
+				2B9237D79C40F7D1A0BA5FE2 /* LioChatSheet.swift */,
+				6A7D94D2885CAB9768DC0D58 /* LyoHomeView.swift */,
+				5335665A170233B4F3B56AED /* EnhancedLyoHomeView.swift */,
+				67BDBF22F721B79ACAE8FDE9 /* EnhancedLyoHomeView.swift */,
+			);
+			path = AITutor;
+			sourceTree = "<group>";
+		};
+		1B4C29AF8DA3F05D6951F17B /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				3E308A8647B95D1DE4FFA7F7 /* AITutor */,
+				466DD653059EC6F855B04B76 /* Challenges */,
+				EEA49D25F097A5D43DFECACD /* Classroom */,
+				DA02E132759FB6402370DD67 /* Common */,
+				11570E556E9EC582C3F86C0B /* Errors */,
+				8F3FBC6BE40EFD3AF399B5BA /* Premium */,
+				11BA24D018677A36F450F635 /* Vision */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		22F9EFC90A265C40204AF205 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				A4D6A22DA8650F8B59F63AB1 /* RepositoryTests.swift */,
+				41484B38CAC7218653EE4C31 /* RepositoryTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		24D57E778DAA441404ADB176 /* Community */ = {
+			isa = PBXGroup;
+			children = (
+				CCFB63C1E631953F6362DFC2 /* CommunityMapView.swift */,
+				D58DF3D7C7EB76AC4EC5B82D /* CommunityMapView.swift */,
+				7DC628CC4F5D7DD8B7C190EF /* CommunityMapView.swift */,
+			);
+			path = Community;
+			sourceTree = "<group>";
+		};
+		2DE819B7CF16495F474A9E9E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DB7E1D60D8537B1725823FB3 /* Lyo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2EF5B7D2F0CF56D28A97FECF /* Classroom */ = {
+			isa = PBXGroup;
+			children = (
+				33832FDAA99B80AA76642070 /* ClassroomView.swift */,
+				F660E75765DF39F0AFE4CB38 /* LiveClassroomView.swift */,
+				22C3E2493103E3F4088BEB92 /* TranscriptSheet.swift */,
+				52031AAE8354B3F9D8DFBDCD /* TutorModeView.swift */,
+			);
+			path = Classroom;
+			sourceTree = "<group>";
+		};
+		342FDB472EE07F260071EA38 /* Creation */ = {
+			isa = PBXGroup;
+			children = (
+				342FDB442EE07F260071EA38 /* CreationSheet.swift */,
+				342FDB452EE07F260071EA38 /* PostEditorView.swift */,
+				342FDB462EE07F260071EA38 /* VideoRecorderView.swift */,
+				342FDB4B2EE1DFD60071EA38 /* PostService.swift */,
+				342FDB4D2EE1DFE20071EA38 /* StoryService.swift */,
+				342FDB4F2EE1DFE50071EA38 /* DiscoveryService.swift */,
+			);
+			path = Creation;
+			sourceTree = "<group>";
+		};
+		357CD9AF4B97AF23F9390299 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				8E42D5596E2AC7C1E4A56FC2 /* AuthViewModel.swift */,
+				3A2A6B615E5AF90C9154801F /* CampusViewModel.swift */,
+				DF907342E2CA311B323D6AA5 /* ChallengesViewModel.swift */,
+				D3B6C2176719561A9DF08FE6 /* ChatViewModel.swift */,
+				9F3ABC070DDBFEB27A7EF4B1 /* ClassroomViewModel.swift */,
+				71A4B3C725E72A7FDB2D1373 /* CommunityViewModel.swift */,
+				DF6F2E23917EB9A90488143D /* DiscoverViewModel.swift */,
+				2A9A328C25E104B977BCB316 /* FeedViewModel.swift */,
+				5F0692C4C5FE5F88B3347F32 /* LiveClassroomViewModel.swift */,
+				0FDBF88DB1D8E03769527EFB /* LyoAIViewModel.swift */,
+				0CD69DD4BBE6890413A33AE7 /* QuizViewModel.swift */,
+				C98440AC4C720FFD0E88BD41 /* RootViewModel.swift */,
+				92AEB8ECBD06B8247DFB00A6 /* TTSViewModel.swift */,
+				4050E7D3E65B6026332E4199 /* ChatViewModel.swift */,
+				E588F23B4CD971E561EBA997 /* CommunityViewModel.swift */,
+				9846F93E8D6EC453095A4A66 /* FeedViewModel.swift */,
+				63B57DE112AF979280024191 /* QuizViewModel.swift */,
+				1BF66F8F4566451D62240143 /* RootViewModel.swift */,
+				7921128188A98605142E8B15 /* TTSViewModel.swift */,
+				34E62B05A48739F0E95AA9D8 /* ChatViewModel.swift */,
+				21610BEA809C97B17A54574B /* CommunityViewModel.swift */,
+				D007F3FC20995FC7CB085E68 /* FeedViewModel.swift */,
+				2016386988945951811E12DC /* QuizViewModel.swift */,
+				7A27DE9F53B74B8433B1316E /* RootViewModel.swift */,
+				F77165D3167E849983994965 /* TTSViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		3E308A8647B95D1DE4FFA7F7 /* AITutor */ = {
+			isa = PBXGroup;
+			children = (
+				62954DB1DAEE514B6D0DC80D /* ComposerBar.swift */,
+				CE53D23E02BC53FC4D5E5296 /* CourseCardView.swift */,
+				1F36D9DE49A9D8074894B3F3 /* LioOrbView.swift */,
+				E5B735290EB0B38467045BDD /* MessageBubbleView.swift */,
+				6CCBE002F2CD3D286056A1A9 /* SuggestionChipsBar.swift */,
+				5588F78E92016AB43BBA7239 /* CourseGenerationCard.swift */,
+			);
+			path = AITutor;
+			sourceTree = "<group>";
+		};
+		40B4CA1358F34A7EC4F744CB /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				D6297CA1DC713DB88D501FFC /* HomeView.swift */,
+				5CC8E7D4E0B5A1F0F81E5A67 /* MainTabView.swift */,
+				89622DC3E07FE16633ABA444 /* ProfileView.swift */,
+				762A9E5F69A4574997DE5E2E /* SettingsView.swift */,
+				BC4475781306267594347461 /* Auth */,
+				24D57E778DAA441404ADB176 /* Community */,
+				E33E9FE7CDF7BF4991E3C131 /* Learning */,
+				5DB74B244F9274E22CF8F25D /* Main */,
+				74947B36CAE17E3C69B5D943 /* Social */,
+				A7D9ABF9D9031000CA42563C /* HomeView.swift */,
+				F9994D2F76877B291D38CD9F /* ProfileView.swift */,
+				238D9E6B9AC4FC212283194E /* SettingsView.swift */,
+				5F32D09C218E85B21A29F5F9 /* HomeView.swift */,
+				7F5BFF7CF6D719D22DAEE8FC /* ProfileView.swift */,
+				62CEEC8925DB1FB9AE1B91BD /* SettingsView.swift */,
+				DED05F775C3EE99543AD5BE6 /* SubscriptionView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		43AAE5F7FA8C197AED9D256D = {
+			isa = PBXGroup;
+			children = (
+				C80987B209E53A03209F60B7 /* Sources */,
+				CBDED5A6FF28C83BBCA85956 /* Frameworks */,
+				2DE819B7CF16495F474A9E9E /* Products */,
+				F70C77C2AE9D407A4004F939 /* GoogleService-Info.plist */,
+			);
+			sourceTree = "<group>";
+		};
+		466DD653059EC6F855B04B76 /* Challenges */ = {
+			isa = PBXGroup;
+			children = (
+				1D473BB5C2FB3D1D62B6FD37 /* AchievementBadgeView.swift */,
+				409D6BD15A706A91FCB8446B /* BattleCardView.swift */,
+				94E2FCF8FE247DBD51B2677D /* ChallengeCardView.swift */,
+				F476EA06E209E75812B6DCBA /* LeaderboardRowView.swift */,
+				7EAA341E6A5636A5E4E343F9 /* LyoAnimatedAvatarView.swift */,
+				64F4BBD8658CEB8B4CA9985C /* LyoAvatarState.swift */,
+				583894E89D97399DE1EFDB32 /* StreakCalendarView.swift */,
+			);
+			path = Challenges;
+			sourceTree = "<group>";
+		};
+		4681A67C6DCA54C20E8D68A3 /* Challenges */ = {
+			isa = PBXGroup;
+			children = (
+				DCE61F32A32DA120A31A6381 /* ChallengesHomeView.swift */,
+			);
+			path = Challenges;
+			sourceTree = "<group>";
+		};
+		4E08B05CA27B1848CC6B680A /* Hybrid */ = {
+			isa = PBXGroup;
+			children = (
+				0AF87D127ED13977BA4D5D9E /* ChatOverlayView.swift */,
+				89A981C81186E1EDBDE1C235 /* FloatingOrbView.swift */,
+				FF9D03B4E7833F37BA7A4117 /* HeroSectionView.swift */,
+				448752348ABA6200849DDAF9 /* HybridLyoHomeView.swift */,
+				0E9E5D53D0BC4FCB1C5252B7 /* SocialFeedSection.swift */,
+				950CBA4EE0E1ECD15CADA4B5 /* LyoOverlayView.swift */,
+				68FCE950A58E95E2FDAAA03D /* LyoAvatarView.swift */,
+				42169FAD7F595581884DFBF7 /* ChatBubbleView.swift */,
+				E2FED8E1D8BC4697309831D2 /* LyoOverlayView.swift */,
+				367F78EBB224065BD7E00DB2 /* LyoAvatarView.swift */,
+				1E05FA53F9D8CD74DF9C5297 /* ChatBubbleView.swift */,
+			);
+			path = Hybrid;
+			sourceTree = "<group>";
+		};
+		55D2FEF88B81DD70C2FC6BF5 /* Repositories */ = {
+			isa = PBXGroup;
+			children = (
+				D2CF638F3BB670D289A0C977 /* DefaultAIRepository.swift */,
+				5291E6397AF59E9E39828CC8 /* DefaultAuthRepository.swift */,
+				9B94FA9370ED069CA0296FC8 /* DefaultCommunityRepository.swift */,
+				E6A30D7C7C505117576F88DE /* DefaultGamificationRepository.swift */,
+				22E1FAC759AED64D24E43B4A /* DefaultLearningRepository.swift */,
+				15920EB95AE0C7AFC1922271 /* DefaultSocialRepository.swift */,
+				F67500EDB27324B6EB120734 /* DefaultTTSRepository.swift */,
+				03B434DBB6B9BEF159527A4B /* RepositoryProtocols.swift */,
+				C7C2AFDED27627C2303DF24B /* DefaultAIRepository.swift */,
+				3A64206100D318D2689C3960 /* DefaultAuthRepository.swift */,
+				96C81D098993604472EF0591 /* DefaultCommunityRepository.swift */,
+				D153027C3F1C563FFC559C99 /* DefaultGamificationRepository.swift */,
+				54F9C15344320964971CD2D8 /* DefaultLearningRepository.swift */,
+				B2920FA658FA996C408CD12A /* DefaultSocialRepository.swift */,
+				EA3E861D4FF108BF36579BF2 /* DefaultTTSRepository.swift */,
+				3458F40371444132AEBBD87E /* RepositoryProtocols.swift */,
+				C259644DF96F0746ABFCA6A1 /* DefaultAIRepository.swift */,
+				A7D5B50DDD36DEEA15A4A528 /* DefaultAuthRepository.swift */,
+				3E18217DB04393F3C51E8DEA /* DefaultCommunityRepository.swift */,
+				56A6A2389713973743BFDDD0 /* DefaultGamificationRepository.swift */,
+				954DEB4237E999469F8BD36F /* DefaultLearningRepository.swift */,
+				9A9B4D54698E82D63872E6BD /* DefaultSocialRepository.swift */,
+				21938E2004A1D3F262105260 /* DefaultTTSRepository.swift */,
+				3F011E253648D93692AC6826 /* RepositoryProtocols.swift */,
+			);
+			path = Repositories;
+			sourceTree = "<group>";
+		};
+		5DB74B244F9274E22CF8F25D /* Main */ = {
+			isa = PBXGroup;
+			children = (
+				342FDB472EE07F260071EA38 /* Creation */,
+				342FDB422EE07EB30071EA38 /* CreateEventView.swift */,
+				AFCE4430BB6040AF31533C61 /* CampusView.swift */,
+				3773C4873A63BDF8DEA2722F /* DiscoverReelView.swift */,
+				F0AB5AC67748757944FFD28C /* DiscoverView.swift */,
+				C748EEBD16A8CC0F24CB473E /* FocusView.swift */,
+				4146A8FFF79D99BC67BE9083 /* StackDrawerView.swift */,
+				1249DE298BDC632FCCA51E1C /* AITutor */,
+				D20018EA69C0A6E49ACEC3D5 /* Campus */,
+				4681A67C6DCA54C20E8D68A3 /* Challenges */,
+				2EF5B7D2F0CF56D28A97FECF /* Classroom */,
+				B58B4660E9DBFD598C09216E /* Home */,
+				4E08B05CA27B1848CC6B680A /* Hybrid */,
+				FBB1753A418BCFE5754EF35C /* Profile */,
+				0013C737D8576BCCFB962735 /* Stack */,
+				622C9E39024928022E7829FB /* FocusView.swift */,
+				C21D4E545C6DACA4DCA69764 /* DiscoverView.swift */,
+				C95EFBA56DF973980156DC4B /* CampusView.swift */,
+				32C8B8DDCD692A141C83E69D /* StackDrawerView.swift */,
+				161804752459CF24FA0F8275 /* FocusView.swift */,
+				28096EBD3269B134A22C238E /* DiscoverView.swift */,
+				4AB567D8EF4541A48120D293 /* CampusView.swift */,
+				524867601320037FEC41C25F /* StackDrawerView.swift */,
+				342FDB3E2EDD51FC0071EA38 /* TopHeaderView.swift */,
+			);
+			path = Main;
+			sourceTree = "<group>";
+		};
+		74947B36CAE17E3C69B5D943 /* Social */ = {
+			isa = PBXGroup;
+			children = (
+				58BC9E6AEC3F5E0762862B5C /* ChatView.swift */,
+				EA4283984ED6762997ACD620 /* FeedView.swift */,
+				D2DB3EA9286F0EED6EC1F9E8 /* ChatView.swift */,
+				D930D96567841208479F7BBA /* FeedView.swift */,
+				296807BE9324582CE3961771 /* ChatView.swift */,
+				215B416CE4843E1BF908001F /* FeedView.swift */,
+			);
+			path = Social;
+			sourceTree = "<group>";
+		};
+		87BAE6486B51635E13AFC957 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				0D315C086762FBBF8225712E /* AppUIState.swift */,
+				F838E09330A333226089099A /* DesignSystem.swift */,
+				4442EBF99D96CDBEF049AFD6 /* DesignTokens.swift */,
+				C9784F399AAB27BB09359207 /* Configuration */,
+				E89DDD244FAD94214E646D6E /* Errors */,
+				E1D880E96A6AA6B1D54198A1 /* Networking */,
+				06740CC2C1478492E3DF903F /* Security */,
+				7C4EA011F490164405EC9B64 /* DesignSystem.swift */,
+				A067949F16F1E1B8B09FB185 /* DesignSystem.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		8A978EE0169561752DD14E2B /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				30C40687012A57E03ACE84E6 /* AuthService.swift */,
+				A60562B31C6844518FE15BFC /* DataService.swift */,
+				9793EECAFF67A8F1002513DE /* HapticManager.swift */,
+				653AF7B3538339B65F0F5EA0 /* LioChatService.swift */,
+				4822F19FCB0BB18A376519CB /* LyoAPIClient.swift */,
+				B42C3F05ABD7F0CA4EF1D287 /* LyoRepository.swift */,
+				0A0B633F7F1A8807D36894F0 /* NewFeatureServices.swift */,
+				31C559270D45A48F2DA435BE /* OpenAIService.swift */,
+				41DEC95DAB811DCF82A42EB1 /* StackService.swift */,
+				B849CEA9567D3B1CC08C4737 /* TutorService.swift */,
+				C2499CAC305E0D3FBF41934B /* UIStackStore.swift */,
+				70718EA61D3E50C6C1C8EFB5 /* VisionService.swift */,
+				55D2FEF88B81DD70C2FC6BF5 /* Repositories */,
+				D95954E23D5C5FB8026E8F13 /* CourseGenerationService.swift */,
+				A066C884DEB429D14670EF58 /* VisionService.swift */,
+				1053A12BA2898B81984243E8 /* StackService.swift */,
+				019D7B8838645438D21B973F /* AuthService.swift */,
+				A656992362DA885DCE0A6E38 /* VisionService.swift */,
+				0F093FE58E5A60642EE566F2 /* StackService.swift */,
+				4EFBF566950FB121EABCBCCB /* AuthService.swift */,
+				39AF112C748C895399712568 /* BackendAIService.swift */,
+				CFB39C4692766D950B95BA31 /* PushNotificationService.swift */,
+				2C6A0A38ADCB78842CCE2991 /* CloudStorageService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		8F3FBC6BE40EFD3AF399B5BA /* Premium */ = {
+			isa = PBXGroup;
+			children = (
+				B1624D490DA83F9DCF10B23C /* AnimatedGradient.swift */,
+				930E4A3FFE956FCE3BB76799 /* AnimatedLioOrb.swift */,
+				434E505EB9076ED24F4C86F4 /* GlassCard.swift */,
+				C90B099CC9CE1FCF711540E1 /* PremiumButton.swift */,
+				0B018ECCB943A9CE5F65A38B /* ShimmerEffect.swift */,
+			);
+			path = Premium;
+			sourceTree = "<group>";
+		};
+		B58B4660E9DBFD598C09216E /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				8983410096FBA6AFB9E2AFC4 /* PremiumHomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		BC4475781306267594347461 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				D6DB6D612B48829C6C59804B /* EditProfileView.swift */,
+				2A3EBC02F7CA90FCDEA65F02 /* LoginView.swift */,
+				3A4F3165F47E420637428A56 /* OnboardingView.swift */,
+				1B8CBE16658257F152ADBEC4 /* RegisterView.swift */,
+				6B1E40E7083296EB3382B725 /* EditProfileView.swift */,
+				95A6BFCD58B2C9A35A5FE137 /* LoginView.swift */,
+				B536C7CD10E8A4EDE0DEDBEC /* OnboardingView.swift */,
+				AF8FCCC7F005AC31E023B6A9 /* RegisterView.swift */,
+				636452B6AC09466677916EB7 /* EditProfileView.swift */,
+				6802F9F52AAFFAB4A0E460AE /* LoginView.swift */,
+				A314961FC6FFAE3E8A115C2F /* OnboardingView.swift */,
+				3EFE51044AF5D93AB657A3A3 /* RegisterView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		C80987B209E53A03209F60B7 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				06F9D8FAFA7242BABEFBC929 /* LyoApp.swift */,
+				1B4C29AF8DA3F05D6951F17B /* Components */,
+				87BAE6486B51635E13AFC957 /* Core */,
+				DF435C208AF6FC140443C26B /* Models */,
+				F27A0414BBBF6F5BB5532882 /* Resources */,
+				8A978EE0169561752DD14E2B /* Services */,
+				F36801FD1FE36DF08A07A4F0 /* Utils */,
+				357CD9AF4B97AF23F9390299 /* ViewModels */,
+				40B4CA1358F34A7EC4F744CB /* Views */,
+				22F9EFC90A265C40204AF205 /* Tests */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		C9784F399AAB27BB09359207 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				81B1217ACE511ED9F5362B37 /* AppConfig.swift */,
+				30B3891E54EB0BF535BA3CEC /* Secrets.swift */,
+				D5FC3579AD034D1F0D22148E /* AppConfig.swift */,
+				D0017B93C860EEFFCAA3B772 /* AppConfig.swift */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		CBDED5A6FF28C83BBCA85956 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0CEEC86F9CF727ACAF369C5A /* AVFoundation.framework */,
+				0BD67F285ACFE8302B5E4FA4 /* AVKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D20018EA69C0A6E49ACEC3D5 /* Campus */ = {
+			isa = PBXGroup;
+			children = (
+				AC511E206CE6BC76BAE1EADE /* CampusItemDetailSheet.swift */,
+			);
+			path = Campus;
+			sourceTree = "<group>";
+		};
+		DA02E132759FB6402370DD67 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				FCF0A776CE6FEDA447611481 /* DiscoverCardView.swift */,
+				532AD8931650A03C81E366F7 /* FlowLayout.swift */,
+				CA52D1C086191FD1CF3BE08B /* GlassmorphicCard.swift */,
+				41E16E63D11D726BDD723A04 /* StackCardView.swift */,
+			);
+			path = Common;
+			sourceTree = "<group>";
+		};
+		DF435C208AF6FC140443C26B /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				342FDB402EE06ADA0071EA38 /* SocialModels.swift */,
+				210AFD89C7327B19698887DC /* APIClientTypes.swift */,
+				226D49A697A8C590F26296C5 /* APIModels.swift */,
+				087DADD1BE224DE276C1CAE2 /* CampusModels.swift */,
+				AC14D897015706EE4D5DA4A2 /* Challenge.swift */,
+				B328C7B505A68011D586035E /* Chat.swift */,
+				B54F7F127060FD18EB0D80BF /* Classroom.swift */,
+				363CFDA6D1153271F3050044 /* Community.swift */,
+				0C3EF0C7B7E467773E12845E /* DiscoverModels.swift */,
+				25DA099EBCF9DB2BB2D902EE /* FeedModels.swift */,
+				D1880BA6E7FEC86C12C48E49 /* LearningModels.swift */,
+				6458303375BE0A98563FC93E /* LiveLessonModels.swift */,
+				76C973FB61F64360F2E5F8EA /* LyoChat.swift */,
+				CE751B4A93847FB8E9BFD7EB /* StackModels.swift */,
+				138DADB848E1A09D8B3524C6 /* TutorModels.swift */,
+				468F4636A36C2560D5C10EDE /* UIStackModels.swift */,
+				8906B73F509FB8DC3AE7C0EA /* User.swift */,
+				D400F26B70E3F2E435676C62 /* LearningModels.swift */,
+				AE99C0F2E4B3B65D700EFA19 /* Chat.swift */,
+				F2DFF5F5B8EB3D701AD9D4B7 /* Community.swift */,
+				52E4D2DB4F8BA748C18C877E /* StackModels.swift */,
+				1ADABF921ED0990E4EA95FEA /* FeedModels.swift */,
+				091836189165E0283D5396C0 /* CampusModels.swift */,
+				6CB64F1C209CEFEAFD0C0140 /* LearningModels.swift */,
+				519DB7C718DB8C9B5A1669F8 /* Chat.swift */,
+				6D4AEB21C14B4F48AD6A3EDA /* Community.swift */,
+				A1CA3036D92205FE8DF678E5 /* StackModels.swift */,
+				66CC9520CF79A80FAB9E4A91 /* FeedModels.swift */,
+				25CAB4B440EC6164BE3DD816 /* CampusModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E1D880E96A6AA6B1D54198A1 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				DE15273338B5371C0E51FF65 /* Endpoint.swift */,
+				B1C57359EC004F498D4E3C01 /* NetworkCache.swift */,
+				C6EAAFA5C5D2F19BE3EBFCE8 /* NetworkClient.swift */,
+				8EF0E1860F1DD82286B1714B /* NetworkLogger.swift */,
+				E66315549DD0DF6BF1EF6B47 /* StreamingResponseManager.swift */,
+				96DD2E5B89D5F9C9705EC35D /* WebSocketManager.swift */,
+				C9C8BE1A99AE42F6D26F0462 /* Endpoint.swift */,
+				04E8CC52CF653B05F58EF43F /* NetworkCache.swift */,
+				BF5E2CD98FF1F95E794D6733 /* NetworkClient.swift */,
+				2A6DFB9B6B3AD3834EF04E07 /* NetworkLogger.swift */,
+				FF13A1725D373634E92D93BE /* StreamingResponseManager.swift */,
+				05E3BACA79CFBD7525F540FA /* WebSocketManager.swift */,
+				20840D4298B8B7523C3D8DD2 /* Endpoint.swift */,
+				CBAF76048A749D471B4347C5 /* NetworkCache.swift */,
+				1514D708C6B9B6D1B17EA89E /* NetworkClient.swift */,
+				19F2CF95A29EAC3D9C6D0F9C /* NetworkLogger.swift */,
+				E5F5880F4F8F9DF94B8CE6FF /* StreamingResponseManager.swift */,
+				8370E40F79E83D2F9791E3FA /* WebSocketManager.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		E33E9FE7CDF7BF4991E3C131 /* Learning */ = {
+			isa = PBXGroup;
+			children = (
+				99DADA92F789F49C9F923576 /* QuizView.swift */,
+				E9F61BB0B00820BBFD5937E6 /* TTSView.swift */,
+				168407AB8CE25C366C7FD86F /* QuizView.swift */,
+				2EC6FAA8E1427219D3FCA66B /* TTSView.swift */,
+				7DB7D120BF23AE24FAFF964E /* QuizView.swift */,
+				03191DFD3F16F58093FA9206 /* TTSView.swift */,
+			);
+			path = Learning;
+			sourceTree = "<group>";
+		};
+		E89DDD244FAD94214E646D6E /* Errors */ = {
+			isa = PBXGroup;
+			children = (
+				446DCA1A8910EFF3CCADEFFB /* LyoError.swift */,
+				EAFEF01FB6009E8A6B579E81 /* LyoError.swift */,
+				C8FBEEAC93A49801332D1135 /* LyoError.swift */,
+			);
+			path = Errors;
+			sourceTree = "<group>";
+		};
+		EEA49D25F097A5D43DFECACD /* Classroom */ = {
+			isa = PBXGroup;
+			children = (
+				8D3A2B6FCDBD3943C228BEC6 /* ControlsOverlay.swift */,
+				68E10D4E02151B921DBFD613 /* ModuleCardView.swift */,
+				DCC51D88385B991B206FBFA1 /* ModuleGridView.swift */,
+				0371FBF158043B45B24C0231 /* OrientationHintOverlay.swift */,
+				9F786A1594D66697581220A1 /* QuickCheckOverlay.swift */,
+				18D366A70E5B000502F2371D /* ReteachOverlay.swift */,
+				A4F8FF247C761F5B12B550C0 /* TTSVoiceBubbleView.swift */,
+			);
+			path = Classroom;
+			sourceTree = "<group>";
+		};
+		F27A0414BBBF6F5BB5532882 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				401DD669DA91A56503EB1CF1 /* Assets.xcassets */,
+				B93007B25800E073B866A7C9 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		F36801FD1FE36DF08A07A4F0 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				839B048A71404C17A0D9256A /* KeychainHelper.swift */,
+				A2F7A40E3E29C9931F7ED90E /* ShimmerModifier.swift */,
+				9AA0266A051A72D7790BAB2D /* ShapeExtensions.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		FBB1753A418BCFE5754EF35C /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				BF91DA74F74FB6560B4A35F3 /* ProfileHomeView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4BB5C257A9D8AD9C970FB775 /* Lyo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1D162F65AF2D60ECDC650D80 /* Build configuration list for PBXNativeTarget "Lyo" */;
+			buildPhases = (
+				5A5D48925F6459B724CC5F4C /* Sources */,
+				05B51C3E8DD696DFC72829D8 /* Resources */,
+				342A32E4B6844511BB53C8BE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Lyo;
+			packageProductDependencies = (
+				FF34AD9B78C1183EAAF40EA4 /* GoogleSignIn */,
+				34C214322EDBDD3700BDE6F8 /* FirebaseAI */,
+				34C214342EDBDD3700BDE6F8 /* FirebaseAILogic */,
+				34C214362EDBDD3700BDE6F8 /* FirebaseAnalytics */,
+				34C214382EDBDD3700BDE6F8 /* FirebaseAnalyticsCore */,
+				34C2143A2EDBDD3700BDE6F8 /* FirebaseAnalyticsIdentitySupport */,
+				34C2143C2EDBDD3700BDE6F8 /* FirebaseAppCheck */,
+				34C2143E2EDBDD3700BDE6F8 /* FirebaseAppDistribution-Beta */,
+				34C214402EDBDD3700BDE6F8 /* FirebaseAuth */,
+				34C214422EDBDD3700BDE6F8 /* FirebaseAuthCombine-Community */,
+				34C214442EDBDD3700BDE6F8 /* FirebaseCore */,
+				34C214462EDBDD3700BDE6F8 /* FirebaseCrashlytics */,
+				34C214482EDBDD3700BDE6F8 /* FirebaseDatabase */,
+				34C2144A2EDBDD3700BDE6F8 /* FirebaseFirestore */,
+				34C2144C2EDBDD3700BDE6F8 /* FirebaseFirestoreCombine-Community */,
+				34C2144E2EDBDD3700BDE6F8 /* FirebaseFunctions */,
+				34C214502EDBDD3700BDE6F8 /* FirebaseFunctionsCombine-Community */,
+				34C214522EDBDD3700BDE6F8 /* FirebaseInAppMessaging-Beta */,
+				34C214542EDBDD3700BDE6F8 /* FirebaseInstallations */,
+				34C214562EDBDD3700BDE6F8 /* FirebaseMLModelDownloader */,
+				34C214582EDBDD3700BDE6F8 /* FirebaseMessaging */,
+				34C2145A2EDBDD3700BDE6F8 /* FirebasePerformance */,
+				34C2145C2EDBDD3700BDE6F8 /* FirebaseRemoteConfig */,
+				34C2145E2EDBDD3800BDE6F8 /* FirebaseStorage */,
+				34C214602EDBDD3800BDE6F8 /* FirebaseStorageCombine-Community */,
+			);
+			productName = Lyo;
+			productReference = DB7E1D60D8537B1725823FB3 /* Lyo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		193BC11F542F8A6A5FFA5D99 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					4BB5C257A9D8AD9C970FB775 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 87597440F183580A4AC5CBD5 /* Build configuration list for PBXProject "Lyo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 43AAE5F7FA8C197AED9D256D;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				874868FB395DDC488B695DBC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			productRefGroup = 2DE819B7CF16495F474A9E9E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4BB5C257A9D8AD9C970FB775 /* Lyo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		05B51C3E8DD696DFC72829D8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90A49122922FA72E7F6A26A1 /* Assets.xcassets in Resources */,
+				DA6F00598094D852D5A4C322 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5A5D48925F6459B724CC5F4C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6E38D22D014FFEAC04B3290 /* APIClientTypes.swift in Sources */,
+				F1213532EE86C4D39F8E77BE /* APIModels.swift in Sources */,
+				6CAFEAE9370506D8DD1B0EE4 /* AchievementBadgeView.swift in Sources */,
+				3AFD78ED34146C4DBE325C32 /* AnimatedGradient.swift in Sources */,
+				8765129631D109290B24E7B1 /* AnimatedLioOrb.swift in Sources */,
+				E3E46A623E82F02B3D7CAA39 /* AppConfig.swift in Sources */,
+				93C4AE38D93851599361CD07 /* AppUIState.swift in Sources */,
+				88015EF2C082A7A926C6E451 /* AuthService.swift in Sources */,
+				35A3C32CE06C9A76DEFDC87D /* AuthViewModel.swift in Sources */,
+				52A25A38C6D05D8401A18340 /* BattleCardView.swift in Sources */,
+				3C3247C44F956869E3AB24CB /* CampusItemDetailSheet.swift in Sources */,
+				BD0B6437FDD2D035C5010CA9 /* CampusModels.swift in Sources */,
+				B009EDFDB8DD88E0912DBA6F /* CampusView.swift in Sources */,
+				2355903B7FCE43FEEF1416BF /* CampusViewModel.swift in Sources */,
+				D8414401A499421EBFBB54E5 /* DataService.swift in Sources */,
+				7321BCD6A8D5E23039F8A8B0 /* Challenge.swift in Sources */,
+				157804452A1276E0CD5D444A /* ChallengeCardView.swift in Sources */,
+				7C8B67DAECD8AB0BEF4D082E /* ChallengesHomeView.swift in Sources */,
+				D8467585FF4000F7E0B6780A /* ChallengesViewModel.swift in Sources */,
+				C60C43E7BAF1E77FCE34A6DA /* Chat.swift in Sources */,
+				CA8001E2CF989EF222B834DD /* ChatOverlayView.swift in Sources */,
+				F0793E65BCEEA1B99DAF1B2F /* ChatView.swift in Sources */,
+				4E3AF259D760B98761301BDB /* ChatViewModel.swift in Sources */,
+				AA598F7F776F634EDC27EB3E /* Classroom.swift in Sources */,
+				24CADF9904E2B96A163E0F67 /* ClassroomView.swift in Sources */,
+				4136639C26A85D95515DB60E /* ClassroomViewModel.swift in Sources */,
+				01B31E74773604890DF43991 /* Community.swift in Sources */,
+				44FB1388A6D9A4C421D60F57 /* CommunityMapView.swift in Sources */,
+				F59AFC4DA5CA5EF793168084 /* CommunityViewModel.swift in Sources */,
+				7DEED86BF5E4AD9BA43E1A6E /* ComposerBar.swift in Sources */,
+				2FAE6C3CC8611E69076A2CEE /* ControlsOverlay.swift in Sources */,
+				DA605159B802E86354F1D10B /* CourseCardView.swift in Sources */,
+				7DF77F82DFD3EC2E86F60C95 /* CourseDrawerView.swift in Sources */,
+				F9280AE70A4FBC18F24CE01E /* DefaultAIRepository.swift in Sources */,
+				45F95565EFE94850F75C26A4 /* DefaultAuthRepository.swift in Sources */,
+				47341520455D9BC9E063D4D2 /* DefaultCommunityRepository.swift in Sources */,
+				F7F67DA476E6DF2EB21084A9 /* DefaultGamificationRepository.swift in Sources */,
+				342FDB482EE07F260071EA38 /* VideoRecorderView.swift in Sources */,
+				342FDB492EE07F260071EA38 /* CreationSheet.swift in Sources */,
+				342FDB4A2EE07F260071EA38 /* PostEditorView.swift in Sources */,
+				CFDFB27C56C7FBC6C4D71F59 /* DefaultLearningRepository.swift in Sources */,
+				63BE157BC71AB485AF0E4A48 /* DefaultSocialRepository.swift in Sources */,
+				79DB2BC985795D231EEDF095 /* DefaultTTSRepository.swift in Sources */,
+				2E04934F0BA1FA18276D9432 /* DesignSystem.swift in Sources */,
+				4CA4A8AF28758C2593B943A4 /* DesignTokens.swift in Sources */,
+				8CDEEAE7CCC02AFA6CBD2F7D /* DiscoverCardView.swift in Sources */,
+				F0473DD90F1C8E8077945DC9 /* DiscoverModels.swift in Sources */,
+				0360F9CAC4A11747C2647505 /* DiscoverReelView.swift in Sources */,
+				D3DB1F347B0770F20F710266 /* DiscoverView.swift in Sources */,
+				58A08B60309616AA10A69FB6 /* DiscoverViewModel.swift in Sources */,
+				9B25E787CE0F88FF16F96EFB /* EditProfileView.swift in Sources */,
+				CD71F8F5AAA9EB8B38BE4938 /* Endpoint.swift in Sources */,
+				428E50D04E8E4B22E66609C9 /* EnhancedLyoHomeView.swift in Sources */,
+				D4348C3CE55C260E94FF623E /* ErrorView.swift in Sources */,
+				621AE0F3572DF2BEF0A97441 /* FeedModels.swift in Sources */,
+				255FF345FB32BADC2E031DD3 /* FeedView.swift in Sources */,
+				F8C87EE9B1D760C6812A91A3 /* FeedViewModel.swift in Sources */,
+				9F511277A05265D1D5F5F85A /* FloatingOrbView.swift in Sources */,
+				B5BE8A2CB0E37FBCCFFB7AE6 /* FlowLayout.swift in Sources */,
+				C3ECE9A5BC29119708C532C4 /* FocusView.swift in Sources */,
+				7EF00D525A942CCCAC6B5443 /* GlassCard.swift in Sources */,
+				AA45A9CE5CFCEFEFF24E3E41 /* GlassmorphicCard.swift in Sources */,
+				0041454849867A8C24EEC7AE /* HapticManager.swift in Sources */,
+				424B9F105B85A33C73B8C3BD /* HeroSectionView.swift in Sources */,
+				3C2949641FCF1473BBF519C2 /* HomeView.swift in Sources */,
+				7EF5D7B2EEF9C725BB21FC17 /* HybridLyoHomeView.swift in Sources */,
+				ECE1DE6528F7076F431A79DA /* ImagePickerView.swift in Sources */,
+				4AD9434F31894CB691401446 /* KeychainHelper.swift in Sources */,
+				2960EF2822082BD7D80CEC76 /* LeaderboardRowView.swift in Sources */,
+				0247300F5C6EAEA5AAFC994E /* LearningModels.swift in Sources */,
+				A5839961C49574ACB849FF88 /* LioChatService.swift in Sources */,
+				97B10DCF894CD89D9F0B72D5 /* LioChatSheet.swift in Sources */,
+				7A82AF5BD6C0A8AC20610F4B /* LioOrbView.swift in Sources */,
+				3CC75E4EE47CB42D2EA7BEB8 /* LiveClassroomView.swift in Sources */,
+				342FDB3F2EDD51FC0071EA38 /* TopHeaderView.swift in Sources */,
+				342FDB4C2EE1DFD60071EA38 /* PostService.swift in Sources */,
+				F5BEB7FCC434FF02D06CBC33 /* LiveClassroomViewModel.swift in Sources */,
+				1C560AB2CD9D55A8B3458E7C /* LiveLessonModels.swift in Sources */,
+				E47708861B4732B438DE145F /* LoginView.swift in Sources */,
+				D4A5114DDDC17A61B3EF6070 /* LyoAIViewModel.swift in Sources */,
+				49599F172AC54DEF7E6ED4AC /* LyoAPIClient.swift in Sources */,
+				FFAB4E615F66D208D401C826 /* LyoAnimatedAvatarView.swift in Sources */,
+				E5ED7D51C1DA2B9AB8BCB1DB /* LyoApp.swift in Sources */,
+				2BF1D7BAB19978B3DEAD47C4 /* LyoAvatarState.swift in Sources */,
+				B0FFC594DC9F9E5E66424165 /* LyoChat.swift in Sources */,
+				89BDA4F1BB119B8E92BA1A4E /* LyoError.swift in Sources */,
+				6A00D4DB215BB65065B18C64 /* LyoHomeView.swift in Sources */,
+				C9E6453E8DF6E0C856F26700 /* LyoRepository.swift in Sources */,
+				96C28D6557C0E070AE8C6EC0 /* MainTabView.swift in Sources */,
+				52D1518DCF59729DD64422DE /* MessageBubbleView.swift in Sources */,
+				342FDB502EE1DFE50071EA38 /* DiscoveryService.swift in Sources */,
+				BD8549C14C7ED92E02B1100D /* ModuleCardView.swift in Sources */,
+				5A9AF9CFD9B0E7E0DFF7E762 /* ModuleGridView.swift in Sources */,
+				4762DEE0A282ED000476B21E /* NetworkCache.swift in Sources */,
+				E0755958C2FEA68ABD29A5CA /* NetworkClient.swift in Sources */,
+				F57ED1C4810C127F6E8CFCC6 /* NetworkLogger.swift in Sources */,
+				63CF8E055AFA4D946EF6C21C /* NewFeatureServices.swift in Sources */,
+				7C46A3688CA3D2CBBB62D7D4 /* OfflineIndicator.swift in Sources */,
+				9F8F4035B1F8C3DC3DE3C05B /* OnboardingView.swift in Sources */,
+				85243333C7F49D4D09021092 /* OpenAIService.swift in Sources */,
+				A3A98676FD6EA60FCBC81340 /* OrientationHintOverlay.swift in Sources */,
+				C80DBCFA2B3B027172EBE3CD /* PremiumButton.swift in Sources */,
+				342FDB432EE07EB40071EA38 /* CreateEventView.swift in Sources */,
+				11280253C9AB5BA7A492A4F0 /* PremiumHomeView.swift in Sources */,
+				2BB79D3F36DD9A11943ADB78 /* ProfileHomeView.swift in Sources */,
+				ABF1AA3EDA26425212FC33E8 /* ProfileView.swift in Sources */,
+				86DFC1F594A1C7FA5D8FFD18 /* QuickCheckOverlay.swift in Sources */,
+				342FDB412EE06ADB0071EA38 /* SocialModels.swift in Sources */,
+				CD8C1E0584F1E07D7E9DB59C /* QuizView.swift in Sources */,
+				8012020A4BBFC0959B0EF27D /* QuizViewModel.swift in Sources */,
+				8ABA12F24A958FC36766AF41 /* RegisterView.swift in Sources */,
+				CA43EC65488C9A96E4CC7D76 /* RepositoryProtocols.swift in Sources */,
+				A84AD804CB15D52308DE0242 /* ReteachOverlay.swift in Sources */,
+				99C8CD9897C00E20DDD9D938 /* RootViewModel.swift in Sources */,
+				415AC948E5D21104798EFAB5 /* Secrets.swift in Sources */,
+				15937220EE14EC6890B51787 /* SettingsView.swift in Sources */,
+				7D9CAEE8F13DFBE2577575B3 /* ShimmerEffect.swift in Sources */,
+				5470BD3BC5FB18803F353AD1 /* ShimmerModifier.swift in Sources */,
+				EC3B7E96E5FE790787B7F387 /* SocialFeedSection.swift in Sources */,
+				342FDB4E2EE1DFE20071EA38 /* StoryService.swift in Sources */,
+				E9DD2B7ACD6BDE62AE05499D /* StackCardView.swift in Sources */,
+				45ADE4C36A7AEF6804F94134 /* StackDrawerView.swift in Sources */,
+				955F9E52460108D7E28F58FC /* StackModels.swift in Sources */,
+				DBB73C18125930CF5B107AC3 /* StackPanelView.swift in Sources */,
+				C6AFAA6EFDA1FC7CD9E3F860 /* StackService.swift in Sources */,
+				499C8B0AC23D6EA8AC25A803 /* StreakCalendarView.swift in Sources */,
+				01D132B07B2975A1EBB24F6C /* StreamingResponseManager.swift in Sources */,
+				F87F01F43CC25E95E2A54755 /* SuggestionChipsBar.swift in Sources */,
+				5F54903D49C62211E25A5FF0 /* TTSView.swift in Sources */,
+				3ADCC393F46C3179C416687F /* TTSViewModel.swift in Sources */,
+				08F20285BA2DAECC2C1DB0D7 /* TTSVoiceBubbleView.swift in Sources */,
+				1CE957CB8326420D54692E14 /* TokenManager.swift in Sources */,
+				DAC3132E4C56CE57A04D7C24 /* TranscriptSheet.swift in Sources */,
+				7DBD7DFF24FB5561E338CE40 /* TutorModeView.swift in Sources */,
+				AA99FAFC279028E559E90DCD /* TutorModels.swift in Sources */,
+				CF294A0A613B091300A57FEB /* TutorService.swift in Sources */,
+				B3328EC8E0EF6442EC84E4D8 /* UIStackModels.swift in Sources */,
+				A02F0FBF50F83B6E0E41E664 /* UIStackStore.swift in Sources */,
+				93D030B08BB64C229F7B0290 /* User.swift in Sources */,
+				4AB802F7E987AFFF68B39738 /* VisionService.swift in Sources */,
+				7A5B6669D488E4B28B02448B /* WebSocketManager.swift in Sources */,
+				B3256A206D29FC70654BC533 /* ShapeExtensions.swift in Sources */,
+				B53943A7702E7C542D3C19C8 /* CourseGenerationService.swift in Sources */,
+				A7B7A59F4D97E1BAA6064ED4 /* CourseGenerationCard.swift in Sources */,
+				C3C5824E6CBD906B021B3D65 /* AppConfig.swift in Sources */,
+				05396162AC28F4F5DA497319 /* LearningModels.swift in Sources */,
+				1BE1F80CE70FC2028D478359 /* DesignSystem.swift in Sources */,
+				257A2B2AC39A3E4F623CB138 /* LyoError.swift in Sources */,
+				73AF2F997555FF69A1447CDB /* Endpoint.swift in Sources */,
+				5BD747462CEC407EF12AF528 /* NetworkCache.swift in Sources */,
+				47E0931D2036367FE541E57F /* NetworkClient.swift in Sources */,
+				AE6CBCAEAE085DEDC141411E /* NetworkLogger.swift in Sources */,
+				E814F8B75E640CA2399F209C /* StreamingResponseManager.swift in Sources */,
+				CE753224CB8A7C3E04839476 /* WebSocketManager.swift in Sources */,
+				D92C558EE335C66E0D4684B0 /* TokenManager.swift in Sources */,
+				9AD516F2372D54CAD2D860A9 /* Chat.swift in Sources */,
+				2437128BFA25C8F0546CEC72 /* Community.swift in Sources */,
+				53EBD3B9759CA7877538AE05 /* StackModels.swift in Sources */,
+				43E17D9DE77132354BBD810E /* FeedModels.swift in Sources */,
+				B996BC5C70461730AC90B1B5 /* CampusModels.swift in Sources */,
+				C05E00B2B761315B0933066A /* DefaultAIRepository.swift in Sources */,
+				4AE35C67CFE9EA0F6158F9A5 /* DefaultAuthRepository.swift in Sources */,
+				BB55DA15A6E2878A8DD3E0C3 /* DefaultCommunityRepository.swift in Sources */,
+				9DBDB1166256605441E61665 /* DefaultGamificationRepository.swift in Sources */,
+				4DC273D007A610DCFCFBD41F /* DefaultLearningRepository.swift in Sources */,
+				2E683C5D41614F3FAC8AF745 /* DefaultSocialRepository.swift in Sources */,
+				50FF5814A5F0C6C516294FBB /* DefaultTTSRepository.swift in Sources */,
+				2F82186BC827DBA1CC43FC11 /* RepositoryProtocols.swift in Sources */,
+				282BFC6E6D05211243CF5A4B /* VisionService.swift in Sources */,
+				A69176811555599E61877554 /* StackService.swift in Sources */,
+				84FE38AAAD22C7AF3003424F /* AuthService.swift in Sources */,
+				4FF54502C2D02635B06C320B /* RepositoryTests.swift in Sources */,
+				71ED2DA9E05DF51619194259 /* ChatViewModel.swift in Sources */,
+				432FF11B7E19F597DFF4C979 /* CommunityViewModel.swift in Sources */,
+				84AA1E4E013260775835EA0A /* FeedViewModel.swift in Sources */,
+				FE7846168C414DCEEBB3D8E6 /* QuizViewModel.swift in Sources */,
+				AD851D15A8ECFA6CDE0419CD /* RootViewModel.swift in Sources */,
+				C037E8F15B48B65B6385F0BA /* TTSViewModel.swift in Sources */,
+				1B0113798A4A501C9A636895 /* EditProfileView.swift in Sources */,
+				710BE61908CD9FF8BDD2DDBE /* LoginView.swift in Sources */,
+				52F013E2B8F6D24D2E6838C5 /* OnboardingView.swift in Sources */,
+				5F3043380F49620B2F2F090E /* RegisterView.swift in Sources */,
+				FFDB08AB224EA41C1C313CE1 /* CommunityMapView.swift in Sources */,
+				7E14E2F6B91CDC0D9A84F68D /* HomeView.swift in Sources */,
+				D620F9D142CE161191FAD34E /* QuizView.swift in Sources */,
+				A87FFE0DAB0CC41F7E239171 /* TTSView.swift in Sources */,
+				4B57D9E1032FD67063CFE578 /* EnhancedLyoHomeView.swift in Sources */,
+				69DE64F4DF6442D1FE7ACD1E /* FocusView.swift in Sources */,
+				C49E9E4386DF6B19A42E5ECC /* DiscoverView.swift in Sources */,
+				6776249393C6CAD07B149B36 /* CampusView.swift in Sources */,
+				8DCA4DD1A0600492A9ADDDE5 /* StackDrawerView.swift in Sources */,
+				4D36FA8D7260BB304E2CDFB2 /* ProfileView.swift in Sources */,
+				88C2AA976FA8578A2F994035 /* SettingsView.swift in Sources */,
+				44716BDAE6E28C2ECF3FF29C /* ChatView.swift in Sources */,
+				7AB117530198CD314DEAA7B6 /* FeedView.swift in Sources */,
+				D5F332B09CDB45D95F3EE42F /* ErrorView.swift in Sources */,
+				38F91C27B570FE0E34A266D2 /* OfflineIndicator.swift in Sources */,
+				4D223E471688D542CACF5465 /* ImagePickerView.swift in Sources */,
+				D32F024B1F787FD0B3C7CD50 /* LyoOverlayView.swift in Sources */,
+				EE7CAA6D15F4CB0B9AD1E2F5 /* LyoAvatarView.swift in Sources */,
+				F7321A6C65ABB33ADCDCE649 /* ChatBubbleView.swift in Sources */,
+				E75B58DAED01D6EAD3E0E0C6 /* AppConfig.swift in Sources */,
+				0258EB9FE072246516F459D4 /* LearningModels.swift in Sources */,
+				ADA2F8D70FCE16468AB1DC8F /* DesignSystem.swift in Sources */,
+				70C7C9F56A13F58DA731544A /* LyoError.swift in Sources */,
+				746034F1B6EC1CD9960ADDAA /* Endpoint.swift in Sources */,
+				12703673FCEEF0AD1EC1E5D7 /* NetworkCache.swift in Sources */,
+				C945669AC1ABE0694DE5F85E /* NetworkClient.swift in Sources */,
+				17C69DFEA231B3F9CAD03404 /* NetworkLogger.swift in Sources */,
+				14E2B356C89D10EEE3711C62 /* StreamingResponseManager.swift in Sources */,
+				5ECD9B5F2AB94CFDAE8527B9 /* WebSocketManager.swift in Sources */,
+				BD14F72ECB9C07B6BF475B8E /* TokenManager.swift in Sources */,
+				2329211178B3D21074B0596E /* Chat.swift in Sources */,
+				68D3DEA4F4BF7B8A45EA7982 /* Community.swift in Sources */,
+				B4502712F1B444403122D33E /* StackModels.swift in Sources */,
+				A0FAC8F89EDAB21F12292C0E /* FeedModels.swift in Sources */,
+				EC4F090256C09F4425E578A8 /* CampusModels.swift in Sources */,
+				AC905857A033A26DC9DA0442 /* DefaultAIRepository.swift in Sources */,
+				137C280CF6DDA87C5288D2CB /* DefaultAuthRepository.swift in Sources */,
+				FFD1F70E46C38F27E863DEC8 /* DefaultCommunityRepository.swift in Sources */,
+				669F24AAB7EE46F582490E8F /* DefaultGamificationRepository.swift in Sources */,
+				4D9D2F83A675B4D7B05AAB06 /* DefaultLearningRepository.swift in Sources */,
+				ED3AC5B17E202D75AF2A8C56 /* DefaultSocialRepository.swift in Sources */,
+				A92ACA7255D7DD29ADD3DBAF /* DefaultTTSRepository.swift in Sources */,
+				4284122F26C4776DE31E6FAB /* RepositoryProtocols.swift in Sources */,
+				188EDBAFAE1A2083FBDD8E56 /* VisionService.swift in Sources */,
+				318FF24C88F7670935301907 /* StackService.swift in Sources */,
+				3617F564FBA223BE1CB8C99D /* AuthService.swift in Sources */,
+				7DC5F2B9F9F80F994FE91F11 /* RepositoryTests.swift in Sources */,
+				ED920030786E62694AE4FFB1 /* ChatViewModel.swift in Sources */,
+				EF153DF1CBB46FF856F19830 /* CommunityViewModel.swift in Sources */,
+				FADF123318FADB3F96A6E087 /* FeedViewModel.swift in Sources */,
+				5CBC54C1AF5EDB317F8D40C2 /* QuizViewModel.swift in Sources */,
+				A3291597780FBBB4E8BE3445 /* RootViewModel.swift in Sources */,
+				F9A722C96B1D2B8614E7F84C /* TTSViewModel.swift in Sources */,
+				D8D3677AAB7A30343F5DB907 /* EditProfileView.swift in Sources */,
+				0CE07777488BE5E91EC51AFE /* LoginView.swift in Sources */,
+				E960D257ECD7CEA329AC2616 /* OnboardingView.swift in Sources */,
+				AB0C6974506BEE95EE8ECAE8 /* RegisterView.swift in Sources */,
+				6C0D1DE480AB4C5A311E5851 /* CommunityMapView.swift in Sources */,
+				00B4F222F58E8135442A2C1D /* HomeView.swift in Sources */,
+				6EC5389A86A78F80B5C7ACA6 /* QuizView.swift in Sources */,
+				D98A246D4783150E6B398DFA /* TTSView.swift in Sources */,
+				AE56D55128660C9ED7C45E19 /* EnhancedLyoHomeView.swift in Sources */,
+				2361CA77F932D8048B3E30C9 /* FocusView.swift in Sources */,
+				4973DE75686E02CA0FA451FE /* DiscoverView.swift in Sources */,
+				486023EA867BF97EBFB5C156 /* CampusView.swift in Sources */,
+				41144AE2E34F9AFDA20623BD /* StackDrawerView.swift in Sources */,
+				EF068F7F1A41CDEABDAFB065 /* ProfileView.swift in Sources */,
+				BAD386B5D3D1E83310F38741 /* SettingsView.swift in Sources */,
+				07831BE36C728232BB27860D /* ChatView.swift in Sources */,
+				D9EB1506FF405057371A733C /* FeedView.swift in Sources */,
+				06FD7324C27EC1DFB1AC66BE /* ErrorView.swift in Sources */,
+				5719F5FF8B890644167EC4C1 /* OfflineIndicator.swift in Sources */,
+				C025D11CFDABA9971C0414FC /* ImagePickerView.swift in Sources */,
+				B438B12B6C4F4259F6C27705 /* LyoOverlayView.swift in Sources */,
+				0437DE115886467E2F14CB3C /* LyoAvatarView.swift in Sources */,
+				ABF3DE0A50F2F26C6CE2FADC /* ChatBubbleView.swift in Sources */,
+				EC35BAF7CEC3A8C3CE5A6B00 /* BackendAIService.swift in Sources */,
+				7F9B7B797FBD5E1B91D8CED4 /* PushNotificationService.swift in Sources */,
+				111D8C98F32F82AA8880C703 /* CloudStorageService.swift in Sources */,
+				6154F06ACBF80797C825ACFA /* SubscriptionView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		228B9A347DD89E8D2A39D32B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5QZDMJGN7B;
+				INFOPLIST_FILE = Sources/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lyo.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		85BD8759D5D2C9BDFC83DDFE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		DB0A50B6CF479A6E795956F8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E285F772B0B08186EBE69F40 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5QZDMJGN7B;
+				INFOPLIST_FILE = Sources/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lyo.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1D162F65AF2D60ECDC650D80 /* Build configuration list for PBXNativeTarget "Lyo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				228B9A347DD89E8D2A39D32B /* Debug */,
+				E285F772B0B08186EBE69F40 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		87597440F183580A4AC5CBD5 /* Build configuration list for PBXProject "Lyo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DB0A50B6CF479A6E795956F8 /* Debug */,
+				85BD8759D5D2C9BDFC83DDFE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.6.0;
+			};
+		};
+		874868FB395DDC488B695DBC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		34C214322EDBDD3700BDE6F8 /* FirebaseAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAI;
+		};
+		34C214342EDBDD3700BDE6F8 /* FirebaseAILogic */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAILogic;
+		};
+		34C214362EDBDD3700BDE6F8 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		34C214382EDBDD3700BDE6F8 /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		34C2143A2EDBDD3700BDE6F8 /* FirebaseAnalyticsIdentitySupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsIdentitySupport;
+		};
+		34C2143C2EDBDD3700BDE6F8 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		34C2143E2EDBDD3700BDE6F8 /* FirebaseAppDistribution-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAppDistribution-Beta";
+		};
+		34C214402EDBDD3700BDE6F8 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		34C214422EDBDD3700BDE6F8 /* FirebaseAuthCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAuthCombine-Community";
+		};
+		34C214442EDBDD3700BDE6F8 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		34C214462EDBDD3700BDE6F8 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		34C214482EDBDD3700BDE6F8 /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		34C2144A2EDBDD3700BDE6F8 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		34C2144C2EDBDD3700BDE6F8 /* FirebaseFirestoreCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseFirestoreCombine-Community";
+		};
+		34C2144E2EDBDD3700BDE6F8 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		34C214502EDBDD3700BDE6F8 /* FirebaseFunctionsCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseFunctionsCombine-Community";
+		};
+		34C214522EDBDD3700BDE6F8 /* FirebaseInAppMessaging-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseInAppMessaging-Beta";
+		};
+		34C214542EDBDD3700BDE6F8 /* FirebaseInstallations */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseInstallations;
+		};
+		34C214562EDBDD3700BDE6F8 /* FirebaseMLModelDownloader */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMLModelDownloader;
+		};
+		34C214582EDBDD3700BDE6F8 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		34C2145A2EDBDD3700BDE6F8 /* FirebasePerformance */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebasePerformance;
+		};
+		34C2145C2EDBDD3700BDE6F8 /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
+		};
+		34C2145E2EDBDD3800BDE6F8 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		34C214602EDBDD3800BDE6F8 /* FirebaseStorageCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 34C214312EDBDD3700BDE6F8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseStorageCombine-Community";
+		};
+		FF34AD9B78C1183EAAF40EA4 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 874868FB395DDC488B695DBC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 193BC11F542F8A6A5FFA5D99 /* Project object */;
+}
