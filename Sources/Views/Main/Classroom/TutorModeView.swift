@@ -44,7 +44,7 @@ struct TutorModeView: View {
                     .onAppear {
                         scrollProxy = proxy
                     }
-                    .onChange(of: viewModel.messages.count) { _ in
+                    .onChange(of: viewModel.messages.count) {
                         scrollToBottom()
                     }
                 }

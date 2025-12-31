@@ -42,7 +42,7 @@ struct BattleCardView: View {
                 VStack(spacing: 8) {
                     ZStack {
                         Circle()
-                            .fill(Color("Primary").opacity(0.3))
+                            .fill(Color("BrandPrimary").opacity(0.3))
                             .frame(width: 60, height: 60)
                         
                         Text("You")
@@ -74,7 +74,7 @@ struct BattleCardView: View {
                 VStack(spacing: 8) {
                     ZStack {
                         Circle()
-                            .fill(Color("Secondary").opacity(0.3))
+                            .fill(Color("BrandSecondary").opacity(0.3))
                             .frame(width: 60, height: 60)
                         
                         if let avatarURLString = battle.opponentAvatar, let avatarURL = URL(string: avatarURLString) {
@@ -136,7 +136,7 @@ struct BattleCardView: View {
                             .padding(.vertical, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color("Primary"))
+                                    .fill(Color("BrandPrimary"))
                         )
                     }
                 }
@@ -151,7 +151,7 @@ struct BattleCardView: View {
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color("Primary"))
+                                .fill(Color("BrandPrimary"))
                         )
                 }
             } else if battle.status == .completed {

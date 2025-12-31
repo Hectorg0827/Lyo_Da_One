@@ -40,6 +40,7 @@ final class LiveClassroomViewModel: ObservableObject {
     private let apiClient = LyoAPIClient.shared
     private let cinemaService = InteractiveCinemaService.shared
     private let tokenManager = TokenManager.shared
+    private let repository = LyoRepository.shared
     private var cancellables = Set<AnyCancellable>()
     
     // Graph-based playback state
@@ -159,13 +160,19 @@ final class LiveClassroomViewModel: ObservableObject {
             // Try to fetch from backend
             lesson = try await apiClient.fetchLiveLesson(courseId: courseId, lessonId: lessonId)
         } catch {
-            // Fall back to mock data if backend unavailable
             print("LiveClassroom: Failed to fetch lesson from API: \(error.localizedDescription)")
-            lesson = LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
             
-            // Only show error if it's not a network issue (user might be offline)
-            if case APIError.unauthorized = error {
-                errorMessage = "Please log in to access lessons"
+            // Only fall back to mock data if explicitly allowed
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock lesson (LYO_ALLOW_MOCKS=1)")
+                lesson = LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
+            } else {
+                // Surface the real error to user
+                if case APIError.unauthorized = error {
+                    errorMessage = "Please log in to access lessons"
+                } else {
+                    errorMessage = "Failed to load lesson. Please check your connection."
+                }
             }
         }
         
@@ -184,6 +191,11 @@ final class LiveClassroomViewModel: ObservableObject {
         // Mark current block as completed
         if let block = currentBlock {
             completedBlocks.insert(block.id)
+            
+            // 🔥 BACKEND SYNC: Mark lesson progress
+            Task {
+                await syncProgressToBackend()
+            }
         }
         
         // Reset quiz state
@@ -197,6 +209,11 @@ final class LiveClassroomViewModel: ObservableObject {
             // Speak new block
             Task {
                 await speakCurrentBlock()
+            }
+        } else {
+            // 🔥 FINAL BLOCK: Mark lesson as completed
+            Task {
+                await markLessonCompleted()
             }
         }
     }
@@ -427,6 +444,56 @@ final class LiveClassroomViewModel: ObservableObject {
     }
     
     // MARK: - Helper: Convert PlaybackState to LiveLesson (for compatibility)
+    
+    // MARK: - Backend Progress Sync
+    
+    /// Sync progress to backend (called on each block completion)
+    private func syncProgressToBackend() async {
+        guard let lesson = lesson else { return }
+        
+        // Calculate overall progress as percentage
+        let overallProgress = Double(completedBlocks.count) / Double(max(lesson.totalBlocks, 1))
+        
+        do {
+            // Use simplified progress tracking - the repository handles the actual format
+            try await repository.saveClassroomProgress(
+                sessionId: lesson.lessonId,
+                progress: LessonProgress(
+                    lessonId: lesson.lessonId,
+                    moduleProgress: [:], // Not using module-based tracking
+                    overallProgress: overallProgress,
+                    startedAt: Date(),
+                    lastAccessedAt: Date(),
+                    completedAt: nil
+                )
+            )
+            print("✅ Synced progress to backend: \(completedBlocks.count)/\(lesson.totalBlocks) blocks")
+        } catch {
+            print("⚠️ Failed to sync progress: \(error.localizedDescription)")
+            // Don't show error to user - continue with local tracking
+        }
+    }
+    
+    /// Mark lesson as completed (called when reaching final block)
+    private func markLessonCompleted() async {
+        guard let lesson = lesson else { return }
+        
+        // Calculate score based on quiz results
+        let totalQuizzes = quizResults.count
+        let correctQuizzes = quizResults.values.filter { $0 }.count
+        let score = totalQuizzes > 0 ? Int((Double(correctQuizzes) / Double(totalQuizzes)) * 100) : 100
+        
+        do {
+            let response = try await repository.markLessonComplete(lessonId: lesson.lessonId, score: score)
+            print("✅ Lesson completed! XP earned: \(response.xpAwarded)")
+            
+            // Award XP locally for immediate feedback
+            // Backend already awarded XP, just update UI
+        } catch {
+            print("⚠️ Failed to mark lesson complete: \(error.localizedDescription)")
+            // Continue - user still completed locally
+        }
+    }
     
     private func convertPlaybackToLesson(playbackState: PlaybackState, courseTitle: String) -> LiveLesson {
         // Extract the current node content

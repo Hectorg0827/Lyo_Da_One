@@ -20,13 +20,14 @@ struct CampusView: View {
     @State private var selectedItem: CampusItem?
     @State private var showDetailSheet = false
     @State private var showLioChat = false
+    @State private var showModeSheet = false
     @State private var animateHeader = false
     
-    // Map region
-    @State private var region = MKCoordinateRegion(
+    // Map position
+    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
         span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-    )
+    ))
     
     var body: some View {
         NavigationStack {
@@ -46,19 +47,14 @@ struct CampusView: View {
                     // Error banner (if any)
                     if let error = viewModel.errorMessage {
                         errorBanner(error)
-                            .padding(.top, 60) // Add padding for App Drawer button
+                            .padding(.top, 60)
                     } else {
                         // Spacer for App Drawer button if no error
                         Color.clear.frame(height: 60)
                     }
                     
-                    // Mode picker
-                    premiumModePicker
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                    
-                    // Search field
-                    premiumSearchField
+                    // Search field with AI button (Mode picker removed - now in FAB)
+                    smartSearchField
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                     
@@ -68,6 +64,18 @@ struct CampusView: View {
                     
                     // Content based on mode
                     contentView
+                }
+                
+                // Floating Mode Button (FAB)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        FloatingModeButton(
+                            showModeSheet: $showModeSheet,
+                            currentMode: viewModel.selectedMode
+                        )
+                    }
                 }
             }
             .navigationBarHidden(true)
@@ -99,6 +107,12 @@ struct CampusView: View {
         .sheet(isPresented: $uiState.isCreatingEvent) {
             CreateEventView(isPresented: $uiState.isCreatingEvent)
                 .environmentObject(uiState)
+        }
+        .sheet(isPresented: $showModeSheet) {
+            ModeSelectionSheet(
+                selectedMode: $viewModel.selectedMode,
+                isPresented: $showModeSheet
+            )
         }
     }
     
@@ -169,6 +183,68 @@ struct CampusView: View {
         )
     }
     
+    // MARK: - Smart Search Field with AI Button
+    
+    private var smartSearchField: some View {
+        HStack(spacing: 10) {
+            // Search icon
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.white.opacity(0.6))
+            
+            // Text field
+            TextField("Search events, topics...", text: $viewModel.searchQuery)
+                .foregroundColor(.white)
+            
+            // Clear button (when there's content)
+            if !viewModel.searchQuery.isEmpty {
+                Button(action: viewModel.clearFilters) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+            
+            // Divider
+            Rectangle()
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 1, height: 24)
+            
+            // Ask Lio AI Button
+            Button {
+                HapticManager.shared.light()
+                showLioChat = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.caption)
+                    Text("Ask Lio")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        colors: [.purple, .blue],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+            }
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                )
+        )
+    }
+    
     // MARK: - Premium Type Filter Chips
     
     private var premiumTypeFilterChips: some View {
@@ -208,37 +284,23 @@ struct CampusView: View {
     
     private var mapView: some View {
         ZStack {
-            if #available(iOS 17.0, *) {
-                Map(position: .constant(.region(region))) {
-                    ForEach(viewModel.filteredItems) { item in
-                        Annotation(item.title, coordinate: item.coordinate.clLocation) {
-                            CampusMapAnnotation(item: item)
-                                .onTapGesture {
-                                    selectedItem = item
-                                    showDetailSheet = true
-                                }
-                        }
-                        .annotationTitles(.hidden)
-                    }
-                }
-                .mapControls {
-                    MapUserLocationButton()
-                    MapCompass()
-                }
-                .ignoresSafeArea(edges: .bottom)
-            } else {
-                // Fallback for older iOS versions
-                Map(coordinateRegion: $region, annotationItems: viewModel.filteredItems) { item in
-                    MapAnnotation(coordinate: item.coordinate.clLocation) {
+            Map(position: $position) {
+                ForEach(viewModel.filteredItems) { item in
+                    Annotation(item.title, coordinate: item.coordinate.clLocation) {
                         CampusMapAnnotation(item: item)
                             .onTapGesture {
                                 selectedItem = item
                                 showDetailSheet = true
                             }
                     }
+                    .annotationTitles(.hidden)
                 }
-                .ignoresSafeArea(edges: .bottom)
             }
+            .mapControls {
+                MapUserLocationButton()
+                MapCompass()
+            }
+            .ignoresSafeArea(edges: .bottom)
             
             // Custom Location button overlay (only needed for custom behavior or older iOS)
             VStack {
@@ -403,10 +465,15 @@ struct CampusView: View {
     private func centerOnUser() {
         HapticManager.shared.light()
         // In production, use location manager
-        region.center = CLLocationCoordinate2D(
-            latitude: viewModel.mapCenterLatitude,
-            longitude: viewModel.mapCenterLongitude
-        )
+        withAnimation {
+            position = .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: viewModel.mapCenterLatitude,
+                    longitude: viewModel.mapCenterLongitude
+                ),
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            ))
+        }
     }
     
     private func joinItem(_ item: CampusItem) {
@@ -719,6 +786,160 @@ struct PremiumFilterChip: View {
                 Capsule()
                     .stroke(isSelected ? Color.clear : Color.white.opacity(0.15), lineWidth: 1)
             )
+        }
+    }
+}
+
+// MARK: - Floating Mode Button (FAB)
+
+struct FloatingModeButton: View {
+    @Binding var showModeSheet: Bool
+    let currentMode: CampusViewMode
+    
+    var body: some View {
+        Button {
+            HapticManager.shared.light()
+            showModeSheet = true
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.purple, Color.blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 56, height: 56)
+                    .shadow(color: .purple.opacity(0.4), radius: 12, x: 0, y: 6)
+                
+                Image(systemName: currentMode.iconName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+        }
+        .padding(.trailing, 20)
+        .padding(.bottom, 100)
+    }
+}
+
+// MARK: - Mode Selection Sheet
+
+struct ModeSelectionSheet: View {
+    @Binding var selectedMode: CampusViewMode
+    @Binding var isPresented: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.white.opacity(0.3))
+                .frame(width: 40, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+            
+            Text("View Mode")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.bottom, 16)
+            
+            ForEach(CampusViewMode.allCases, id: \.self) { mode in
+                ModeOptionRow(
+                    mode: mode,
+                    isSelected: selectedMode == mode
+                ) {
+                    HapticManager.shared.medium()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedMode = mode
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        isPresented = false
+                    }
+                }
+                
+                if mode != CampusViewMode.allCases.last {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                        .padding(.horizontal, 16)
+                }
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hexString: "1E293B"), Color(hexString: "0F172A")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .ignoresSafeArea()
+        )
+        .presentationDetents([.height(320)])
+        .presentationDragIndicator(.hidden)
+    }
+}
+
+// MARK: - Mode Option Row
+
+struct ModeOptionRow: View {
+    let mode: CampusViewMode
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? 
+                              LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing) :
+                              LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: mode.iconName)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.rawValue)
+                        .font(.body.weight(.semibold))
+                        .foregroundColor(.white)
+                    
+                    Text(mode.modeSubtitle)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(
+                            LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(isSelected ? Color.white.opacity(0.05) : Color.clear)
+        }
+    }
+}
+
+// MARK: - CampusViewMode Extension
+
+extension CampusViewMode {
+    var modeSubtitle: String {
+        switch self {
+        case .library: return "Browse courses & content"
+        case .map: return "Explore nearby events"
+        case .list: return "See all activities"
+        case .feed: return "Discover what's trending"
         }
     }
 }

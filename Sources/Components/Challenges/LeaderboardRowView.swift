@@ -23,7 +23,7 @@ struct LeaderboardRowView: View {
             // Avatar
             ZStack {
                 Circle()
-                    .fill(Color("Primary").opacity(0.3))
+                    .fill(Color("BrandPrimary").opacity(0.3))
                     .frame(width: 44, height: 44)
                 
                 if let avatarURLString = entry.avatarURL, let avatarURL = URL(string: avatarURLString) {
@@ -33,7 +33,7 @@ struct LeaderboardRowView: View {
                             .scaledToFill()
                     } placeholder: {
                         Image(systemName: "person.fill")
-                            .foregroundColor(Color("Primary"))
+                            .foregroundColor(Color("BrandPrimary"))
                     }
                     .frame(width: 44, height: 44)
                     .clipShape(Circle())
@@ -101,7 +101,7 @@ struct LeaderboardRowView: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isCurrentUser ? Color("Primary").opacity(0.15) : Color.clear)
+                .fill(isCurrentUser ? Color("BrandPrimary").opacity(0.15) : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)

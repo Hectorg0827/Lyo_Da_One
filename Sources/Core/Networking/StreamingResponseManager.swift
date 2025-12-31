@@ -67,6 +67,9 @@ class StreamingResponseManager: NSObject, URLSessionDataDelegate {
         if let tenantId = await TokenManager.shared.getTenantId() {
             request.setValue(tenantId, forHTTPHeaderField: "X-Tenant-Id")
         }
+        
+        // Add API Key
+        request.setValue(AppConfig.apiKey, forHTTPHeaderField: "X-API-Key")
 
         logger.log("🌊 Starting SSE stream: \(endpoint)")
 

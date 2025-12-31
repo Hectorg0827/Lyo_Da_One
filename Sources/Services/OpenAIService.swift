@@ -15,12 +15,10 @@ class OpenAIService {
     
     // Backend is the single source of truth for AI (keys live server-side).
     private let baseURL = AppConfig.baseURL
-    private let session: URLSession
     private let tokenManager = TokenManager.shared
     private var useMockMode: Bool { baseURL.isEmpty }
     
-    private init(session: URLSession = .shared) {
-        self.session = session
+    private init() {
         if useMockMode {
             print("⚠️ Leo AI: Running in MOCK mode (no backend URL)")
         } else {
@@ -60,7 +58,7 @@ class OpenAIService {
 
     // MARK: - Backend AI
 
-    private struct BackendClassroomChatResponse: Decodable {
+    private struct BackendClassroomChatResponse: Codable {
         let content: String?
         let response: String?
     }
@@ -70,21 +68,6 @@ class OpenAIService {
         conversationHistory: [LyoMessage],
         systemPrompt: String?
     ) async throws -> String {
-        let endpoint = "\(baseURL)/api/v1/classroom/chat"
-
-        guard let url = URL(string: endpoint) else {
-            throw OpenAIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120
-
-        if let token = await tokenManager.getToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
         // The classroom endpoint doesn't accept system prompts/history directly,
         // so we fold them into the message in a predictable way.
         var composed = ""
@@ -106,19 +89,16 @@ class OpenAIService {
             "session_id": NSNull(),
             "include_audio": false
         ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let encodableBody = body.mapValues { AnyEncodable(value: $0) }
+        
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/classroom/chat",
+            method: .post,
+            body: encodableBody
+        )
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.invalidResponse
-        }
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw OpenAIError.apiError(statusCode: httpResponse.statusCode)
-        }
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let chat = try decoder.decode(BackendClassroomChatResponse.self, from: data)
+        let chat: BackendClassroomChatResponse = try await NetworkClient.shared.request(endpoint)
 
         let text = chat.content ?? chat.response ?? ""
         if text.isEmpty {

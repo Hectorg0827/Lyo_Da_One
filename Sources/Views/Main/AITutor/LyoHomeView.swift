@@ -40,14 +40,14 @@ struct LyoHomeView: View {
                             .padding()
                         }
                     }
-                    .onChange(of: viewModel.messages.count) { _ in
+                    .onChange(of: viewModel.messages.count) {
                         if let lastId = viewModel.messages.last?.id {
                             withAnimation {
                                 proxy.scrollTo(lastId, anchor: .bottom)
                             }
                         }
                     }
-                    .onChange(of: viewModel.isLoading) { isLoading in
+                    .onChange(of: viewModel.isLoading) { _, isLoading in
                         if isLoading {
                             withAnimation {
                                 proxy.scrollTo("typingIndicator", anchor: .bottom)

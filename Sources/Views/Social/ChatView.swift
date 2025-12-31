@@ -234,7 +234,7 @@ struct ConversationView: View {
                 scrollProxy = proxy
                 scrollToBottom()
             }
-            .onChange(of: viewModel.messages.count) { _ in
+            .onChange(of: viewModel.messages.count) {
                 scrollToBottom()
             }
         }
@@ -257,7 +257,7 @@ struct ConversationView: View {
                     TextField("Message...", text: $viewModel.newMessageText, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .lineLimit(1...5)
-                        .onChange(of: viewModel.newMessageText) { newText in
+                        .onChange(of: viewModel.newMessageText) { _, newText in
                             if !newText.isEmpty {
                                 viewModel.sendTypingIndicator(isTyping: true)
                             } else {

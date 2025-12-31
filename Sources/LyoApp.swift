@@ -10,6 +10,10 @@ import GoogleSignIn
 import FirebaseCore
 #endif
 
+#if canImport(FirebaseCrashlytics)
+import FirebaseCrashlytics
+#endif
+
 // MARK: - App Delegate
 class AppDelegate: NSObject, UIApplicationDelegate {
     static var orientationLock = UIInterfaceOrientationMask.all
@@ -24,10 +28,33 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         print("⚠️ FirebaseCore not available. Skipping FirebaseApp.configure()")
         #endif
+        
+        // Configure Crashlytics
+        configureCrashlytics()
+        
         setupAppearance()
         configureGoogleSignIn()
         configurePushNotifications()
         return true
+    }
+    
+    // MARK: - Crashlytics Configuration
+    
+    private func configureCrashlytics() {
+        #if canImport(FirebaseCrashlytics)
+        // Set user identifier for crash reports (if logged in)
+        if let userId = UserDefaults.standard.string(forKey: "currentUserId") {
+            Crashlytics.crashlytics().setUserID(userId)
+        }
+        
+        // Add custom keys for debugging
+        Crashlytics.crashlytics().setCustomValue(AppConfig.version, forKey: "app_version")
+        Crashlytics.crashlytics().setCustomValue(AppConfig.buildNumber, forKey: "build_number")
+        
+        print("✅ Firebase Crashlytics configured")
+        #else
+        print("⚠️ FirebaseCrashlytics not available")
+        #endif
     }
     
     // MARK: - Push Notifications
@@ -90,6 +117,7 @@ struct LyoApp: App {
     @StateObject private var rootViewModel = RootViewModel()
     @StateObject private var uiState = AppUIState()
     @StateObject private var uiStackStore = UIStackStore.shared
+    @StateObject private var deepLinkHandler = DeepLinkHandler.shared
 
     var body: some Scene {
         WindowGroup {
@@ -103,6 +131,7 @@ struct LyoApp: App {
                         .environmentObject(rootViewModel)
                         .environmentObject(uiState)
                         .environmentObject(uiStackStore)
+                        .environmentObject(deepLinkHandler)
                 } else {
                     // Authentication flow
                     LoginView()
@@ -113,7 +142,81 @@ struct LyoApp: App {
             .onAppear {
                 rootViewModel.checkAuthStatus()
             }
+            .onOpenURL { url in
+                deepLinkHandler.handle(url: url)
+            }
         }
+    }
+}
+
+// MARK: - Deep Link Handler
+@MainActor
+class DeepLinkHandler: ObservableObject {
+    static let shared = DeepLinkHandler()
+    
+    @Published var pendingCourseId: String?
+    @Published var pendingAction: DeepLinkAction?
+    
+    enum DeepLinkAction: Equatable {
+        case openCourse(String)
+        case openLesson(courseId: String, lessonId: String)
+        case openProfile(userId: String)
+        case openChat
+    }
+    
+    private init() {}
+    
+    /// Handle incoming deep link URL
+    func handle(url: URL) {
+        print("🔗 Deep link received: \(url)")
+        
+        guard url.scheme == "lyoapp" else {
+            print("⚠️ Unknown URL scheme: \(url.scheme ?? "nil")")
+            return
+        }
+        
+        let host = url.host ?? ""
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        
+        switch host {
+        case "course":
+            // lyoapp://course/{courseId}
+            if let courseId = pathComponents.first {
+                print("📚 Opening course: \(courseId)")
+                pendingCourseId = courseId
+                pendingAction = .openCourse(courseId)
+            }
+            
+        case "lesson":
+            // lyoapp://lesson/{courseId}/{lessonId}
+            if pathComponents.count >= 2 {
+                let courseId = pathComponents[0]
+                let lessonId = pathComponents[1]
+                print("📖 Opening lesson: \(lessonId) in course: \(courseId)")
+                pendingAction = .openLesson(courseId: courseId, lessonId: lessonId)
+            }
+            
+        case "profile":
+            // lyoapp://profile/{userId}
+            if let userId = pathComponents.first {
+                print("👤 Opening profile: \(userId)")
+                pendingAction = .openProfile(userId: userId)
+            }
+            
+        case "chat":
+            // lyoapp://chat
+            print("💬 Opening chat")
+            pendingAction = .openChat
+            
+        default:
+            print("⚠️ Unknown deep link host: \(host)")
+        }
+    }
+    
+    /// Clear pending action after navigation
+    func clearPendingAction() {
+        pendingCourseId = nil
+        pendingAction = nil
     }
 }
 

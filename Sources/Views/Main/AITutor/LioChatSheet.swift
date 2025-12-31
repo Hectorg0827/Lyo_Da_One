@@ -65,7 +65,7 @@ struct LioChatSheet: View {
                             .padding(.bottom, 100) // Space for input bar
                         }
                         .onAppear { scrollProxy = proxy }
-                        .onChange(of: viewModel.messages.count) { _ in
+                        .onChange(of: viewModel.messages.count) {
                             scrollToBottom(using: proxy)
                         }
                     }
@@ -318,7 +318,7 @@ struct LioChatSheet: View {
                             Text("NEXR SUGGESTION")
                                 .font(.system(size: 10, weight: .black))
                                 .foregroundColor(.yellow)
-                            Text(action.content)
+                            Text(action.contentString)
                                 .font(.subheadline.bold())
                                 .foregroundColor(.primary)
                                 .lineLimit(1)

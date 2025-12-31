@@ -24,7 +24,7 @@ struct TranscriptSheet: View {
                         proxy.scrollTo(lastTurn.id, anchor: .bottom)
                     }
                 }
-                .onChange(of: transcript.count) { _ in
+                .onChange(of: transcript.count) {
                     if let lastTurn = transcript.last {
                         withAnimation {
                             proxy.scrollTo(lastTurn.id, anchor: .bottom)

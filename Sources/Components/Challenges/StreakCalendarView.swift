@@ -41,7 +41,7 @@ struct StreakCalendarView: View {
                         
                         ZStack {
                             Circle()
-                                .fill(isStreakDay(date) ? Color("Primary").opacity(0.2) : Color("LyoSurface"))
+                                .fill(isStreakDay(date) ? Color("BrandPrimary").opacity(0.2) : Color("LyoSurface"))
                                 .frame(width: 40, height: 40)
                             
                             if isStreakDay(date) {

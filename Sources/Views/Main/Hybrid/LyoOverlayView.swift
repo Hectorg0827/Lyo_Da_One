@@ -69,7 +69,7 @@ struct LyoOverlayView: View {
                                 .padding(.top, 60) // Space for header/back button
                                 .padding(.bottom, 20) // Minimal space before input
                             }
-                            .onChange(of: viewModel.messages.count) { _ in
+                            .onChange(of: viewModel.messages.count) {
                                 if let lastId = viewModel.messages.last?.id {
                                     withAnimation {
                                         proxy.scrollTo(lastId, anchor: .bottom)

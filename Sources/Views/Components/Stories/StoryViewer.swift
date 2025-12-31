@@ -92,7 +92,7 @@ struct StoryViewer: View {
                         // Footer Actions
                         VStack(spacing: 12) {
                             // Contextual Buttons
-                            if let courseId = story.linkedCourseId {
+                            if story.linkedCourseId != nil {
                                 Button(action: { 
                                     // Navigate to Course
                                     isPresented = false 
@@ -111,7 +111,7 @@ struct StoryViewer: View {
                                 }
                             }
                             
-                            if let groupId = story.linkedGroupId {
+                            if story.linkedGroupId != nil {
                                 Button(action: {
                                     isPresented = false
                                     // Navigate to Community

@@ -21,6 +21,7 @@ targets:
       - path: Sources
         excludes:
           - Tests/**
+      - path: PrivacyInfo.xcprivacy
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.lyo.app
       INFOPLIST_FILE: Sources/Resources/Info.plist
@@ -39,6 +40,8 @@ targets:
         product: GoogleSignIn
       - package: Firebase
         product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseCrashlytics
 
 schemes:
   Lyo:

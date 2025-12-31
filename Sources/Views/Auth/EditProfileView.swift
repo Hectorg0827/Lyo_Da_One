@@ -182,7 +182,7 @@ struct EditProfileView: View {
             .onAppear {
                 loadCurrentProfile()
             }
-            .onChange(of: selectedImage) { _ in
+            .onChange(of: selectedImage) {
                 Task {
                     if let data = try? await selectedImage?.loadTransferable(type: Data.self),
                        let uiImage = UIImage(data: data) {

@@ -637,9 +637,12 @@ struct AssembledLessonContent: Codable {
     }
 }
 
-// MARK: - Missing Types for API Client
+// MARK: - Common Response Types
 
-struct EmptyResponse: Codable {}
+/// Empty response for endpoints that return no data
+struct EmptyResponse: Codable {
+    // Intentionally empty - used for endpoints that return 204 or empty JSON
+}
 
 struct CommunityEvent: Codable, Identifiable {
     let id: String

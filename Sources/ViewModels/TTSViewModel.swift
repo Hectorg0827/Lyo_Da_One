@@ -92,11 +92,13 @@ class TTSViewModel: NSObject, ObservableObject {
     }
 
     private func loadWordTimings(from urlString: String) async {
-        guard let url = URL(string: urlString) else { return }
-
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            wordTimings = try JSONDecoder.lyoDecoder.decode([WordTiming].self, from: data)
+            let dynamicEndpoint = DynamicEndpoint(
+                urlString: urlString,
+                method: .get,
+                requiresAuth: false
+            )
+            wordTimings = try await NetworkClient.shared.request(dynamicEndpoint)
         } catch {
             print("Failed to load word timings: \(error)")
         }

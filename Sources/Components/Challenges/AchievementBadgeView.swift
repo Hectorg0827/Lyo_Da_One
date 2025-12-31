@@ -80,7 +80,7 @@ struct AchievementBadgeView: View {
     
     private var categoryColor: Color {
         switch achievement.category {
-        case .learning: return Color("Primary")
+        case .learning: return Color("BrandPrimary")
         case .streak: return .orange
         case .battle: return .red
         case .social: return .green

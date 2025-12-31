@@ -191,7 +191,7 @@ struct ScanButton: View {
                 isPresented: $showingPicker
             )
         }
-        .onChange(of: selectedImage) { newImage in
+        .onChange(of: selectedImage) { _, newImage in
             if let image = newImage {
                 action(image)
                 selectedImage = nil

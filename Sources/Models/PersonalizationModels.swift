@@ -11,18 +11,32 @@ public enum ActionType: String, Codable {
 }
 
 public struct NextActionResponse: Codable {
-    public let actionType: ActionType
-    public let content: String
-    public let metadata: [String: String]?
-    public let reasoning: String?
-    public let confidence: Double
+    public let action: ActionType
+    public let difficulty: String
+    public let reason: [String]
+    public let spacedRepetitionDue: Bool?
+    public let content: [String: AnyCodable]?
+    public let metadata: [String: AnyCodable]?
     
     enum CodingKeys: String, CodingKey {
-        case actionType = "action_type"
+        case action
+        case difficulty
+        case reason
+        case spacedRepetitionDue = "spaced_repetition_due"
         case content
         case metadata
-        case reasoning
-        case confidence
+    }
+    
+    // Backward compatibility computed properties
+    public var actionType: ActionType { action }
+    public var confidence: Double { 0.8 }  // Default since backend doesn't return this
+    
+    // Extract content string if available
+    public var contentString: String {
+        if let desc = content?["description"]?.value as? String {
+            return desc
+        }
+        return reason.joined(separator: ". ")
     }
 }
 

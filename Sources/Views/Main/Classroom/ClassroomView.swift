@@ -190,7 +190,7 @@ struct ClassroomView: View {
                 )
             }
         }
-        .onChange(of: viewModel.currentModuleIndex) { _ in
+        .onChange(of: viewModel.currentModuleIndex) {
             // Update progress in stack when module changes
             if let session = viewModel.session {
                 let progress = Double(viewModel.currentModuleIndex + 1) / Double(session.modules.count)

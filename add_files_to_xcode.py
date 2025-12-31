@@ -8,12 +8,17 @@ import uuid
 
 # Files that are missing from the Xcode project
 MISSING_FILES = [
+    "Sources/Core/Services/CourseSocialService.swift",
+    "Sources/Core/Services/CourseLibraryService.swift",
+    "Sources/Core/Services/CourseShareService.swift",
+    "Sources/Core/Networking/OfflineQueueManager.swift",
     "Sources/Services/UserContextService.swift",
     "Sources/Services/SmartMemoryService.swift",
     "Sources/Services/SoftSkillsService.swift",
     "Sources/Views/Main/AdaptiveHomeView.swift",
     "Sources/Views/Components/ProactiveHintBanner.swift",
     "Sources/Views/Profile/HolisticProfileView.swift",
+    "Sources/Views/Main/Creation/CreateHubView.swift",
 ]
 
 def generate_uuid():
@@ -64,8 +69,8 @@ def add_files_to_project(project_path, base_dir):
 
         file_refs_by_uuid[file_ref_uuid] = (filename, file_path)
 
-        # Create PBXFileReference entry
-        file_ref_entry = f"\t\t{file_ref_uuid} /* {filename} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {filename}; sourceTree = \"<group>\"; }};"
+        # Create PBXFileReference entry (use full path from project root)
+        file_ref_entry = f"\t\t{file_ref_uuid} /* {filename} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = \"{file_path}\"; sourceTree = SOURCE_ROOT; }};"
         file_references.append(file_ref_entry)
 
         # Create PBXBuildFile entry

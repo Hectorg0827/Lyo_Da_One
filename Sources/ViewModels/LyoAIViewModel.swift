@@ -47,6 +47,7 @@ class LyoAIViewModel: ObservableObject {
     private var sessionStartTime = Date()
     private var interactionCount = 0
     private var lastInteractionTime = Date()
+    private var lastAffectUpdate = Date.distantPast // Debounce affect updates
     
     // MARK: - Social Data (Mock)
     @Published var socialPosts: [RepoPost] = []
@@ -204,7 +205,7 @@ class LyoAIViewModel: ObservableObject {
                 if action.confidence > 0.7 {
                     let chip = SuggestionChip(
                         id: UUID().uuidString,
-                        text: action.content,
+                        text: action.contentString,
                         icon: nil,
                         actionType: action.actionType.rawValue,
                         context: nil
@@ -261,14 +262,14 @@ class LyoAIViewModel: ObservableObject {
         case .practiceQuestion, .review, .challenge:
             // If it's a learning action, we might want to trigger a specific flow
             // For now, we'll send it as a message to let the Intent Architecture handle it
-            inputText = action.content
+            inputText = action.contentString
             Task { await sendMessage() }
             
         case .break:
             // Show a break reminder or mindfulness view
             let breakMessage = LyoMessage(
                 id: UUID().uuidString,
-                content: "🧘 **Time for a quick break!**\n\n\(action.content)\n\nTaking short breaks helps maintain focus and prevents fatigue.",
+                content: "🧘 **Time for a quick break!**\n\n\(action.contentString)\n\nTaking short breaks helps maintain focus and prevents fatigue.",
                 isFromUser: false,
                 timestamp: Date(),
                 status: .sent
@@ -278,7 +279,7 @@ class LyoAIViewModel: ObservableObject {
             }
             
         default:
-            inputText = action.content
+            inputText = action.contentString
             Task { await sendMessage() }
         }
     }
@@ -355,9 +356,12 @@ class LyoAIViewModel: ObservableObject {
         // Optimistically add message
         messages.append(userMessage)
         
-        // Update affect signals (interaction detected)
-        Task {
-            await updateAffectSignals(valence: 0.1, arousal: 0.6)
+        // Update affect signals (debounced - only every 30 seconds to prevent overwhelming server)
+        if Date().timeIntervalSince(lastAffectUpdate) > 30 {
+            lastAffectUpdate = Date()
+            Task.detached(priority: .background) { [weak self] in
+                await self?.updateAffectSignals(valence: 0.1, arousal: 0.6)
+            }
         }
         
         isLoading = true
@@ -431,8 +435,35 @@ class LyoAIViewModel: ObservableObject {
             print("❌ LioChatService Error: \(error)")
             await MainActor.run {
                 isLoading = false
-                addErrorMessage("I'm having trouble connecting. Please try again.")
+                addErrorMessage(chatErrorMessage(for: error))
             }
+        }
+    }
+
+    private func chatErrorMessage(for error: Error) -> String {
+        let lyoError = LyoError.from(error: error)
+
+        switch lyoError {
+        case .network(.unauthorized):
+            return "You're signed out. Please log in to chat."
+
+        case .network(.noInternetConnection):
+            return "No internet connection. Please try again."
+
+        case .network(.timeout):
+            return "The request timed out. Please try again."
+
+        case .network(.serverError):
+            return "The server is having trouble right now. Please try again in a bit."
+
+        case .rateLimitExceeded:
+            return "Too many requests. Please wait a moment and try again."
+
+        case .network(.connectionFailed):
+            return "I'm having trouble reaching the server. Please try again."
+
+        default:
+            return "Something went wrong. Please try again."
         }
     }
     

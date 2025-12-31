@@ -15,7 +15,13 @@ class PushService: ObservableObject {
     
     func registerDevice(token: String, type: String = "ios", info: [String: String]? = nil) async throws {
         let _: EmptyResponse = try await client.request(
-            Endpoints.Push.registerDevice(token: token, type: type, info: info)
+            Endpoints.Push.registerDevice(
+                token: token,
+                type: type,
+                info: info,
+                appVersion: AppConfig.version,
+                osVersion: nil // We can add UIDevice.current.systemVersion if we import UIKit
+            )
         )
     }
     
@@ -33,7 +39,9 @@ class PushService: ObservableObject {
     }
     
     func testPush() async throws {
-        let _: EmptyResponse = try await client.request(Endpoints.Push.testPush)
+        let _: EmptyResponse = try await client.request(
+            Endpoints.Push.testPush(title: "Test Push", body: "This is a test notification")
+        )
     }
 }
 
@@ -177,22 +185,16 @@ class StorageService: ObservableObject {
             folder: "avatars"
         )
         
-        guard let uploadUrl = presigned.uploadUrl else {
+        guard let uploadUrl = presigned.uploadUrl, let url = URL(string: uploadUrl) else {
             throw LyoError.serverError("Failed to get upload URL")
         }
         
-        // Upload to the presigned URL
-        var request = URLRequest(url: URL(string: uploadUrl)!)
-        request.httpMethod = "PUT"
-        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
-        request.httpBody = imageData
-        
-        let (_, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw LyoError.serverError("Upload failed")
-        }
+        // Upload to the presigned URL using NetworkClient
+        try await client.uploadBinary(
+            url: url,
+            data: imageData,
+            contentType: "image/jpeg"
+        )
         
         return FileUploadResponse(
             success: true,

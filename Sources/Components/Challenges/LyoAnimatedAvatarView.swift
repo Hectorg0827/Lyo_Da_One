@@ -11,7 +11,7 @@ struct LyoAnimatedAvatarView: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [Color("LyoAccent"), Color("Primary")],
+                        colors: [Color("LyoAccent"), Color("BrandPrimary")],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )

@@ -42,12 +42,25 @@ actor NetworkClient {
             logger.log("📦 Cache HIT: \(endpoint.path)")
             return cached
         }
+        
+        // 2. Check network connectivity
+        let isConnected = await MainActor.run { NetworkMonitor.shared.isConnected }
+        if !isConnected {
+            // If offline, try to return stale cache if available
+            if let staleCache: T = await cache.get(key: endpoint.cacheKey, ignoreExpiry: true) {
+                logger.log("📡 Offline - using stale cache: \(endpoint.path)")
+                return staleCache
+            }
+            // No cache available - throw offline error
+            logger.log("❌ Offline - no cache available: \(endpoint.path)")
+            throw LyoError.network(.noInternetConnection)
+        }
 
-        // 2. Build request
+        // 3. Build request
         var request = try endpoint.buildURLRequest()
 
         // 3. Apply request interceptors
-        request = try await applyRequestInterceptors(request)
+        request = try await applyHeaders(request, endpoint: endpoint)
 
         // 4. Execute with retry logic
         let response = try await executeWithRetry(request: request, endpoint: endpoint)
@@ -95,7 +108,7 @@ actor NetworkClient {
         request.httpBody = body
 
         // Apply interceptors
-        request = try await applyRequestInterceptors(request)
+        request = try await applyHeaders(request, endpoint: endpoint)
 
         // Execute
         let response = try await executeWithRetry(request: request, endpoint: endpoint)
@@ -104,6 +117,65 @@ actor NetworkClient {
         // Decode
         let decoder = JSONDecoder.lyoDecoder
         return try decoder.decode(T.self, from: processedResponse.data)
+    }
+
+    /// Upload raw binary data (e.g. for presigned URLs)
+    /// - Parameters:
+    ///   - url: The full destination URL (e.g. Google Cloud Storage signed URL)
+    ///   - data: The raw binary data to upload
+    ///   - contentType: The MIME type of the data
+    ///   - headers: Optional additional headers
+    func uploadBinary(
+        url: URL,
+        data: Data,
+        contentType: String,
+        headers: [String: String]? = nil
+    ) async throws {
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        
+        if let headers = headers {
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+        
+        request.httpBody = data
+        
+        // Log request
+        logger.logRequest(request, attempt: 0)
+        
+        let (responseData, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LyoError.network(.invalidResponse)
+        }
+        
+        let networkResponse = NetworkResponse(
+            data: responseData,
+            statusCode: httpResponse.statusCode,
+            headers: httpResponse.allHeaderFields as? [String: String] ?? [:]
+        )
+        
+        logger.logResponse(networkResponse, for: request)
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw LyoError.network(.serverError(httpResponse.statusCode))
+        }
+    }
+
+    /// Execute a streaming request
+    func stream(_ endpoint: Endpoint) async throws -> (URLSession.AsyncBytes, URLResponse) {
+        var request = try endpoint.buildURLRequest()
+        
+        // Apply interceptors
+        request = try await applyHeaders(request, endpoint: endpoint)
+        
+        // Log request
+        logger.logRequest(request, attempt: 0)
+        
+        return try await session.bytes(for: request)
     }
 
     // MARK: - Request Execution
@@ -143,7 +215,13 @@ actor NetworkClient {
                 // Don't refresh for login/register endpoints
                 if attempt == 0 && endpoint?.requiresAuth != false {
                     try await refreshTokenIfNeeded()
-                    return try await executeWithRetry(request: request, endpoint: endpoint, attempt: attempt + 1)
+                    var refreshedRequest = request
+                    if let token = await TokenManager.shared.getToken() {
+                        refreshedRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    } else {
+                        refreshedRequest.setValue(nil, forHTTPHeaderField: "Authorization")
+                    }
+                    return try await executeWithRetry(request: refreshedRequest, endpoint: endpoint, attempt: attempt + 1)
                 }
                 throw LyoError.network(.unauthorized)
 
@@ -212,16 +290,22 @@ actor NetworkClient {
 
     // MARK: - Interceptors
 
-    private func applyRequestInterceptors(_ request: URLRequest) async throws -> URLRequest {
+    /// Applies standard headers (Auth, API Key, Tenant ID) to a request
+    func applyHeaders(_ request: URLRequest, endpoint: Endpoint? = nil) async throws -> URLRequest {
         var modifiedRequest = request
 
+        let requiresAuth = endpoint?.requiresAuth ?? true
+
         // 1. Add authentication token
-        if let token = await TokenManager.shared.getToken() {
+        if requiresAuth, let token = await TokenManager.shared.getToken() {
             modifiedRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
         // 2. Add common headers
-        modifiedRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Preserve any existing content type (e.g. multipart/form-data)
+        if modifiedRequest.value(forHTTPHeaderField: "Content-Type") == nil {
+            modifiedRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         modifiedRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         modifiedRequest.setValue("iOS", forHTTPHeaderField: "X-Platform")
         modifiedRequest.setValue(AppConfig.version, forHTTPHeaderField: "X-App-Version")
@@ -260,28 +344,11 @@ actor NetworkClient {
                 throw LyoError.network(.unauthorized)
             }
 
-            // Build refresh request
-            var request = URLRequest(url: URL(string: "\(AppConfig.baseURL)/auth/refresh")!)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-            let body = ["refresh_token": refreshToken]
-            request.httpBody = try JSONEncoder().encode(body)
-
-            // Execute without retry (to avoid infinite loop)
-            let (data, response) = try await session.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-                logger.log("❌ Refresh failed with status: \(status)")
-                if let responseString = String(data: data, encoding: .utf8) {
-                    logger.log("❌ Refresh response: \(responseString)")
-                }
-                throw LyoError.network(.unauthorized)
-            }
-
-            let refreshResponse = try JSONDecoder().decode(TokenRefreshResponse.self, from: data)
+            // Use the typed endpoint + standard header pipeline so SaaS headers are always present.
+            let refreshResponse: TokenRefreshResponse = try await self.request(
+                Endpoints.Auth.refresh(refreshToken: refreshToken),
+                cachePolicy: .reloadIgnoringCache
+            )
 
             // Store new tokens
             await TokenManager.shared.setToken(refreshResponse.accessToken)

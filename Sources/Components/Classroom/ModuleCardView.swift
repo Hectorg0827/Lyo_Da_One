@@ -37,8 +37,8 @@ struct CoverAreaView: View {
             // Background gradient
             LinearGradient(
                 colors: [
-                    Color("Primary").opacity(0.3),
-                    Color("Secondary").opacity(0.2)
+                    Color("BrandPrimary").opacity(0.3),
+                    Color("BrandSecondary").opacity(0.2)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing

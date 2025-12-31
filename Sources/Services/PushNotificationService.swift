@@ -80,49 +80,21 @@ final class PushNotificationService: NSObject {
         }
         
         let osVersion = await MainActor.run { UIDevice.current.systemVersion }
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         
-        let request = DeviceRegistrationRequest(
-            deviceToken: token,
-            deviceType: "ios",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-            osVersion: osVersion
+        let response: PushDeviceResponse = try await NetworkClient.shared.request(
+            Endpoints.Push.registerDevice(
+                token: token,
+                type: "ios",
+                info: nil,
+                appVersion: appVersion,
+                osVersion: osVersion
+            )
         )
         
-        let url = URL(string: "\(baseURL)/api/v1/push/devices/register")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let encoder = JSONEncoder()
-        urlRequest.httpBody = try encoder.encode(request)
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw PushNotificationError.invalidResponse
-        }
-        
-        switch httpResponse.statusCode {
-        case 200...299:
-            let decoder = JSONDecoder()
-            let deviceResponse = try decoder.decode(PushDeviceResponse.self, from: data)
-            isRegisteredWithBackend = true
-            print("✅ Device registered with backend: \(deviceResponse.id)")
-            return deviceResponse
-            
-        case 401:
-            throw PushNotificationError.notAuthenticated
-            
-        default:
-            if let errorMessage = String(data: data, encoding: .utf8) {
-                throw PushNotificationError.serverError(errorMessage)
-            }
-            throw PushNotificationError.serverError("Registration failed with status \(httpResponse.statusCode)")
-        }
+        isRegisteredWithBackend = true
+        print("✅ Device registered with backend: \(response.id)")
+        return response
     }
     
     /// Auto-register when user logs in or token is received
@@ -155,52 +127,14 @@ final class PushNotificationService: NSObject {
     
     /// List all devices registered for the current user
     func getRegisteredDevices() async throws -> [PushDeviceResponse] {
-        guard await tokenManager.getToken() != nil else {
-            throw PushNotificationError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/push/devices")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "GET"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw PushNotificationError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        return try decoder.decode([PushDeviceResponse].self, from: data)
+        return try await NetworkClient.shared.request(Endpoints.Push.listDevices)
     }
     
     // MARK: - Unregister Device
     
     /// Unregister a specific device
     func unregisterDevice(deviceId: String) async throws {
-        guard await tokenManager.getToken() != nil else {
-            throw PushNotificationError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/push/devices/\(deviceId)")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "DELETE"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (_, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw PushNotificationError.invalidResponse
-        }
-        
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Push.unregisterDevice(deviceId: deviceId))
         isRegisteredWithBackend = false
         print("✅ Device unregistered from backend")
     }
@@ -209,98 +143,20 @@ final class PushNotificationService: NSObject {
     
     /// Get user's notification preferences from backend
     func getPreferences() async throws -> NotificationPreferences {
-        guard await tokenManager.getToken() != nil else {
-            throw PushNotificationError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/push/preferences")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "GET"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw PushNotificationError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(NotificationPreferences.self, from: data)
+        return try await NetworkClient.shared.request(Endpoints.Push.getPreferences)
     }
     
     /// Update user's notification preferences
     func updatePreferences(_ preferences: NotificationPreferences) async throws -> NotificationPreferences {
-        guard await tokenManager.getToken() != nil else {
-            throw PushNotificationError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/push/preferences")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "PUT"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        urlRequest.httpBody = try encoder.encode(preferences)
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw PushNotificationError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(NotificationPreferences.self, from: data)
+        return try await NetworkClient.shared.request(Endpoints.Push.updatePreferences(preferences: preferences))
     }
     
     // MARK: - Test Notification
     
     /// Send a test notification to verify setup
     func sendTestNotification(title: String = "Test from Lyo", body: String = "Push notifications are working!") async throws {
-        guard await tokenManager.getToken() != nil else {
-            throw PushNotificationError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/push/test")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let request = TestNotificationRequest(title: title, body: body)
-        let encoder = JSONEncoder()
-        urlRequest.httpBody = try encoder.encode(request)
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw PushNotificationError.invalidResponse
-        }
-        
-        switch httpResponse.statusCode {
-        case 200...299:
-            print("✅ Test notification sent")
-        case 400:
-            throw PushNotificationError.noActiveDevices
-        default:
-            if let errorMessage = String(data: data, encoding: .utf8) {
-                throw PushNotificationError.serverError(errorMessage)
-            }
-            throw PushNotificationError.serverError("Failed with status \(httpResponse.statusCode)")
-        }
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Push.testPush(title: title, body: body))
+        print("✅ Test notification sent")
     }
     
     // MARK: - Handle Incoming Notifications

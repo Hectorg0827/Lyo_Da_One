@@ -56,7 +56,7 @@ struct ChallengeCardView: View {
                                 .frame(height: 6)
                             
                             Rectangle()
-                                .fill(Color("Primary"))
+                                .fill(Color("BrandPrimary"))
                                 .frame(width: geometry.size.width * CGFloat(challenge.progress), height: 6)
                                 .animation(.easeOut(duration: 0.3), value: challenge.progress)
                         }
@@ -107,7 +107,7 @@ struct ChallengeCardView: View {
                         .padding(.vertical, 8)
                         .background(
                             Capsule()
-                                .fill(challenge.isCompleted ? Color.green : Color("Primary"))
+                                .fill(challenge.isCompleted ? Color.green : Color("BrandPrimary"))
                         )
                 }
                 .disabled(challenge.isCompleted)

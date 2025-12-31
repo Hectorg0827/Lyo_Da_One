@@ -42,9 +42,12 @@ actor NetworkCache {
     // MARK: - Public API
 
     /// Get cached value
-    func get<T: Decodable>(key: String) async -> T? {
+    /// - Parameters:
+    ///   - key: Cache key
+    ///   - ignoreExpiry: If true, returns expired cache entries (useful for offline mode)
+    func get<T: Decodable>(key: String, ignoreExpiry: Bool = false) async -> T? {
         // 1. Check memory cache first
-        if let entry = memoryCache[key], !entry.isExpired {
+        if let entry = memoryCache[key], (!entry.isExpired || ignoreExpiry) {
             do {
                 let decoded = try JSONDecoder.lyoDecoder.decode(T.self, from: entry.data)
                 return decoded
@@ -65,8 +68,8 @@ actor NetworkCache {
             let data = try Data(contentsOf: fileURL)
             let entry = try JSONDecoder().decode(CacheEntry.self, from: data)
 
-            // Check if expired
-            if entry.isExpired {
+            // Check if expired (unless ignoreExpiry is true)
+            if entry.isExpired && !ignoreExpiry {
                 try? fileManager.removeItem(at: fileURL)
                 return nil
             }

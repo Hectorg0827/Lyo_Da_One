@@ -299,21 +299,13 @@ final class MonetizationService: ObservableObject {
             throw MonetizationError.notAuthenticated
         }
         
-        let url = URL(string: "\(baseURL)/api/v1/users/me/subscription")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/users/me/subscription",
+            method: .get,
+            requiresAuth: true
+        )
         
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw MonetizationError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(SubscriptionStatusResponse.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - Energy Credits
@@ -363,77 +355,60 @@ final class MonetizationService: ObservableObject {
     }
     
     private func sendPurchaseValidation(_ request: PurchaseValidationRequest) async throws -> PurchaseValidationResponse {
-        let url = URL(string: "\(baseURL)/api/v1/purchases/validate")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
-        urlRequest.httpBody = try encoder.encode(request)
+        let bodyData = try encoder.encode(request)
+        let bodyDict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        // Use AnyEncodable wrapper for the body
+        let encodableBody = bodyDict?.mapValues { AnyEncodable(value: $0) }
         
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw MonetizationError.validationFailed
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/purchases/validate",
+            method: .post,
+            body: encodableBody,
+            requiresAuth: true
+        )
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(PurchaseValidationResponse.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     private func sendSubscriptionSync(_ request: SubscriptionSyncRequest) async throws -> SubscriptionSyncResponse {
-        let url = URL(string: "\(baseURL)/api/v1/users/me/subscription/sync")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
-        urlRequest.httpBody = try encoder.encode(request)
+        let bodyData = try encoder.encode(request)
+        let bodyDict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        // Use AnyEncodable wrapper for the body
+        let encodableBody = bodyDict?.mapValues { AnyEncodable(value: $0) }
         
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw MonetizationError.syncFailed
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/users/me/subscription/sync",
+            method: .post,
+            body: encodableBody,
+            requiresAuth: true
+        )
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(SubscriptionSyncResponse.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     private func sendUseEnergy(_ request: UseEnergyRequest) async throws -> UseEnergyResponse {
-        let url = URL(string: "\(baseURL)/api/v1/users/me/energy/use")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
         let encoder = JSONEncoder()
-        urlRequest.httpBody = try encoder.encode(request)
+        // Note: UseEnergyRequest doesn't need snake_case conversion for 'amount'
+        let bodyData = try encoder.encode(request)
+        let bodyDict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        // Use AnyEncodable wrapper for the body
+        let encodableBody = bodyDict?.mapValues { AnyEncodable(value: $0) }
         
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw MonetizationError.energyUseFailed
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/users/me/energy/use",
+            method: .post,
+            body: encodableBody,
+            requiresAuth: true
+        )
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(UseEnergyResponse.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - Product Helpers

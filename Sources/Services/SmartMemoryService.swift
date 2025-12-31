@@ -33,16 +33,8 @@ final class SmartMemoryService: ObservableObject {
     
     /// Fetch user's learning memory from backend
     func fetchMemory() async {
-        guard let url = URL(string: "\(baseURL)/api/v1/memory/summary") else { return }
-        
-        var request = URLRequest(url: url)
-        if let token = await TokenManager.shared.getToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            memory = try JSONDecoder().decode(LearningMemory.self, from: data)
+            memory = try await NetworkClient.shared.request(Endpoints.Memory.getSummary)
             generateProactiveHint()
         } catch {
             print("⚠️ Failed to fetch memory: \(error)")

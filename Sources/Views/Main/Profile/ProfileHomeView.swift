@@ -63,7 +63,7 @@ struct ProfileHomeView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color("Primary"), Color("Secondary")],
+                            colors: [Color("BrandPrimary"), Color("BrandSecondary")],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -127,14 +127,14 @@ struct ProfileHomeView: View {
                 icon: "trophy.fill",
                 value: "\(challengesViewModel.achievements.filter { $0.isUnlocked }.count)",
                 label: "Achievements",
-                color: Color("Primary")
+                color: Color("BrandPrimary")
             )
             
             StatCard(
                 icon: "book.fill",
                 value: "12",
                 label: "Courses",
-                color: Color("Secondary")
+                color: Color("BrandSecondary")
             )
         }
     }
@@ -227,7 +227,7 @@ struct ProfileHomeView: View {
             SettingsRow(
                 icon: "lock.fill",
                 title: "Privacy",
-                iconColor: Color("Primary")
+                iconColor: Color("BrandPrimary")
             )
             
             Divider()
@@ -236,7 +236,7 @@ struct ProfileHomeView: View {
             SettingsRow(
                 icon: "gear",
                 title: "Account Settings",
-                iconColor: Color("Secondary")
+                iconColor: Color("BrandSecondary")
             )
             
             Divider()
@@ -332,7 +332,7 @@ struct SavedCourseRow: View {
                 
                 Text("\(Int(progress * 100))%")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color("Primary"))
+                    .foregroundColor(Color("BrandPrimary"))
             }
             
             // Progress bar
@@ -343,7 +343,7 @@ struct SavedCourseRow: View {
                         .frame(height: 6)
                     
                     Rectangle()
-                        .fill(Color("Primary"))
+                        .fill(Color("BrandPrimary"))
                         .frame(width: geometry.size.width * progress, height: 6)
                         .animation(.easeOut(duration: 0.6), value: progress)
                 }

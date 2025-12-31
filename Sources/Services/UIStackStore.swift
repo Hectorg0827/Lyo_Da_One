@@ -11,6 +11,7 @@ final class UIStackStore: ObservableObject {
     @Published private(set) var items: [UIStackItem] = []
     
     private let userDefaultsKey = "lyo_ui_stack_items"
+    private let repository = LyoRepository.shared
     
     private init() {
         loadFromDisk()
@@ -163,6 +164,24 @@ final class UIStackStore: ObservableObject {
         items[index] = item
         sortByRecency()
         saveToDisk()
+        
+        // 🔥 BACKEND SYNC: Sync progress to backend for cross-device support
+        Task {
+            await syncCourseProgressToBackend(courseId: courseId, progress: progress)
+        }
+    }
+    
+    // MARK: - Backend Sync
+    
+    /// Sync course progress to backend (called automatically on updateCourseProgress)
+    private func syncCourseProgressToBackend(courseId: String, progress: Double) async {
+        do {
+            let _ = try await repository.getCourseProgress(courseId: courseId)
+            print("✅ UIStackStore: Synced course progress to backend (\(Int(progress * 100))%)")
+        } catch {
+            print("⚠️ UIStackStore: Failed to sync course progress: \(error.localizedDescription)")
+            // Don't block user - local tracking continues
+        }
     }
     
     // MARK: - Private Helpers

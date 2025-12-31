@@ -87,4 +87,9 @@ extension StackItem {
     var subtitle: String? {
         return tags?.first
     }
+    
+    /// Convenience accessor for courseId from contextData
+    var courseId: String? {
+        return contextData?.courseId
+    }
 }

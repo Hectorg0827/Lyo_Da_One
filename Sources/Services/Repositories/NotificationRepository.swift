@@ -37,7 +37,7 @@ class DefaultNotificationRepository: NotificationRepository {
     
     func markAllAsRead() async {
         do {
-            try await NetworkClient.shared.request(Endpoints.Notifications.markAllRead(category: nil)) as VoidResponse?
+            _ = try await NetworkClient.shared.request(Endpoints.Notifications.markAllRead(category: nil)) as VoidResponse?
             print("✅ All notifications marked as read")
         } catch {
              print("⚠️ Failed to mark notifications as read: \(error)")

@@ -3,6 +3,7 @@ import SwiftUI
 struct FocusView: View {
     @EnvironmentObject var stackService: StackService
     @EnvironmentObject var uiState: AppUIState
+    @StateObject private var socialService = CourseSocialService.shared
     
     @State private var animateWelcome = false
     @State private var streakCount = 7
@@ -106,7 +107,7 @@ struct FocusView: View {
             
             TabView(selection: $activeCourseIndex) {
                 ForEach(Array(courseStackCards.enumerated()), id: \.element.id) { index, card in
-                    FocusCourseCardView(card: card)
+                    FocusCourseCardView(card: card, socialService: socialService)
                         .padding(.vertical, 4)
                         .tag(index)
                 }
@@ -168,7 +169,12 @@ struct FocusView: View {
     // MARK: - Derived Data
     private var courseStackCards: [FocusCourseCardModel] {
         let mapped = stackService.items.prefix(6).enumerated().map { offset, item in
-            FocusCourseCardModel(
+            // 🔥 REAL SOCIAL DATA: Get actual likes/ratings from CourseSocialService
+            let courseId = item.courseId ?? item.id
+            let likes = socialService.getLikeCount(courseId: courseId)
+            let rating = socialService.getAverageRating(courseId: courseId)
+            
+            return FocusCourseCardModel(
                 id: item.id,
                 title: item.title.isEmpty ? "Course Session" : item.title,
                 subtitle: item.subtitle ?? "Personalized focus",
@@ -185,8 +191,10 @@ struct FocusView: View {
                     }
                 }(),
                 creator: "Lyo AI",
-                likes: Int.random(in: 100...5000),
-                dislikes: Int.random(in: 0...50)
+                likes: likes,
+                dislikes: 0,  // Not using dislikes currently
+                courseId: courseId,
+                rating: rating
             )
         }
         if !mapped.isEmpty { return Array(mapped) }
@@ -610,6 +618,8 @@ struct FocusCourseCardModel: Identifiable, Hashable {
     let creator: String
     let likes: Int
     let dislikes: Int
+    let courseId: String?
+    let rating: Double
     
     struct GradientAccent: Hashable {
         let start: Color
@@ -638,7 +648,9 @@ struct FocusCourseCardModel: Identifiable, Hashable {
                 description: "Master the fundamentals of Swift concurrency and actors in this high-intensity power session designed for senior developers.",
                 creator: "Dr. Angela Yu",
                 likes: 1240,
-                dislikes: 12
+                dislikes: 12,
+                courseId: "suggested_swift",
+                rating: 4.8
             ),
             FocusCourseCardModel(
                 id: "suggested_ml",
@@ -652,7 +664,9 @@ struct FocusCourseCardModel: Identifiable, Hashable {
                 description: "Create your first machine learning model on iOS using CoreML and CreateML. Perfect for beginners entering the AI space.",
                 creator: "Paul Hudson",
                 likes: 890,
-                dislikes: 4
+                dislikes: 4,
+                courseId: "suggested_ml",
+                rating: 4.6
             )
         ]
     }
@@ -660,6 +674,7 @@ struct FocusCourseCardModel: Identifiable, Hashable {
 
 struct FocusCourseCardView: View {
     let card: FocusCourseCardModel
+    @ObservedObject var socialService: CourseSocialService
     
     // Animation States
     @State private var isFlipped = false
@@ -766,6 +781,31 @@ struct FocusCourseCardView: View {
                 )
                 .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 8) // Lifted 2D effect
                 .overlay(glassOrb, alignment: .topTrailing) // Moved orb to top for better space usage
+                // 🔥 SHARE BUTTON: Overlay for course sharing
+                .overlay(alignment: .topLeading) {
+                    Button(action: {
+                        // Get the root view controller for presenting the share sheet
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let rootVC = windowScene.windows.first?.rootViewController {
+                            CourseShareService.shared.shareCourse(
+                                courseId: card.courseId ?? card.id,
+                                title: card.title,
+                                description: card.description,
+                                from: rootVC
+                            )
+                        }
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    }
+                    .padding(16)
+                }
             
             VStack(alignment: .leading, spacing: 20) {
                 // Header Area
@@ -887,27 +927,68 @@ struct FocusCourseCardView: View {
                             .foregroundColor(.white)
                     }
                     
+                    // 🔥 INTERACTIVE LIKE BUTTON
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("RATING")
+                        Text("LIKES")
                             .font(.caption2.bold())
                             .foregroundColor(.white.opacity(0.5))
                             .tracking(1)
-                        HStack(spacing: 12) {
+                        Button(action: {
+                            let courseId = card.courseId ?? card.id
+                            Task {
+                                do {
+                                    try await socialService.toggleLike(courseId: courseId)
+                                    HapticManager.shared.light()
+                                } catch {
+                                    print("⚠️ Failed to toggle like: \(error)")
+                                }
+                            }
+                        }) {
                             HStack(spacing: 4) {
-                                Image(systemName: "hand.thumbsup.fill")
-                                    .foregroundColor(.green.opacity(0.8))
-                                Text("\(card.likes)")
+                                let courseId = card.courseId ?? card.id
+                                let isLiked = socialService.hasLiked(courseId: courseId)
+                                Image(systemName: isLiked ? "heart.fill" : "heart")
+                                    .foregroundColor(isLiked ? .red : .white.opacity(0.8))
+                                Text("\(socialService.getLikeCount(courseId: courseId))")
                                     .font(.subheadline.bold())
                                     .foregroundColor(.white)
                             }
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "hand.thumbsdown.fill")
-                                    .foregroundColor(.red.opacity(0.8))
-                                Text("\(card.dislikes)")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                    
+                    // 🔥 INTERACTIVE STAR RATING
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("YOUR RATING")
+                            .font(.caption2.bold())
+                            .foregroundColor(.white.opacity(0.5))
+                            .tracking(1)
+                        HStack(spacing: 8) {
+                            ForEach(1...5, id: \.self) { starIndex in
+                                Button(action: {
+                                    let courseId = card.courseId ?? card.id
+                                    Task {
+                                        do {
+                                            try await socialService.rateCourse(courseId: courseId, rating: starIndex)
+                                            HapticManager.shared.light()
+                                        } catch {
+                                            print("⚠️ Failed to rate course: \(error)")
+                                        }
+                                    }
+                                }) {
+                                    let courseId = card.courseId ?? card.id
+                                    let userRating = socialService.getUserRating(courseId: courseId) ?? 0
+                                    Image(systemName: starIndex <= userRating ? "star.fill" : "star")
+                                        .foregroundColor(starIndex <= userRating ? .yellow : .white.opacity(0.4))
+                                        .font(.system(size: 20))
+                                }
                             }
+                        }
+                        
+                        // Show average rating
+                        if card.rating > 0 {
+                            Text(String(format: "%.1f average from community", card.rating))
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.6))
                         }
                     }
                 }

@@ -42,6 +42,51 @@ struct APIKeyInfo: Codable, Identifiable {
     let totalRequests: Int
 }
 
+// MARK: - SaaS Endpoints
+
+enum SaaSEndpoint: Endpoint {
+    case getOrganization
+    case getUsageStats
+    case listAPIKeys
+    case createAPIKey(name: String, description: String?)
+    case revokeAPIKey(id: Int)
+    
+    var path: String {
+        switch self {
+        case .getOrganization:
+            return "/tenants/me"
+        case .getUsageStats:
+            return "/tenants/usage"
+        case .listAPIKeys, .createAPIKey:
+            return "/tenants/api-keys"
+        case .revokeAPIKey(let id):
+            return "/tenants/api-keys/\(id)"
+        }
+    }
+    
+    var method: HTTPMethod {
+        switch self {
+        case .getOrganization, .getUsageStats, .listAPIKeys:
+            return .get
+        case .createAPIKey:
+            return .post
+        case .revokeAPIKey:
+            return .delete
+        }
+    }
+    
+    var body: Encodable? {
+        switch self {
+        case .createAPIKey(let name, let description):
+            return ["name": name, "description": description ?? "Created via iOS App"]
+        default:
+            return nil
+        }
+    }
+    
+    var requiresAuth: Bool { true }
+}
+
 // MARK: - SaaS Service
 
 actor SaaSService {
@@ -51,64 +96,32 @@ actor SaaSService {
     // MARK: - Fetch Organization
     
     func getOrganization() async throws -> OrganizationResponse {
-        let endpoint = Endpoint(
-            path: "/tenants/me",
-            method: .GET,
-            requiresAuth: true
-        )
-        return try await NetworkClient.shared.request(endpoint)
+        return try await NetworkClient.shared.request(SaaSEndpoint.getOrganization)
     }
     
     // MARK: - Fetch Usage Stats
     
     func getUsageStats() async throws -> UsageStatsResponse {
-        let endpoint = Endpoint(
-            path: "/tenants/usage",
-            method: .GET,
-            requiresAuth: true
-        )
-        return try await NetworkClient.shared.request(endpoint)
+        return try await NetworkClient.shared.request(SaaSEndpoint.getUsageStats)
     }
     
     // MARK: - API Key Management
     
     func listAPIKeys() async throws -> [APIKeyInfo] {
-        let endpoint = Endpoint(
-            path: "/tenants/api-keys",
-            method: .GET,
-            requiresAuth: true
-        )
-        return try await NetworkClient.shared.request(endpoint)
+        return try await NetworkClient.shared.request(SaaSEndpoint.listAPIKeys)
     }
     
     func createAPIKey(name: String) async throws -> String {
-        struct CreateKeyRequest: Codable {
-            let name: String
-            let description: String?
-        }
-        
-        let payload = CreateKeyRequest(name: name, description: "Created via iOS App")
-        
-        let endpoint = Endpoint(
-            path: "/tenants/api-keys",
-            method: .POST,
-            body: try? JSONEncoder.lyoEncoder.encode(payload),
-            requiresAuth: true
+        let response: APIKeyCreatedResponse = try await NetworkClient.shared.request(
+            SaaSEndpoint.createAPIKey(name: name, description: nil)
         )
-        
-        let response: APIKeyCreatedResponse = try await NetworkClient.shared.request(endpoint)
         return response.apiKey
     }
     
     func revokeAPIKey(id: Int) async throws {
-        let endpoint = Endpoint(
-            path: "/tenants/api-keys/\(id)",
-            method: .DELETE,
-            requiresAuth: true
-        )
-        let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
+        let _: SaaSEmptyResponse = try await NetworkClient.shared.request(SaaSEndpoint.revokeAPIKey(id: id))
     }
 }
 
-// Helper for empty responses
-struct EmptyResponse: Codable {}
+// Helper for empty responses (scoped to SaaS to avoid conflicts)
+private struct SaaSEmptyResponse: Codable {}

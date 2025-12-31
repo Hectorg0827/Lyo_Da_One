@@ -28,6 +28,16 @@
 				<string>com.googleusercontent.apps.689766559983-qofs54ugjj3vg5p6a37ealq2no2psmoj</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.lyo.app.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>lyoapp</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

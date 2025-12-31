@@ -243,12 +243,14 @@ struct CreateEventView: View {
             }) {
                 ZStack(alignment: .bottom) {
                     // Real MapKit view
-                    Map(coordinateRegion: .constant(region), annotationItems: markerItems) { item in
-                        MapAnnotation(coordinate: item.coordinate) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.title)
-                                .foregroundColor(.blue)
-                                .shadow(radius: 3)
+                    Map(position: .constant(.region(region))) {
+                        ForEach(markerItems) { item in
+                            Annotation("", coordinate: item.coordinate) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.title)
+                                    .foregroundColor(.blue)
+                                    .shadow(radius: 3)
+                            }
                         }
                     }
                     .frame(height: 140)
@@ -430,29 +432,35 @@ struct FullMapPicker: View {
     @State private var searchText = ""
     @State private var searchResults: [MKMapItem] = []
     @State private var isSearching = false
+    @State private var position: MapCameraPosition = .automatic
     
     var body: some View {
         NavigationView {
             ZStack {
                 // Full Map
-                Map(coordinateRegion: $region, annotationItems: markerItems) { item in
-                    MapAnnotation(coordinate: item.coordinate) {
-                        VStack(spacing: 0) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.largeTitle)
-                                .foregroundColor(.blue)
-                            Image(systemName: "arrowtriangle.down.fill")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                                .offset(y: -5)
+                Map(position: $position) {
+                    ForEach(markerItems) { item in
+                        Annotation("", coordinate: item.coordinate) {
+                            VStack(spacing: 0) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.blue)
+                                Image(systemName: "arrowtriangle.down.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                    .offset(y: -5)
+                            }
+                            .shadow(radius: 3)
                         }
-                        .shadow(radius: 3)
                     }
                 }
-                .ignoresSafeArea(edges: .bottom)
-                .onTapGesture { location in
-                    // This is simplified - in production, use UITapGestureRecognizer
+                .onMapCameraChange { context in
+                    region = context.region
                 }
+                .onAppear {
+                    position = .region(region)
+                }
+                .ignoresSafeArea(edges: .bottom)
                 
                 // Search Overlay
                 VStack {
@@ -567,6 +575,7 @@ struct FullMapPicker: View {
         selectedCoordinate = item.placemark.coordinate
         locationName = item.name ?? item.placemark.title ?? "Selected Location"
         region.center = item.placemark.coordinate
+        position = .region(MKCoordinateRegion(center: item.placemark.coordinate, span: region.span))
         searchResults = []
         searchText = ""
         

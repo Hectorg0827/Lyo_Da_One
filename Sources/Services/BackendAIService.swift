@@ -28,7 +28,7 @@ struct BackendAIChatRequest: Encodable {
 }
 
 // Response from /api/v1/ai/chat
-struct BackendAIChatResponse: Decodable {
+struct BackendAIChatResponse: Codable {
     let content: String
     let primaryAi: String
     let secondaryAi: String?
@@ -78,7 +78,7 @@ struct ConversationMessage: Codable {
     let content: String
 }
 
-struct BackendStudySessionResponse: Decodable {
+struct BackendStudySessionResponse: Codable {
     let response: String
     let conversationHistory: [ConversationMessage]
 }
@@ -89,7 +89,7 @@ struct BackendQuizRequest: Encodable {
     let questionCount: Int
 }
 
-struct BackendQuizQuestion: Decodable {
+struct BackendQuizQuestion: Codable {
     let question: String
     let options: [String]
     let correctAnswer: String
@@ -101,8 +101,52 @@ struct BackendAnswerAnalysisRequest: Encodable {
     let userAnswer: String
 }
 
-struct BackendAnswerAnalysisResponse: Decodable {
+struct BackendAnswerAnalysisResponse: Codable {
     let feedback: String
+}
+
+// MARK: - Course Generation Models
+
+struct CourseGenerationJobResponse: Codable {
+    let jobId: String
+    let status: String
+    let qualityTier: String
+    let estimatedCostUSD: Double
+    let message: String
+    let pollUrl: String
+    
+    enum CodingKeys: String, CodingKey {
+        case jobId = "job_id"
+        case status
+        case qualityTier = "quality_tier"
+        case estimatedCostUSD = "estimated_cost_usd"
+        case message
+        case pollUrl = "poll_url"
+    }
+}
+
+struct CourseGenerationStatusResponse: Codable {
+    let jobId: String
+    let status: String
+    let progressPercent: Int
+    let currentStep: String?
+    let stepsCompleted: [String]
+    let estimatedTimeRemainingSec: Int?
+    let createdAt: String
+    let updatedAt: String?
+    let error: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case jobId = "job_id"
+        case status
+        case progressPercent = "progress_percent"
+        case currentStep = "current_step"
+        case stepsCompleted = "steps_completed"
+        case estimatedTimeRemainingSec = "estimated_time_remaining_seconds"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case error
+    }
 }
 
 // MARK: - Backend AI Service
@@ -168,61 +212,21 @@ final class BackendAIService {
         }
         
         // Build request
-        let request = BackendAIChatRequest(
-            prompt: message,
-            taskType: "EDUCATIONAL_EXPLANATION",
-            maxTokens: 500,
-            temperature: 0.7,
-            context: contextDict
-        )
+        // Note: Request body is constructed in Endpoint.swift for chatStream
         
-        let endpoint = "\(baseURL)/api/v1/ai/chat/stream"
-        
-        guard let url = URL(string: endpoint) else {
-            onError(BackendAIError.invalidURL)
-            return
-        }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        urlRequest.setValue("iOS", forHTTPHeaderField: "X-Platform")
-        
-        do {
-            urlRequest.httpBody = try jsonEncoder.encode(request)
-        } catch {
-            onError(error)
-            return
-        }
-        
-        print("🌊 Starting streaming request to: \(endpoint)")
-        
-        // Use URLSession with a streaming delegate
-        let session = URLSession(configuration: .default)
-        let task = session.dataTask(with: urlRequest) { [weak self] data, response, error in
-            if let error = error {
-                DispatchQueue.main.async {
-                    onError(error)
-                }
-                return
-            }
-            
-            guard let data = data else {
-                DispatchQueue.main.async {
+        Task {
+            do {
+                let (bytes, response) = try await NetworkClient.shared.stream(Endpoints.AI.chatStream(message: message, context: contextDict))
+                
+                guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
                     onError(BackendAIError.invalidResponse)
+                    return
                 }
-                return
-            }
-            
-            // Parse SSE data
-            if let dataString = String(data: data, encoding: .utf8) {
+                
                 var fullContent = ""
                 var responseTime: Double = 0
                 
-                // Split by "data: " and parse each event
-                let lines = dataString.components(separatedBy: "\n")
-                for line in lines {
+                for try await line in bytes.lines {
                     if line.hasPrefix("data: ") {
                         let jsonStr = String(line.dropFirst(6))
                         if let jsonData = jsonStr.data(using: .utf8),
@@ -238,9 +242,7 @@ final class BackendAIService {
                             case "chunk":
                                 if let content = event["content"] as? String {
                                     fullContent += content
-                                    DispatchQueue.main.async {
-                                        onChunk(content)
-                                    }
+                                    onChunk(content)
                                 }
                                 
                             case "done":
@@ -248,23 +250,19 @@ final class BackendAIService {
                                 print("✅ Stream completed in \(responseTime)ms")
                                 
                                 // Update conversation history
-                                DispatchQueue.main.async {
-                                    self?.conversationHistory.append(ConversationMessage(role: "user", content: message))
-                                    self?.conversationHistory.append(ConversationMessage(role: "assistant", content: fullContent))
-                                    
-                                    if let count = self?.conversationHistory.count, count > 10 {
-                                        self?.conversationHistory = Array(self?.conversationHistory.suffix(10) ?? [])
-                                    }
-                                    
-                                    onComplete(fullContent, responseTime)
+                                self.conversationHistory.append(ConversationMessage(role: "user", content: message))
+                                self.conversationHistory.append(ConversationMessage(role: "assistant", content: fullContent))
+                                
+                                if self.conversationHistory.count > 10 {
+                                    self.conversationHistory = Array(self.conversationHistory.suffix(10))
                                 }
+                                
+                                onComplete(fullContent, responseTime)
                                 
                             case "error":
                                 let errorMsg = event["message"] as? String ?? "Unknown error"
                                 print("❌ Stream error: \(errorMsg)")
-                                DispatchQueue.main.async {
-                                    onError(BackendAIError.serverError(errorMsg))
-                                }
+                                onError(BackendAIError.serverError(errorMsg))
                                 
                             default:
                                 break
@@ -272,9 +270,10 @@ final class BackendAIService {
                         }
                     }
                 }
+            } catch {
+                onError(error)
             }
         }
-        task.resume()
     }
     
     // MARK: - Study Session (Socratic Dialogue)
@@ -397,6 +396,64 @@ final class BackendAIService {
             conversationHistory.removeAll()
             currentResourceId = resourceId
         }
+    }
+    
+    // MARK: - Course Generation (Multi-Agent v2)
+    
+    /// Estimate cost for generating a course
+    func estimateCost(
+        topic: String,
+        options: CourseGenerationOptions
+    ) async throws -> CostEstimate {
+        let request = CostEstimateRequest(
+            topic: topic,
+            options: options
+        )
+        
+        let endpoint = "\(baseURL)/api/v2/courses/estimate-cost"
+        
+        return try await postPublic(endpoint: endpoint, body: request)
+    }
+    
+    /// Generate a course with enhanced quality and feature controls
+    func generateCourse(
+        topic: String,
+        options: CourseGenerationOptions = .recommended,
+        userContext: [String: String]? = nil
+    ) async throws -> CourseGenerationJobResponse {
+        var requestDict: [String: Any] = [
+            "request": topic,
+            "quality_tier": options.qualityTier.rawValue,
+            "enable_code_examples": options.includeCodeExamples,
+            "enable_practice_exercises": options.includePracticeExercises,
+            "enable_final_quiz": options.includeFinalQuiz,
+            "enable_multimedia_suggestions": options.includeMultimediaSuggestions,
+            "qa_strictness": options.qaStrictness,
+            "target_language": options.targetLanguage
+        ]
+        
+        if let budget = options.maxBudgetUSD {
+            requestDict["max_budget_usd"] = budget
+        }
+        
+        if let context = userContext {
+            requestDict["user_context"] = context
+        }
+        
+        let endpoint = "\(baseURL)/api/v2/courses/generate"
+        
+        return try await postJSONDict(endpoint: endpoint, body: requestDict)
+    }
+    
+    /// Poll for course generation status
+    func getCourseGenerationStatus(jobId: String) async throws -> CourseGenerationStatusResponse {
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v2/courses/status/\(jobId)",
+            method: .get,
+            requiresAuth: true
+        )
+        
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - System Prompt Builder
@@ -526,119 +583,25 @@ final class BackendAIService {
     // MARK: - Network Helpers
     
     /// POST request WITH authentication (for auth-required endpoints)
-    private func post<T: Encodable, R: Decodable>(endpoint: String, body: T) async throws -> R {
-        guard let url = URL(string: endpoint) else {
-            throw BackendAIError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        
-        // Add auth token
-        if let token = await tokenManager.getToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // Encode body
-        request.httpBody = try jsonEncoder.encode(body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw BackendAIError.invalidResponse
-        }
-        
-        switch httpResponse.statusCode {
-        case 200...299:
-            return try jsonDecoder.decode(R.self, from: data)
-        case 401:
-            throw BackendAIError.unauthorized
-        case 429:
-            throw BackendAIError.rateLimited
-        default:
-            // Try to extract error message
-            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let detail = errorJson["detail"] as? String {
-                throw BackendAIError.serverError(detail)
-            }
-            throw BackendAIError.serverError("Server error: \(httpResponse.statusCode)")
-        }
+    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: body,
+            requiresAuth: true
+        )
+        return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
     /// POST request WITHOUT authentication (for public endpoints like /api/v1/ai/chat)
-    private func postPublic<T: Encodable, R: Decodable>(endpoint: String, body: T) async throws -> R {
-        guard let url = URL(string: endpoint) else {
-            throw BackendAIError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("iOS", forHTTPHeaderField: "X-Platform")
-        request.setValue("1.0", forHTTPHeaderField: "X-App-Version")
-        
-        // NO auth token for public endpoints
-        
-        // Encode body
-        request.httpBody = try jsonEncoder.encode(body)
-        
-        // Debug: print request
-        print("\n================================")
-        print("📤 REQUEST")
-        print("================================")
-        print("Method: POST")
-        print("URL: \(endpoint)")
-        print("Headers:")
-        for (key, value) in request.allHTTPHeaderFields ?? [:] {
-            print("  \(key): \(value)")
-        }
-        if let body = request.httpBody, let bodyStr = String(data: body, encoding: .utf8) {
-            print("\nBody:")
-            print(bodyStr)
-        }
-        print("================================\n")
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw BackendAIError.invalidResponse
-        }
-        
-        // Debug: print response
-        print("\n================================")
-        print("📥 RESPONSE")
-        print("================================")
-        print("URL: \(endpoint)")
-        print("Status: \(httpResponse.statusCode) \(httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 ? "✅" : "⚠️")")
-        print("\nHeaders:")
-        for (key, value) in httpResponse.allHeaderFields {
-            print("  \(key): \(value)")
-        }
-        if let bodyStr = String(data: data, encoding: .utf8) {
-            let prettyBody = (try? JSONSerialization.jsonObject(with: data, options: []))
-                .flatMap { try? JSONSerialization.data(withJSONObject: $0, options: .prettyPrinted) }
-                .flatMap { String(data: $0, encoding: .utf8) } ?? bodyStr
-            print("\nBody:")
-            print(prettyBody)
-        }
-        print("================================\n")
-        
-        switch httpResponse.statusCode {
-        case 200...299:
-            return try jsonDecoder.decode(R.self, from: data)
-        case 429:
-            throw BackendAIError.rateLimited
-        default:
-            // Try to extract error message
-            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let detail = errorJson["detail"] as? String {
-                throw BackendAIError.serverError(detail)
-            }
-            throw BackendAIError.serverError("Server error: \(httpResponse.statusCode)")
-        }
+    private func postPublic<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: body,
+            requiresAuth: false
+        )
+        return try await NetworkClient.shared.request(dynamicEndpoint)
     }
 }
 

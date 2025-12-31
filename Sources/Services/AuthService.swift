@@ -330,4 +330,16 @@ class AuthService: NSObject, ObservableObject {
         }
         #endif
     }
+    
+    // MARK: - Helper Methods
+    
+    /// Get current user ID for analytics and other services
+    /// Returns email as user ID since that's what we use for authentication
+    func getCurrentUserId() async throws -> String? {
+        guard isAuthenticated else {
+            return nil
+        }
+        // Use email as user ID
+        return currentUserEmail.isEmpty ? nil : currentUserEmail
+    }
 }

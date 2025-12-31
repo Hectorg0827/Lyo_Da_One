@@ -59,7 +59,7 @@ struct LyoAvatarView: View {
                 isBreathing = true
             }
         }
-        .onChange(of: isThinking) { thinking in
+        .onChange(of: isThinking) { _, thinking in
             if thinking {
                 startReadingAnimation()
             } else {

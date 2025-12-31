@@ -21,49 +21,30 @@ final class CloudStorageService {
         contentType: String,
         folder: String = "uploads"
     ) async throws -> PresignedURLResponse {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/uploads/presigned-url")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
         let body = PresignedURLRequest(
             filename: filename,
             contentType: contentType,
             folder: folder
         )
         
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        request.httpBody = try encoder.encode(body)
+        // Use DynamicEndpoint to match the specific path used by this service
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/presigned-url",
+            method: .post,
+            body: body,
+            requiresAuth: true
+        )
         
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CloudStorageError.invalidResponse
-        }
-        
-        if httpResponse.statusCode == 401 {
-            throw CloudStorageError.notAuthenticated
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if let error = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw CloudStorageError.serverError(error.detail ?? "Upload failed")
+        do {
+            return try await NetworkClient.shared.request(endpoint)
+        } catch let error as LyoError {
+            if case .network(.unauthorized) = error {
+                throw CloudStorageError.notAuthenticated
             }
-            throw CloudStorageError.serverError("Status: \(httpResponse.statusCode)")
+            throw error
+        } catch {
+            throw error
         }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(PresignedURLResponse.self, from: data)
     }
     
     // MARK: - Upload File
@@ -88,32 +69,29 @@ final class CloudStorageService {
         }
         
         // 2. Upload directly to cloud storage
-        var request = URLRequest(url: URL(string: uploadURL)!)
-        request.httpMethod = "PUT"
-        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        
-        // Add any additional headers from presigned response
-        if let headers = presigned.headers {
-            for (key, value) in headers {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
+        guard let url = URL(string: uploadURL) else {
+            throw CloudStorageError.serverError("Invalid upload URL")
         }
         
-        // Use upload task for progress tracking
-        let (_, response) = try await URLSession.shared.upload(for: request, from: data)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        do {
+            try await NetworkClient.shared.uploadBinary(
+                url: url,
+                data: data,
+                contentType: contentType,
+                headers: presigned.headers
+            )
+            
+            print("✅ File uploaded: \(presigned.publicUrl ?? "unknown")")
+            
+            return UploadResult(
+                success: true,
+                publicURL: presigned.publicUrl,
+                blobName: presigned.blobName
+            )
+        } catch {
+            print("❌ Upload failed: \(error)")
             throw CloudStorageError.uploadFailed
         }
-        
-        print("✅ File uploaded: \(presigned.publicUrl ?? "unknown")")
-        
-        return UploadResult(
-            success: true,
-            publicURL: presigned.publicUrl,
-            blobName: presigned.blobName
-        )
     }
     
     // MARK: - Upload Image
@@ -177,10 +155,6 @@ final class CloudStorageService {
     
     /// Upload user avatar with automatic processing
     func uploadAvatar(image: UIImage) async throws -> AvatarUploadResponse {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
-        
         // Process image: resize and compress for avatar
         let processedImage = resizeImage(image, maxDimension: 400)
         
@@ -188,60 +162,30 @@ final class CloudStorageService {
             throw CloudStorageError.invalidFile
         }
         
-        let url = URL(string: "\(baseURL)/api/v1/uploads/avatar")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        // Use DynamicEndpoint to match existing path structure
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/avatar",
+            method: .post,
+            requiresAuth: true
+        )
         
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // Create multipart form data
-        let boundary = UUID().uuidString
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        
-        request.httpBody = body
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw CloudStorageError.uploadFailed
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(AvatarUploadResponse.self, from: data)
+        return try await NetworkClient.shared.upload(
+            endpoint,
+            data: imageData,
+            fileName: "avatar.jpg",
+            mimeType: "image/jpeg"
+        )
     }
     
     /// Delete current user's avatar
     func deleteAvatar() async throws {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/avatar",
+            method: .delete,
+            requiresAuth: true
+        )
         
-        let url = URL(string: "\(baseURL)/api/v1/uploads/avatar")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (_, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw CloudStorageError.deleteFailed
-        }
-        
+        let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
         print("✅ Avatar deleted")
     }
     
@@ -265,54 +209,27 @@ final class CloudStorageService {
     
     /// Get user's storage usage statistics
     func getStorageUsage() async throws -> StorageUsageResponse {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/usage",
+            method: .get,
+            requiresAuth: true
+        )
         
-        let url = URL(string: "\(baseURL)/api/v1/uploads/usage")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw CloudStorageError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(StorageUsageResponse.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - Delete File
     
     /// Delete a file from cloud storage
     func deleteFile(blobName: String) async throws {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
-        
         let encodedBlobName = blobName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? blobName
-        let url = URL(string: "\(baseURL)/api/v1/uploads/file/\(encodedBlobName)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/file/\(encodedBlobName)",
+            method: .delete,
+            requiresAuth: true
+        )
         
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (_, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw CloudStorageError.deleteFailed
-        }
-        
+        let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
         print("✅ File deleted: \(blobName)")
     }
     
@@ -320,67 +237,33 @@ final class CloudStorageService {
     
     /// Validate file before upload (check type and size constraints)
     func validateFile(contentType: String, size: Int, fileType: String? = nil) async throws -> FileValidationResult {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
-        
-        let url = URL(string: "\(baseURL)/api/v1/uploads/validate")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
         let body = FileValidationRequest(
             contentType: contentType,
             size: size,
             fileType: fileType
         )
         
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        request.httpBody = try encoder.encode(body)
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/validate",
+            method: .post,
+            body: body,
+            requiresAuth: true
+        )
         
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw CloudStorageError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(FileValidationResult.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - Get Supported File Types
     
     /// Get information about supported file types and size limits
     func getSupportedFileTypes() async throws -> SupportedFileTypesResponse {
-        guard await tokenManager.getToken() != nil else {
-            throw CloudStorageError.notAuthenticated
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/uploads/supported-types",
+            method: .get,
+            requiresAuth: true
+        )
         
-        let url = URL(string: "\(baseURL)/api/v1/uploads/supported-types")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        if let authToken = await tokenManager.getToken() {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw CloudStorageError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(SupportedFileTypesResponse.self, from: data)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - Image Processing Helpers

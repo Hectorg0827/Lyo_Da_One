@@ -84,116 +84,52 @@ enum APIError: LocalizedError {
 final class LyoAPIClient {
     static let shared = LyoAPIClient()
     
-    private let baseURL: String
-    private let session: URLSession
-    private let tokenManager = TokenManager.shared
-    
-    private var jsonDecoder: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let dateString = try container.decode(String.self)
-            
-            // Try ISO8601 with fractional seconds
-            let isoFormatter = ISO8601DateFormatter()
-            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = isoFormatter.date(from: dateString) {
-                return date
-            }
-            
-            // Try ISO8601 without fractional seconds
-            isoFormatter.formatOptions = [.withInternetDateTime]
-            if let date = isoFormatter.date(from: dateString) {
-                return date
-            }
-            
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
-        }
-        return decoder
-    }
-    
+    // Kept for compatibility with existing methods that use it
     private var jsonEncoder: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
     
-    init(session: URLSession? = nil, baseURL: String? = nil) {
-        self.baseURL = baseURL ?? AppConfig.baseURL
-        
-        if let session = session {
-            self.session = session
-        } else {
-            let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = AppConfig.requestTimeout
-            config.timeoutIntervalForResource = AppConfig.uploadTimeout
-            self.session = URLSession(configuration: config)
-        }
-    }
-    
-    // MARK: - Auth Helper
-    
-    private func getAuthToken() async -> String? {
-        return await tokenManager.getToken()
-    }
+    init() {}
     
     // MARK: - Generic Request Helper
     
-    private func request<T: Decodable>(
+    private func request<T: Codable>(
         method: String = "GET",
         path: String,
         body: Data? = nil,
         requiresAuth: Bool = true
     ) async throws -> T {
-        guard let url = URL(string: baseURL + path) else {
-            throw APIError.invalidURL
-        }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let httpMethod = HTTPMethod(rawValue: method.uppercased()) ?? .get
         
-        if requiresAuth, let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        // Wrap data if present to preserve structure while passing through NetworkClient
+        let encodableBody: Encodable? = body.map { DataWrapper(data: $0) }
         
-        if let body = body {
-            request.httpBody = body
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: path,
+            method: httpMethod,
+            body: encodableBody,
+            requiresAuth: requiresAuth
+        )
         
-        let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await session.data(for: request)
+            return try await NetworkClient.shared.request(endpoint)
         } catch {
-            throw APIError.networkError(error.localizedDescription)
-        }
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
-        
-        // Handle status codes
-        switch httpResponse.statusCode {
-        case 200...299:
-            do {
-                return try jsonDecoder.decode(T.self, from: data)
-            } catch let decodingError {
-                print("Decoding error for \(path): \(decodingError)")
-                throw APIError.decodingFailed(decodingError.localizedDescription)
+            // Map NetworkClient errors to APIError for compatibility
+            if let lyoError = error as? LyoError {
+                switch lyoError {
+                case .network(.unauthorized): throw APIError.unauthorized
+                case .rateLimitExceeded: throw APIError.rateLimited
+                case .network(.serverError(let code)): throw APIError.serverError(code, nil)
+                case .network(.connectionFailed(let msg)): throw APIError.networkError(msg)
+                case .network(.invalidResponse): throw APIError.invalidResponse
+                case .network(.invalidURL): throw APIError.invalidURL
+                default: throw APIError.networkError(error.localizedDescription)
+                }
             }
-        case 401:
-            throw APIError.unauthorized
-        case 429:
-            throw APIError.rateLimited
-        default:
-            // Try to parse error message
-            var errorMessage: String?
-            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let detail = errorJson["detail"] as? String {
-                errorMessage = detail
-            }
-            throw APIError.serverError(httpResponse.statusCode, errorMessage)
+            throw error
         }
     }
     
@@ -209,8 +145,12 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/courses", requiresAuth: false)
         } catch {
-            print("⚠️ Failed to fetch courses: \(error). Using mocks.")
-            return LyoAPIClient.mockCourses()
+            print("⚠️ Failed to fetch courses: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockCourses()
+            }
+            throw error
         }
     }
     
@@ -222,23 +162,31 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/courses/\(courseId)/lessons", requiresAuth: false)
         } catch {
-            print("⚠️ Failed to fetch lessons: \(error). Using mocks.")
-            return LyoAPIClient.mockLessons()
+            print("⚠️ Failed to fetch lessons: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockLessons()
+            }
+            throw error
         }
     }
     
     func fetchLiveLesson(courseId: String, lessonId: String) async throws -> LiveLesson {
-        // Optimistic Mock Check: Use local data for demo/mock IDs to avoid 404s
-        if ["intro_1", "intro_2", "video_1"].contains(lessonId) || courseId.contains("demo") || courseId == "calculus_101" {
-            print("🚀 Loading locally for demo lesson: \(lessonId)")
+        // Only use mock for demo IDs if mock fallbacks are allowed
+        if AppConfig.allowMockFallbacks && (["intro_1", "intro_2", "video_1"].contains(lessonId) || courseId.contains("demo") || courseId == "calculus_101") {
+            print("🚀 Loading mock for demo lesson: \(lessonId) (LYO_ALLOW_MOCKS=1)")
             return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
         }
         
         do {
             return try await request(path: "/api/v1/learning/courses/\(courseId)/lessons/\(lessonId)/live", requiresAuth: false)
         } catch {
-            print("⚠️ Failed to fetch live lesson: \(error). Falling back to mock.")
-            return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
+            print("⚠️ Failed to fetch live lesson: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
+            }
+            throw error
         }
     }
     
@@ -246,8 +194,12 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/enrollments")
         } catch {
-            print("⚠️ Failed to fetch enrollments: \(error). Using mocks.")
-            return LyoAPIClient.mockEnrollments()
+            print("⚠️ Failed to fetch enrollments: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockEnrollments()
+            }
+            throw error
         }
     }
     
@@ -257,13 +209,22 @@ final class LyoAPIClient {
         return try await request(path: "/api/v1/community/events")
     }
     
-    func createCommunityEvent(_ request: CreateEventRequest) async throws -> CommunityEvent {
-        let body = try jsonEncoder.encode(request)
+    func createCommunityEvent(_ requestBody: CreateEventRequest) async throws -> CommunityEvent {
+        let body = try jsonEncoder.encode(requestBody)
         return try await self.request(method: "POST", path: "/api/v1/community/events", body: body)
     }
     
     func fetchCommunityEvent(id: String) async throws -> CommunityEvent {
         return try await request(path: "/api/v1/community/events/\(id)")
+    }
+    
+    // MARK: - AI Recommendations
+    
+    func fetchRecommendations() async throws -> [DiscoverItem] {
+        let response: [String: AnyCodable] = try await request(path: "/api/v1/ai/recommendations")
+        // The backend returns a complex object, we'll need to map it if needed
+        // For now, if it fails, the caller handles empty list
+        return [] 
     }
     
     // MARK: - Tutor API
@@ -333,11 +294,11 @@ final class LyoAPIClient {
     // MARK: - Posts & Social Feed (Real Backend)
     
     func fetchPublicFeed(limit: Int = 20, offset: Int = 0) async throws -> [RepoPost] {
-        return try await request(path: "/api/v1/posts/feed/public?limit=\(limit)&offset=\(offset)")
+        return try await request(path: "/api/v1/feed/public?limit=\(limit)&offset=\(offset)")
     }
     
     func fetchMyFeed(limit: Int = 20, offset: Int = 0) async throws -> [RepoPost] {
-        return try await request(path: "/api/v1/posts/feed?limit=\(limit)&offset=\(offset)")
+        return try await request(path: "/api/v1/feed?limit=\(limit)&offset=\(offset)")
     }
     
     func createPost(content: String, mediaURLs: [String]? = nil) async throws -> RepoPost {
@@ -346,11 +307,11 @@ final class LyoAPIClient {
             let media_urls: [String]?
         }
         let body = try jsonEncoder.encode(CreatePostRequest(content: content, media_urls: mediaURLs))
-        return try await request(method: "POST", path: "/api/v1/posts/posts", body: body)
+        return try await request(method: "POST", path: "/api/v1/posts", body: body)
     }
     
     func likePost(id: String) async throws -> RepoPost {
-        return try await request(method: "POST", path: "/api/v1/posts/posts/\(id)/reactions")
+        return try await request(method: "POST", path: "/api/v1/posts/\(id)/reactions")
     }
     
     // MARK: - Search Endpoints (Real Backend)
@@ -471,8 +432,12 @@ final class LyoAPIClient {
         
         // Fallback to mocks if we have no items (either request failed or returned empty)
         if discoverItems.isEmpty {
-            print("⚠️ Using mock discover items due to backend failure or empty response")
-            return LyoAPIClient.mockDiscoverItems()
+            if AppConfig.allowMockFallbacks {
+                print("⚠️ Using mock discover items (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockDiscoverItems()
+            }
+            print("⚠️ No discover items available from backend")
+            return []
         }
         
         return discoverItems
@@ -518,8 +483,12 @@ final class LyoAPIClient {
             return items
             
         } catch {
-            print("⚠️ Failed to fetch campus events: \(error). Using mocks.")
-            return LyoAPIClient.mockCampusEvents()
+            print("⚠️ Failed to fetch campus events: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockCampusEvents()
+            }
+            throw error
         }
     }
     

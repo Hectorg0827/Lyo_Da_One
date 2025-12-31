@@ -15,170 +15,69 @@ class LyoRepository: ObservableObject {
     // MARK: - Auth
     
     func login(email: String, password: String) async throws -> User {
-        let endpoint = "\(baseURL)/auth/login"
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let response: LoginResponse = try await NetworkClient.shared.request(Endpoints.Auth.login(email: email, password: password))
         
-        let body = ["email": email, "password": password]
-        request.httpBody = try JSONEncoder().encode(body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let loginResponse = try JSONDecoder().decode(LoginResponse.self, from: data)
-        self.authToken = loginResponse.token
+        self.authToken = response.accessToken
         
         // Persist token to KeyChain for auto-login across app restarts
-        await tokenManager.setToken(loginResponse.token)
-        if let refreshToken = loginResponse.refreshToken {
+        await tokenManager.setToken(response.accessToken)
+        if let refreshToken = response.refreshToken {
             await tokenManager.setRefreshToken(refreshToken)
         }
-        await tokenManager.setUserId(String(loginResponse.user.id))
+        await tokenManager.setUserId(String(response.user.id))
+        if let tenantId = response.tenantId {
+            await tokenManager.setTenantId(tenantId)
+        }
         
-        return loginResponse.user
+        return response.user
     }
 
     func loginWithGoogle(idToken: String) async throws -> User {
-        let endpoint = "\(baseURL)/auth/firebase"
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let response: LoginResponse = try await NetworkClient.shared.request(Endpoints.Auth.firebase(idToken: idToken))
         
-        let body = ["id_token": idToken]
-        request.httpBody = try JSONEncoder().encode(body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            debugPrintFailedResponse(response: response, data: data)
-            
-            // Try to parse error message
-            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
-               let detail = errorData["detail"] {
-                throw NetworkError.loginFailed(detail)
-            }
-            
-            throw NetworkError.invalidResponse
-        }
-        
-        let loginResponse = try JSONDecoder().decode(LoginResponse.self, from: data)
-        self.authToken = loginResponse.token
+        self.authToken = response.accessToken
         
         // Persist token to KeyChain for auto-login across app restarts
-        await tokenManager.setToken(loginResponse.token)
-        if let refreshToken = loginResponse.refreshToken {
+        await tokenManager.setToken(response.accessToken)
+        if let refreshToken = response.refreshToken {
             await tokenManager.setRefreshToken(refreshToken)
         }
-        await tokenManager.setUserId(String(loginResponse.user.id))
+        await tokenManager.setUserId(String(response.user.id))
+        if let tenantId = response.tenantId {
+            await tokenManager.setTenantId(tenantId)
+        }
         
-        return loginResponse.user
+        return response.user
     }
     
     func register(email: String, password: String, name: String) async throws -> User {
-        let endpoint = "\(baseURL)/auth/register"
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let response: LoginResponse = try await NetworkClient.shared.request(Endpoints.Auth.register(email: email, password: password, name: name))
         
-        // GCP API requires: email, username, password, confirm_password
-        // Optional: first_name, last_name
-        // Extract username from email (before @) and sanitize
-        // Username can only contain letters, numbers, underscores, and hyphens
-        let emailPrefix = email.components(separatedBy: "@").first ?? email
-        let username = emailPrefix
-            .replacingOccurrences(of: ".", with: "_")
-            .replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: "+", with: "_")
-        
-        // Split name into first_name and last_name if provided
-        let nameParts = name.split(separator: " ", maxSplits: 1)
-        let firstName = nameParts.first.map(String.init)
-        let lastName = nameParts.count > 1 ? String(nameParts[1]) : nil
-        
-        var body: [String: Any] = [
-            "email": email,
-            "username": username,
-            "password": password,
-            "confirm_password": password
-        ]
-        
-        // Add optional fields if present
-        if let firstName = firstName {
-            body["first_name"] = firstName
-        }
-        if let lastName = lastName {
-            body["last_name"] = lastName
-        }
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            // Try to parse error message
-            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
-               let detail = errorData["detail"] {
-                throw NetworkError.registrationFailed(detail)
-            }
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let loginResponse = try JSONDecoder().decode(LoginResponse.self, from: data)
-        self.authToken = loginResponse.token
+        self.authToken = response.accessToken
         
         // Persist token to KeyChain for auto-login across app restarts
-        await tokenManager.setToken(loginResponse.token)
-        if let refreshToken = loginResponse.refreshToken {
+        await tokenManager.setToken(response.accessToken)
+        if let refreshToken = response.refreshToken {
             await tokenManager.setRefreshToken(refreshToken)
         }
-        await tokenManager.setUserId(String(loginResponse.user.id))
+        await tokenManager.setUserId(String(response.user.id))
+        if let tenantId = response.tenantId {
+            await tokenManager.setTenantId(tenantId)
+        }
         
-        return loginResponse.user
+        return response.user
     }
     
     // MARK: - Leo AI Chat
     
     func sendLyoMessage(message: String, attachmentIds: [String]? = nil, context: ChatContext? = nil) async throws -> LyoChatResponse {
-        let endpoint = "\(baseURL)/ai/mentor/conversation"
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let chatRequest = LyoChatRequest(
-            message: message,
-            context: context,
-            attachments: attachmentIds
+        return try await NetworkClient.shared.request(
+            Endpoints.AI.mentorChat(message: message, attachments: attachmentIds, context: context)
         )
-        request.httpBody = try JSONEncoder().encode(chatRequest)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(LyoChatResponse.self, from: data)
     }
     
     func getCourseCards() async throws -> [CourseCard] {
-        // Allow passing a full URL safely
-        return try await get(endpoint: "/learning/courses")
+        return try await get(endpoint: "/api/v1/learning/courses")
     }
 
     func getChatCourses(topic: String? = nil, limit: Int = 20, offset: Int = 0) async throws -> [ChatCourseRead] {
@@ -191,176 +90,40 @@ class LyoRepository: ObservableObject {
     }
     
     func uploadFile(url: URL) async throws -> MessageAttachment {
-        let endpoint = "\(baseURL)/files/upload"
-        
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        if let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let boundary = UUID().uuidString
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
-        var body = Data()
-        
-        // Add file data
-        let filename = url.lastPathComponent
         let data = try Data(contentsOf: url)
+        let filename = url.lastPathComponent
         let mimetype = mimeType(for: url)
         
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimetype)\r\n\r\n".data(using: .utf8)!)
-        body.append(data)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        
-        request.httpBody = body
-        
-        let (responseData, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            debugPrintFailedResponse(response: response, data: responseData)
-            throw NetworkError.invalidResponse
-        }
-        
-        return try JSONDecoder().decode(MessageAttachment.self, from: responseData)
+        return try await NetworkClient.shared.upload(
+            Endpoints.Files.upload,
+            data: data,
+            fileName: filename,
+            mimeType: mimetype
+        )
     }
     
     // MARK: - Generic Helpers
     
-    /// Get auth token, restoring from KeyChain if needed
-    private func getAuthToken() async -> String? {
-        if authToken == nil {
-            // Try to restore from KeyChain
-            authToken = await tokenManager.getToken()
-        }
-        return authToken
+    private func get<T: Codable>(endpoint: String) async throws -> T {
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .get)
+        return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func makeURL(_ endpoint: String) -> URL {
-        if endpoint.hasPrefix("http://") || endpoint.hasPrefix("https://") {
-            return URL(string: endpoint)!
-        } else {
-            return URL(string: baseURL + endpoint)!
-        }
+    private func post<T: Codable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
+        let encodableBody = body.map { AnyEncodable(value: $0) }
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .post, body: encodableBody)
+        return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func get<T: Decodable>(endpoint: String) async throws -> T {
-        var request = URLRequest(url: makeURL(endpoint))
-        request.httpMethod = "GET"
-        if let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
+    private func put<T: Codable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
+        let encodableBody = body.map { AnyEncodable(value: $0) }
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .put, body: encodableBody)
+        return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func post<T: Decodable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
-        var request = URLRequest(url: makeURL(endpoint))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        if let body = body {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        } else {
-            // Ensure we send a valid JSON body when Content-Type is application/json
-            request.httpBody = "{}".data(using: .utf8)
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            // Try to surface useful error messages, especially for 4xx/422
-            if let message = extractErrorMessage(from: data) {
-                // Reuse an existing error case to carry the server message
-                throw NetworkError.loginFailed("HTTP \(httpResponse.statusCode): \(message)")
-            }
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
-    }
-    
-    private func put<T: Decodable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
-        var request = URLRequest(url: makeURL(endpoint))
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        if let body = body {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        } else {
-            request.httpBody = "{}".data(using: .utf8)
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if let message = extractErrorMessage(from: data) {
-                throw NetworkError.loginFailed("HTTP \(httpResponse.statusCode): \(message)")
-            }
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
-    }
-    
-    private func delete<T: Decodable>(endpoint: String) async throws -> T {
-        var request = URLRequest(url: makeURL(endpoint))
-        request.httpMethod = "DELETE"
-        if let token = await getAuthToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if let message = extractErrorMessage(from: data) {
-                throw NetworkError.loginFailed("HTTP \(httpResponse.statusCode): \(message)")
-            }
-            debugPrintFailedResponse(response: response, data: data)
-            throw NetworkError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
+    private func delete<T: Codable>(endpoint: String) async throws -> T {
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .delete)
+        return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
     private func mimeType(for url: URL) -> String {
@@ -373,33 +136,6 @@ class LyoRepository: ObservableObject {
         case "mp4": return "video/mp4"
         case "mp3": return "audio/mpeg"
         default: return "application/octet-stream"
-        }
-    }
-    
-    private func extractErrorMessage(from data: Data) -> String? {
-        // Try common shapes: {"detail":"..."} or FastAPI-style {"detail":[{...}]}
-        if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if let detail = dict["detail"] as? String {
-                return detail
-            }
-            if let details = dict["detail"] as? [[String: Any]],
-               let first = details.first,
-               let msg = first["msg"] as? String {
-                return msg
-            }
-        }
-        if let text = String(data: data, encoding: .utf8), !text.isEmpty {
-            return text
-        }
-        return nil
-    }
-    
-    private func debugPrintFailedResponse(response: URLResponse?, data: Data) {
-        if let http = response as? HTTPURLResponse {
-            let body = String(data: data, encoding: .utf8) ?? "<non-utf8 body>"
-            print("❌ HTTP \(http.statusCode) – Response body: \(body)")
-        } else {
-            print("❌ Invalid response object")
         }
     }
     
@@ -603,21 +339,15 @@ class LyoRepository: ObservableObject {
     func getStackItems(status: StackItemStatus? = nil) async throws -> [StackItem] {
         // Note: The backend endpoint /stack/ returns all items. Status filtering might need to happen client-side
         // or via query params if supported. For now, we fetch all.
-        let endpoint = Endpoints.Stack.getItems
-        let request = try endpoint.buildURLRequest()
-        return try await performRequest(request)
+        return try await NetworkClient.shared.request(Endpoints.Stack.getItems)
     }
 
     func createStackItem(request: CreateStackItemRequest) async throws -> StackItem {
-        let endpoint = Endpoints.Stack.createItem(item: request)
-        let urlRequest = try endpoint.buildURLRequest()
-        return try await performRequest(urlRequest)
+        return try await NetworkClient.shared.request(Endpoints.Stack.createItem(item: request))
     }
 
     func updateStackItem(id: String, request: UpdateStackItemRequest) async throws -> StackItem {
-        let endpoint = Endpoints.Stack.updateItem(id: id, item: request)
-        let urlRequest = try endpoint.buildURLRequest()
-        return try await performRequest(urlRequest)
+        return try await NetworkClient.shared.request(Endpoints.Stack.updateItem(id: id, item: request))
     }
 
     // MARK: - Feed / Discover
@@ -625,55 +355,69 @@ class LyoRepository: ObservableObject {
     // Replaced legacy Feed endpoints with direct access to Courses and Events
     
     func getDiscoverCourses() async throws -> [Course] {
-        let endpoint = Endpoints.Learning.getCourses
-        let request = try endpoint.buildURLRequest()
-        return try await performRequest(request)
+        return try await NetworkClient.shared.request(Endpoints.Learning.getCourses)
     }
     
     func getDiscoverEvents() async throws -> [EducationalEvent] {
-        let endpoint = Endpoints.Community.getEvents(filters: nil as CommunityFilter?, location: nil as CLLocationCoordinate2D?)
-        let request = try endpoint.buildURLRequest()
-        return try await performRequest(request)
+        return try await NetworkClient.shared.request(Endpoints.Community.getEvents(filters: nil, location: nil))
     }
 
     // MARK: - Campus
 
     func getBeacons(latitude: Double, longitude: Double, radiusKm: Double = 10) async throws -> [Beacon] {
-        let endpoint = Endpoints.Community.getBeacons(lat: latitude, lng: longitude, radius: radiusKm)
-        let request = try endpoint.buildURLRequest()
-        return try await performRequest(request)
+        return try await NetworkClient.shared.request(Endpoints.Community.getBeacons(lat: latitude, lng: longitude, radius: radiusKm))
     }
 
     func createQuestion(request: CreateQuestionRequest) async throws -> QuestionResponse {
-        let endpoint = Endpoints.Community.createQuestion(question: request)
-        let urlRequest = try endpoint.buildURLRequest()
-        return try await performRequest(urlRequest)
+        return try await NetworkClient.shared.request(Endpoints.Community.createQuestion(question: request))
     }
     
     // MARK: - Community (User-specific)
     
     func getMyStudyGroups() async throws -> [StudyGroup] {
-        return try await get(endpoint: "/community/my-groups")
+        return try await get(endpoint: "/api/v1/community/my-groups")
     }
     
     func getMyEvents() async throws -> [EducationalEvent] {
-        return try await get(endpoint: "/community/my-events")
+        return try await get(endpoint: "/api/v1/community/my-events")
     }
     
     func getCommunityStats() async throws -> CommunityStats {
-        return try await get(endpoint: "/community/stats")
+        return try await get(endpoint: "/api/v1/community/stats")
     }
     
     func saveEventToStack(eventId: String) async throws {
-        let _: EmptyResponse = try await post(endpoint: "/community/events/\(eventId)/save", body: [:])
+        let _: EmptyResponse = try await post(endpoint: "/api/v1/community/events/\(eventId)/save", body: [:])
     }
     
     func attendEvent(eventId: String) async throws -> EducationalEvent {
-        return try await post(endpoint: "/community/events/\(eventId)/attend", body: [:])
+        return try await post(endpoint: "/api/v1/community/events/\(eventId)/register", body: [:])
     }
     
     func leaveEvent(eventId: String) async throws {
-        let _: EmptyResponse = try await delete(endpoint: "/community/events/\(eventId)/attend")
+        let _: EmptyResponse = try await delete(endpoint: "/api/v1/community/events/\(eventId)/unregister")
+    }
+    
+    // MARK: - Course Social
+    
+    func likeCourse(courseId: String) async throws -> CourseLikeResponse {
+        return try await NetworkClient.shared.request(Endpoints.CourseSocial.likeCourse(courseId: courseId))
+    }
+    
+    func unlikeCourse(courseId: String) async throws {
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.CourseSocial.unlikeCourse(courseId: courseId))
+    }
+    
+    func rateCourse(courseId: String, rating: Int) async throws -> CourseRatingResponse {
+        return try await NetworkClient.shared.request(Endpoints.CourseSocial.rateCourse(courseId: courseId, rating: rating))
+    }
+    
+    func getCourseSocialStats(courseId: String) async throws -> CourseSocialStats {
+        return try await NetworkClient.shared.request(Endpoints.CourseSocial.getCourseSocialStats(courseId: courseId))
+    }
+    
+    func getBulkCourseSocialStats(courseIds: [String]) async throws -> [String: CourseSocialStats] {
+        return try await NetworkClient.shared.request(Endpoints.CourseSocial.getBulkCourseSocialStats(courseIds: courseIds))
     }
     
     // MARK: - Learning Progress
@@ -696,44 +440,17 @@ class LyoRepository: ObservableObject {
     
     // MARK: - Helper for Endpoint requests
     
-    private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-        var signedRequest = request
-        if let token = await getAuthToken() {
-            signedRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        let (data, response) = try await URLSession.shared.data(for: signedRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            debugPrintFailedResponse(response: response, data: data)
-            if let message = extractErrorMessage(from: data) {
-                throw NetworkError.loginFailed("HTTP \(httpResponse.statusCode): \(message)")
-            }
-            throw NetworkError.invalidResponse
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
-    }
+    // performRequest removed as we now use NetworkClient directly
+
 }
 
 // MARK: - Supporting Types
 
 struct LoginResponse: Codable {
     let user: User
-    let token: String
+    let accessToken: String
     let refreshToken: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case user
-        case token = "access_token"
-        case refreshToken = "refresh_token"
-    }
+    let tenantId: String?
 }
 
 enum NetworkError: Error {
@@ -955,5 +672,71 @@ extension LyoRepository: SocialRepository {
     
     func getComments(postId: String) async throws -> [Comment] {
         return try await get(endpoint: "/api/v1/posts/posts/\(postId)/comments")
+    }
+}
+
+// MARK: - Dynamic Endpoint Support
+
+// DynamicEndpoint is now defined in Sources/Core/Networking/Endpoint.swift
+// Removed duplicate definition to avoid ambiguity
+
+struct AnyEncodable: Encodable {
+    let value: Any
+
+    init(value: Any) {
+        self.value = value
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch value {
+        case let number as Int: try container.encode(number)
+        case let number as Double: try container.encode(number)
+        case let string as String: try container.encode(string)
+        case let bool as Bool: try container.encode(bool)
+        case let array as [Any]: try container.encode(array.map { AnyEncodable(value: $0) })
+        case let dict as [String: Any]: try container.encode(dict.mapValues { AnyEncodable(value: $0) })
+        default: try container.encodeNil()
+        }
+    }
+}
+
+// MARK: - Course Social Response Models
+
+struct CourseLikeResponse: Codable {
+    let totalLikes: Int
+    let userHasLiked: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case totalLikes = "total_likes"
+        case userHasLiked = "user_has_liked"
+    }
+}
+
+struct CourseRatingResponse: Codable {
+    let averageRating: Double
+    let totalRatings: Int
+    let userRating: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case averageRating = "average_rating"
+        case totalRatings = "total_ratings"
+        case userRating = "user_rating"
+    }
+}
+
+struct CourseSocialStats: Codable {
+    let likes: Int
+    let rating: Double
+    let ratingCount: Int
+    let userHasLiked: Bool
+    let userRating: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case likes
+        case rating
+        case ratingCount = "rating_count"
+        case userHasLiked = "user_has_liked"
+        case userRating = "user_rating"
     }
 }

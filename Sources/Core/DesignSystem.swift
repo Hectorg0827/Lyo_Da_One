@@ -6,8 +6,8 @@ struct DesignSystem {
     struct Colors {
         static let background = Color("Background")
         static let surface = Color("Surface")
-        static let primary = Color("Primary")
-        static let secondary = Color("Secondary")
+        static let primary = Color("BrandPrimary")
+        static let secondary = Color("BrandSecondary")
         static let accent = Color("Accent")
         static let textPrimary = Color("TextPrimary")
         static let textSecondary = Color("TextSecondary")

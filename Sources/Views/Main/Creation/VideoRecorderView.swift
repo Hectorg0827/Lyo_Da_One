@@ -57,7 +57,7 @@ struct VideoRecorderView: View {
                     }
                     .foregroundColor(.white)
                 }
-                .onChange(of: selectedItem) { newItem in
+                .onChange(of: selectedItem) { _, newItem in
                     Task {
                         if let data = try? await newItem?.loadTransferable(type: Data.self) {
                             // Save to temporary file for upload
@@ -96,7 +96,7 @@ struct VideoRecorderView: View {
                     .foregroundColor(.white)
             }
         }
-        .onChange(of: cameraManager.recordedVideoURL) { newValue in
+        .onChange(of: cameraManager.recordedVideoURL) { _, newValue in
             if let url = newValue {
                 uploadVideo(url: url)
             }

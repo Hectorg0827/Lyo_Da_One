@@ -15,7 +15,7 @@ struct GlobalSearchView: View {
                     
                     TextField("Search courses, tutors, chats...", text: $searchText)
                         .foregroundColor(.white)
-                        .onChange(of: searchText) { newValue in
+                        .onChange(of: searchText) { _, newValue in
                             performSearch(query: newValue)
                         }
                     

@@ -74,10 +74,13 @@ final class ChatIntentClassifier: ObservableObject {
         "design a course",
         "generate a course",
         "full course",
+        "full corse",           // Common typo
         "complete course",
         "teach me everything",
         "i want to learn",
+        "want to learn",        // Without "I"
         "i want to master",
+        "want to master",       // Without "I"
         "comprehensive guide",
         "full guide",
         "complete guide",
@@ -87,7 +90,16 @@ final class ChatIntentClassifier: ObservableObject {
         "curriculum",
         "syllabus",
         "class on",
-        "class about"
+        "class about",
+        "make me a course",
+        "create me a course",
+        "build me a course",
+        "do the course",        // Follow-up intent
+        "start the course",     // Follow-up intent
+        "generate the course",
+        "go ahead and create",
+        "yes create",
+        "yes make"
     ]
     
     private let courseCreationPatterns: [String] = [

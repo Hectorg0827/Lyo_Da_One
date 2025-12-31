@@ -28,16 +28,14 @@ final class SoftSkillsService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        guard let url = URL(string: "\(baseURL)/api/v1/skills/soft-skills") else { return }
-        
-        var request = URLRequest(url: url)
-        if let token = await TokenManager.shared.getToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/skills/soft-skills",
+            method: .get,
+            requiresAuth: true
+        )
         
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            profile = try JSONDecoder().decode(SoftSkillsProfile.self, from: data)
+            profile = try await NetworkClient.shared.request(endpoint)
         } catch {
             print("⚠️ Failed to fetch soft skills: \(error)")
         }

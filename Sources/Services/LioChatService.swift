@@ -94,6 +94,17 @@ struct LioGreetingResponse: Codable {
         return encoder
     }
     
+    /// Converts 0.0-1.0 difficulty to human-readable level
+    private func difficultyToLevel(_ difficulty: Double) -> String {
+        if difficulty < 0.35 {
+            return "beginner"
+        } else if difficulty < 0.65 {
+            return "intermediate"
+        } else {
+            return "advanced"
+        }
+    }
+    
     // MARK: - Send Message (Uses OpenAI Service)
     
     // MARK: - Dependencies
@@ -158,12 +169,8 @@ struct LioGreetingResponse: Codable {
             includeChips: true
         )
         
-        let endpoint = Endpoint(
-            path: "/chat",
-            method: .POST,
-            body: try? jsonEncoder.encode(payload),
-            requiresAuth: true
-        )
+        let payloadData = try jsonEncoder.encode(payload)
+        let endpoint = Endpoints.ChatModule.sendMessage(payload: payloadData)
         
         return try await NetworkClient.shared.request(endpoint)
     }
@@ -171,12 +178,7 @@ struct LioGreetingResponse: Codable {
     // MARK: - Proactive Greeting
     
     func getProactiveGreeting() async throws -> LioGreetingResponse {
-        let endpoint = Endpoint(
-            path: "/chat/greeting",
-            method: .GET,
-            requiresAuth: true
-        )
-        return try await NetworkClient.shared.request(endpoint)
+        return try await NetworkClient.shared.request(Endpoints.ChatModule.getGreeting)
     }
     
     // MARK: - Send Message (Hybrid: Backend -> OpenAI -> Local)
@@ -195,34 +197,105 @@ struct LioGreetingResponse: Codable {
         
         switch intent {
         case .courseCreation(let topic):
-            // Use the real backend course planner so a real course is created/saved.
-            // Backend will return courseProposal + generatedCourseId when applicable.
-            let backend = try await sendChatModuleMessage(
-                message: text,
-                modeHint: "course_planner",
-                action: "create_course",
-                contextHint: topic
-            )
+            // SMART COURSE CREATION FLOW
+            // 1. Check if we have user's mastery profile for auto-difficulty detection
+            // 2. If profile known → generate course automatically at optimal level
+            // 3. If profile unknown → ask via wizard
+            
+            do {
+                // Try to get user's learning profile
+                let profile = try? await PersonalizationService.shared.getMasteryProfile()
+                
+                if let profile = profile, profile.optimalDifficulty > 0 {
+                    // User has a profile - use their optimal difficulty
+                    let level = difficultyToLevel(profile.optimalDifficulty)
+                    print("🎓 Auto-generating course at \(level) level based on user profile")
+                    
+                    // Generate actual course via Cinema service
+                    let course = try await InteractiveCinemaService.shared.generateGraphCourse(
+                        topic: topic,
+                        level: level
+                    )
+                    
+                    // Return response with action to open classroom
+                    let confirmationText = "🎉 Your **\(topic)** course is ready! I've tailored it for \(level) level based on your progress. Opening now..."
+                    
+                    let aiMessage = LyoMessage(
+                        id: UUID().uuidString,
+                        content: confirmationText,
+                        isFromUser: false,
+                        timestamp: Date()
+                    )
+                    conversationHistory.append(aiMessage)
+                    
+                    return LioChatResponse(
+                        text: confirmationText,
+                        source: "course_generator",
+                        action: LioChatAction(type: "open_classroom", parameters: ["courseId": course.id, "topic": topic]),
+                        suggestions: ["Start Learning", "View Outline"],
+                        meta: ["courseId": course.id, "level": level]
+                    )
+                } else {
+                    // No profile yet - start wizard to ask about level
+                    print("🎓 No user profile - starting course wizard for level selection")
+                    intentClassifier.startWizard(topic: topic)
+                    
+                    let clarificationText = """
+                    I'd love to create a **\(topic)** course for you! 🎓
+                    
+                    To personalize it perfectly, what's your current level with this subject?
+                    
+                    • **Beginner** - New to this topic
+                    • **Intermediate** - Some experience
+                    • **Advanced** - Ready for deep dives
+                    """
+                    
+                    let aiMessage = LyoMessage(
+                        id: UUID().uuidString,
+                        content: clarificationText,
+                        isFromUser: false,
+                        timestamp: Date()
+                    )
+                    conversationHistory.append(aiMessage)
+                    
+                    return LioChatResponse(
+                        text: clarificationText,
+                        source: "course_wizard",
+                        action: nil,
+                        suggestions: ["Beginner", "Intermediate", "Advanced"],
+                        meta: ["mode": "course_wizard", "topic": topic]
+                    )
+                }
+            } catch {
+                // Fallback to backend chat if something fails
+                print("⚠️ Course generation failed, falling back to chat: \(error)")
+                let backend = try await sendChatModuleMessage(
+                    message: text,
+                    modeHint: "course_planner",
+                    action: "create_course",
+                    contextHint: topic
+                )
 
-            let validatedText = validateNotCourseContent(backend.response)
-            var aiMessage = LyoMessage(
-                id: UUID().uuidString,
-                content: validatedText,
-                isFromUser: false,
-                timestamp: Date()
-            )
-            aiMessage.responseMode = backend.responseMode
-            aiMessage.quickExplainer = backend.quickExplainer
-            aiMessage.courseProposal = backend.courseProposal
-            conversationHistory.append(aiMessage)
+                let validatedText = validateNotCourseContent(backend.response)
+                var aiMessage = LyoMessage(
+                    id: UUID().uuidString,
+                    content: validatedText,
+                    isFromUser: false,
+                    timestamp: Date()
+                )
+                aiMessage.responseMode = backend.responseMode
+                aiMessage.quickExplainer = backend.quickExplainer
+                aiMessage.courseProposal = backend.courseProposal
+                conversationHistory.append(aiMessage)
 
-            return LioChatResponse(
-                text: validatedText,
-                source: "backend_chat",
-                action: nil,
-                suggestions: backend.quickExplainer?.chips,
-                meta: ["mode": "course_planner"]
-            )
+                return LioChatResponse(
+                    text: validatedText,
+                    source: "backend_chat",
+                    action: nil,
+                    suggestions: backend.quickExplainer?.chips,
+                    meta: ["mode": "course_planner"]
+                )
+            }
             
         case .courseWizardContinue(let action):
              // Continue wizard locally - NO backend call
@@ -313,6 +386,38 @@ struct LioGreetingResponse: Codable {
             )
         } catch {
             print("⚠️ LioChatService: Backend chat failed (\(error)).")
+
+            // If the user is unauthorized (common when backend auth is down), fall back to the public AI chat endpoint.
+            // This keeps chat usable while still avoiding direct client-side OpenAI keys.
+            let normalizedError = LyoError.from(error: error)
+            if case .network(.unauthorized) = normalizedError {
+                do {
+                    let (response, source) = try await BackendAIService.shared.studySession(
+                        message: text,
+                        resourceId: contextHint,
+                        mode: mode
+                    )
+
+                    let validatedText = validateNotCourseContent(response)
+                    let aiMessage = LyoMessage(
+                        id: UUID().uuidString,
+                        content: validatedText,
+                        isFromUser: false,
+                        timestamp: Date()
+                    )
+                    conversationHistory.append(aiMessage)
+
+                    return LioChatResponse(
+                        text: validatedText,
+                        source: "backend_public_ai",
+                        action: nil,
+                        suggestions: nil,
+                        meta: ["provider": source, "fallback": "unauthorized"]
+                    )
+                } catch {
+                    // If the public fallback also fails, continue to the normal fallback chain below.
+                }
+            }
 
             // In real mode, surface the failure instead of silently returning mock content.
             guard AppConfig.allowMockFallbacks else {

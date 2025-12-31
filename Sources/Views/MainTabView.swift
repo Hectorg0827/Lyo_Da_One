@@ -109,10 +109,10 @@ struct MainTabView: View {
             .environmentObject(stackService)
             .environmentObject(uiState)
             .toolbar(.hidden, for: .tabBar)
-            .onChange(of: selectedTab) { newValue in
+            .onChange(of: selectedTab) { _, newValue in
                 uiState.currentTab = newValue.toAppTab
             }
-            .onChange(of: uiState.currentTab) { newTab in
+            .onChange(of: uiState.currentTab) { _, newTab in
                 // Sync external tab changes (e.g. from Header) to local state
                 switch newTab {
                 case .focus: selectedTab = .focus
@@ -169,6 +169,7 @@ struct MainTabView: View {
             }
         }
         .environmentObject(aiViewModel) // Inject at root of ZStack
+        .detectOffline() // Wire up offline indicator banner
         .onAppear { aiViewModel.uiState = uiState }
         .sheet(isPresented: $uiState.isLioChatPresented) {
             LioChatSheet(isPresented: $uiState.isLioChatPresented)
@@ -216,31 +217,9 @@ struct MainTabView: View {
         .sheet(isPresented: $isSearchPresented) {
             GlobalSearchView()
         }
-        .overlay(
-            Group {
-                if isCreationSheetPresented {
-                    CreationSheet(isPresented: $isCreationSheetPresented) { option in
-                        isCreationSheetPresented = false
-                        // Delay slightly to allow sheet to close
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            switch option {
-                            case .discovery:
-                                recorderMode = .discovery
-                                isVideoRecorderPresented = true
-                            case .story:
-                                recorderMode = .story
-                                isVideoRecorderPresented = true
-                            case .post:
-                                isPostEditorPresented = true
-                            case .community:
-                                selectedTab = .community
-                                uiState.isCreatingEvent = true
-                            }
-                        }
-                    }
-                }
-            }
-        )
+        .fullScreenCover(isPresented: $isCreationSheetPresented) {
+            CreateHubView()
+        }
     }
     
     // MARK: - Stack Navigation Handler

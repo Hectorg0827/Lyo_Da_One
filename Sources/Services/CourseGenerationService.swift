@@ -177,37 +177,16 @@ final class CourseGenerationService: ObservableObject {
     // MARK: - Backend Generation (Primary - Uses Gemini AI with Streaming)
     
     private func generateFromBackendStreaming(request: CourseGenerationRequest) async throws -> GeneratedCourseResponse {
-        // Use the backend's streaming AI content generation endpoint (Gemini)
-        let endpoint = "\(baseURL)/api/content/generate-course/stream"
-        
         print("🎓 Starting STREAMING course generation for: \(request.topic)")
-        print("📤 Calling streaming backend: \(endpoint)")
         
-        guard let url = URL(string: endpoint) else {
-            throw CourseGenerationError.invalidURL
-        }
+        let endpoint = Endpoints.AI.generateCourseStream(
+            topic: request.topic,
+            level: request.level,
+            outcomes: request.outcomes,
+            teachingStyle: request.teachingStyle
+        )
         
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Add auth token if available
-        if let token = await TokenManager.shared.getToken() {
-            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // Construct request body
-        let requestBody: [String: Any] = [
-            "topic": request.topic,
-            "level": request.level,
-            "outcomes": request.outcomes,
-            "teaching_style": request.teachingStyle
-        ]
-        
-        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        urlRequest.timeoutInterval = 90 // Longer timeout for streaming (won't timeout as data flows continuously)
-        
-        print("📦 Request body: \(requestBody)")
+        print("📤 Calling streaming backend: \(endpoint.path)")
         
         // Accumulate streamed chunks
         var accumulatedData = Data()
@@ -215,7 +194,7 @@ final class CourseGenerationService: ObservableObject {
         let progressUpdateInterval: TimeInterval = 0.5 // Update progress every 0.5 seconds
         
         do {
-            let (asyncBytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+            let (asyncBytes, response) = try await NetworkClient.shared.stream(endpoint)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 print("❌ Invalid response type")
@@ -266,28 +245,24 @@ final class CourseGenerationService: ObservableObject {
     
     // MARK: - Backend Generation (Fallback - Non-Streaming)
     
+    private struct AIResponse: Codable {
+        let content: String?
+        let response: String?
+        let primaryAi: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case content
+            case response
+            case primaryAi = "primary_ai"
+        }
+    }
+
     private func generateFromBackend(request: CourseGenerationRequest) async throws -> GeneratedCourseResponse {
         // Use the backend's Dual AI Orchestrator endpoint (Gemini + OpenAI Hybrid)
         // This endpoint routes to Gemini for educational content generation
-        let endpoint = "\(baseURL)/api/v1/ai/generate"
         
         print("🎓 Starting course generation for: \(request.topic)")
-        print("📤 Calling Dual AI Orchestrator: \(endpoint)")
-        
-        guard let url = URL(string: endpoint) else {
-            throw CourseGenerationError.invalidURL
-        }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Add auth token (REQUIRED for this endpoint)
-        guard let token = await TokenManager.shared.getToken() else {
-            print("❌ No auth token available - cannot use backend AI")
-            throw CourseGenerationError.authenticationRequired
-        }
-        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        print("📤 Calling Dual AI Orchestrator: /api/v1/ai/generate")
         
         // Build course generation prompt for the AI
         let outcomesText = request.outcomes.joined(separator: "\n- ")
@@ -327,72 +302,41 @@ final class CourseGenerationService: ObservableObject {
             ]
         ]
         
-        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        urlRequest.timeoutInterval = 60  // AI generation needs time
+        // Use AnyEncodable wrapper for the body
+        let encodableBody = requestBody.mapValues { AnyEncodable(value: $0) }
         
-        print("📦 Request body: \(requestBody)")
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/ai/generate",
+            method: .post,
+            body: encodableBody,
+            requiresAuth: true
+        )
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            print("❌ Invalid response type")
-            throw CourseGenerationError.serverError
-        }
-        
-        print("📥 Backend response status: \(httpResponse.statusCode)")
-        
-        // Handle auth errors specifically
-        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-            print("❌ Authentication failed - token may be expired")
-            throw CourseGenerationError.authenticationRequired
-        }
-        
-        // Handle energy/payment required
-        if httpResponse.statusCode == 402 {
-            print("⚠️ Energy required - user needs to watch ad or upgrade")
-            throw CourseGenerationError.energyRequired
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            if let errorText = String(data: data, encoding: .utf8) {
-                print("❌ Backend error (\(httpResponse.statusCode)): \(errorText)")
+        do {
+            let aiResponse: AIResponse = try await NetworkClient.shared.request(endpoint)
+            
+            let content = aiResponse.content ?? aiResponse.response
+            guard let validContent = content else {
+                print("❌ Failed to extract content/response from AI JSON")
+                throw CourseGenerationError.invalidResponse
             }
-            throw CourseGenerationError.serverError
+            
+            print("🤖 AI used: \(aiResponse.primaryAi ?? "unknown")")
+            print("📄 Content length: \(validContent.count) characters")
+            
+            return try parseAIContent(validContent, topic: request.topic)
+            
+        } catch {
+            print("❌ Backend generation failed: \(error)")
+            throw error
         }
-        
-        // Log raw response for debugging
-        if let jsonStr = String(data: data, encoding: .utf8) {
-            print("📥 Backend raw response: \(String(jsonStr.prefix(500)))...")
-        }
-        
-        // Parse the AI response - it returns the generated content in a "content" field
-        return try parseAIGenerateResponse(data: data, topic: request.topic)
     }
     
-    // MARK: - Parse AI Generate Response
+    // MARK: - Parse AI Content
     
-    private func parseAIGenerateResponse(data: Data, topic: String) throws -> GeneratedCourseResponse {
-        // The /api/v1/ai/generate endpoint returns:
-        // { "content": "...", ... } OR { "response": "...", ... }
-        
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ Failed to parse AI response as JSON")
-            throw CourseGenerationError.invalidResponse
-        }
-        
-        // Check for 'content' OR 'response' keys
-        let content = (json["content"] as? String) ?? (json["response"] as? String)
-        
-        guard let validContent = content else {
-            print("❌ Failed to extract content/response from AI JSON. Keys found: \(json.keys)")
-            throw CourseGenerationError.invalidResponse
-        }
-        
-        print("🤖 AI used: \(json["primary_ai"] ?? "unknown")")
-        print("📄 Content length: \(validContent.count) characters")
-        
+    private func parseAIContent(_ content: String, topic: String) throws -> GeneratedCourseResponse {
         // Clean and parse the JSON from the content
-        var cleanJson = validContent
+        var cleanJson = content
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)

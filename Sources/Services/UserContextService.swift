@@ -22,21 +22,14 @@ final class UserContextService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        guard let url = URL(string: "\(baseURL)/api/v1/context/current") else { return }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        if let token = await TokenManager.shared.getToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/context/current",
+            method: .get,
+            requiresAuth: true
+        )
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else { return }
-            
-            currentContext = try JSONDecoder().decode(UserContext.self, from: data)
+            currentContext = try await NetworkClient.shared.request(endpoint)
             print("🎭 User context loaded: \(currentContext?.persona ?? "unknown")")
         } catch {
             print("⚠️ Failed to fetch context: \(error)")
