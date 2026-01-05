@@ -451,6 +451,11 @@ struct LoginResponse: Codable {
     let accessToken: String
     let refreshToken: String?
     let tenantId: String?
+    // Backend also sends these fields - must be optional to avoid decoding failure
+    let expiresIn: Int?
+    let isNewUser: Bool?
+    let tokenType: String?
+    
 }
 
 enum NetworkError: Error {

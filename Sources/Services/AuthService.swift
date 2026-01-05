@@ -277,41 +277,27 @@ class AuthService: NSObject, ObservableObject {
                             self.saveUserSession(name: backendUser.name, email: backendUser.email)
                             self.isAuthenticated = true
                             print("✅ Backend registration successful for Google user: \(email)")
-                        } catch {
-                            // Both login and register failed - use local session with Firebase token
-                            print("⚠️ Backend auth completely failed, using Firebase token only")
+                        } catch let registrationError {
+                            // Both login and register failed - cannot use app without backend auth
+                            print("❌ Backend auth completely failed: \(registrationError.localizedDescription)")
+                            print("⚠️ Firebase UID cannot be used as backend user ID - would cause 403/500 errors")
                             
-                            // Store Firebase ID token in TokenManager for subsequent API requests
-                            await TokenManager.shared.setToken(firebaseIdToken)
-                            await TokenManager.shared.setUserId(firebaseUser.uid)
-                            print("✅ Firebase ID token stored for API calls")
-                            
-                            self.currentUserName = name
-                            self.currentUserEmail = email
-                            self.isDemoMode = false
-                            UserDefaults.standard.set(false, forKey: demoModeKey)
-                            self.saveUserSession(name: name, email: email)
-                            self.isAuthenticated = true
+                            // Do NOT store Firebase UID as userId - it's incompatible with backend!
+                            // Show error to user instead of silently failing
+                            self.error = "Unable to connect to server. Please try again later."
+                            self.isLoading = false
+                            self.isAuthenticated = false
+                            return
                         }
                     }
                 }
                 #else
-                // FirebaseAuth not available: proceed with a local session using Google profile
-                print("⚠️ FirebaseAuth not available. Skipping Firebase exchange; using local session.")
-                self.currentUserName = name
-                self.currentUserEmail = email
-                self.isDemoMode = false
-                UserDefaults.standard.set(false, forKey: demoModeKey)
-                self.saveUserSession(name: name, email: email)
-                
-                // Save Google user ID and token to TokenManager for API calls
-                let googleUserId = user.userID ?? UUID().uuidString
-                Task {
-                    await TokenManager.shared.setUserId(googleUserId)
-                    await TokenManager.shared.setToken(idToken)
-                }
-                
-                self.isAuthenticated = true
+                // FirebaseAuth not available: cannot proceed - backend requires Firebase auth
+                print("❌ FirebaseAuth not available. Cannot authenticate with backend.")
+                self.error = "Authentication unavailable. Please update the app."
+                self.isLoading = false
+                self.isAuthenticated = false
+                return
                 #endif
                 
                 self.isLoading = false

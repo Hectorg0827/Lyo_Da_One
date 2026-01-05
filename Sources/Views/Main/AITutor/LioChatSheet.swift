@@ -48,7 +48,12 @@ struct LioChatSheet: View {
                                             onCourseStart: { course in
                                                 viewModel.inputText = "Start course: \(course.title)"
                                                 Task { await viewModel.sendMessage() }
-                                            }
+                                            },
+                                            onAudioToggle: { messageId, text in
+                                                viewModel.toggleMessageAudio(messageId: messageId, text: text)
+                                            },
+                                            isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
+                                            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0
                                         )
                                         .id(msg.id)
                                     }
@@ -385,13 +390,67 @@ struct LioChatSheet: View {
         }
     }
     
+    // MARK: - Multimodal Input Bar
+    
+    @State private var showMediaPicker = false
+    @State private var mediaPickerSource: MediaPickerSource = .photoLibrary
+    @State private var selectedImage: UIImage? = nil
+    
+    enum MediaPickerSource {
+        case photoLibrary, camera, files
+    }
+    
     private var inputBar: some View {
+        VStack(spacing: 0) {
+            // Attachment Preview
+            if !viewModel.attachments.isEmpty {
+                attachmentPreviewBar
+            }
+            
+            // Voice Recording Overlay
+            if viewModel.isRecordingVoice {
+                voiceRecordingBar
+            } else {
+                standardInputBar
+            }
+        }
+        .background(Material.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+        .sheet(isPresented: $showMediaPicker) {
+            mediaPickerSheet
+        }
+    }
+    
+    private var attachmentPreviewBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(viewModel.attachments) { attachment in
+                    AttachmentPreviewChip(
+                        attachment: attachment,
+                        onRemove: { viewModel.removeAttachment(attachment) }
+                    )
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+    }
+    
+    private var standardInputBar: some View {
         HStack(alignment: .bottom, spacing: 12) {
-            // Add File Button
-            Button(action: {
-                // Placeholder for file picker
-                HapticManager.shared.light()
-            }) {
+            // Media Menu Button
+            Menu {
+                Button(action: { openPhotoPicker() }) {
+                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                }
+                Button(action: { openCamera() }) {
+                    Label("Take Photo", systemImage: "camera")
+                }
+                Button(action: { openFilePicker() }) {
+                    Label("Choose File", systemImage: "doc")
+                }
+            } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.secondary)
@@ -408,10 +467,11 @@ struct LioChatSheet: View {
                 .cornerRadius(20)
                 .lineLimit(1...5)
             
-            // Mic Button (or Send if typing)
-            if viewModel.inputText.isEmpty {
+            // Voice / Send Button
+            if viewModel.inputText.isEmpty && viewModel.attachments.isEmpty {
+                // Mic Button with Long Press
                 Button(action: {
-                    HapticManager.shared.medium()
+                    HapticManager.shared.playMediumImpact()
                     viewModel.toggleVoiceMode()
                 }) {
                     Image(systemName: "mic.fill")
@@ -419,7 +479,15 @@ struct LioChatSheet: View {
                         .foregroundColor(.secondary)
                         .frame(width: 36, height: 36)
                 }
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.3)
+                        .onEnded { _ in
+                            HapticManager.shared.playRecordingStarted()
+                            viewModel.startVoiceRecording()
+                        }
+                )
             } else {
+                // Send Button
                 Button(action: send) {
                     ZStack {
                         Circle()
@@ -441,9 +509,104 @@ struct LioChatSheet: View {
             }
         }
         .padding(12)
-        .background(Material.regularMaterial)
-        .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+    }
+    
+    private var voiceRecordingBar: some View {
+        HStack(spacing: 16) {
+            // Cancel Button
+            Button(action: {
+                viewModel.cancelVoiceRecording()
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.red.opacity(0.8))
+            }
+            
+            // Waveform Visualization
+            VoiceWaveformView(level: viewModel.voiceInputLevel)
+                .frame(height: 40)
+            
+            // Recording Indicator
+            Circle()
+                .fill(Color.red)
+                .frame(width: 12, height: 12)
+                .opacity(0.8)
+                .modifier(PulseAnimation())
+            
+            // Stop/Send Button
+            Button(action: {
+                viewModel.stopVoiceRecording()
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.purple, .blue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .padding(12)
+    }
+    
+    @ViewBuilder
+    private var mediaPickerSheet: some View {
+        switch mediaPickerSource {
+        case .photoLibrary:
+            ImagePickerView(selectedImage: $selectedImage, isPresented: $showMediaPicker)
+                .onChange(of: selectedImage) { _, newImage in
+                    if let image = newImage,
+                       let data = image.jpegData(compressionQuality: 0.8) {
+                        let media = PickedMedia(
+                            type: .image,
+                            data: data,
+                            filename: "photo_library_image.jpg",
+                            mimeType: "image/jpeg",
+                            thumbnail: image,
+                            originalURL: nil
+                        )
+                        viewModel.handlePickedMedia(media)
+                        selectedImage = nil // Reset for next use
+                    }
+                }
+        case .camera:
+            CameraPickerView { media in
+                if let media = media {
+                    viewModel.handlePickedMedia(media)
+                }
+                showMediaPicker = false
+            }
+        case .files:
+            DocumentPickerView { media in
+                if let media = media {
+                    viewModel.handlePickedMedia(media)
+                }
+                showMediaPicker = false
+            }
+        }
+    }
+    
+    private func openPhotoPicker() {
+        mediaPickerSource = .photoLibrary
+        showMediaPicker = true
+    }
+    
+    private func openCamera() {
+        mediaPickerSource = .camera
+        showMediaPicker = true
+    }
+    
+    private func openFilePicker() {
+        mediaPickerSource = .files
+        showMediaPicker = true
     }
     
     
@@ -451,10 +614,15 @@ struct LioChatSheet: View {
     
     private func send() {
         let trimmed = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        viewModel.inputText = trimmed
-        HapticManager.shared.light()
-        Task { await viewModel.sendMessage() }
+        guard !trimmed.isEmpty || !viewModel.attachments.isEmpty else { return }
+        HapticManager.shared.playLightImpact()
+        
+        if viewModel.attachments.isEmpty {
+            viewModel.inputText = trimmed
+            Task { await viewModel.sendMessage() }
+        } else {
+            Task { await viewModel.sendMessageWithAttachments(text: trimmed, attachments: viewModel.attachments) }
+        }
     }
 
     // MARK: - Voice UI

@@ -392,32 +392,8 @@ struct MessageBubbleView: View {
 }
 
 // MARK: - Typing Indicator View
-struct TypingIndicatorView: View {
-    @State private var animationAmount = 0.0
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(Color.gray)
-                    .frame(width: 8, height: 8)
-                    .offset(y: animationAmount)
-                    .animation(
-                        Animation.easeInOut(duration: 0.6)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.2),
-                        value: animationAmount
-                    )
-            }
-        }
-        .padding(12)
-        .background(Color(.systemGray5))
-        .cornerRadius(16)
-        .onAppear {
-            animationAmount = -4
-        }
-    }
-}
+// MARK: - End of ChatView
+// Note: TypingIndicatorView is defined in SuggestionChipsView.swift
 
 struct ChatView_Previews: PreviewProvider {
     static var previews: some View {

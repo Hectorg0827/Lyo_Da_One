@@ -108,8 +108,10 @@ struct ErrorView: View {
                     }
                 }
 
-                // Support Button
-                if !error.isUserError {
+                // Support Button (show for non-validation errors)
+                if case .validation = error {
+                    // No support button for validation errors
+                } else {
                     Button(action: {
                         // Open support
                         if let url = URL(string: "mailto:\(AppConfig.supportEmail)?subject=Error Report") {

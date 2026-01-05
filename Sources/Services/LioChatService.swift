@@ -348,81 +348,100 @@ struct LioGreetingResponse: Codable {
         }
 
         // 3. Primary: Real backend chat module (/api/v1/chat)
-        do {
-            print("🧠 LioChatService: Attempting backend chat module...")
-            let backend = try await sendChatModuleMessage(
-                message: text,
-                modeHint: nil,
-                action: nil,
-                contextHint: contextHint
-            )
+        var authFailed = false
+        
+        // Only attempt authenticated chat if we have a token
+        if await tokenManager.getToken() != nil {
+            do {
+                print("🧠 LioChatService: Attempting backend chat module...")
+                let backend = try await sendChatModuleMessage(
+                    message: text,
+                    modeHint: nil,
+                    action: nil,
+                    contextHint: contextHint
+                )
 
-            let validatedText = validateNotCourseContent(backend.response)
-            var aiMessage = LyoMessage(
-                id: UUID().uuidString,
-                content: validatedText,
-                isFromUser: false,
-                timestamp: Date()
-            )
-            aiMessage.responseMode = backend.responseMode
+                let validatedText = validateNotCourseContent(backend.response)
+                var aiMessage = LyoMessage(
+                    id: UUID().uuidString,
+                    content: validatedText,
+                    isFromUser: false,
+                    timestamp: Date()
+                )
+                aiMessage.responseMode = backend.responseMode
 
-            if let qe = backend.quickExplainer {
-                // If backend schema doesn't include concept, use the inferred topic if available.
-                let concept = qe.concept.isEmpty ? (contextHint ?? "") : qe.concept
-                aiMessage.quickExplainer = QuickExplainerData(concept: concept, explanation: qe.explanation, chips: qe.chips)
-            } else {
-                aiMessage.quickExplainer = nil
-            }
+                if let qe = backend.quickExplainer {
+                    // If backend schema doesn't include concept, use the inferred topic if available.
+                    let concept = qe.concept.isEmpty ? (contextHint ?? "") : qe.concept
+                    aiMessage.quickExplainer = QuickExplainerData(concept: concept, explanation: qe.explanation, chips: qe.chips)
+                } else {
+                    aiMessage.quickExplainer = nil
+                }
 
-            aiMessage.courseProposal = backend.courseProposal
-            conversationHistory.append(aiMessage)
+                aiMessage.courseProposal = backend.courseProposal
+                conversationHistory.append(aiMessage)
 
-            return LioChatResponse(
-                text: validatedText,
-                source: "backend_chat",
-                action: nil,
-                suggestions: backend.quickExplainer?.chips,
-                meta: ["provider": backend.provider ?? "chat"]
-            )
-        } catch {
-            print("⚠️ LioChatService: Backend chat failed (\(error)).")
+                return LioChatResponse(
+                    text: validatedText,
+                    source: "backend_chat",
+                    action: nil,
+                    suggestions: backend.quickExplainer?.chips,
+                    meta: ["provider": backend.provider ?? "chat"]
+                )
+            } catch {
+                print("⚠️ LioChatService: Backend chat failed (\(error)).")
 
-            // If the user is unauthorized (common when backend auth is down), fall back to the public AI chat endpoint.
-            // This keeps chat usable while still avoiding direct client-side OpenAI keys.
-            let normalizedError = LyoError.from(error: error)
-            if case .network(.unauthorized) = normalizedError {
-                do {
-                    let (response, source) = try await BackendAIService.shared.studySession(
-                        message: text,
-                        resourceId: contextHint,
-                        mode: mode
-                    )
-
-                    let validatedText = validateNotCourseContent(response)
-                    let aiMessage = LyoMessage(
-                        id: UUID().uuidString,
-                        content: validatedText,
-                        isFromUser: false,
-                        timestamp: Date()
-                    )
-                    conversationHistory.append(aiMessage)
-
-                    return LioChatResponse(
-                        text: validatedText,
-                        source: "backend_public_ai",
-                        action: nil,
-                        suggestions: nil,
-                        meta: ["provider": source, "fallback": "unauthorized"]
-                    )
-                } catch {
-                    // If the public fallback also fails, continue to the normal fallback chain below.
+                // If the user is unauthorized (common when backend auth is down), fall back to the public AI chat endpoint.
+                let normalizedError = LyoError.from(error: error)
+                if case .network(.unauthorized) = normalizedError {
+                    authFailed = true
+                } else {
+                    // For other errors, only continue if mocks are allowed
+                    guard AppConfig.allowMockFallbacks else {
+                        throw error
+                    }
                 }
             }
+        } else {
+            // No token available, skip straight to public fallback
+            authFailed = true
+        }
 
-            // In real mode, surface the failure instead of silently returning mock content.
-            guard AppConfig.allowMockFallbacks else {
-                throw error
+        // Fallback: Public AI Chat (if auth failed or no token)
+        if authFailed {
+            do {
+                let (response, source) = try await BackendAIService.shared.studySession(
+                    message: text,
+                    resourceId: contextHint,
+                    mode: mode
+                )
+
+                let validatedText = validateNotCourseContent(response)
+                let aiMessage = LyoMessage(
+                    id: UUID().uuidString,
+                    content: validatedText,
+                    isFromUser: false,
+                    timestamp: Date()
+                )
+                conversationHistory.append(aiMessage)
+
+                return LioChatResponse(
+                    text: validatedText,
+                    source: "backend_public_ai",
+                    action: nil,
+                    suggestions: nil,
+                    meta: ["provider": source, "fallback": "unauthorized"]
+                )
+            } catch {
+                // If the public fallback also fails, continue to the normal fallback chain below.
+                print("⚠️ Public fallback failed: \(error)")
             }
+        }
+
+        // In real mode, surface the failure instead of silently returning mock content.
+        guard AppConfig.allowMockFallbacks else {
+            throw LyoError.network(.serverError(500))
+        }
 
             // Optional fallback chain (explicitly enabled via LYO_ALLOW_MOCKS=1)
             print("⚠️ Falling back to OpenAI/local because LYO_ALLOW_MOCKS=1")
@@ -455,7 +474,6 @@ struct LioGreetingResponse: Codable {
                 return generateLocalResponse(for: text, mode: mode)
             }
         }
-    }
     
     // MARK: - Fail-Safe Handlers
     

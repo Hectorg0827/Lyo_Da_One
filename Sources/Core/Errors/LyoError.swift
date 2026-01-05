@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Lyo Error
 /// Comprehensive error handling for the Lyo app
-enum LyoError: Error {
+enum LyoError: Error, Identifiable {
     case network(NetworkErrorType)
     case validation(ValidationErrorResponse)
     case business(BusinessErrorType)
@@ -11,7 +11,25 @@ enum LyoError: Error {
     case serverError(String)
     case rateLimitExceeded(retryAfter: TimeInterval?)
     case unknown(String)
+    case speechRecognitionError
+    case offlineMode
+    
+    var id: String {
+        switch self {
+        case .network: return "network_error"
+        case .validation: return "validation_error"
+        case .business: return "business_error"
+        case .ai: return "ai_error"
+        case .storage: return "storage_error"
+        case .serverError: return "server_error"
+        case .rateLimitExceeded: return "rate_limited"
+        case .unknown: return "unknown_error"
+        case .speechRecognitionError: return "speech_error"
+        case .offlineMode: return "offline_mode"
+        }
+    }
 }
+
 
 // MARK: - Network Error Types
 enum NetworkErrorType {
@@ -45,7 +63,15 @@ enum AIErrorType {
     case invalidPrompt
     case contentFiltered
     case modelUnavailable
+    case processingError(String)
+    case courseGenerationFailed(String)
+    case quizGenerationFailed(String)
 }
+
+enum LyoEmotion: String, Codable {
+    case friendly, excited, thoughtful, encouraging, apologetic, confused, proud
+}
+
 
 // MARK: - Storage Error Types
 enum StorageErrorType {
@@ -88,8 +114,85 @@ extension LyoError: LocalizedError {
 
         case .unknown(let message):
             return message
+        case .speechRecognitionError:
+            return "Speech recognition failed"
+        case .offlineMode:
+            return "Device is offline"
         }
     }
+
+    var lyoMessage: String {
+        switch self {
+        case .network:
+            return "Oops! I can't reach my brain in the cloud right now."
+        case .ai(.processingError):
+            return "I'm having trouble understanding. Let me try that again!"
+        case .ai(.courseGenerationFailed):
+            return "I ran into trouble creating your course. Let's try a different approach!"
+        case .ai(.quizGenerationFailed):
+            return "I couldn't generate that quiz right now. How about we review the topic instead?"
+        case .business(.userNotFound):
+            return "I couldn't find your profile. Let's explore together!"
+        case .network(.unauthorized):
+            return "I need you to sign in first so I can personalize your learning!"
+        case .rateLimitExceeded:
+            return "Whoa there! I need a moment to catch my breath."
+        case .offlineMode:
+            return "I'm in offline mode, but I can still help with what I know!"
+        case .speechRecognitionError:
+            return "I couldn't quite catch that. Could you try speaking again?"
+        default:
+            return "Something unexpected happened, but don't worry - I'm here to help!"
+        }
+    }
+
+    var actionableAdvice: String {
+        switch self {
+        case .network:
+            return "Check your internet connection, or I can work with cached content."
+        case .ai(.processingError):
+            return "Try rephrasing your question, or I can suggest some alternatives."
+        case .business(.userNotFound):
+            return "I can create new content for you, or suggest similar topics."
+        case .network(.unauthorized):
+            return "Signing in unlocks personalized courses and progress tracking."
+        case .rateLimitExceeded(let retryAfter):
+            let minutes = Int((retryAfter ?? 60) / 60)
+            return "Try again in \(minutes) minute\(minutes == 1 ? "" : "s"), or explore existing content."
+        case .offlineMode:
+            return "I'll sync everything when you're back online!"
+        case .speechRecognitionError:
+            return "Make sure your microphone is enabled and try speaking clearly."
+        case .ai(.courseGenerationFailed), .ai(.quizGenerationFailed):
+            return "Let's break down your topic into smaller pieces I can handle."
+        default:
+            return "Let's start fresh - what would you like to learn about?"
+        }
+    }
+
+    var emotion: LyoEmotion {
+        switch self {
+        case .network, .unknown, .serverError:
+            return .apologetic
+        case .ai(.processingError):
+            return .confused
+        case .business(.userNotFound):
+            return .thoughtful
+        case .network(.unauthorized):
+            return .encouraging
+        case .rateLimitExceeded:
+            return .apologetic
+        case .offlineMode:
+            return .friendly
+        case .speechRecognitionError:
+            return .confused
+        case .ai(.courseGenerationFailed), .ai(.quizGenerationFailed):
+            return .apologetic
+        default:
+            return .apologetic
+        }
+    }
+
 
     var recoverySuggestion: String? {
         switch self {
@@ -173,17 +276,51 @@ extension LyoError: LocalizedError {
         return false
     }
 
-    var isUserError: Bool {
+    var suggestedActions: [LyoAction] {
         switch self {
-        case .validation,
-             .business(.invalidOperation),
-             .network(.badRequest):
-            return true
+        case .network:
+            return [
+                LyoAction(id: "retry", title: "Try Again", icon: "arrow.clockwise", style: .primary, handler: {}),
+                LyoAction(id: "offline_mode", title: "Use Offline Mode", icon: "wifi.slash", style: .secondary, handler: {})
+            ]
+        case .ai(.processingError):
+            return [
+                LyoAction(id: "rephrase", title: "Help Me Rephrase", icon: "text.bubble", style: .primary, handler: {}),
+                LyoAction(id: "try_again", title: "Try Again", icon: "arrow.clockwise", style: .secondary, handler: {})
+            ]
+        case .network(.unauthorized):
+            return [
+                LyoAction(id: "sign_in", title: "Sign In", icon: "person.circle", style: .primary, handler: {})
+            ]
+        case .speechRecognitionError:
+            return [
+                LyoAction(id: "try_voice_again", title: "Try Voice Again", icon: "mic", style: .primary, handler: {}),
+                LyoAction(id: "type_instead", title: "Type Instead", icon: "keyboard", style: .secondary, handler: {})
+            ]
         default:
-            return false
+            return [
+                LyoAction(id: "restart", title: "Start Fresh", icon: "arrow.clockwise.circle", style: .primary, handler: {})
+            ]
         }
     }
 }
+
+// MARK: - Lyo Action
+struct LyoAction: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    let style: ActionStyle
+    let handler: () -> Void
+
+    enum ActionStyle {
+        case primary, secondary, tertiary
+    }
+
+    var accessibleLabel: String { title }
+    var accessibleHint: String { "Double tap to \(title.lowercased())" }
+}
+
 
 // MARK: - Network Error Description
 extension NetworkErrorType {

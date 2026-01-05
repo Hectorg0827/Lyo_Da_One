@@ -3,11 +3,7 @@
 //  Lyo
 //
 //  Unified course library management service
-//  NOTE: Disabled due to API mismatches with existing models
-//  TODO: Update to match current CourseCard and StackItem APIs
 //
-
-#if false  // Disabled until API compatibility is fixed
 
 import Foundation
 import SwiftUI
@@ -257,5 +253,3 @@ enum CourseLevel: String, CaseIterable {
 }
 
 // Note: CourseCard is defined in Models/LyoChat.swift
-
-#endif  // End of disabled CourseLibraryService

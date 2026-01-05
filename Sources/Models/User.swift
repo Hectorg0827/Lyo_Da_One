@@ -19,19 +19,20 @@ struct User: Identifiable, Codable {
     let totalLessonsCompleted: Int
     let achievements: [String]
     
+
     enum CodingKeys: String, CodingKey {
         case id
         case email
         case name
         case username
-        case firstName = "first_name"
-        case lastName = "last_name"
-        case avatarURL = "avatar_url"
-        case createdAt = "created_at"
+        case firstName
+        case lastName
+        case avatarURL = "avatarUrl"  // avatar_url → avatarUrl via .convertFromSnakeCase
+        case createdAt
         case level
         case xp
         case streak
-        case totalLessonsCompleted = "total_lessons_completed"
+        case totalLessonsCompleted
         case achievements
     }
     

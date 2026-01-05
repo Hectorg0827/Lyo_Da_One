@@ -5,6 +5,9 @@ struct LyoMessageBubbleView: View {
     var onActionTap: ((MessageAction) -> Void)?
     var onQuickChipTap: ((String) -> Void)?
     var onCourseStart: ((CourseProposalData) -> Void)?
+    var onAudioToggle: ((String, String) -> Void)?  // (messageId, text) -> Void
+    var isPlayingAudio: Bool = false
+    var audioProgress: Double = 0
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     
     var body: some View {
@@ -16,14 +19,29 @@ struct LyoMessageBubbleView: View {
             
             VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: DesignTokens.Spacing.xs) {
                 // Message content with premium styling
-                Text(message.content)
-                    .font(DesignTokens.Typography.bodyMedium)
-                    .foregroundColor(DesignTokens.Colors.textPrimary)
-                    .lineSpacing(4)
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                    .padding(.vertical, DesignTokens.Spacing.sm)
-                    .padding(.vertical, DesignTokens.Spacing.sm)
-                    .background(messageBackground)
+                HStack(alignment: .top, spacing: 8) {
+                    Text(message.content)
+                        .font(DesignTokens.Typography.bodyMedium)
+                        .foregroundColor(DesignTokens.Colors.textPrimary)
+                        .lineSpacing(4)
+                    
+                    // TTS Audio Button (AI messages only)
+                    if !message.isFromUser && onAudioToggle != nil {
+                        MessageAudioButton(
+                            messageId: message.id,
+                            text: message.content,
+                            isPlaying: isPlayingAudio,
+                            progress: audioProgress,
+                            onToggle: {
+                                onAudioToggle?(message.id, message.content)
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.vertical, DesignTokens.Spacing.sm)
+                .padding(.vertical, DesignTokens.Spacing.sm)
+                .background(messageBackground)
                 
                 // Mentor Mode Content
                 if let mode = message.responseMode {
@@ -57,7 +75,7 @@ struct LyoMessageBubbleView: View {
                     FlowLayout(spacing: DesignTokens.Spacing.xs) {
                         ForEach(actions) { action in
                             PremiumActionPillButton(action: action) {
-                                HapticManager.shared.light()
+                                HapticManager.shared.playLightImpact()
                                 onActionTap?(action)
                             }
                         }
@@ -191,13 +209,14 @@ struct PremiumAttachmentView: View {
         .frame(maxWidth: 260)
     }
     
-    private func iconForType(_ type: MessageAttachment.AttachmentType) -> String {
+    private func iconForType(_ type: AttachmentType) -> String {
         switch type {
         case .file: return "doc.fill"
         case .image: return "photo.fill"
         case .video: return "play.rectangle.fill"
         case .audio: return "waveform"
         case .link: return "link"
+        case .document: return "doc.text.fill"
         }
     }
     

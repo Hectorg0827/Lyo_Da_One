@@ -88,24 +88,57 @@ public struct SessionState: Codable {
     }
 }
 
-public struct LearningContext: Codable {
+// Note: LearningLevel is defined in DiscoverModels.swift
+// Using that definition to avoid duplication
+
+public struct LearningContext: Codable, Equatable {
+    public let topic: String
+    public let learningLevel: LearningLevel
+    public let contentType: ContentType
+    public let source: ContentSource
+    public let timestamp: Date
+    public let clipId: String?
+    public let complexity: ContextComplexity
+    
+    // Legacy support for older fields
     public let lessonId: String?
     public let skill: String?
-    public let topic: String?
-    public let difficulty: String?
+
+    public enum ContentType: String, Codable {
+        case video, course, quiz, conversation, explainer
+    }
+
+    public enum ContentSource: String, Codable {
+        case chat, discover, community, classroom, stack
+    }
+
+    public enum ContextComplexity: String, Codable {
+        case simple, moderate, complex
+    }
     
-    public init(lessonId: String? = nil, skill: String? = nil, topic: String? = nil, difficulty: String? = nil) {
+    public init(
+        topic: String,
+        learningLevel: LearningLevel,
+        contentType: ContentType,
+        source: ContentSource,
+        timestamp: Date = Date(),
+        clipId: String? = nil,
+        complexity: ContextComplexity = .moderate,
+        lessonId: String? = nil,
+        skill: String? = nil
+    ) {
+        self.topic = topic
+        self.learningLevel = learningLevel
+        self.contentType = contentType
+        self.source = source
+        self.timestamp = timestamp
+        self.clipId = clipId
+        self.complexity = complexity
         self.lessonId = lessonId
         self.skill = skill
-        self.topic = topic
-        self.difficulty = difficulty
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case lessonId = "lesson_id"
-        case skill, topic, difficulty
     }
 }
+
 
 public struct PersonalizationStateUpdate: Codable {
     public let learnerId: String

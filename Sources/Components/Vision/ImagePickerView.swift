@@ -86,8 +86,21 @@ struct ImagePickerView: View {
 // MARK: - Camera View
 struct CameraView: UIViewControllerRepresentable {
 
-    @Binding var image: UIImage?
+    var image: Binding<UIImage?>?
+    var onCapture: ((UIImage) -> Void)?
     @Binding var isPresented: Bool
+
+    init(image: Binding<UIImage?>, isPresented: Binding<Bool>) {
+        self.image = image
+        self.onCapture = nil
+        self._isPresented = isPresented
+    }
+
+    init(isPresented: Binding<Bool>, onCapture: @escaping (UIImage) -> Void) {
+        self.image = nil
+        self.onCapture = onCapture
+        self._isPresented = isPresented
+    }
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -111,7 +124,8 @@ struct CameraView: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                parent.image = image
+                parent.image?.wrappedValue = image
+                parent.onCapture?(image)
             }
             parent.isPresented = false
         }

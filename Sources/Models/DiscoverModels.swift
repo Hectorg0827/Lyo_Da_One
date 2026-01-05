@@ -29,7 +29,7 @@ enum DiscoverItemType: String, Codable, CaseIterable {
 
 // MARK: - Learning Context
 
-enum LearningLevel: String, Codable, CaseIterable {
+public enum LearningLevel: String, Codable, CaseIterable {
     case beginner
     case intermediate
     case advanced

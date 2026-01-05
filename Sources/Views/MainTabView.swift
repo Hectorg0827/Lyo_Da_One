@@ -877,64 +877,7 @@ struct LivingMascotFAB: View {
     }
 }
 
-// MARK: - Mascot Particles
-struct MascotParticles: View {
-    let color: Color
-    @State private var particles: [Particle] = []
-    
-    struct Particle: Identifiable {
-        let id = UUID()
-        var x: CGFloat
-        var y: CGFloat
-        var scale: CGFloat
-        var opacity: Double
-        var speed: CGFloat
-    }
-    
-    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { context, size in
-                for particle in particles {
-                    let rect = CGRect(
-                        x: particle.x * size.width,
-                        y: particle.y * size.height,
-                        width: 4 * particle.scale,
-                        height: 4 * particle.scale
-                    )
-                    context.opacity = particle.opacity
-                    context.fill(Circle().path(in: rect), with: .color(color))
-                }
-            }
-        }
-        .onReceive(timer) { _ in
-            updateParticles()
-        }
-    }
-    
-    private func updateParticles() {
-        // Add new particle
-        if Double.random(in: 0...1) > 0.7 {
-            particles.append(Particle(
-                x: CGFloat.random(in: 0.2...0.8),
-                y: 0.8, // Start near bottom
-                scale: CGFloat.random(in: 0.5...1.5),
-                opacity: 1.0,
-                speed: CGFloat.random(in: 0.01...0.03)
-            ))
-        }
-        
-        // Update existing
-        for i in particles.indices {
-            particles[i].y -= particles[i].speed
-            particles[i].opacity -= 0.02
-        }
-        
-        // Remove dead particles
-        particles.removeAll { $0.opacity <= 0 }
-    }
-}
+
 
 // MARK: - App Drawer Overlay
 struct AppDrawerOverlay: View {

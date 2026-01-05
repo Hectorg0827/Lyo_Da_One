@@ -46,8 +46,10 @@ actor OfflineQueueManager {
     // MARK: - Initialization
     
     private init() {
-        loadQueue()
-        setupConnectivityObserver()
+        Task {
+            await loadQueue()
+            await setupConnectivityObserver()
+        }
     }
     
     // MARK: - Public API

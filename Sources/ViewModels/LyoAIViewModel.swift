@@ -29,6 +29,12 @@ class LyoAIViewModel: ObservableObject {
     @Published var attachments: [MessageAttachment] = []
     @Published var isUploadingFile: Bool = false
     
+    // MARK: - Multimodal State
+    @Published var voiceInputLevel: Float = 0
+    @Published var isRecordingVoice: Bool = false
+    @Published var currentlyPlayingMessageId: String?
+    @Published var playbackProgress: Double = 0
+    
     // MARK: - Hybrid UI State
     @Published var scrollOffset: CGFloat = 0
     @Published var isChatOpen: Bool = false
@@ -54,13 +60,18 @@ class LyoAIViewModel: ObservableObject {
     @Published var suggestedUsers: [User] = []
     
     // MARK: - Dependencies
-    private let repository = LyoRepository.shared // Backend missing AI endpoints
-    private let aiService = OpenAIService.shared // Legacy: Used for Quiz generation only
+    private let repository = LyoRepository.shared 
+    private let aiService = OpenAIService.shared 
     private let ttsService = TextToSpeechService.shared
-    private let sttService = SpeechToTextService.shared
-    private let cinemaService = InteractiveCinemaService.shared // NEW: Graph-based courses
+    private let sttService = VoiceInputService.shared
+    private let cinemaService = InteractiveCinemaService.shared 
     private let socialRepository: SocialRepository = LyoRepository.shared as SocialRepository
     private var drawerAutoCloseTimer: Timer?
+    
+    // MARK: - Multimodal Services
+    private let voiceInputService = VoiceInputService.shared
+    private let audioPlaybackService = AudioPlaybackService.shared
+    private let mediaPickerService = MediaPickerService.shared
     
     // UI State reference (injected)
     var uiState: AppUIState?
@@ -81,7 +92,7 @@ class LyoAIViewModel: ObservableObject {
     }
     
     private func setupVoiceBindings() {
-        sttService.$transcribedText
+        sttService.$transcript
             .receive(on: RunLoop.main)
             .sink { [weak self] text in
                 if self?.isVoiceActive == true && !text.isEmpty {
@@ -120,13 +131,15 @@ class LyoAIViewModel: ObservableObject {
         // For barge-in, we don't stop TTS here. We let it play.
         // If user speaks, onSpeechDetected will stop TTS.
         
-        sttService.requestAuthorization()
-        do {
-            try sttService.startRecording()
-            isVoiceActive = true
-        } catch {
-            print("Failed to start recording: \(error)")
-            isVoiceActive = false
+        sttService.checkPermissions()
+        Task {
+            do {
+                try await sttService.startRecording()
+                isVoiceActive = true
+            } catch {
+                print("Failed to start recording: \(error)")
+                isVoiceActive = false
+            }
         }
     }
     
@@ -1023,6 +1036,182 @@ class LyoAIViewModel: ObservableObject {
                 status: .sent
             ))
         }
+    }
+    
+    // MARK: - Multimodal Voice Input
+    
+    func startVoiceRecording() {
+        Task {
+            do {
+                try await voiceInputService.startRecording()
+                isRecordingVoice = true
+                HapticManager.shared.playRecordingStarted()
+                
+                // Bind audio level for waveform visualization
+                voiceInputService.$audioLevel
+                    .receive(on: RunLoop.main)
+                    .assign(to: &$voiceInputLevel)
+            } catch {
+                print("❌ Failed to start voice recording: \(error)")
+                isRecordingVoice = false
+            }
+        }
+    }
+    
+    func stopVoiceRecording() {
+        Task {
+            let transcription = await voiceInputService.stopRecording()
+            isRecordingVoice = false
+            HapticManager.shared.playRecordingStopped()
+            
+            if let text = transcription, !text.isEmpty {
+                inputText = text
+            }
+        }
+    }
+    
+    func cancelVoiceRecording() {
+        voiceInputService.cancelRecording()
+        isRecordingVoice = false
+        HapticManager.shared.playLightImpact()
+    }
+    
+    // MARK: - Multimodal TTS Playback
+    
+    func playMessageAudio(messageId: String, text: String) {
+        Task {
+            do {
+                currentlyPlayingMessageId = messageId
+                HapticManager.shared.playLightImpact()
+                
+                try await audioPlaybackService.playTTS(text: text, messageId: messageId)
+                
+                // Observe playback state
+                audioPlaybackService.$playbackProgress
+                    .receive(on: RunLoop.main)
+                    .assign(to: &$playbackProgress)
+                
+                audioPlaybackService.$isPlaying
+                    .receive(on: RunLoop.main)
+                    .sink { [weak self] isPlaying in
+                        if !isPlaying {
+                            self?.currentlyPlayingMessageId = nil
+                        }
+                    }
+                    .store(in: &cancellables)
+                
+            } catch {
+                print("❌ TTS playback error: \(error)")
+                currentlyPlayingMessageId = nil
+            }
+        }
+    }
+    
+    func stopMessageAudio() {
+        audioPlaybackService.stop()
+        currentlyPlayingMessageId = nil
+    }
+    
+    func toggleMessageAudio(messageId: String, text: String) {
+        if currentlyPlayingMessageId == messageId {
+            if audioPlaybackService.isPlaying {
+                audioPlaybackService.pause()
+            } else {
+                audioPlaybackService.resume()
+            }
+        } else {
+            playMessageAudio(messageId: messageId, text: text)
+        }
+    }
+    
+    // MARK: - Multimodal Media Handling
+    
+    func handlePickedMedia(_ media: PickedMedia) {
+        Task {
+            isUploadingFile = true
+            
+            do {
+                let attachment = try await mediaPickerService.uploadMedia(media)
+                addAttachment(attachment)
+                HapticManager.shared.playSuccess()
+            } catch {
+                print("❌ Media upload failed: \(error)")
+                addErrorMessage("Failed to upload \(media.type.rawValue). Please try again.")
+                HapticManager.shared.playError()
+            }
+            
+            isUploadingFile = false
+        }
+    }
+    
+    func sendMessageWithAttachments(text: String, attachments: [MessageAttachment]) async {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty else { return }
+        
+        inputText = ""
+        self.attachments = []
+        
+        // Create user message with attachments
+        let userMessage = LyoMessage(
+            id: UUID().uuidString,
+            content: text,
+            isFromUser: true,
+            timestamp: Date(),
+            attachments: attachments.isEmpty ? nil : attachments,
+            actions: nil,
+            status: .sent
+        )
+        
+        messages.append(userMessage)
+        HapticManager.shared.playMessageSent()
+        
+        isLoading = true
+        
+        do {
+            // Build context hint for attachments
+            var contextHint: String? = nil
+            if !attachments.isEmpty {
+                let types = attachments.map { $0.type.rawValue }.joined(separator: ", ")
+                contextHint = "User attached: \(types)"
+            }
+            
+            let response = try await LioChatService.shared.sendMessage(
+                text: text,
+                mode: uiState?.currentAIMode ?? "focus",
+                contextHint: contextHint
+            )
+            
+            let aiMessage = LyoMessage(
+                id: UUID().uuidString,
+                content: response.text,
+                isFromUser: false,
+                timestamp: Date(),
+                attachments: nil,
+                actions: nil,
+                status: .sent
+            )
+            
+            withAnimation {
+                messages.append(aiMessage)
+            }
+            
+            // Update suggestions
+            if let newSuggestions = response.suggestions {
+                suggestions = newSuggestions.enumerated().map { index, text in
+                    SuggestionChip(id: UUID().uuidString, text: text, icon: "sparkles")
+                }
+            }
+            
+            // Auto-speak if in voice mode
+            if isVoiceActive {
+                speak(text: response.text)
+            }
+            
+        } catch {
+            print("❌ Send message error: \(error)")
+            addErrorMessage(chatErrorMessage(for: error))
+        }
+        
+        isLoading = false
     }
 }
 

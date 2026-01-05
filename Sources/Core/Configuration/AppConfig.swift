@@ -28,11 +28,11 @@ struct AppConfig {
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "http://localhost:8000"
             }
-            return "https://lyo-backend-production-830162750094.us-central1.run.app"
+            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
         case .staging:
-            return "https://lyo-backend-production-830162750094.us-central1.run.app"
+            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
         case .production:
-            return "https://lyo-backend-production-830162750094.us-central1.run.app"
+            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
         }
     }
     

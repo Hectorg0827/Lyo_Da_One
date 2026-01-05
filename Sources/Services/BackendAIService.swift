@@ -11,35 +11,38 @@ import Foundation
 // MARK: - Backend AI Request/Response Models
 
 // Request for /api/v1/ai/chat (public endpoint - no auth required)
+// Backend schema expects: message (required), conversationHistory (optional), context (optional string)
 struct BackendAIChatRequest: Encodable {
-    let prompt: String
-    let taskType: String?
-    let maxTokens: Int
-    let temperature: Double
-    let context: [String: String]?
+    let message: String
+    let conversationHistory: [ConversationMessage]?
+    let context: String?  // Must be a string, not a dictionary!
     
     enum CodingKeys: String, CodingKey {
-        case prompt
-        case taskType = "task_type"
-        case maxTokens = "max_tokens"
-        case temperature
+        case message
+        case conversationHistory
         case context
     }
 }
 
 // Response from /api/v1/ai/chat
+// Backend returns: { "response": "...", "conversationHistory": [...] }
 struct BackendAIChatResponse: Codable {
-    let content: String
-    let primaryAi: String
+    // Primary fields from backend ChatResponse
+    let response: String?  // Backend's main response field
+    let conversationHistory: [ConversationMessage]?
+    
+    // Legacy fields for backward compatibility (may not be present anymore)
+    let content: String?  // Some endpoints still use this
+    let primaryAi: String?
     let secondaryAi: String?
-    let taskType: String
+    let taskType: String?
     let reasoning: String?
     let conversationTone: String?
-    let responseTimeMs: Double
-    let tokensUsed: Int
-    let costEstimate: Double
-    let confidenceScore: Double
-    let modelVersions: [String: String]
+    let responseTimeMs: Double?
+    let tokensUsed: Int?
+    let costEstimate: Double?
+    let confidenceScore: Double?
+    let modelVersions: [String: String]?
     let userId: Int?
     
     // New fields for Mentor Mode
@@ -48,6 +51,8 @@ struct BackendAIChatResponse: Codable {
     let courseProposal: CourseProposalData?
     
     enum CodingKeys: String, CodingKey {
+        case response
+        case conversationHistory
         case content
         case primaryAi = "primary_ai"
         case secondaryAi = "secondary_ai"
@@ -63,6 +68,16 @@ struct BackendAIChatResponse: Codable {
         case responseMode = "response_mode"
         case quickExplainer = "quick_explainer"
         case courseProposal = "course_proposal"
+    }
+    
+    // Computed property for easy access to the AI response text
+    var responseText: String {
+        return response ?? content ?? "No response"
+    }
+    
+    // Computed property for AI source (with fallback)
+    var aiSource: String {
+        return primaryAi ?? "gemini"
     }
 }
 
@@ -295,28 +310,25 @@ final class BackendAIService {
             }
         }
         
-        // Build context from mode and topic
-        var contextDict: [String: String] = [
-            "mode": mode,
-            "topic": currentResourceId
+        // Build context string with system prompt for the backend
+        // The backend expects context as an optional string, not a dictionary
+        var contextString: String? = nil
+        let systemPrompt = buildSystemPrompt(for: mode, resourceId: currentResourceId)
+        
+        // Include mode, topic, and system instruction in context
+        let contextParts = [
+            "Mode: \(mode)",
+            "Topic: \(currentResourceId)",
+            "System Instruction: \(systemPrompt)"
         ]
-        
-        // Include conversation history context
-        if !conversationHistory.isEmpty {
-            let historyContext = conversationHistory.suffix(4).map { "\($0.role): \($0.content)" }.joined(separator: "\n")
-            contextDict["conversation_history"] = historyContext
-        }
-        
-        // Inject System Prompt
-        contextDict["system_instruction"] = buildSystemPrompt(for: mode, resourceId: currentResourceId)
+        contextString = contextParts.joined(separator: "\n")
         
         // Build request for /api/v1/ai/chat endpoint (public, no auth required)
+        // Backend schema: message (required), conversationHistory (optional), context (optional string)
         let request = BackendAIChatRequest(
-            prompt: message,
-            taskType: "EDUCATIONAL_EXPLANATION",
-            maxTokens: 500,
-            temperature: 0.7,
-            context: contextDict
+            message: message,
+            conversationHistory: conversationHistory.isEmpty ? nil : Array(conversationHistory.suffix(10)),
+            context: contextString
         )
         
         let endpoint = "\(baseURL)/api/v1/ai/chat"
@@ -324,16 +336,16 @@ final class BackendAIService {
         do {
             let response: BackendAIChatResponse = try await postPublic(endpoint: endpoint, body: request)
             
-            // Update local conversation history
+            // Update local conversation history using the computed responseText property
             conversationHistory.append(ConversationMessage(role: "user", content: message))
-            conversationHistory.append(ConversationMessage(role: "assistant", content: response.content))
+            conversationHistory.append(ConversationMessage(role: "assistant", content: response.responseText))
             
             // Keep history reasonable size
             if conversationHistory.count > 10 {
                 conversationHistory = Array(conversationHistory.suffix(10))
             }
             
-            return (response: response.content, source: response.primaryAi)
+            return (response: response.responseText, source: response.aiSource)
             
         } catch {
             print("⚠️ Backend AI failed: \(error). Will fallback to local.")

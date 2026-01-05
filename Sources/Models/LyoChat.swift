@@ -2,6 +2,15 @@ import Foundation
 
 // MARK: - Message Models
 
+enum AttachmentType: String, Codable {
+    case file
+    case image
+    case video
+    case audio
+    case link
+    case document
+}
+
 struct LyoMessage: Identifiable, Codable {
     let id: String
     let content: String
@@ -30,14 +39,6 @@ struct MessageAttachment: Identifiable, Codable {
     var filename: String?
     var size: Int?
     var mimeType: String?
-    
-    enum AttachmentType: String, Codable {
-        case file
-        case image
-        case video
-        case audio
-        case link
-    }
 }
 
 struct MessageAction: Identifiable, Codable {

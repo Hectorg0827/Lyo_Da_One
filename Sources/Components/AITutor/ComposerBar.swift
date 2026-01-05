@@ -139,13 +139,14 @@ struct AttachmentChip: View {
         )
     }
     
-    private func iconForType(_ type: MessageAttachment.AttachmentType) -> String {
+    private func iconForType(_ type: AttachmentType) -> String {
         switch type {
         case .file: return "doc.fill"
         case .image: return "photo.fill"
         case .video: return "play.rectangle.fill"
         case .audio: return "waveform"
         case .link: return "link"
+        case .document: return "doc.text.fill"
         }
     }
 }

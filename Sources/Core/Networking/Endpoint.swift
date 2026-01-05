@@ -500,19 +500,16 @@ enum Endpoints {
                 )
 
             case .chatStream(let message, let context):
-                struct BackendAIChatRequest: Encodable {
-                    let prompt: String
-                    let task_type: String
-                    let max_tokens: Int
-                    let temperature: Double
-                    let context: [String: String]?
+                // Matches backend ChatRequest schema: message, conversationHistory, context (String)
+                struct ChatStreamRequest: Encodable {
+                    let message: String
+                    let context: String?  // Backend expects string, not dictionary
                 }
-                return BackendAIChatRequest(
-                    prompt: message,
-                    task_type: "EDUCATIONAL_EXPLANATION",
-                    max_tokens: 500,
-                    temperature: 0.7,
-                    context: context
+                // Convert context dictionary to a string representation
+                let contextString = context?.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+                return ChatStreamRequest(
+                    message: message,
+                    context: contextString
                 )
 
             default:
