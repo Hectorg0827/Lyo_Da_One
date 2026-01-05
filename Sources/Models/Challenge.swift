@@ -328,7 +328,7 @@ struct XPActivity: Codable {
 
 // MARK: - Level
 
-struct UserLevel: Codable {
+struct UserLevel: Codable, Equatable {
     let level: Int
     let currentXP: Int
     let requiredXP: Int
