@@ -10,3 +10,4 @@ DerivedData/
 .netrc
 
 .fake
+build/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth.build/AppAuth.DependencyMetadataFileList
