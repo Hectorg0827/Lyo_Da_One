@@ -49,6 +49,7 @@ struct MessageAction: Identifiable, Codable {
     
     enum ActionType: String, Codable {
         case createCourse = "create_course"
+        case createCourseA2A = "create_course_a2a"  // A2A multi-agent generation
         case quizMe = "quiz_me"
         case addToLibrary = "add_to_library"
         case openDrawer = "open_drawer"
@@ -134,5 +135,18 @@ struct LyoChatResponse: Codable {
         case message
         case suggestions
         case systemStatus = "system_status"
+    }
+}
+
+// MARK: - Open Classroom Payload
+// Note: StackItemPayload and CoursePayload are defined in AICommandResponse.swift
+
+struct OpenClassroomPayload: Codable {
+    let stackItem: StackItemPayload
+    let course: CoursePayload
+    
+    enum CodingKeys: String, CodingKey {
+        case stackItem = "stack_item"
+        case course
     }
 }

@@ -54,7 +54,7 @@ final class CourseLibraryService: ObservableObject {
             
             // Fetch social stats for all courses
             let courseIds = courses.map { $0.id }
-            try? await socialService.fetchBulkSocialStats(courseIds: courseIds)
+            _ = try? await socialService.fetchBulkSocialStats(courseIds: courseIds)
             
             // Convert to CourseCard format
             allCourses = courses.map { convertToCard($0) }
@@ -79,15 +79,15 @@ final class CourseLibraryService: ObservableObject {
             
             // Fetch social stats
             let courseIds = courses.map { $0.id }
-            try? await socialService.fetchBulkSocialStats(courseIds: courseIds)
+            _ = try? await socialService.fetchBulkSocialStats(courseIds: courseIds)
             
             // Sort by popularity (likes + ratings)
             var cards = courses.map { convertToCard($0) }
             cards.sort { course1, course2 in
-                let score1 = Double(socialService.getLikeCount(for: course1.id)) + 
-                            (socialService.getRating(for: course1.id) * 10)
-                let score2 = Double(socialService.getLikeCount(for: course2.id)) + 
-                            (socialService.getRating(for: course2.id) * 10)
+                let score1 = Double(socialService.getLikeCount(courseId: course1.id)) + 
+                            (socialService.getAverageRating(courseId: course1.id) * 10)
+                let score2 = Double(socialService.getLikeCount(courseId: course2.id)) + 
+                            (socialService.getAverageRating(courseId: course2.id) * 10)
                 return score1 > score2
             }
             
@@ -130,15 +130,14 @@ final class CourseLibraryService: ObservableObject {
     func applyFilters() {
         var filtered = allCourses
         
-        // Filter by level
-        if let level = selectedLevel {
-            filtered = filtered.filter { $0.level == level.rawValue }
-        }
+        // Filter by level (CourseCard doesn't have level, skip this filter for now)
+        // TODO: Add level property to CourseCard if needed
         
         // Filter by tags
         if !selectedTags.isEmpty {
             filtered = filtered.filter { course in
-                !Set(course.tags).isDisjoint(with: selectedTags)
+                guard let tags = course.tags else { return false }
+                return !Set(tags).isDisjoint(with: selectedTags)
             }
         }
         
@@ -157,25 +156,11 @@ final class CourseLibraryService: ObservableObject {
         }
         
         // Save to backend (via stack)
-        let stackItem = StackItem(
-            id: UUID().uuidString,
-            category: .course,
-            title: "Saved Course",
-            subtitle: courseId,
-            status: .active,
-            priority: .medium,
-            createdAt: Date(),
-            metadata: ["courseId": courseId]
-        )
-        
-        try? await repository.createStackItem(request: CreateStackItemRequest(
-            category: "Course",
-            title: stackItem.title,
-            subtitle: stackItem.subtitle,
-            status: "active",
-            priority: "medium",
-            dueDate: nil,
-            metadata: stackItem.metadata
+        _ = try? await repository.createStackItem(request: CreateStackItemRequest(
+            type: .course,
+            refId: courseId,
+            tags: ["saved"],
+            contextData: ["courseId": courseId]
         ))
     }
     
@@ -202,43 +187,49 @@ final class CourseLibraryService: ObservableObject {
         let source = courses ?? allCourses
         
         // Get stack items to determine progress
-        let stackItems = stackStore.getAllItems()
-        let courseStackItems = stackItems.filter { $0.category == .course }
+        let stackItems = stackStore.items
+        let courseStackItems = stackItems.filter { $0.type == .course }
         
-        // Categorize
+        // Helper to check if a course matches a stack item
+        func matchesCourse(_ item: UIStackItem, courseId: String) -> Bool {
+            return item.courseId == courseId
+        }
+        
+        // Categorize courses based on progress
         inProgressCourses = source.filter { course in
-            courseStackItems.contains { item in
-                item.status == .active && 
-                (item.subtitle?.contains(course.id) ?? false || item.metadata?["courseId"] == course.id)
-            }
+            courseStackItems.contains(where: { item in
+                matchesCourse(item, courseId: course.id) && 
+                (item.progress ?? 0) > 0 && 
+                (item.progress ?? 0) < 1.0
+            })
         }
         
         completedCourses = source.filter { course in
-            courseStackItems.contains { item in
-                item.status == .completed && 
-                (item.subtitle?.contains(course.id) ?? false || item.metadata?["courseId"] == course.id)
-            }
+            courseStackItems.contains(where: { item in
+                matchesCourse(item, courseId: course.id) && 
+                (item.progress ?? 0) >= 1.0
+            })
         }
         
         savedCourses = source.filter { course in
-            courseStackItems.contains { item in
-                item.subtitle?.contains(course.id) ?? false || item.metadata?["courseId"] == course.id
-            } && !inProgressCourses.contains(where: { $0.id == course.id }) &&
-              !completedCourses.contains(where: { $0.id == course.id })
+            let isInStack = courseStackItems.contains(where: { matchesCourse($0, courseId: course.id) })
+            let notInProgress = !inProgressCourses.contains(where: { $0.id == course.id })
+            let notCompleted = !completedCourses.contains(where: { $0.id == course.id })
+            return isInStack && notInProgress && notCompleted
         }
     }
     
     private func convertToCard(_ course: ChatCourseRead) -> CourseCard {
         CourseCard(
             id: course.id,
-            title: course.topic,
-            subtitle: course.description ?? "",
-            description: course.description ?? "",
-            duration: course.estimatedDuration ?? 0,
-            level: course.level ?? "Beginner",
-            tags: course.tags ?? [],
-            thumbnailURL: course.thumbnailUrl,
-            createdAt: course.createdAt
+            title: course.title,
+            description: course.description,
+            coverURL: nil,
+            progress: nil,
+            timeLeft: nil,
+            lastOpened: nil,
+            tags: course.learningObjectives,
+            status: .suggested
         )
     }
 }

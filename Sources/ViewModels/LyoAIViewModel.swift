@@ -84,14 +84,15 @@ class LyoAIViewModel: ObservableObject {
     init(uiState: AppUIState? = nil) {
         self.uiState = uiState
         loadInitialSuggestions()
-        setupVoiceBindings()
+        setupBindings()
         Task {
             await loadSocialData()
             await loadCourseCards()
         }
     }
     
-    private func setupVoiceBindings() {
+    private func setupBindings() {
+        // Voice bindings
         sttService.$transcript
             .receive(on: RunLoop.main)
             .sink { [weak self] text in
@@ -111,10 +112,36 @@ class LyoAIViewModel: ObservableObject {
             self.startListening()
         }
         
-        // Barge-in: Stop AI speaking when user speech is detected
-        sttService.onSpeechDetected = { [weak self] in
-            self?.stopSpeaking()
-        }
+        // A2UI: Listen for Course Orchestrator triggers (DISABLED - notification not defined)
+        // NotificationCenter.default.publisher(for: .openClassroom)
+        //     .receive(on: RunLoop.main)
+        //     .sink { [weak self] notification in
+        //         guard let self = self,
+        //               let courseId = notification.userInfo?["courseId"] as? String else { return }
+        //         
+        //         print("🚀 ViewModel received .openClassroom for: \(courseId)")
+        //         
+        //         // Create a placeholder ContentItem for immediate navigation
+        //         // The actual view will load data from cache/backend using this ID
+        //         let placeholderItem = ContentItem(
+        //             id: courseId,
+        //             type: .anchorCourse,
+        //             title: "Loading Course...",
+        //             description: "Preparing your personalized curriculum...",
+        //             coverImage: "sparkles",
+        //             duration: 0,
+        //             author: ContentAuthor(name: "Lio AI", avatar: "sparkles", role: "AI"),
+        //             tags: [], // Will be filled by View
+        //             level: .beginner, // Default
+        //             stats: ContentStats(views: 0, likes: 0, rating: 0),
+        //             progress: 0,
+        //             childContentIds: []
+        //         )
+        //         
+        //         self.uiState?.courseToDisplay = placeholderItem
+        //         self.uiState?.showCourseDetail = true
+        //     }
+        //     .store(in: &cancellables)
     }
     
     // MARK: - Voice Control
@@ -255,7 +282,17 @@ class LyoAIViewModel: ObservableObject {
             learnerId: userId,
             affect: AffectSignals(valence: valence, arousal: arousal, confidence: 0.8, source: ["app_interaction"]),
             session: SessionState(fatigue: fatigue, focus: 0.9, durationMinutes: duration),
-            context: LearningContext(topic: uiState?.currentTab.displayName)
+            context: LearningContext(
+                topic: uiState?.currentTab.displayName ?? "General",
+                learningLevel: .intermediate,
+                contentType: .conversation,
+                source: .chat,
+                timestamp: Date(),
+                clipId: nil,
+                complexity: .moderate,
+                lessonId: nil,
+                skill: nil
+            )
         )
         
         do {
@@ -369,7 +406,7 @@ class LyoAIViewModel: ObservableObject {
         // Optimistically add message
         messages.append(userMessage)
         
-        // Update affect signals (debounced - only every 30 seconds to prevent overwhelming server)
+        // Update affect signals (debounced)
         if Date().timeIntervalSince(lastAffectUpdate) > 30 {
             lastAffectUpdate = Date()
             Task.detached(priority: .background) { [weak self] in
@@ -386,34 +423,8 @@ class LyoAIViewModel: ObservableObject {
                 mode: uiState?.currentAIMode ?? "focus"
             )
             
-            // Map actions from response
-            var messageActions: [MessageAction]? = nil
-            if let action = response.action {
-                // Determine action type
-                let type: MessageAction.ActionType
-                switch action.type {
-                case "start_tutor": type = .quickExplainer
-                case "start_quiz": type = .quizMe
-                case "generate_course": type = .createCourse
-                case "open_course": type = .openClassroom
-                default: type = .quickExplainer
-                }
-                
-                messageActions = [
-                    MessageAction(
-                        id: UUID().uuidString,
-                        label: action.type.replacingOccurrences(of: "_", with: " ").capitalized,
-                        actionType: type,
-                        data: action.parameters
-                    )
-                ]
-                
-                // If it's a course generation request, update internal state or trigger full generation if needed
-                if action.type == "generate_course", let params = action.parameters, let topic = params["topic"] {
-                    // Check if we need to auto-trigger something, usually we wait for user to confirm via wizard
-                    _ = topic
-                }
-            }
+            // --- A2UI INTEGRATION DISABLED (Parser not in build) ---
+            // Using simple response display instead
             
             let aiMessage = LyoMessage(
                 id: UUID().uuidString,
@@ -421,7 +432,7 @@ class LyoAIViewModel: ObservableObject {
                 isFromUser: false,
                 timestamp: Date(),
                 attachments: nil,
-                actions: messageActions,
+                actions: response.action != nil ? convertAction(response.action!) : nil,
                 status: .sent
             )
             
@@ -430,19 +441,25 @@ class LyoAIViewModel: ObservableObject {
                 isLoading = false
             }
             
-            // Update suggestions if provided by service
+            // Update Suggestions
             if let newSuggestions = response.suggestions {
-                self.suggestions = newSuggestions.enumerated().map { index, text in
-                    SuggestionChip(id: UUID().uuidString, text: text, icon: "sparkles")
+                self.suggestions = newSuggestions.map { 
+                    SuggestionChip(
+                        id: UUID().uuidString,
+                        text: $0,
+                        icon: nil,
+                        actionType: "suggestion",
+                        context: nil
+                    )
                 }
-            } else {
-                // Keep existing or clear? Usually keep unless wizard flow changes them.
             }
             
             // Auto-speak response if in voice mode
             if isVoiceActive {
                 speak(text: response.text)
             }
+            
+            // --- A2UI INTEGRATION END ---
             
         } catch {
             print("❌ LioChatService Error: \(error)")
@@ -452,6 +469,27 @@ class LyoAIViewModel: ObservableObject {
             }
         }
     }
+    
+    // MARK: - A2UI Action Handler (DISABLED - A2UI Parser not currently in build)
+    
+    // @MainActor
+    // private func handleA2UIAction(_ action: A2UIAction) async {
+    //     switch action {
+    //     case .openClassroom(let payload):
+    //         print("🎬 A2UI Trigger: Opening Classroom for \(payload.title)")
+    //         // Tell Orchestrator to start the show
+    //         // This triggers the view transition via NotificationCenter
+    //         await CourseOrchestrator.shared.execute(proposal: payload)
+    //         
+    //     case .addToStack(let item):
+    //          print("📚 A2UI Trigger: Added to stack \(item.title)")
+    //          // Implementation for stack addition would go here
+    //          
+    //     case .navigate(let destination):
+    //          print("🧭 A2UI Trigger: Navigating to \(destination)")
+    //     }
+    // }
+
 
     private func chatErrorMessage(for error: Error) -> String {
         let lyoError = LyoError.from(error: error)
@@ -585,7 +623,154 @@ class LyoAIViewModel: ObservableObject {
         isGeneratingCourse = false
     }
     
+    // MARK: - A2A Multi-Agent Course Generation
+    
+    /// Generate a course using the A2A multi-agent pipeline
+    /// This uses 5 specialized AI agents: Pedagogy, Cinematic Director, Visual Director, Voice Agent, QA Checker
+    @Published var showA2AProgressView: Bool = false
+    @Published var a2aGenerationTopic: String = ""
+    @Published var a2aGenerationTier: CourseQualityTier = .standard
+    
+    func startA2ACourseGeneration(topic: String, qualityTier: CourseQualityTier = .standard) {
+        print("🤖 Starting A2A multi-agent course generation for: \(topic)")
+        
+        a2aGenerationTopic = topic
+        a2aGenerationTier = qualityTier
+        isGeneratingCourse = true
+        
+        // Show progress message
+        let startMessage = LyoMessage(
+            id: UUID().uuidString,
+            content: """
+            🤖 **Starting Multi-Agent Course Generation**
+            
+            I'm assembling a team of AI experts to create your course:
+            
+            📚 **Pedagogy Agent** - Learning science & structure
+            🎬 **Cinematic Director** - Story & scene design
+            🎨 **Visual Director** - Image & diagram specs
+            🔊 **Voice Agent** - Audio & narration
+            ✅ **QA Checker** - Quality validation
+            
+            This usually takes 2-3 minutes for the best results...
+            """,
+            isFromUser: false,
+            timestamp: Date(),
+            status: .sent
+        )
+        messages.append(startMessage)
+        
+        // Show the A2A progress view
+        showA2AProgressView = true
+    }
+    
+    func handleA2AGenerationComplete(course: A2AGeneratedCourse) {
+        print("✅ A2A course generation complete: \(course.title)")
+        
+        isGeneratingCourse = false
+        showA2AProgressView = false
+        
+        // Convert A2A course to legacy format for compatibility
+        _ = A2ACourseService.shared.convertToLegacyFormat(course)
+        
+        // Create success message with course details
+        let successMessage = LyoMessage(
+            id: UUID().uuidString,
+            content: """
+            🎉 **Your Multi-Agent Course is Ready!**
+            
+            **\(course.title)**
+            \(course.modules.count) modules • \(course.estimatedDuration) min
+            
+            This course was crafted by 5 AI agents working together to ensure the highest quality learning experience.
+            """,
+            isFromUser: false,
+            timestamp: Date(),
+            actions: [
+                MessageAction(
+                    id: "start_a2a_course",
+                    label: "🎬 Start Learning",
+                    actionType: .openClassroom,
+                    data: ["courseId": course.id]
+                )
+            ],
+            status: .sent
+        )
+        messages.append(successMessage)
+        
+        // Trigger the course detail sheet via AppUIState
+        if let uiState = self.uiState {
+            let contentItem = ContentItem(
+                id: course.id,
+                type: .anchorCourse,
+                title: course.title,
+                description: course.description,
+                coverImage: "sparkles",
+                duration: TimeInterval(course.estimatedDuration * 60),
+                author: ContentAuthor(
+                    name: "A2A Multi-Agent System",
+                    avatar: "sparkles",
+                    role: "AI Course Generation Pipeline"
+                ),
+                tags: [a2aGenerationTopic, "A2A", "Multi-Agent"],
+                level: course.difficulty == "advanced" ? .advanced : course.difficulty == "intermediate" ? .intermediate : .beginner,
+                stats: ContentStats(views: 1, likes: 0, rating: 5.0),
+                progress: 0.0,
+                childContentIds: []
+            )
+            
+            Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                uiState.courseToDisplay = contentItem
+                uiState.showCourseDetail = true
+            }
+        }
+    }
+    
+    func handleA2AGenerationCancelled() {
+        print("⚠️ A2A course generation cancelled")
+        
+        isGeneratingCourse = false
+        showA2AProgressView = false
+        
+        let cancelMessage = LyoMessage(
+            id: UUID().uuidString,
+            content: "Course generation cancelled. Let me know when you'd like to try again!",
+            isFromUser: false,
+            timestamp: Date(),
+            status: .sent
+        )
+        messages.append(cancelMessage)
+    }
+    
     // MARK: - Helper Methods
+    
+    private func convertAction(_ action: LioChatAction) -> [MessageAction] {
+        var actionType: MessageAction.ActionType
+        
+        switch action.type {
+        case "open_classroom":
+            actionType = .openClassroom
+        case "create_course":
+            actionType = .createCourse
+        case "start_quiz":
+            actionType = .quizMe
+        case "open_drawer":
+            actionType = .openDrawer
+        default:
+            // Fallback for unknown actions or map to a generic type
+            actionType = .openDrawer
+        }
+        
+        return [
+            MessageAction(
+                id: UUID().uuidString,
+                label: "Action", // Could improve label based on type
+                actionType: actionType,
+                data: action.parameters
+            )
+        ]
+    }
     
     // addWizardResponse removed (legacy)
 
@@ -663,6 +848,10 @@ class LyoAIViewModel: ObservableObject {
         switch action.actionType {
         case .createCourse:
             createCourse(with: action.data)
+        case .createCourseA2A:
+            // A2A Multi-Agent Course Generation
+            let topic = action.data?["topic"] ?? messages.last(where: { $0.isFromUser })?.content ?? "General Knowledge"
+            startA2ACourseGeneration(topic: topic)
         case .quizMe:
             startQuiz(with: action.data)
         case .addToLibrary:
@@ -678,8 +867,46 @@ class LyoAIViewModel: ObservableObject {
         case .extractKeyPoints:
             extractKeyPoints(with: action.data)
         case .openClassroom:
-            // Handled by parent view
-            break
+            // Extract details from action data
+            guard let data = action.data, 
+                  let courseId = data["courseId"] else {
+                print("⚠️ openClassroom action missing courseId")
+                return
+            }
+            
+            let title = data["courseTitle"] ?? "New Course"
+            let topic = data["topic"] ?? "Learning"
+            let levelStr = data["level"] ?? "beginner"
+            
+            // Create a ContentItem to trigger the detail sheet
+            // We use .anchorCourse as the type for now
+            let contentItem = ContentItem(
+                id: courseId,
+                type: .anchorCourse,
+                title: title,
+                description: "Interactive course on \(topic)",
+                coverImage: "book.fill", // Default icon
+                duration: 1200, // Default 20 mins
+                author: ContentAuthor(
+                    name: "Lio AI",
+                    avatar: "sparkles",
+                    role: "AI Learning Assistant"
+                ),
+                tags: [topic, levelStr.capitalized],
+                level: levelStr.lowercased() == "advanced" ? .advanced : levelStr.lowercased() == "intermediate" ? .intermediate : .beginner,
+                stats: ContentStats(views: 0, likes: 0, rating: 0),
+                progress: 0.0,
+                childContentIds: []
+            )
+            
+            print("📱 Opening classroom for course: \(courseId)")
+            
+            DispatchQueue.main.async {
+                if let uiState = self.uiState {
+                    uiState.courseToDisplay = contentItem
+                    uiState.showCourseDetail = true
+                }
+            }
         }
     }
     
@@ -769,7 +996,7 @@ class LyoAIViewModel: ObservableObject {
         suggestions = [
             SuggestionChip(id: "1", text: "Teach me something new", icon: "sparkles", actionType: "learn", context: nil),
             SuggestionChip(id: "2", text: "Create a course for me", icon: "plus.circle", actionType: "create_course", context: nil),
-            SuggestionChip(id: "3", text: "Explain like I'm 5", icon: "face.smiling", actionType: "eli5", context: nil),
+            SuggestionChip(id: "3", text: "🤖 Multi-Agent Course", icon: "cpu", actionType: "create_course_a2a", context: nil),
             SuggestionChip(id: "4", text: "Quiz me on a topic", icon: "questionmark.circle", actionType: "quiz", context: nil)
         ]
     }
@@ -1060,11 +1287,13 @@ class LyoAIViewModel: ObservableObject {
     
     func stopVoiceRecording() {
         Task {
-            let transcription = await voiceInputService.stopRecording()
+            voiceInputService.stopRecording()
             isRecordingVoice = false
             HapticManager.shared.playRecordingStopped()
             
-            if let text = transcription, !text.isEmpty {
+            // Get transcript from the service's published property
+            let text = voiceInputService.transcript
+            if !text.isEmpty {
                 inputText = text
             }
         }
@@ -1080,14 +1309,13 @@ class LyoAIViewModel: ObservableObject {
     
     func playMessageAudio(messageId: String, text: String) {
         Task {
-            do {
                 currentlyPlayingMessageId = messageId
                 HapticManager.shared.playLightImpact()
                 
-                try await audioPlaybackService.playTTS(text: text, messageId: messageId)
+                await audioPlaybackService.playTTS(text: text, messageId: messageId)
                 
                 // Observe playback state
-                audioPlaybackService.$playbackProgress
+                audioPlaybackService.$currentProgress
                     .receive(on: RunLoop.main)
                     .assign(to: &$playbackProgress)
                 
@@ -1099,11 +1327,6 @@ class LyoAIViewModel: ObservableObject {
                         }
                     }
                     .store(in: &cancellables)
-                
-            } catch {
-                print("❌ TTS playback error: \(error)")
-                currentlyPlayingMessageId = nil
-            }
         }
     }
     

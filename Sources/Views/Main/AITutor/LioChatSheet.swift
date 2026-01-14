@@ -14,6 +14,10 @@ struct LioChatSheet: View {
     // Voice Animation State
     @State private var waveformPhase: CGFloat = 0
     
+    // AI Command Handler for course creation navigation
+    @StateObject private var commandHandler = AICommandHandler.shared
+    @State private var showingClassroom = false
+    
     // MARK: - Body
     
     var body: some View {
@@ -128,6 +132,48 @@ struct LioChatSheet: View {
             .sheet(isPresented: $uiState.showCourseDetail) {
                 if let course = uiState.courseToDisplay {
                     CourseDetailSheet(course: course, isPresented: $uiState.showCourseDetail)
+                }
+            }
+            // A2A Multi-Agent Generation Progress View
+            .fullScreenCover(isPresented: $viewModel.showA2AProgressView) {
+                A2AGenerationProgressView(
+                    topic: viewModel.a2aGenerationTopic,
+                    qualityTier: viewModel.a2aGenerationTier,
+                    onComplete: { course in
+                        viewModel.handleA2AGenerationComplete(course: course)
+                    },
+                    onCancel: {
+                        viewModel.handleA2AGenerationCancelled()
+                    }
+                )
+            }
+            // AI Command Handler - Classroom Navigation
+            .onChange(of: commandHandler.shouldOpenClassroom) { _, shouldOpen in
+                if shouldOpen {
+                    showingClassroom = true
+                    commandHandler.clearPendingNavigation()
+                }
+            }
+            .fullScreenCover(isPresented: $showingClassroom) {
+                if let course = commandHandler.pendingClassroomCourse {
+                    // Generate course and open classroom
+                    CourseGenerationIntermediateView(
+                        topic: course.topic,
+                        title: course.title,
+                        level: course.level,
+                        objectives: course.objectives,
+                        onComplete: {
+                            showingClassroom = false
+                        }
+                    )
+                } else {
+                    // Fallback if no course data
+                    Text("Opening Classroom...")
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                                showingClassroom = false
+                            }
+                        }
                 }
             }
         }
@@ -585,9 +631,34 @@ struct LioChatSheet: View {
                 showMediaPicker = false
             }
         case .files:
-            DocumentPickerView { media in
-                if let media = media {
-                    viewModel.handlePickedMedia(media)
+            DocumentPickerView { url in
+                if let url = url {
+                    // Convert URL to PickedMedia
+                    let filename = url.lastPathComponent
+                    let pathExtension = url.pathExtension.lowercased()
+                    let mimeType: String
+                    switch pathExtension {
+                    case "pdf": mimeType = "application/pdf"
+                    case "txt": mimeType = "text/plain"
+                    case "doc", "docx": mimeType = "application/msword"
+                    case "xls", "xlsx": mimeType = "application/vnd.ms-excel"
+                    case "ppt", "pptx": mimeType = "application/vnd.ms-powerpoint"
+                    case "jpg", "jpeg": mimeType = "image/jpeg"
+                    case "png": mimeType = "image/png"
+                    default: mimeType = "application/octet-stream"
+                    }
+                    
+                    if let data = try? Data(contentsOf: url) {
+                        let media = PickedMedia(
+                            type: .document,
+                            data: data,
+                            filename: filename,
+                            mimeType: mimeType,
+                            thumbnail: nil,
+                            originalURL: url
+                        )
+                        viewModel.handlePickedMedia(media)
+                    }
                 }
                 showMediaPicker = false
             }

@@ -123,6 +123,8 @@ extension LyoError: LocalizedError {
 
     var lyoMessage: String {
         switch self {
+        case .network(.unauthorized):
+            return "I need you to sign in first so I can personalize your learning!"
         case .network:
             return "Oops! I can't reach my brain in the cloud right now."
         case .ai(.processingError):
@@ -133,8 +135,6 @@ extension LyoError: LocalizedError {
             return "I couldn't generate that quiz right now. How about we review the topic instead?"
         case .business(.userNotFound):
             return "I couldn't find your profile. Let's explore together!"
-        case .network(.unauthorized):
-            return "I need you to sign in first so I can personalize your learning!"
         case .rateLimitExceeded:
             return "Whoa there! I need a moment to catch my breath."
         case .offlineMode:
@@ -148,14 +148,14 @@ extension LyoError: LocalizedError {
 
     var actionableAdvice: String {
         switch self {
+        case .network(.unauthorized):
+            return "Signing in unlocks personalized courses and progress tracking."
         case .network:
             return "Check your internet connection, or I can work with cached content."
         case .ai(.processingError):
             return "Try rephrasing your question, or I can suggest some alternatives."
         case .business(.userNotFound):
             return "I can create new content for you, or suggest similar topics."
-        case .network(.unauthorized):
-            return "Signing in unlocks personalized courses and progress tracking."
         case .rateLimitExceeded(let retryAfter):
             let minutes = Int((retryAfter ?? 60) / 60)
             return "Try again in \(minutes) minute\(minutes == 1 ? "" : "s"), or explore existing content."
@@ -172,14 +172,14 @@ extension LyoError: LocalizedError {
 
     var emotion: LyoEmotion {
         switch self {
+        case .network(.unauthorized):
+            return .encouraging
         case .network, .unknown, .serverError:
             return .apologetic
         case .ai(.processingError):
             return .confused
         case .business(.userNotFound):
             return .thoughtful
-        case .network(.unauthorized):
-            return .encouraging
         case .rateLimitExceeded:
             return .apologetic
         case .offlineMode:
@@ -278,19 +278,18 @@ extension LyoError: LocalizedError {
 
     var suggestedActions: [LyoAction] {
         switch self {
+        case .network(.unauthorized):
+            return [
+                LyoAction(id: "sign_in", title: "Sign In", icon: "person.circle", style: .primary, handler: {})
+            ]
         case .network:
             return [
-                LyoAction(id: "retry", title: "Try Again", icon: "arrow.clockwise", style: .primary, handler: {}),
-                LyoAction(id: "offline_mode", title: "Use Offline Mode", icon: "wifi.slash", style: .secondary, handler: {})
+                LyoAction(id: "retry", title: "Try Again", icon: "arrow.clockwise", style: .primary, handler: {})
             ]
         case .ai(.processingError):
             return [
                 LyoAction(id: "rephrase", title: "Help Me Rephrase", icon: "text.bubble", style: .primary, handler: {}),
                 LyoAction(id: "try_again", title: "Try Again", icon: "arrow.clockwise", style: .secondary, handler: {})
-            ]
-        case .network(.unauthorized):
-            return [
-                LyoAction(id: "sign_in", title: "Sign In", icon: "person.circle", style: .primary, handler: {})
             ]
         case .speechRecognitionError:
             return [
@@ -430,6 +429,12 @@ extension AIErrorType {
             return "Content filtered"
         case .modelUnavailable:
             return "AI model unavailable"
+        case .processingError:
+            return "AI processing error"
+        case .courseGenerationFailed:
+            return "Course generation failed"
+        case .quizGenerationFailed:
+            return "Quiz generation failed"
         }
     }
 
@@ -445,6 +450,12 @@ extension AIErrorType {
             return "The generated content was filtered due to safety policies."
         case .modelUnavailable:
             return "The AI model is temporarily unavailable."
+        case .processingError(let details):
+            return "AI processing error: \(details)"
+        case .courseGenerationFailed(let details):
+            return "Course generation failed: \(details)"
+        case .quizGenerationFailed(let details):
+            return "Quiz generation failed: \(details)"
         }
     }
 }

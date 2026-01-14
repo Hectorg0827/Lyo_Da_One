@@ -33,17 +33,6 @@ struct FocusView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                
-                // Lyo App Drawer Button (existing behavior)
-                HStack {
-                    Spacer()
-                    VStack {
-                        Spacer()
-                        lioOrb
-                            .padding(.trailing, 12)
-                            .padding(.bottom, 24)
-                    }
-                }
             }
             .navigationBarHidden(true)
             .onAppear {
@@ -429,50 +418,6 @@ struct FocusView: View {
         .shadow(color: .orange.opacity(0.3), radius: 10, x: 0, y: 5)
     }
     
-    // MARK: - Lio Orb
-    private var lioOrb: some View {
-        Button {
-            uiState.isLioChatPresented = true
-        } label: {
-            ZStack {
-                // Outer glow ring
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            colors: [Color(hex: "A855F7").opacity(0.6), Color(hex: "6366F1").opacity(0.3), Color(hex: "A855F7").opacity(0.6)],
-                            center: .center
-                        ),
-                        lineWidth: 3
-                    )
-                    .frame(width: 68, height: 68)
-                    .blur(radius: 2)
-                
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "7C3AED"), Color(hex: "6366F1")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 58, height: 58)
-                    .shadow(color: Color(hex: "7C3AED").opacity(0.55), radius: 18, x: 0, y: 6)
-                
-                Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.white, Color.white.opacity(0.85)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
-            .scaleEffect(isBreathing ? 1.06 : 1.0)
-            .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isBreathing)
-            .onAppear { isBreathing = true }
-        }
-    }
     
     // MARK: - Bottom Input Bar
     private var bottomInputBar: some View {

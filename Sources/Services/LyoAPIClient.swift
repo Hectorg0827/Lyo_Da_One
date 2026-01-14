@@ -221,7 +221,7 @@ final class LyoAPIClient {
     // MARK: - AI Recommendations
     
     func fetchRecommendations() async throws -> [DiscoverItem] {
-        let response: [String: AnyCodable] = try await request(path: "/api/v1/ai/recommendations")
+        let _: [String: AnyCodable] = try await request(path: "/api/v1/ai/recommendations")
         // The backend returns a complex object, we'll need to map it if needed
         // For now, if it fails, the caller handles empty list
         return [] 

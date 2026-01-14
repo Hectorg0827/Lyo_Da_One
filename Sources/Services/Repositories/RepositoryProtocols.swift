@@ -148,6 +148,11 @@ struct ChatResponse: Codable {
     let responseMode: ResponseMode?
     let quickExplainer: QuickExplainerData?
     let courseProposal: CourseProposalData?
+    let conversationHistory: [ChatMessageDTO]?
+    
+    // New fields for Open Classroom Event
+    let type: String?
+    let openClassroomPayload: OpenClassroomPayload?
     
     // Handle both "response" and "content" from different backend endpoints
     enum CodingKeys: String, CodingKey {
@@ -169,6 +174,12 @@ struct ChatResponse: Codable {
         case quickExplainerCamel = "quickExplainer"
         case courseProposalCamel = "courseProposal"
         case cacheHitCamel = "cacheHit"
+        case conversationHistory = "conversation_history"
+        case conversationHistoryCamel = "conversationHistory"
+        
+        // Open Classroom
+        case type
+        case payload
     }
     
     init(from decoder: Decoder) throws {
@@ -219,11 +230,17 @@ struct ChatResponse: Codable {
 
         // Mentor fields can be snake_case or camelCase
         responseMode = (try? container.decode(ResponseMode.self, forKey: .responseMode))
-            ?? (try? container.decode(ResponseMode.self, forKey: .responseModeCamel))
+             ?? (try? container.decode(ResponseMode.self, forKey: .responseModeCamel))
         quickExplainer = (try? container.decode(QuickExplainerData.self, forKey: .quickExplainer))
-            ?? (try? container.decode(QuickExplainerData.self, forKey: .quickExplainerCamel))
+             ?? (try? container.decode(QuickExplainerData.self, forKey: .quickExplainerCamel))
         courseProposal = (try? container.decode(CourseProposalData.self, forKey: .courseProposal))
-            ?? (try? container.decode(CourseProposalData.self, forKey: .courseProposalCamel))
+             ?? (try? container.decode(CourseProposalData.self, forKey: .courseProposalCamel))
+        conversationHistory = (try? container.decode([ChatMessageDTO].self, forKey: .conversationHistory))
+             ?? (try? container.decode([ChatMessageDTO].self, forKey: .conversationHistoryCamel))
+             
+        // Open Classroom fields
+        type = try? container.decode(String.self, forKey: .type)
+        openClassroomPayload = try? container.decode(OpenClassroomPayload.self, forKey: .payload)
     }
     
     func encode(to encoder: Encoder) throws {
@@ -236,9 +253,12 @@ struct ChatResponse: Codable {
         try container.encodeIfPresent(responseMode, forKey: .responseMode)
         try container.encodeIfPresent(quickExplainer, forKey: .quickExplainer)
         try container.encodeIfPresent(courseProposal, forKey: .courseProposal)
+        try container.encodeIfPresent(conversationHistory, forKey: .conversationHistory)
+        try container.encodeIfPresent(type, forKey: .type)
+        try container.encodeIfPresent(openClassroomPayload, forKey: .payload)
     }
     
-    init(response: String, provider: String?, cost: Double?, tokens: Int?, cached: Bool?, responseMode: ResponseMode? = nil, quickExplainer: QuickExplainerData? = nil, courseProposal: CourseProposalData? = nil) {
+    init(response: String, provider: String?, cost: Double?, tokens: Int?, cached: Bool?, responseMode: ResponseMode? = nil, quickExplainer: QuickExplainerData? = nil, courseProposal: CourseProposalData? = nil, conversationHistory: [ChatMessageDTO]? = nil, type: String? = nil, openClassroomPayload: OpenClassroomPayload? = nil) {
         self.response = response
         self.provider = provider
         self.cost = cost
@@ -247,7 +267,15 @@ struct ChatResponse: Codable {
         self.responseMode = responseMode
         self.quickExplainer = quickExplainer
         self.courseProposal = courseProposal
+        self.conversationHistory = conversationHistory
+        self.type = type
+        self.openClassroomPayload = openClassroomPayload
     }
+}
+
+struct ChatMessageDTO: Codable {
+    let role: String
+    let content: String
 }
 
 struct ChatContextDTO: Codable {

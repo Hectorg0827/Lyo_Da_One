@@ -368,7 +368,7 @@ class LyoRepository: ObservableObject {
         return try await NetworkClient.shared.request(Endpoints.Community.getBeacons(lat: latitude, lng: longitude, radius: radiusKm))
     }
 
-    func createQuestion(request: CreateQuestionRequest) async throws -> QuestionResponse {
+    func createQuestion(request: APICreateQuestionRequest) async throws -> APIQuestionResponse {
         return try await NetworkClient.shared.request(Endpoints.Community.createQuestion(question: request))
     }
     
@@ -647,8 +647,8 @@ extension LyoRepository: SocialRepository {
     func getPosts(page: Int, limit: Int, algorithm: String?) async throws -> RepoFeedResponse {
         var query = "limit=\(limit)&offset=\((page - 1) * limit)"
         if let alg = algorithm { query += "&algorithm=\(alg)" }
-        // Use known backend path structure
-        return try await get(endpoint: "/api/v1/posts/feed?\(query)")
+        // FIXED: Backend endpoint is /api/v1/feed NOT /api/v1/posts/feed
+        return try await get(endpoint: "/api/v1/feed?\(query)")
     }
     
     func createPost(content: String, attachments: [String]?) async throws -> RepoPost {

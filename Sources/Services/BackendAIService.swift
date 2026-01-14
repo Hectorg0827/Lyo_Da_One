@@ -299,7 +299,7 @@ final class BackendAIService {
         message: String,
         resourceId: String? = nil,
         mode: String = "focus"
-    ) async throws -> (response: String, source: String) {
+    ) async throws -> (response: String, source: String, wasCommand: Bool) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -310,25 +310,28 @@ final class BackendAIService {
             }
         }
         
-        // Build context string with system prompt for the backend
-        // The backend expects context as an optional string, not a dictionary
-        var contextString: String? = nil
+        // Build the system prompt - this must be sent as part of conversation history
+        // NOT in the context field (which backend treats as metadata)
         let systemPrompt = buildSystemPrompt(for: mode, resourceId: currentResourceId)
         
-        // Include mode, topic, and system instruction in context
-        let contextParts = [
-            "Mode: \(mode)",
-            "Topic: \(currentResourceId)",
-            "System Instruction: \(systemPrompt)"
-        ]
-        contextString = contextParts.joined(separator: "\n")
+        // Build conversation history with system prompt at the start
+        var historyWithSystem: [ConversationMessage] = []
         
-        // Build request for /api/v1/ai/chat endpoint (public, no auth required)
-        // Backend schema: message (required), conversationHistory (optional), context (optional string)
+        // Add system prompt as first message if this is a new conversation
+        if conversationHistory.isEmpty {
+            historyWithSystem.append(ConversationMessage(role: "system", content: systemPrompt))
+        }
+        
+        // Add existing conversation history
+        historyWithSystem.append(contentsOf: conversationHistory.suffix(8))
+        
+        // Build request - context should be simple metadata, not the full prompt
+        let contextMetadata = "mode=\(mode),topic=\(currentResourceId)"
+        
         let request = BackendAIChatRequest(
             message: message,
-            conversationHistory: conversationHistory.isEmpty ? nil : Array(conversationHistory.suffix(10)),
-            context: contextString
+            conversationHistory: historyWithSystem.isEmpty ? nil : historyWithSystem,
+            context: contextMetadata
         )
         
         let endpoint = "\(baseURL)/api/v1/ai/chat"
@@ -336,16 +339,22 @@ final class BackendAIService {
         do {
             let response: BackendAIChatResponse = try await postPublic(endpoint: endpoint, body: request)
             
-            // Update local conversation history using the computed responseText property
+            let rawResponse = response.responseText
+            
+            // Parse response to check for commands
+            let (displayText, wasCommand) = await AICommandHandler.shared.processResponse(rawResponse)
+            
+            // Update local conversation history with the original user message
+            // and the display text (not raw JSON if it was a command)
             conversationHistory.append(ConversationMessage(role: "user", content: message))
-            conversationHistory.append(ConversationMessage(role: "assistant", content: response.responseText))
+            conversationHistory.append(ConversationMessage(role: "assistant", content: displayText))
             
             // Keep history reasonable size
             if conversationHistory.count > 10 {
                 conversationHistory = Array(conversationHistory.suffix(10))
             }
             
-            return (response: response.responseText, source: response.aiSource)
+            return (response: displayText, source: response.aiSource, wasCommand: wasCommand)
             
         } catch {
             print("⚠️ Backend AI failed: \(error). Will fallback to local.")

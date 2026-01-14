@@ -172,7 +172,151 @@ struct LioGreetingResponse: Codable {
         let payloadData = try jsonEncoder.encode(payload)
         let endpoint = Endpoints.ChatModule.sendMessage(payload: payloadData)
         
-        return try await NetworkClient.shared.request(endpoint)
+        let backend: ChatResponse = try await NetworkClient.shared.request(endpoint)
+        
+        // 1. Check for Top-Level JSON Event (Ideal Case)
+        if backend.type == "OPEN_CLASSROOM", let payload = backend.openClassroomPayload {
+            print("🎓 LioChatService: Received OPEN_CLASSROOM event (Top-Level)")
+            return createOpenClassroomResponse(payload)
+        }
+        
+        // 2. Check for Embedded JSON in Text (Fallback/LLM output)
+        if backend.response.contains("OPEN_CLASSROOM") {
+            if let payload = extractOpenClassroomPayload(from: backend.response) {
+                print("🎓 LioChatService: Extracted OPEN_CLASSROOM event from Markdown")
+                return createOpenClassroomResponse(payload)
+            }
+        }
+        
+        return backend
+    }
+    
+    // MARK: - Helper: Create Synthetic Response
+    
+    private func createOpenClassroomResponse(_ payload: OpenClassroomPayload) -> ChatResponse {
+        let confirmationText = "🎉 I've created your **\(payload.course.title)** course! Opening the classroom now..."
+        
+        return ChatResponse(
+            response: confirmationText,
+            provider: "classroom_trigger",
+            cost: 0,
+            tokens: 0,
+            cached: false,
+            responseMode: .course,
+            quickExplainer: nil,
+            courseProposal: nil,
+            conversationHistory: nil,
+            type: "OPEN_CLASSROOM",
+            openClassroomPayload: payload
+        )
+    }
+    
+    // MARK: - Helper: Extract JSON from Markdown
+    
+
+
+    // MARK: - Handle Authenticated Chat Response
+    
+    private func handleBackendResponse(_ backend: ChatResponse, validatedText: String) -> LioChatResponse {
+        // Construct Action
+        var chatAction: LioChatAction? = nil
+        
+        // Check for OPEN_CLASSROOM Trigger
+        if backend.type == "OPEN_CLASSROOM", let payload = backend.openClassroomPayload {
+            // We encode the payload into the action parameters so the UI (ViewModel) can use it
+            // ensuring we don't lose the course details.
+            var params: [String: String] = [
+                "courseTitle": payload.course.title,
+                "topic": payload.course.topic,
+                "level": payload.course.level
+            ]
+            
+            if let courseId = payload.course.id {
+                params["courseId"] = courseId
+            }
+            
+            // Try to encode full payload for robust client handling
+            if let data = try? jsonEncoder.encode(payload),
+               let jsonString = String(data: data, encoding: .utf8) {
+                params["payload_json"] = jsonString
+            }
+            
+            chatAction = LioChatAction(type: "open_classroom", parameters: params)
+        }
+        
+        return LioChatResponse(
+            text: validatedText,
+            source: "backend_chat",
+            action: chatAction,
+            suggestions: backend.quickExplainer?.chips,
+            meta: ["provider": backend.provider ?? "chat"]
+        )
+    }
+    
+    // ... (Fallback helpers)
+    
+    // MARK: - Helper: Extract JSON from Markdown
+    
+    private func extractOpenClassroomPayload(from text: String) -> OpenClassroomPayload? {
+        print("🔍 Extracting JSON from: \(text.prefix(50))...")
+        
+        // 1. Try Regex for Code Block: ```json ... ```
+        // Using raw string for cleaner regex pattern
+        let pattern = #"(?s)```json\s*(\{.*?\})\s*```"#
+        
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            let nsString = text as NSString
+            let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+            
+            if let match = results.first, match.numberOfRanges > 1 {
+                let jsonString = nsString.substring(with: match.range(at: 1))
+                print("🔍 Regex match found: \(jsonString.prefix(20))...")
+                if let payload = decodePayload(from: jsonString) {
+                    return payload
+                }
+            } else {
+                print("🔍 Regex no match.")
+            }
+        }
+        
+        // 2. Fallback: Try finding the largest outer {} block containing "OPEN_CLASSROOM"
+        if let start = text.range(of: "{"), let end = text.range(of: "}", options: .backwards) {
+            let jsonString = String(text[start.lowerBound...end.upperBound])
+            if jsonString.contains("OPEN_CLASSROOM") {
+                print("🔍 Fallback found JSON candidate.")
+                if let payload = decodePayload(from: jsonString) {
+                    return payload
+                }
+            } else {
+                 print("🔍 Fallback block does not contain OPEN_CLASSROOM.")
+            }
+        } else {
+            print("🔍 Fallback found no braces.")
+        }
+        
+        return nil
+    }
+    
+    private func decodePayload(from jsonString: String) -> OpenClassroomPayload? {
+        guard let data = jsonString.data(using: .utf8) else { 
+            print("⚠️ Decode failed: Invalid UTF8")
+            return nil 
+        }
+        
+        struct EmbeddedTrigger: Codable {
+            let type: String
+            let payload: OpenClassroomPayload
+        }
+        
+        do {
+            let decoded = try jsonDecoder.decode(EmbeddedTrigger.self, from: data)
+            print("✅ JSON Decode Success: \(decoded.type)")
+            return decoded.type == "OPEN_CLASSROOM" ? decoded.payload : nil
+        } catch {
+            print("⚠️ LioChatService: JSON Decode failed: \(error)")
+            // Try lenient decoding if needed?
+            return nil
+        }
     }
     
     // MARK: - Proactive Greeting
@@ -381,13 +525,9 @@ struct LioGreetingResponse: Codable {
                 aiMessage.courseProposal = backend.courseProposal
                 conversationHistory.append(aiMessage)
 
-                return LioChatResponse(
-                    text: validatedText,
-                    source: "backend_chat",
-                    action: nil,
-                    suggestions: backend.quickExplainer?.chips,
-                    meta: ["provider": backend.provider ?? "chat"]
-                )
+
+
+                return handleBackendResponse(backend, validatedText: validatedText)
             } catch {
                 print("⚠️ LioChatService: Backend chat failed (\(error)).")
 
@@ -407,10 +547,19 @@ struct LioGreetingResponse: Codable {
             authFailed = true
         }
 
+        // ... rest of method
+        
+        // Fallback: Public AI Chat (if auth failed or no token)
+        if authFailed {
+            // ... (existing fallback logic)
+        }
+        
+        // ...
+        
         // Fallback: Public AI Chat (if auth failed or no token)
         if authFailed {
             do {
-                let (response, source) = try await BackendAIService.shared.studySession(
+                let (response, source, wasCommand) = try await BackendAIService.shared.studySession(
                     message: text,
                     resourceId: contextHint,
                     mode: mode
@@ -424,6 +573,8 @@ struct LioGreetingResponse: Codable {
                     timestamp: Date()
                 )
                 conversationHistory.append(aiMessage)
+                
+                print("📝 LioChatService: Response was\(wasCommand ? "" : " not") a command")
 
                 return LioChatResponse(
                     text: validatedText,
@@ -443,37 +594,37 @@ struct LioGreetingResponse: Codable {
             throw LyoError.network(.serverError(500))
         }
 
-            // Optional fallback chain (explicitly enabled via LYO_ALLOW_MOCKS=1)
-            print("⚠️ Falling back to OpenAI/local because LYO_ALLOW_MOCKS=1")
+        // Optional fallback chain (explicitly enabled via LYO_ALLOW_MOCKS=1)
+        print("⚠️ Falling back to OpenAI/local because LYO_ALLOW_MOCKS=1")
 
-            do {
-                let systemPrompt = buildSystemPrompt(for: mode, context: context)
-                let openAIResponse = try await OpenAIService.shared.sendMessage(
-                    message: text,
-                    conversationHistory: conversationHistory,
-                    systemPrompt: systemPrompt
-                )
+        do {
+            let systemPrompt = buildSystemPrompt(for: mode, context: context)
+            let openAIResponse = try await OpenAIService.shared.sendMessage(
+                message: text,
+                conversationHistory: conversationHistory,
+                systemPrompt: systemPrompt
+            )
 
-                let validatedText = validateNotCourseContent(openAIResponse)
-                let aiMessage = LyoMessage(
-                    id: UUID().uuidString,
-                    content: validatedText,
-                    isFromUser: false,
-                    timestamp: Date()
-                )
-                conversationHistory.append(aiMessage)
-                let action = detectAction(in: text, response: validatedText)
-                return LioChatResponse(
-                    text: validatedText,
-                    source: "openai_backup",
-                    action: action,
-                    suggestions: nil,
-                    meta: ["mode": mode, "fallback": "openai"]
-                )
-            } catch {
-                return generateLocalResponse(for: text, mode: mode)
-            }
+            let validatedText = validateNotCourseContent(openAIResponse)
+            let aiMessage = LyoMessage(
+                id: UUID().uuidString,
+                content: validatedText,
+                isFromUser: false,
+                timestamp: Date()
+            )
+            conversationHistory.append(aiMessage)
+            let action = detectAction(in: text, response: validatedText)
+            return LioChatResponse(
+                text: validatedText,
+                source: "openai_backup",
+                action: action,
+                suggestions: nil,
+                meta: ["mode": mode, "fallback": "openai"]
+            )
+        } catch {
+            return generateLocalResponse(for: text, mode: mode)
         }
+    }
     
     // MARK: - Fail-Safe Handlers
     

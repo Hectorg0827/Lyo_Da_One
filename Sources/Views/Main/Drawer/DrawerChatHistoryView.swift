@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 @available(iOS 17.0, *)
-struct ChatHistoryView: View {
+struct DrawerChatHistoryView: View {
     // SwiftData Queries
     @Query(sort: \ChatFolder.createdAt, order: .forward) private var folders: [ChatFolder]
     @Query(sort: \ChatSession.timestamp, order: .reverse) private var sessions: [ChatSession]

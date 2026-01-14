@@ -57,6 +57,7 @@ struct MainTabView: View {
         case clips // Renamed from discover
         case create // New creation tab
         case community // Was post/campus
+        case messages
         case profile // Kept for state but not in bottom bar
         
         var toAppTab: AppTab {
@@ -65,6 +66,7 @@ struct MainTabView: View {
             case .clips: return .discover
             case .create: return .campus // Temporary mapping
             case .community: return .campus
+            case .messages: return .campus // Messages lives in Social/Campus context
             case .profile: return .profile
             }
         }
@@ -93,14 +95,12 @@ struct MainTabView: View {
                     .tag(Tab.create)
                 
                 // Community
-                Group {
-                    if #available(iOS 17.0, *) {
-                        CommunityMapView()
-                    } else {
-                        CommunityMapFallbackView()
-                    }
-                }
+                CommunityView()
                     .tag(Tab.community)
+                
+                // Messages
+                ChatView()
+                    .tag(Tab.messages)
                 
                 // Profile - Hidden from tab bar but accessible
                 ProfileView()
@@ -943,18 +943,9 @@ struct AppDrawerOverlay: View {
                             // Message Icon - Opens Lio Chat
                             Button(action: {
                                 closeDrawer()
-                                // Small delay to allow drawer to close before presenting sheet
+                                // Navigate to messages tab
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    // Accessing global state via main view's environment if possible, 
-                                    // or using a binding/closure. 
-                                    // For now, we'll assume we can trigger it or leave a TODO if binding missing.
-                                    // Actually, let's use a notification or binding if available. 
-                                    // Since we don't have direct access to uiState here easily without passing it down,
-                                    // let's try NotificationCenter which MainTabView listens to? 
-                                    // Wait, MainTabView has `uiState`. AppDrawerOverlay is inside MainTabView.
-                                    // We can just rely on the user tapping the Lyo button, OR better:
-                                    // Send a notification "TriggerLioChat"
-                                    NotificationCenter.default.post(name: NSNotification.Name("TriggerLioChat"), object: nil)
+                                    selectedTab = .messages
                                 }
                             }) {
                                 ZStack(alignment: .topTrailing) {
@@ -1056,7 +1047,7 @@ struct AppDrawerOverlay: View {
                     // Chat History Section
                     ScrollView { 
                         if #available(iOS 17.0, *) {
-                            ChatHistoryView()
+                            DrawerChatHistoryView()
                                 .padding(.bottom, 40) // Spacing for bottom interaction
                         } else {
                             Text("Chat History requires iOS 17.0 or later")

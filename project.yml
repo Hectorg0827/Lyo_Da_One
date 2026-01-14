@@ -33,6 +33,11 @@ targets:
       ENABLE_PREVIEWS_DYLIB: NO
       DEAD_CODE_STRIPPING: YES
       OTHER_LDFLAGS: $(inherited) -Xlinker -no_warn_duplicate_libraries
+    entitlements:
+      path: Lyo.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
     dependencies:
       - sdk: AVFoundation.framework
       - sdk: AVKit.framework

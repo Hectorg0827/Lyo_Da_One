@@ -49,10 +49,8 @@ struct MyCoursesView: View {
                 }
             }
             .sheet(isPresented: $showFilters) {
-                FiltersView(
-                    selectedLevel: $libraryService.selectedLevel,
-                    selectedTags: $libraryService.selectedTags
-                )
+                Text("Filters Coming Soon")
+                    .padding()
             }
             .task {
                 await libraryService.fetchMyCourses()
@@ -111,8 +109,12 @@ struct MyCoursesView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(currentCourses) { course in
-                    CourseCardView(course: course)
-                        .environmentObject(socialService)
+                    CourseCardView(
+                        card: course,
+                        onContinue: { },
+                        onSave: { }
+                    )
+                    .environmentObject(socialService)
                 }
             }
             .padding()

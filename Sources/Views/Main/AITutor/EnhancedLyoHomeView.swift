@@ -440,7 +440,7 @@ struct EnhancedLyoHomeView: View {
             }
         case .openDrawer:
             viewModel.isDrawerOpen = true
-        case .createCourse, .quizMe, .addToLibrary, .generateSyllabus, .quickExplainer, .makeFlashcards, .extractKeyPoints:
+        case .createCourse, .createCourseA2A, .quizMe, .addToLibrary, .generateSyllabus, .quickExplainer, .makeFlashcards, .extractKeyPoints:
             print("Action: \(action.actionType.rawValue)")
         }
     }

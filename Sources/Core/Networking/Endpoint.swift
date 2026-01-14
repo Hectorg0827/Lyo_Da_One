@@ -939,7 +939,7 @@ enum Endpoints {
 
         // Beacons & Questions
         case getBeacons(lat: Double, lng: Double, radius: Double)
-        case createQuestion(question: CreateQuestionRequest)
+        case createQuestion(question: APICreateQuestionRequest)
         case answerQuestion(id: String, answer: String)
         
         // Institutions

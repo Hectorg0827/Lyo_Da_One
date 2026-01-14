@@ -1,520 +1,279 @@
-import Foundation
 import SwiftUI
 import MapKit
-import CoreLocation
 import Combine
+import CoreLocation
 
-// MARK: - Community ViewModel
-@MainActor
-class CommunityViewModel: NSObject, ObservableObject {
+// MARK: - Models
 
-    // MARK: - Published Properties
+struct CommunityItem: Identifiable, Equatable {
+    let id: String
+    let type: CommunityItemType
+    let title: String
+    let subtitle: String?
+    let coordinate: CLLocationCoordinate2D
+    let imageURL: String?
+    let userAvatar: String?
+    let timestamp: Date
     
-    // Community
-    @Published var studyGroups: [StudyGroup] = []
-    @Published var events: [EducationalEvent] = []
-    @Published var listings: [MarketplaceListing] = []
-    @Published var institutions: [Institution] = []
+    // For specific type handling
+    var eventData: APIEducationalEvent?
+    var groupData: APIStudyGroup?
+    var listingData: APIMarketplaceListing?
     
-    // Library (New)
-    @Published var featuredContent: [ContentItem] = []
-    @Published var quickWins: [ContentItem] = [] // Micro-lessons
-    @Published var learningPaths: [ContentItem] = [] // Paths
-    @Published var trendingContent: [ContentItem] = [] // Mini-courses
-    @Published var allContent: [ContentItem] = []
-
-    // UI State
-    @Published var selectedMode: CampusViewMode = .library // Default to Library!
-    @Published var searchQuery = ""
-    @Published var selectedTypeFilter: CampusItemType?
-    @Published var errorMessage: String?
-
-    @Published var mapPins: [MapPin] = []
-    @Published var selectedPin: MapPin?
-    @Published var activeFilters: Set<CommunityFilter> = [.all]
-
-    @Published var mapRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Default: San Francisco
-        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-    )
-
-    @Published var userLocation: CLLocationCoordinate2D?
-    @Published var isLoadingLocation = false
-    @Published var isLoadingData = false
-    @Published var error: LyoError?
-    @Published var locationPermissionStatus: CLAuthorizationStatus = .notDetermined
-
-    // MARK: - Dependencies
-
-    private let repository: CommunityRepository
-    private let contentRepository: ContentRepository
-    private let locationManager: CLLocationManager
-    private var cancellables = Set<AnyCancellable>()
-
-    // MARK: - Init
-
-    init(repository: CommunityRepository = DefaultCommunityRepository(),
-         contentRepository: ContentRepository = DefaultContentRepository()) {
-        self.repository = repository
-        self.contentRepository = contentRepository
-        self.locationManager = CLLocationManager()
-        super.init()
-
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        locationPermissionStatus = locationManager.authorizationStatus
-        
-        Task {
-            await loadAllData()
-        }
-    }
-
-    // MARK: - Location Services
-
-    func requestLocationPermission() {
-        isLoadingLocation = true
-        locationManager.requestWhenInUseAuthorization()
-    }
-
-    func startUpdatingLocation() {
-        guard locationManager.authorizationStatus == .authorizedWhenInUse ||
-              locationManager.authorizationStatus == .authorizedAlways else {
-            requestLocationPermission()
-            return
-        }
-
-        locationManager.startUpdatingLocation()
-    }
-
-    func stopUpdatingLocation() {
-        locationManager.stopUpdatingLocation()
-    }
-
-    // MARK: - Data Loading
-
-    func loadAllData() async {
-        isLoadingData = true
-        error = nil
-
-        await withTaskGroup(of: Void.self) { group in
-            // Library
-            group.addTask { await self.loadLibraryData() }
-            
-            // Community
-            group.addTask { await self.loadStudyGroups() }
-            group.addTask { await self.loadEvents() }
-            group.addTask { await self.loadListings() }
-            group.addTask { await self.loadInstitutions() }
-        }
-
-        updateMapPins()
-        isLoadingData = false
-    }
-    
-    func loadLibraryData() async {
-        do {
-            async let featured = contentRepository.getFeaturedContent()
-            async let quick = contentRepository.getQuickWins()
-            async let paths = contentRepository.getLearningPaths()
-            async let trending = contentRepository.getTrendingMiniCourses()
-            async let all = contentRepository.getAllContent()
-            
-            self.featuredContent = try await featured
-            self.quickWins = try await quick
-            self.learningPaths = try await paths
-            self.trendingContent = try await trending
-            self.allContent = try await all
-        } catch {
-            print("Error loading library content: \(error)")
-            // Don't block UI, just log
-        }
-    }
-
-    func loadStudyGroups() async {
-        do {
-            let filters = getActiveFilter()
-            studyGroups = try await repository.getStudyGroups(filters: filters, location: userLocation)
-            calculateDistances(for: studyGroups)
-        } catch {
-            handleError(error)
-        }
-    }
-
-    func loadEvents() async {
-        do {
-            let filters = getActiveFilter()
-            events = try await repository.getEvents(filters: filters, location: userLocation)
-            calculateDistances(for: events)
-        } catch {
-            handleError(error)
-        }
-    }
-
-    func loadListings() async {
-        do {
-            let filters = getActiveFilter()
-            listings = try await repository.getListings(filters: filters, location: userLocation)
-            calculateDistances(for: listings)
-        } catch {
-            handleError(error)
-        }
-    }
-
-    func loadInstitutions() async {
-        do {
-            let filters = getActiveFilter()
-            institutions = try await repository.getInstitutions(filters: filters, location: userLocation)
-            calculateDistances(for: institutions)
-        } catch {
-            handleError(error)
-        }
-    }
-
-    // MARK: - Filtering
-
-    func applyFilter(_ filter: CommunityFilter) {
-        if filter == .all {
-            activeFilters = [.all]
-        } else {
-            activeFilters.remove(.all)
-            if activeFilters.contains(filter) {
-                activeFilters.remove(filter)
-                if activeFilters.isEmpty {
-                    activeFilters = [.all]
-                }
-            } else {
-                activeFilters.insert(filter)
-            }
-        }
-
-        updateMapPins()
-    }
-
-    private func getActiveFilter() -> CommunityFilter? {
-        if activeFilters.contains(.all) {
-            return nil
-        }
-        return activeFilters.first
-    }
-
-    // MARK: - Map Management
-
-    private func updateMapPins() {
-        var pins: [MapPin] = []
-
-        // Add study groups
-        if shouldShowType(.studyGroups) {
-            for group in studyGroups {
-                let pin = MapPin(
-                    id: group.id,
-                    type: .studyGroup(group),
-                    coordinate: group.location.coordinate,
-                    title: group.title,
-                    subtitle: "\(group.attendeeCount)/\(group.maxAttendees) attendees",
-                    distance: group.distance
-                )
-                pins.append(pin)
-            }
-        }
-
-        // Add events
-        if shouldShowType(.events) {
-            for event in events {
-                let pin = MapPin(
-                    id: event.id,
-                    type: .event(event),
-                    coordinate: event.location.coordinate,
-                    title: event.title,
-                    subtitle: formatDate(event.dateTime),
-                    distance: event.distance
-                )
-                pins.append(pin)
-            }
-        }
-
-        // Add marketplace listings
-        if shouldShowType(.marketplace) {
-            for listing in listings {
-                let pin = MapPin(
-                    id: listing.id,
-                    type: .marketplace(listing),
-                    coordinate: listing.location,
-                    title: listing.title,
-                    subtitle: listing.priceString,
-                    distance: listing.distance
-                )
-                pins.append(pin)
-            }
-        }
-
-        // Add institutions
-        if shouldShowType(.institutions) {
-            for institution in institutions {
-                let pin = MapPin(
-                    id: institution.id,
-                    type: .institution(institution),
-                    coordinate: institution.location,
-                    title: institution.name,
-                    subtitle: institution.type.rawValue.replacingOccurrences(of: "_", with: " ").capitalized,
-                    distance: institution.distance
-                )
-                pins.append(pin)
-            }
-        }
-
-        mapPins = pins
-    }
-
-    private func shouldShowType(_ type: CommunityFilter) -> Bool {
-        // If "All" is active, show everything
-        if activeFilters.contains(.all) { return true }
-        
-        // If the specific type filter is active, show it
-        if activeFilters.contains(type) { return true }
-        
-        // If NO specific type filters are selected (meaning only attribute filters like .nearby, .today are active),
-        // then we should default to showing ALL types (filtered by attributes)
-        let typeFilters: Set<CommunityFilter> = [.studyGroups, .events, .marketplace, .institutions]
-        if activeFilters.isDisjoint(with: typeFilters) {
-            return true
-        }
-        
-        return false
-    }
-
-    func centerMapOnUser() {
-        guard let location = userLocation else { return }
-        mapRegion = MKCoordinateRegion(
-            center: location,
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-        )
-    }
-
-    func centerMapOnPin(_ pin: MapPin) {
-        mapRegion = MKCoordinateRegion(
-            center: pin.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        )
-        selectedPin = pin
-    }
-
-    // MARK: - Distance Calculations
-
-    private func calculateDistances(for items: Any) {
-        guard let userLocation = userLocation else { return }
-
-        let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-
-        if var groups = items as? [StudyGroup] {
-            for i in 0..<groups.count {
-                let itemLocation = CLLocation(
-                    latitude: groups[i].location.coordinate.latitude,
-                    longitude: groups[i].location.coordinate.longitude
-                )
-                let distanceMeters = userCLLocation.distance(from: itemLocation)
-                let distanceMiles = distanceMeters * 0.000621371 // Convert to miles
-                groups[i].distance = distanceMiles
-            }
-            studyGroups = groups
-        } else if var eventsList = items as? [EducationalEvent] {
-            for i in 0..<eventsList.count {
-                let itemLocation = CLLocation(
-                    latitude: eventsList[i].location.coordinate.latitude,
-                    longitude: eventsList[i].location.coordinate.longitude
-                )
-                let distanceMeters = userCLLocation.distance(from: itemLocation)
-                let distanceMiles = distanceMeters * 0.000621371
-                eventsList[i].distance = distanceMiles
-            }
-            events = eventsList
-        } else if var listingsList = items as? [MarketplaceListing] {
-            for i in 0..<listingsList.count {
-                let itemLocation = CLLocation(
-                    latitude: listingsList[i].location.latitude,
-                    longitude: listingsList[i].location.longitude
-                )
-                let distanceMeters = userCLLocation.distance(from: itemLocation)
-                let distanceMiles = distanceMeters * 0.000621371
-                listingsList[i].distance = distanceMiles
-            }
-            listings = listingsList
-        } else if var institutionsList = items as? [Institution] {
-            for i in 0..<institutionsList.count {
-                let itemLocation = CLLocation(
-                    latitude: institutionsList[i].location.latitude,
-                    longitude: institutionsList[i].location.longitude
-                )
-                let distanceMeters = userCLLocation.distance(from: itemLocation)
-                let distanceMiles = distanceMeters * 0.000621371
-                institutionsList[i].distance = distanceMiles
-            }
-            institutions = institutionsList
-        }
-    }
-
-    // MARK: - Actions
-
-    func joinStudyGroup(_ group: StudyGroup) async {
-        do {
-            let updated = try await repository.joinStudyGroup(groupId: group.id)
-            if let index = studyGroups.firstIndex(where: { $0.id == group.id }) {
-                studyGroups[index] = updated
-                updateMapPins()
-            }
-        } catch {
-            handleError(error)
-        }
-    }
-
-    func registerForEvent(_ event: EducationalEvent) async {
-        do {
-            let updated = try await repository.registerForEvent(eventId: event.id)
-            if let index = events.firstIndex(where: { $0.id == event.id }) {
-                events[index] = updated
-                updateMapPins()
-            }
-        } catch {
-            handleError(error)
-        }
-    }
-
-    func contactSeller(listing: MarketplaceListing) {
-        // TODO: Implement chat integration
-        print("Contact seller: \(listing.seller.name)")
-    }
-
-    func getDirections(to coordinate: CLLocationCoordinate2D) {
-        let placemark = MKPlacemark(coordinate: coordinate)
-        let mapItem = MKMapItem(placemark: placemark)
-        mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-        ])
-    }
-
-    func shareItem(title: String, url: String?) {
-        // TODO: Implement share sheet
-        print("Share: \(title)")
-    }
-
-    // MARK: - Search
-
-    func searchInstitutions(query: String) async {
-        guard !query.isEmpty else {
-            await loadInstitutions()
-            return
-        }
-
-        do {
-            institutions = try await repository.searchInstitutions(query: query, location: userLocation)
-            calculateDistances(for: institutions)
-            updateMapPins()
-        } catch {
-            handleError(error)
-        }
-    }
-
-    // MARK: - Error Handling
-
-    private func handleError(_ error: Error) {
-        if let lyoError = error as? LyoError {
-            self.error = lyoError
-        } else {
-            self.error = .network(.serverError(500))
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-
-    private func formatDistance(_ distance: Double?) -> String {
-        guard let distance = distance else { return "" }
-        return String(format: "%.1f mi", distance)
-    }
-
-    // MARK: - Computed Properties
-
-    var availableFilters: [CommunityFilter] {
-        return [.all, .studyGroups, .events, .marketplace, .institutions, .nearby(radius: 5), .today, .free]
-    }
-
-    var hasLocation: Bool {
-        userLocation != nil
-    }
-
-    var filteredStudyGroups: [StudyGroup] {
-        studyGroups.sorted { ($0.distance ?? Double.infinity) < ($1.distance ?? Double.infinity) }
-    }
-
-    var filteredEvents: [EducationalEvent] {
-        events.sorted { ($0.distance ?? Double.infinity) < ($1.distance ?? Double.infinity) }
-    }
-
-    var filteredListings: [MarketplaceListing] {
-        listings.sorted { ($0.distance ?? Double.infinity) < ($1.distance ?? Double.infinity) }
-    }
-
-    var filteredInstitutions: [Institution] {
-        institutions.sorted { ($0.distance ?? Double.infinity) < ($1.distance ?? Double.infinity) }
+    static func == (lhs: CommunityItem, rhs: CommunityItem) -> Bool {
+        return lhs.id == rhs.id
     }
 }
 
-// MARK: - CLLocationManagerDelegate
-extension CommunityViewModel: CLLocationManagerDelegate {
+enum CommunityItemType: String, CaseIterable, Identifiable {
+    case all = "All"
+    case event = "Events"
+    case group = "Groups"
+    case question = "Questions"
+    case spot = "Spots"
+    case marketplace = "Market"
+    
+    var id: String { rawValue }
+    
+    var icon: String {
+        switch self {
+        case .all: return "square.grid.2x2.fill"
+        case .event: return "calendar"
+        case .group: return "person.3.fill"
+        case .question: return "bubble.left.and.bubble.right.fill"
+        case .spot: return "mappin.and.ellipse"
+        case .marketplace: return "tag.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .all: return .primary
+        case .event: return .orange
+        case .group: return .blue
+        case .question: return .purple
+        case .spot: return .green
+        case .marketplace: return .pink
+        }
+    }
+}
 
-    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        Task { @MainActor in
-            locationPermissionStatus = manager.authorizationStatus
+// MARK: - API Models (Matching Endpoint.swift)
+// See Sources/Models/CommunityDTOs.swift for APIStudyGroup, APIEducationalEvent, etc.
 
-            switch manager.authorizationStatus {
-            case .authorizedWhenInUse, .authorizedAlways:
-                manager.startUpdatingLocation()
+// Beacon wrapper for map display (consolidated)
+struct CommunityBeacon: Identifiable {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let type: CommunityItemType
+    let title: String
+    let subtitle: String?
+}
 
-            case .denied, .restricted:
-                isLoadingLocation = false
-                error = .network(.unauthorized)
 
-            case .notDetermined:
-                break
 
-            @unknown default:
-                break
+// MARK: - ViewModel
+
+@MainActor
+class CommunityViewModel: ObservableObject {
+    // UI State
+    @Published var searchText: String = ""
+    @Published var selectedFilter: CommunityItemType = .all
+    @Published var currentFilter: CommunityFilter = .all
+    @Published var viewMode: ViewMode = .map
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String?
+    
+    enum ViewMode {
+        case map
+        case list
+    }
+    
+    // Data State
+    @Published var items: [CommunityItem] = []
+    @Published var beacons: [CommunityBeacon] = []
+    @Published var mapPins: [MapPin] = []  // For CommunityDockView compatibility
+    
+    // Map State
+    @Published var region = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Default SF
+        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    )
+    @Published var selectedPin: MapPin?  // For dock view selection tracking
+    
+    // Location Manager
+    private let locationManager = CLLocationManager()
+    
+    // Repositories
+    private let network = NetworkClient.shared
+    
+    init() {
+        requestLocation()
+    }
+    
+    func requestLocation() {
+        locationManager.requestWhenInUseAuthorization()
+        if let loc = locationManager.location {
+            region.center = loc.coordinate
+            loadData()
+        }
+    }
+    
+    // MARK: - Operations
+    
+    func loadData() {
+        guard !isLoading else { return }
+        isLoading = true
+        
+        Task {
+            do {
+                // Fetch data in parallel
+                async let groupsTask = fetchStudyGroups()
+                async let eventsTask = fetchEvents()
+                async let listingsTask = fetchListings()
+                
+                let (groups, events, listings) = try await (groupsTask, eventsTask, listingsTask)
+                
+                // Convert to unified items
+                var newItems: [CommunityItem] = []
+                
+                // Process Groups
+                newItems.append(contentsOf: groups.map { group in
+                    CommunityItem(
+                        id: group.id,
+                        type: .group,
+                        title: group.name,
+                        subtitle: "\(group.memberCount) members • \(group.subject)",
+                        coordinate: CLLocationCoordinate2D(latitude: group.lat ?? 0, longitude: group.lng ?? 0),
+                        imageURL: nil,
+                        userAvatar: group.host.avatar,
+                        timestamp: group.nextSession ?? Date(),
+                        groupData: group
+                    )
+                })
+                
+                // Process Events
+                newItems.append(contentsOf: events.map { event in
+                    CommunityItem(
+                        id: event.id,
+                        type: .event,
+                        title: event.title,
+                        subtitle: event.locationName,
+                        coordinate: CLLocationCoordinate2D(latitude: event.lat ?? 0, longitude: event.lng ?? 0),
+                        imageURL: event.imageURL,
+                        userAvatar: nil,
+                        timestamp: event.date,
+                        eventData: event
+                    )
+                })
+                
+                // Process Listings
+                newItems.append(contentsOf: listings.map { listing in
+                    CommunityItem(
+                        id: listing.id,
+                        type: .marketplace,
+                        title: listing.title,
+                        subtitle: "\(listing.currency)\(listing.price)",
+                        coordinate: CLLocationCoordinate2D(latitude: listing.lat ?? 0, longitude: listing.lng ?? 0),
+                        imageURL: listing.images.first,
+                        userAvatar: listing.sellerAvatar,
+                        timestamp: Date(), // Listings timestamp?
+                        listingData: listing
+                    )
+                })
+                
+                // Update Main Thread
+                let finalItems = newItems
+                await MainActor.run {
+                    self.items = finalItems
+                    self.updateBeacons()
+                    self.isLoading = false
+                }
+                
+            } catch {
+                print("❌ Community Fetch Error: \(error.localizedDescription)")
+                self.errorMessage = "Failed to load community data: \(error.localizedDescription)"
+                self.isLoading = false
             }
         }
     }
-
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        Task { @MainActor in
-            guard let location = locations.last else { return }
-
-            userLocation = location.coordinate
-            mapRegion = MKCoordinateRegion(
-                center: location.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    
+    private func updateBeacons() {
+        // Filter items based on selectedFilter
+        let filtered = selectedFilter == .all ? items : items.filter { $0.type == selectedFilter }
+        
+        self.beacons = filtered.compactMap { item in
+            // Only include items with valid coordinates
+            guard item.coordinate.latitude != 0 && item.coordinate.longitude != 0 else { return nil }
+            return CommunityBeacon(
+                id: item.id,
+                coordinate: item.coordinate,
+                type: item.type,
+                title: item.title,
+                subtitle: item.subtitle
             )
-
-            isLoadingLocation = false
-
-            // Recalculate distances for all items
-            calculateDistances(for: studyGroups)
-            calculateDistances(for: events)
-            calculateDistances(for: listings)
-            calculateDistances(for: institutions)
-
-            // Stop updating after first successful location
-            manager.stopUpdatingLocation()
         }
     }
-
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Task { @MainActor in
-            isLoadingLocation = false
-            self.error = LyoError.business(.invalidOperation(error.localizedDescription))
-        }
+    
+    // MARK: - API Calls (Real Backend)
+    
+    private func fetchStudyGroups() async throws -> [APIStudyGroup] {
+        return try await network.request(Endpoints.Community.getStudyGroups(filters: nil, location: region.center))
+    }
+    
+    private func fetchEvents() async throws -> [APIEducationalEvent] {
+        return try await network.request(Endpoints.Community.getEvents(filters: nil, location: region.center))
+    }
+    
+    private func fetchListings() async throws -> [APIMarketplaceListing] {
+        return try await network.request(Endpoints.Community.getListings(filters: nil, location: region.center))
+    }
+    
+    // MARK: - Filter
+    
+    func applyFilter(_ filter: CommunityFilter) {
+        currentFilter = filter
+        updateBeacons()
+        // Note: MapPins could be updated here if we tracked domain models
+    }
+    
+    // MARK: - Actions
+    
+    func createEvent(_ event: EducationalEvent) async throws {
+        // Implementation for creating event - endpoint now uses domain model
+        let _: EducationalEvent = try await network.request(Endpoints.Community.createEvent(event: event))
+        loadData() // Refresh
+    }
+    
+    func createStudyGroup(_ group: StudyGroup) async throws {
+        let _: StudyGroup = try await network.request(Endpoints.Community.createStudyGroup(group: group))
+        loadData()
+    }
+    
+    func createQuestion(content: String, tags: [String], isAnonymous: Bool) async throws {
+        let request = APICreateQuestionRequest(
+            content: content,
+            tags: tags,
+            lat: region.center.latitude,
+            lng: region.center.longitude,
+            isAnonymous: isAnonymous
+        )
+        let _: APIQuestionResponse = try await network.request(Endpoints.Community.createQuestion(question: request))
+        loadData()
+    }
+    
+    func joinStudyGroup(id: String) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.joinStudyGroup(groupId: id))
+        loadData() // Refresh
+    }
+    
+    func registerForEvent(id: String) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.registerForEvent(eventId: id))
+        loadData()
+    }
+    
+    func centerMapOnPin(_ pin: MapPin) {
+        selectedPin = pin
+        region.center = pin.coordinate
     }
 }

@@ -6,7 +6,6 @@ struct HybridLyoHomeView: View {
     
     // Scroll State
     @State private var scrollOffset: CGFloat = 0
-    @State private var showFloatingOrb: Bool = false
     
     // UI State
     @State private var isChatOverlayOpen = false
@@ -55,26 +54,8 @@ struct HybridLyoHomeView: View {
             .coordinateSpace(name: "hybridScroll")
             .onPreferenceChange(HybridScrollOffsetKey.self) { value in
                 scrollOffset = value
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    showFloatingOrb = scrollOffset < transitionThreshold
-                }
             }
             
-            // Layer 2: Floating Orb (Appears on scroll)
-            if showFloatingOrb {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        FloatingOrbView {
-                            withAnimation { isChatOverlayOpen = true }
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 40)
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-            }
             
             // Layer 3: Chat Overlay
             if isChatOverlayOpen {

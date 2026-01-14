@@ -117,7 +117,13 @@ final class ChatIntentClassifier: ObservableObject {
         "start a course",
         "begin a course",
         "study plan for",
-        "learn .* step by step"
+        "learn .* step by step",
+        ".* for beginners",
+        ".* 101",
+        ".* basics",
+        "introduction to .*",
+        "intro to .*",
+        ".* crash course"
     ]
     
     // MARK: - Quick Explanation Keywords (Stay in chat)
@@ -216,7 +222,7 @@ final class ChatIntentClassifier: ObservableObject {
     // MARK: - Learning Intent Detection
     
     private func containsLearningIntent(_ message: String) -> Bool {
-        let learningWords = ["learn", "study", "understand", "know", "teach", "education", "tutorial"]
+        let learningWords = ["learn", "study", "understand", "know", "teach", "education", "tutorial", "roadmap", "curriculum", "syllabus"]
         return learningWords.contains { message.contains($0) }
     }
     

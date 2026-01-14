@@ -289,7 +289,7 @@ struct RecommendedContentSection: View {
                     title: "Find Study Groups",
                     subtitle: "Connect with learners nearby",
                     color: .green,
-                    destination: CommunityMapFallbackWrapper()
+                    destination: CommunityView()
                 )
             }
         }

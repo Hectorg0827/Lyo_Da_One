@@ -1,0 +1,391 @@
+//
+//  MultimodalMessage.swift
+//  Lyo
+//
+//  Multimodal message types for rich AI chat experience
+//
+
+import Foundation
+
+// MARK: - Message Content Types
+
+/// Represents different types of content that can be sent or received in chat
+enum MessageContentType: Codable, Equatable {
+    case text
+    case image(url: String, caption: String?)
+    case audio(url: String, duration: TimeInterval, transcript: String?)
+    case video(url: String, thumbnail: String?, duration: TimeInterval)
+    case file(url: String, name: String, mimeType: String, size: Int64)
+    case codeSnippet(language: String, code: String)
+    case quiz(question: String, options: [String], correctIndex: Int, explanation: String?)
+    case courseCard(courseId: String, title: String, subtitle: String?, thumbnail: String?)
+    case poll(question: String, options: [String], votes: [Int]?)
+    case richCard(title: String, body: String, imageURL: String?, actions: [CardAction]?)
+    
+    enum CodingKeys: String, CodingKey {
+        case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
+        case language, code, question, options, correctIndex, explanation
+        case courseId, title, subtitle, body, imageURL, actions, votes
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        
+        switch type {
+        case "text":
+            self = .text
+        case "image":
+            let url = try container.decode(String.self, forKey: .url)
+            let caption = try container.decodeIfPresent(String.self, forKey: .caption)
+            self = .image(url: url, caption: caption)
+        case "audio":
+            let url = try container.decode(String.self, forKey: .url)
+            let duration = try container.decode(TimeInterval.self, forKey: .duration)
+            let transcript = try container.decodeIfPresent(String.self, forKey: .transcript)
+            self = .audio(url: url, duration: duration, transcript: transcript)
+        case "video":
+            let url = try container.decode(String.self, forKey: .url)
+            let thumbnail = try container.decodeIfPresent(String.self, forKey: .thumbnail)
+            let duration = try container.decode(TimeInterval.self, forKey: .duration)
+            self = .video(url: url, thumbnail: thumbnail, duration: duration)
+        case "file":
+            let url = try container.decode(String.self, forKey: .url)
+            let name = try container.decode(String.self, forKey: .name)
+            let mimeType = try container.decode(String.self, forKey: .mimeType)
+            let size = try container.decode(Int64.self, forKey: .size)
+            self = .file(url: url, name: name, mimeType: mimeType, size: size)
+        case "code":
+            let language = try container.decode(String.self, forKey: .language)
+            let code = try container.decode(String.self, forKey: .code)
+            self = .codeSnippet(language: language, code: code)
+        case "quiz":
+            let question = try container.decode(String.self, forKey: .question)
+            let options = try container.decode([String].self, forKey: .options)
+            let correctIndex = try container.decode(Int.self, forKey: .correctIndex)
+            let explanation = try container.decodeIfPresent(String.self, forKey: .explanation)
+            self = .quiz(question: question, options: options, correctIndex: correctIndex, explanation: explanation)
+        case "course_card":
+            let courseId = try container.decode(String.self, forKey: .courseId)
+            let title = try container.decode(String.self, forKey: .title)
+            let subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+            let thumbnail = try container.decodeIfPresent(String.self, forKey: .thumbnail)
+            self = .courseCard(courseId: courseId, title: title, subtitle: subtitle, thumbnail: thumbnail)
+        case "poll":
+            let question = try container.decode(String.self, forKey: .question)
+            let options = try container.decode([String].self, forKey: .options)
+            let votes = try container.decodeIfPresent([Int].self, forKey: .votes)
+            self = .poll(question: question, options: options, votes: votes)
+        case "rich_card":
+            let title = try container.decode(String.self, forKey: .title)
+            let body = try container.decode(String.self, forKey: .body)
+            let imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
+            let actions = try container.decodeIfPresent([CardAction].self, forKey: .actions)
+            self = .richCard(title: title, body: body, imageURL: imageURL, actions: actions)
+        default:
+            self = .text
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        switch self {
+        case .text:
+            try container.encode("text", forKey: .type)
+        case .image(let url, let caption):
+            try container.encode("image", forKey: .type)
+            try container.encode(url, forKey: .url)
+            try container.encodeIfPresent(caption, forKey: .caption)
+        case .audio(let url, let duration, let transcript):
+            try container.encode("audio", forKey: .type)
+            try container.encode(url, forKey: .url)
+            try container.encode(duration, forKey: .duration)
+            try container.encodeIfPresent(transcript, forKey: .transcript)
+        case .video(let url, let thumbnail, let duration):
+            try container.encode("video", forKey: .type)
+            try container.encode(url, forKey: .url)
+            try container.encodeIfPresent(thumbnail, forKey: .thumbnail)
+            try container.encode(duration, forKey: .duration)
+        case .file(let url, let name, let mimeType, let size):
+            try container.encode("file", forKey: .type)
+            try container.encode(url, forKey: .url)
+            try container.encode(name, forKey: .name)
+            try container.encode(mimeType, forKey: .mimeType)
+            try container.encode(size, forKey: .size)
+        case .codeSnippet(let language, let code):
+            try container.encode("code", forKey: .type)
+            try container.encode(language, forKey: .language)
+            try container.encode(code, forKey: .code)
+        case .quiz(let question, let options, let correctIndex, let explanation):
+            try container.encode("quiz", forKey: .type)
+            try container.encode(question, forKey: .question)
+            try container.encode(options, forKey: .options)
+            try container.encode(correctIndex, forKey: .correctIndex)
+            try container.encodeIfPresent(explanation, forKey: .explanation)
+        case .courseCard(let courseId, let title, let subtitle, let thumbnail):
+            try container.encode("course_card", forKey: .type)
+            try container.encode(courseId, forKey: .courseId)
+            try container.encode(title, forKey: .title)
+            try container.encodeIfPresent(subtitle, forKey: .subtitle)
+            try container.encodeIfPresent(thumbnail, forKey: .thumbnail)
+        case .poll(let question, let options, let votes):
+            try container.encode("poll", forKey: .type)
+            try container.encode(question, forKey: .question)
+            try container.encode(options, forKey: .options)
+            try container.encodeIfPresent(votes, forKey: .votes)
+        case .richCard(let title, let body, let imageURL, let actions):
+            try container.encode("rich_card", forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encode(body, forKey: .body)
+            try container.encodeIfPresent(imageURL, forKey: .imageURL)
+            try container.encodeIfPresent(actions, forKey: .actions)
+        }
+    }
+}
+
+// MARK: - Card Action
+
+/// Action button for rich cards
+struct CardAction: Codable, Equatable, Identifiable {
+    let id: String
+    let label: String
+    let actionType: String // "open_url", "send_message", "open_course", etc.
+    let payload: String?
+    
+    init(id: String = UUID().uuidString, label: String, actionType: String, payload: String? = nil) {
+        self.id = id
+        self.label = label
+        self.actionType = actionType
+        self.payload = payload
+    }
+}
+
+// MARK: - Chat Attachment
+
+/// Attachment for multimodal messages
+struct ChatAttachment: Identifiable, Equatable {
+    let id: String
+    let type: AttachmentType
+    var url: String?
+    var localURL: URL?
+    let name: String
+    let mimeType: String
+    let size: Int64
+    var thumbnail: String?
+    var uploadProgress: Double?
+    var isUploading: Bool
+    
+
+    
+    init(id: String = UUID().uuidString,
+         type: AttachmentType,
+         url: String? = nil,
+         localURL: URL? = nil,
+         name: String,
+         mimeType: String,
+         size: Int64,
+         thumbnail: String? = nil,
+         uploadProgress: Double? = nil,
+         isUploading: Bool = false) {
+        self.id = id
+        self.type = type
+        self.url = url
+        self.localURL = localURL
+        self.name = name
+        self.mimeType = mimeType
+        self.size = size
+        self.thumbnail = thumbnail
+        self.uploadProgress = uploadProgress
+        self.isUploading = isUploading
+    }
+}
+
+// MARK: - Multimodal Message
+
+/// Enhanced message model with multimodal support
+struct MultimodalMessage: Identifiable, Equatable {
+    let id: String
+    let role: MessageRole
+    var content: String
+    var contentTypes: [MessageContentType]
+    var attachments: [ChatAttachment]
+    let timestamp: Date
+    var isStreaming: Bool
+    var metadata: MessageMetadata?
+    
+    enum MessageRole: String, Codable {
+        case user
+        case assistant
+        case system
+    }
+    
+    struct MessageMetadata: Equatable {
+        var aiSource: String?
+        var responseTimeMs: Double?
+        var tokensUsed: Int?
+        var isVoiceInput: Bool?
+        var voiceTranscript: String?
+    }
+    
+    init(id: String = UUID().uuidString,
+         role: MessageRole,
+         content: String,
+         contentTypes: [MessageContentType] = [.text],
+         attachments: [ChatAttachment] = [],
+         timestamp: Date = Date(),
+         isStreaming: Bool = false,
+         metadata: MessageMetadata? = nil) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.contentTypes = contentTypes
+        self.attachments = attachments
+        self.timestamp = timestamp
+        self.isStreaming = isStreaming
+        self.metadata = metadata
+    }
+    
+    var isFromUser: Bool { role == .user }
+    
+    // Convert from legacy LyoMessage
+    init(from legacyMessage: LyoMessage) {
+        self.id = legacyMessage.id
+        self.role = legacyMessage.isFromUser ? .user : .assistant
+        self.content = legacyMessage.content
+        self.contentTypes = [.text]
+        self.attachments = legacyMessage.attachments?.compactMap { attachment in
+            ChatAttachment(
+                id: attachment.id,
+                type: attachment.type,
+                url: attachment.url,
+                localURL: nil,
+                name: attachment.filename ?? "File",
+                mimeType: attachment.mimeType ?? "application/octet-stream",
+                size: Int64(attachment.size ?? 0),
+                thumbnail: nil
+            )
+        } ?? []
+        self.timestamp = legacyMessage.timestamp
+        self.isStreaming = false
+        self.metadata = nil
+    }
+}
+
+// MARK: - Convenience Extensions
+
+extension MultimodalMessage {
+    /// Create a user text message
+    static func userText(_ text: String, attachments: [ChatAttachment] = [], isVoiceInput: Bool = false) -> MultimodalMessage {
+        MultimodalMessage(
+            role: .user,
+            content: text,
+            contentTypes: [.text],
+            attachments: attachments,
+            metadata: isVoiceInput ? MessageMetadata(isVoiceInput: true) : nil
+        )
+    }
+    
+    /// Create an assistant text message
+    static func assistantText(_ text: String, isStreaming: Bool = false) -> MultimodalMessage {
+        MultimodalMessage(
+            role: .assistant,
+            content: text,
+            contentTypes: [.text],
+            isStreaming: isStreaming
+        )
+    }
+    
+    /// Create a message with a quiz
+    static func quiz(question: String, options: [String], correctIndex: Int, explanation: String? = nil) -> MultimodalMessage {
+        MultimodalMessage(
+            role: .assistant,
+            content: question,
+            contentTypes: [.quiz(question: question, options: options, correctIndex: correctIndex, explanation: explanation)]
+        )
+    }
+    
+    /// Create a message with a course card
+    static func courseCard(courseId: String, title: String, subtitle: String?, thumbnail: String?) -> MultimodalMessage {
+        MultimodalMessage(
+            role: .assistant,
+            content: "Here's a course for you:",
+            contentTypes: [.courseCard(courseId: courseId, title: title, subtitle: subtitle, thumbnail: thumbnail)]
+        )
+    }
+}
+
+// MARK: - Content Type Helper Structs
+
+/// Helper struct for code snippet content used by bubble views
+struct CodeSnippetContent {
+    let language: String
+    let code: String
+    
+    init(language: String, code: String) {
+        self.language = language
+        self.code = code
+    }
+}
+
+/// Helper struct for quiz content used by bubble views
+struct QuizContent {
+    let question: String
+    let options: [String]
+    let correctAnswer: Int
+    let explanation: String?
+    var selectedAnswer: Int?
+    
+    init(question: String, options: [String], correctAnswer: Int, explanation: String?, selectedAnswer: Int? = nil) {
+        self.question = question
+        self.options = options
+        self.correctAnswer = correctAnswer
+        self.explanation = explanation
+        self.selectedAnswer = selectedAnswer
+    }
+}
+
+/// Helper struct for course card content used by bubble views
+struct CourseCardContent {
+    let courseId: String
+    let title: String
+    let description: String?
+    let thumbnail: URL?
+    let duration: String?
+    
+    init(courseId: String, title: String, description: String?, thumbnail: URL?, duration: String?) {
+        self.courseId = courseId
+        self.title = title
+        self.description = description
+        self.thumbnail = thumbnail
+        self.duration = duration
+    }
+}
+
+/// Helper struct for poll content used by bubble views
+struct PollContent {
+    let question: String
+    let options: [String]
+    let votes: [Int]
+    
+    init(question: String, options: [String], votes: [Int]) {
+        self.question = question
+        self.options = options
+        self.votes = votes
+    }
+}
+
+/// Helper struct for rich card content used by bubble views
+struct RichCardContent {
+    let title: String
+    let body: String
+    let imageURL: URL?
+    let actions: [CardAction]?
+    
+    init(title: String, body: String, imageURL: URL?, actions: [CardAction]?) {
+        self.title = title
+        self.body = body
+        self.imageURL = imageURL
+        self.actions = actions
+    }
+}

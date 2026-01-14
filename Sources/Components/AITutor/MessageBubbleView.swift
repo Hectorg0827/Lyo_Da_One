@@ -285,6 +285,7 @@ struct PremiumActionPillButton: View {
     private func iconForAction(_ type: MessageAction.ActionType) -> String {
         switch type {
         case .createCourse: return "plus.circle.fill"
+        case .createCourseA2A: return "cpu.fill"  // A2A multi-agent icon
         case .quizMe: return "questionmark.circle.fill"
         case .addToLibrary: return "bookmark.fill"
         case .openDrawer: return "square.grid.2x2.fill"

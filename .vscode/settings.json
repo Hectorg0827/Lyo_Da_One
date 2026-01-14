@@ -1,0 +1,40 @@
+{
+    "cmake.sourceDirectory": "/Users/hectorgarcia/LYO_Da_ONE/.build/checkouts/firebase-ios-sdk",
+    
+    // Swift/iOS Development Settings
+    "swift.path": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+    "swift.buildPath": "${workspaceFolder}/.build",
+    "swift.diagnostics": false,
+    
+    // SourceKit-LSP Configuration for iOS
+    "sourcekit-lsp.serverPath": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp",
+    "sourcekit-lsp.serverArguments": [
+        "-Xswiftc", "-sdk",
+        "-Xswiftc", "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk",
+        "-Xswiftc", "-target",
+        "-Xswiftc", "arm64-apple-ios17.0-simulator"
+    ],
+    
+    // Disable VS Code's default Swift diagnostics (use Xcode instead)
+    "swift.autoGenerateLaunchConfigurations": false,
+    "swift.backgroundCompilation": false,
+    
+    // File associations
+    "files.associations": {
+        "*.swift": "swift"
+    },
+    
+    // Exclude build artifacts from search
+    "search.exclude": {
+        "**/build/**": true,
+        "**/.build/**": true,
+        "**/DerivedData/**": true,
+        "**/*.xcodeproj/**": true,
+        "**/Pods/**": true
+    },
+    
+    // Python settings for backend folder (if opened)
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/../LyoBackendJune"
+    ]
+}

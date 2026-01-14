@@ -240,7 +240,6 @@ class CreateViewModel: ObservableObject {
         progress = 0.3
         
         // Upload video to storage
-        let videoData = try Data(contentsOf: videoURL)
         let videoAttachment = try await repository.uploadFile(url: videoURL)
         
         progress = 0.6
@@ -450,3 +449,4 @@ enum CreateError: LocalizedError {
         }
     }
 }
+

@@ -28,11 +28,11 @@ struct AppConfig {
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "http://localhost:8000"
             }
-            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
+            return "https://lyo-backend-830162750094.us-central1.run.app"
         case .staging:
-            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
+            return "https://lyo-backend-830162750094.us-central1.run.app"
         case .production:
-            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
+            return "https://lyo-backend-830162750094.us-central1.run.app"
         }
     }
     
@@ -79,11 +79,11 @@ struct AppConfig {
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "ws://localhost:8000/ws"
             }
-            return "wss://lyo-backend-production-830162750094.us-central1.run.app/ws"
+            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
         case .staging:
-            return "wss://lyo-backend-production-830162750094.us-central1.run.app/ws"
+            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
         case .production:
-            return "wss://lyo-backend-production-830162750094.us-central1.run.app/ws"
+            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
         }
     }
 

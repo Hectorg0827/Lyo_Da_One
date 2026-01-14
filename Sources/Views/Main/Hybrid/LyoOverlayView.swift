@@ -8,9 +8,8 @@ struct LyoOverlayView: View {
     @EnvironmentObject var viewModel: LyoAIViewModel
     
     @State private var animationState: AnimationState = .initial
-    // Local copy of thinking state for animation timing if needed, OR map to viewModel.isLoading
-    // Keeping isThinking to allow for smooth transitions/animations separate from logic
-    @State private var isThinking = false 
+    @State private var isThinking = false
+    @State private var showGreeting = false
     
     enum AnimationState {
         case initial // At tab bar position
@@ -78,6 +77,25 @@ struct LyoOverlayView: View {
                             }
                         }
                     } else {
+                        Spacer()
+                        
+                        // Greeting Text
+                        if animationState == .active && showGreeting {
+                            VStack(spacing: 12) {
+                                Text(greetingText)
+                                    .font(.system(size: 28, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+                                    .transition(.opacity.combined(with: .scale))
+                                
+                                Text("I'm here to help you learn")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .transition(.opacity)
+                            }
+                            .padding(.bottom, 40)
+                        }
+                        
                         Spacer()
                     }
                     
@@ -159,7 +177,21 @@ struct LyoOverlayView: View {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
                 animationState = .active
             }
+            
+            // Show greeting after avatar animation completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    showGreeting = true
+                }
+            }
         }
+    }
+    
+    private var greetingText: String {
+        // Try to get user's first name from auth service or profile
+        // For now, using a friendly generic greeting
+        // TODO: Wire up to AuthService to get actual user name
+        return "Hello!" // Will be "Hello, [Name]!" when auth is wired
     }
     
     private func close() {
@@ -185,14 +217,15 @@ struct LyoOverlayView: View {
         Task {
             await viewModel.sendMessage()
             
-            await MainActor.run {
-                withAnimation {
-                    isThinking = false
-                    // Transition to chatting state if not already
-                    if animationState == .active {
-                        animationState = .chatting
+                await MainActor.run {
+                    withAnimation {
+                        isThinking = false
+                        showGreeting = false // Hide greeting when transitioning to chat
+                        // Transition to chatting state if not already
+                        if animationState == .active {
+                            animationState = .chatting
+                        }
                     }
-                }
                 
                 // Haptic: Response Received
                 let responseGenerator = UINotificationFeedbackGenerator()
@@ -234,6 +267,22 @@ struct HybridInputBar: View {
                 TextField("Ask Lyo...", text: $text)
                     .foregroundColor(.white)
                     .onSubmit(onSubmit)
+                
+                // Create Course Button (Hidden when typing)
+                if text.isEmpty {
+                    Button(action: {
+                        text = "Create a course"
+                        onSubmit()
+                    }) {
+                        Image(systemName: "book.fill")
+                            .font(.body)
+                            .foregroundColor(.white.opacity(0.8))
+                            .padding(8)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .transition(.scale)
+                }
                 
                 if !text.isEmpty {
                     Button(action: onSubmit) {
