@@ -82,24 +82,29 @@ struct EnhancedChatInputBar: View {
             }
             
             // Main Input Container
-            VStack(spacing: 12) {
-                // Input Row
+            VStack(spacing: 16) {
+                // Row 1: Text Input + Voice/Send Buttons
                 HStack(alignment: .bottom, spacing: 12) {
-                    // Attachment Button (+)
-                    attachmentButton
-                    
-                    // Text Input Area
+                    // Text Input Area (Expanded text bar)
                     textInputArea
                     
-                    // Voice Buttons
+                    // Voice & Send Buttons
                     voiceButtonsStack
+                        .padding(.bottom, 6) // Align with text field
                 }
                 
-                // Mode Selector Bar
-                modeSelectorBar
+                // Row 2: Attachment (+) + Mode Selector
+                HStack(spacing: 16) {
+                    attachmentButton
+                    
+                    modeSelectorBar
+                    
+                    Spacer()
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 20) // Extra bottom padding for safety
             .background(inputBackground)
         }
         .photosPicker(
@@ -240,25 +245,32 @@ struct EnhancedChatInputBar: View {
     // MARK: - Text Input Area
     
     private var textInputArea: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Placeholder label (shows when empty)
-            if text.isEmpty && !isTextFieldFocused {
-                Text(selectedMode.placeholder)
-                    .font(.title3.weight(.semibold))
-                    .foregroundColor(.primary)
-                    .transition(.opacity)
+        HStack(alignment: .bottom, spacing: 0) {
+            ZStack(alignment: .leading) {
+                // Placeholder
+                if text.isEmpty && !isTextFieldFocused {
+                    Text(selectedMode.placeholder)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .transition(.opacity)
+                }
+                
+                // Text field
+                TextField("", text: $text, axis: .vertical)
+                    .lineLimit(1...6)
+                    .focused($isTextFieldFocused)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                    .disabled(isVoiceModeActive)
             }
-            
-            // Text field
-            TextField("", text: $text, axis: .vertical)
-                .lineLimit(1...4)
-                .focused($isTextFieldFocused)
-                .textFieldStyle(.plain)
-                .font(.body)
-                .disabled(isVoiceModeActive)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(minHeight: 52)
+        .background(
+            RoundedRectangle(cornerRadius: 26)
+                .fill(Color(.secondarySystemBackground))
+        )
     }
     
     // MARK: - Voice Buttons Stack
@@ -319,48 +331,40 @@ struct EnhancedChatInputBar: View {
     // MARK: - Mode Selector Bar
     
     private var modeSelectorBar: some View {
-        HStack(spacing: 12) {
-            // Mode picker
-            Menu {
-                ForEach(AIChatMode.allCases) { mode in
-                    Button {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedMode = mode
-                        }
-                        HapticManager.shared.playLightImpact()
-                    } label: {
-                        Label(mode.rawValue, systemImage: mode.icon)
+        Menu {
+            ForEach(AIChatMode.allCases) { mode in
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedMode = mode
                     }
+                    HapticManager.shared.playLightImpact()
+                } label: {
+                    Label(mode.rawValue, systemImage: mode.icon)
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: selectedMode.icon)
-                        .font(.caption)
-                    Text(selectedMode.rawValue)
-                        .font(.caption.weight(.medium))
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
-                }
-                .foregroundColor(.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray6))
-                .clipShape(Capsule())
             }
-            
-            Spacer()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: selectedMode.icon)
+                    .font(.caption)
+                Text(selectedMode.rawValue)
+                    .font(.caption.weight(.medium))
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+            .foregroundColor(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8) // Slightly taller
+            .background(Color(.systemGray6))
+            .clipShape(Capsule())
         }
     }
     
     // MARK: - Input Background
     
     private var inputBackground: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .overlay(
-                Rectangle()
-                    .fill(Color(.systemBackground).opacity(0.95))
-            )
+        // Solid background based on color mode (systemBackground)
+        Color(.systemBackground)
+            .ignoresSafeArea()
             .overlay(
                 Rectangle()
                     .fill(Color(.systemGray5).opacity(0.3))

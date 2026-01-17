@@ -27,7 +27,7 @@ class AICommandHandler: ObservableObject {
     /// Process an AI response and return displayable text (or trigger navigation)
     /// Returns: Text to display in chat (empty if command was handled)
     func processResponse(_ responseText: String) -> (displayText: String, wasCommand: Bool) {
-        let parsed = AIResponseParser.parse(responseText)
+        let parsed = AICommandParser.parse(responseText)
         
         switch parsed {
         case .chat(let text):
@@ -66,12 +66,10 @@ class AICommandHandler: ObservableObject {
         
         print("🎓 Opening AI Classroom for: \(course.title)")
         
-        // Store the course details for navigation
-        self.pendingClassroomCourse = course
-        self.pendingStackItem = payload?.stackItem
-        
-        // Trigger navigation
-        self.shouldOpenClassroom = true
+        // Use the CourseOrchestrator for robust, optimistic creation
+        Task {
+            await CourseOrchestrator.shared.execute(proposal: course)
+        }
         
         // Also add to stack if provided
         if let stackItem = payload?.stackItem {
@@ -80,14 +78,14 @@ class AICommandHandler: ObservableObject {
             }
         }
         
-        // Return confirmation message (will be displayed while navigating)
+        // Return confirmation message
         let confirmationMessage = """
-        🎓 Perfect! I'm setting up your **\(course.title)** course now!
+        🎓 Fantastic! I'm weaving together your **\(course.title)** course right now.
         
-        **What you'll learn:**
+        **Curriculum:**
         \(course.objectives.prefix(3).map { "• \($0)" }.joined(separator: "\n"))
         
-        Opening the AI Classroom...
+        Opening the classroom...
         """
         
         return (confirmationMessage, true)
@@ -158,3 +156,4 @@ class AICommandHandler: ObservableObject {
         shouldOpenClassroom = false
     }
 }
+

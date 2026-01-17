@@ -3,6 +3,10 @@ import SwiftUI
 struct ClassroomView: View {
     @StateObject private var viewModel = ClassroomViewModel()
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var uiStackStore: UIStackStore
+    @EnvironmentObject var uiState: AppUIState
+    @EnvironmentObject var aiViewModel: LyoAIViewModel
+    
     let sessionId: String
     
     // Tutor Mode state
@@ -142,7 +146,50 @@ struct ClassroomView: View {
                             .foregroundColor(Color("LyoTextSecondary"))
                     }
                 }
+                
+                // MAIN AI ASSISTANT OVERLAY
+                VStack {
+                    HStack {
+                        Spacer()
+                        // Sparkle Button
+                        Button(action: {
+                            HapticManager.shared.light()
+                            // Set context
+                            if let session = viewModel.session {
+                                let module = session.modules[viewModel.currentModuleIndex]
+                                uiState.lioContextHint = "Learning: \(module.title)"
+                            } else {
+                                uiState.lioContextHint = "In Classroom"
+                            }
+                            uiState.isLioChatPresented = true
+                        }) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color(hex: "8B5CF6"), Color(hex: "6366F1")],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                                .shadow(color: Color(hex: "8B5CF6").opacity(0.5), radius: 8, x: 0, y: 0)
+                        }
+                        .padding(.top, 24)
+                        .padding(.trailing, 24)
+                    }
+                    Spacer()
+                }
             }
+        }
+        .sheet(isPresented: $uiState.isLioChatPresented) {
+            LioChatSheet(isPresented: $uiState.isLioChatPresented)
         }
         .sheet(isPresented: $isTutorModePresented) {
             if let session = viewModel.session {

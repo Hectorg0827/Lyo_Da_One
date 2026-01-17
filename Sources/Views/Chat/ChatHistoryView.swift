@@ -128,7 +128,7 @@ struct ChatHistoryView: View {
     // MARK: - Actions
     
     private func createNewChat() {
-        let newConversation = conversationManager.createNewConversation()
+        _ = conversationManager.createNewConversation()
         onNewChat()
         dismiss()
     }

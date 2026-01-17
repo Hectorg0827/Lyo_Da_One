@@ -13,6 +13,9 @@ struct EnhancedMessageBubble: View {
     let onTTSToggle: (() -> Void)?
     let onQuizAnswer: ((Int) -> Void)?
     let onCourseOpen: ((String) -> Void)?
+    let onTopicSelect: ((TopicOption) -> Void)?
+    let onModuleSelect: ((CourseModule) -> Void)?
+    let onSuggestionSelect: ((String) -> Void)?
     
     @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
@@ -22,12 +25,18 @@ struct EnhancedMessageBubble: View {
         message: MultimodalMessage,
         onTTSToggle: (() -> Void)? = nil,
         onQuizAnswer: ((Int) -> Void)? = nil,
-        onCourseOpen: ((String) -> Void)? = nil
+        onCourseOpen: ((String) -> Void)? = nil,
+        onTopicSelect: ((TopicOption) -> Void)? = nil,
+        onModuleSelect: ((CourseModule) -> Void)? = nil,
+        onSuggestionSelect: ((String) -> Void)? = nil
     ) {
         self.message = message
         self.onTTSToggle = onTTSToggle
         self.onQuizAnswer = onQuizAnswer
         self.onCourseOpen = onCourseOpen
+        self.onTopicSelect = onTopicSelect
+        self.onModuleSelect = onModuleSelect
+        self.onSuggestionSelect = onSuggestionSelect
     }
     
     var body: some View {
@@ -42,26 +51,97 @@ struct EnhancedMessageBubble: View {
     
     // MARK: - AI Message View (Full Width, Gemini Style)
     
+    // MARK: - AI Message View (Full-Width Stream)
+    
     private var aiMessageView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Avatar at top-left
-            HStack(spacing: 12) {
-                avatarView
-                    .padding(.leading, 16)
-                
-                Spacer()
-            }
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+        HStack(alignment: .top, spacing: 16) {
+            // Avatar (Small, floating left of content)
+            avatarView
+                .frame(width: 32, height: 32)
+                .padding(.top, 4) // Align with first line of text
             
             // Full-width content area
             VStack(alignment: .leading, spacing: 12) {
-                // Main text content
-                Text(LocalizedStringKey(message.content))
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Iterate over content types
+                ForEach(message.contentTypes.indices, id: \.self) { index in
+                    let contentType = message.contentTypes[index]
+                    
+                    switch contentType {
+                    case .text:
+                        if !message.content.isEmpty {
+                            Text(LocalizedStringKey(message.content))
+                                .font(.body)
+                                .foregroundColor(.primary) // White in dark mode
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true) // Ensure wraps correctly
+                        }
+                        
+                    case .processing(let step, let progress):
+                        ProcessingBubbleView(step: step, progress: progress)
+                        
+                    case .topicSelection(let title, let topics):
+                        TopicSelectionBubbleView(
+                            title: title,
+                            topics: topics,
+                            onSelect: { topic in
+                                onTopicSelect?(topic)
+                            }
+                        )
+                        .padding(.horizontal, -8) // Slight bleed
+                        
+                    case .courseRoadmap(let title, let modules, let total, let completed):
+                        CourseRoadmapBubbleView(
+                            title: title,
+                            modules: modules,
+                            totalModules: total,
+                            completedModules: completed,
+                            onModuleSelect: { module in
+                                onModuleSelect?(module)
+                            }
+                        )
+                        
+                    case .flashcards(let title, let cards):
+                        FlashcardCarouselBubbleView(
+                            title: title,
+                            cards: cards
+                        )
+                        .padding(.horizontal, -8)
+                        
+                    case .quiz(let question, let options, let correctIndex, let explanation):
+                        InteractiveQuizBubbleView(
+                            question: question,
+                            options: options,
+                            correctIndex: correctIndex,
+                            explanation: explanation,
+                            onAnswerSelected: { index in
+                                onQuizAnswer?(index)
+                            }
+                        )
+                        
+                    case .courseCard(let courseId, let title, let subtitle, _):
+                         Button {
+                             onCourseOpen?(courseId)
+                         } label: {
+                             VStack(alignment: .leading) {
+                                 Text(title).font(.headline)
+                                 if let subtitle { Text(subtitle).font(.caption) }
+                             }
+                             .padding()
+                             .frame(maxWidth: .infinity, alignment: .leading)
+                             .background(Color(.secondarySystemBackground))
+                             .cornerRadius(12)
+                         }
+                    
+                    case .suggestions(let title, let options):
+                        InlineSuggestionsView(title: title, options: options) { selected in
+                            onSuggestionSelect?(selected)
+                        }
+                         
+                    default:
+                        EmptyView()
+                    }
+                }
                 
                 // Attachments
                 if !message.attachments.isEmpty {
@@ -71,8 +151,8 @@ struct EnhancedMessageBubble: View {
                 // Message footer with TTS and timestamp
                 HStack(spacing: 12) {
                     Text(message.timestamp, style: .time)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                     
                     Spacer()
                     
@@ -80,14 +160,12 @@ struct EnhancedMessageBubble: View {
                     ttsButton
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
+        .padding(.horizontal, 16) // "Internal padding of 16px"
+        .padding(.vertical, 8)    // "Minimal vertical spacing"
+        .frame(maxWidth: .infinity) // "Width: 99% to 100%"
         .background(
-            Color(.systemBackground)
-                .overlay(
-                    Color(.systemGray6).opacity(0.3)
-                )
+            Color(hex: "181818").opacity(0.3) // "Transparent or extremely subtle dark overlay"
         )
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
@@ -225,23 +303,24 @@ struct EnhancedMessageBubble: View {
     VStack(spacing: 16) {
         EnhancedMessageBubble(
             message: MultimodalMessage(
-                id: UUID(),
+                id: UUID().uuidString,
                 role: .assistant,
                 content: "Here's a comprehensive explanation of SwiftUI. SwiftUI is Apple's modern framework for building user interfaces across all Apple platforms. It uses a declarative syntax that makes it easy to create complex UIs with less code.",
-                timestamp: Date(),
-                attachments: []
+                attachments: [],
+                timestamp: Date()
             )
         )
         
         EnhancedMessageBubble(
             message: MultimodalMessage(
-                id: UUID(),
+                id: UUID().uuidString,
                 role: .user,
                 content: "Tell me about SwiftUI",
-                timestamp: Date(),
-                attachments: []
+                attachments: [],
+                timestamp: Date()
             )
         )
     }
     .padding()
 }
+

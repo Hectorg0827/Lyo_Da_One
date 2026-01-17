@@ -35,7 +35,7 @@ final class A2ACourseAgent {
             
             // 2. Verify course_generation skill exists
             guard agentCard.skills.contains(where: { $0.id == "course_generation" }) else {
-                throw A2AError.skillNotSupported("course_generation")
+                throw A2ATaskError.skillNotSupported("course_generation")
             }
             
             onProgress("Connecting to course agent...", 0.1)
@@ -97,7 +97,7 @@ final class A2ACourseAgent {
                             onComplete(.failure(error))
                         }
                     } else {
-                        onComplete(.failure(A2AError.taskFailed("Course generation incomplete")))
+                        onComplete(.failure(A2ATaskError.taskFailed("Course generation incomplete")))
                     }
                 }
             )
@@ -109,10 +109,10 @@ final class A2ACourseAgent {
     
     // MARK: - Parse Course from A2A Artifacts
     
-    private func parseCourseFromArtifacts(_ artifacts: [A2AArtifact], topic: String) throws -> GeneratedCourseResponse {
+    private func parseCourseFromArtifacts(_ artifacts: [A2ATaskArtifact], topic: String) throws -> GeneratedCourseResponse {
         // Find the course artifact
         guard let courseArtifact = artifacts.first(where: { $0.name == "course" || $0.name == "generated_course" }) else {
-            throw A2AError.invalidResponse
+            throw A2ATaskError.invalidResponse
         }
         
         // Extract JSON data from artifact parts
@@ -131,7 +131,7 @@ final class A2ACourseAgent {
             }
         }
         
-        throw A2AError.invalidResponse
+        throw A2ATaskError.invalidResponse
     }
     
     // MARK: - Collaborate with External Agent
@@ -146,7 +146,7 @@ final class A2ACourseAgent {
         let agentCard = try await agentCardService.discoverAgent(at: agentURL)
         
         guard agentCard.skills.contains(where: { $0.id == skill }) else {
-            throw A2AError.skillNotSupported(skill)
+            throw A2ATaskError.skillNotSupported(skill)
         }
         
         // Send the task

@@ -20,6 +20,9 @@ struct LyoMessage: Identifiable, Codable {
     var actions: [MessageAction]?
     var status: MessageStatus?
     
+    // A2UI Widget Content Types (parsed from backend)
+    var contentTypes: [MessageContentType]? = nil
+    
     // New fields for Mentor Mode
     var responseMode: ResponseMode?
     var quickExplainer: QuickExplainerData?

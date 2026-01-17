@@ -6,10 +6,13 @@ struct LyoOverlayView: View {
     var startFrame: CGRect // The frame of the tab bar button
     
     @EnvironmentObject var viewModel: LyoAIViewModel
+    @ObservedObject var conversationManager = ConversationManager.shared
     
     @State private var animationState: AnimationState = .initial
     @State private var isThinking = false
     @State private var showGreeting = false
+    @State private var showHistory = false
+    @State private var selectedMode: ChatMode = .chat
     
     enum AnimationState {
         case initial // At tab bar position
@@ -61,14 +64,24 @@ struct LyoOverlayView: View {
                             ScrollView {
                                 VStack(spacing: 16) {
                                     ForEach(viewModel.messages) { message in
-                                        ChatBubbleView(message: message)
-                                            .id(message.id)
+                                        // Convert LyoMessage to MultimodalMessage for A2UI widgets
+                                        EnhancedMessageBubble(
+                                            message: MultimodalMessage(from: message),
+                                            onTTSToggle: nil,
+                                            onQuizAnswer: nil,
+                                            onCourseOpen: { id in
+                                                viewModel.openCourse(id: id)
+                                            },
+                                            onTopicSelect: nil,
+                                            onModuleSelect: nil
+                                        )
+                                        .id(message.id)
                                     }
                                 }
                                 .padding(.top, 60) // Space for header/back button
                                 .padding(.bottom, 20) // Minimal space before input
                             }
-                            .onChange(of: viewModel.messages.count) {
+                            .onChange(of: viewModel.messages.count) { _, _ in
                                 if let lastId = viewModel.messages.last?.id {
                                     withAnimation {
                                         proxy.scrollTo(lastId, anchor: .bottom)
@@ -119,6 +132,7 @@ struct LyoOverlayView: View {
                     if animationState != .initial {
                         // Input Bar
                         // Input Bar
+                        // Input Bar (Docked Console)
                         HybridInputBar(
                             text: $viewModel.inputText,
                             isListening: Binding(
@@ -127,12 +141,13 @@ struct LyoOverlayView: View {
                                     if active { viewModel.startListening() } else { viewModel.stopListening() }
                                 }
                             ),
+                            selectedMode: $selectedMode,
                             onSubmit: {
                                 submitText()
                             }
                         )
-                        .padding()
-                        .padding(.bottom, animationState == .chatting ? 0 : 20)
+                        // Removed .padding() to allow full width
+                        .padding(.bottom, 0) // Dock to bottom
                         .transition(.move(edge: .bottom))
                     }
                 }
@@ -155,18 +170,44 @@ struct LyoOverlayView: View {
                     .opacity((animationState == .chatting && !isThinking) ? 0 : 1)
                 }
                 
-                // Close Button (Top Right)
+                // Header Bar (Top)
                 if animationState != .initial {
                     VStack {
-                        HStack {
-                            Spacer()
-                            Button(action: close) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title)
-                                    .foregroundColor(.white.opacity(0.6))
+                        HStack(spacing: 16) {
+                            // History Button (Left)
+                            Button(action: { showHistory = true }) {
+                                Image(systemName: "list.bullet")
+                                    .font(.title3)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(Circle())
                             }
-                            .padding()
+                            
+                            Spacer()
+                            
+                            // New Chat Button
+                            Button(action: createNewChat) {
+                                Image(systemName: "square.and.pencil")
+                                    .font(.title3)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(Circle())
+                            }
+                            
+                            // Close Button (Right)
+                            Button(action: close) {
+                                Image(systemName: "xmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(Circle())
+                            }
                         }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                         Spacer()
                     }
                 }
@@ -184,6 +225,17 @@ struct LyoOverlayView: View {
                     showGreeting = true
                 }
             }
+        }
+        .sheet(isPresented: $showHistory) {
+            ChatHistoryView(
+                onSelectConversation: { conversation in
+                    // Load the selected conversation
+                    loadConversation(conversation)
+                },
+                onNewChat: {
+                    createNewChat()
+                }
+            )
         }
     }
     
@@ -203,6 +255,33 @@ struct LyoOverlayView: View {
         }
     }
     
+    private func createNewChat() {
+        _ = conversationManager.createNewConversation()
+        viewModel.messages.removeAll()
+        // Add welcome message
+        viewModel.messages.append(LyoMessage(
+            id: UUID().uuidString,
+            content: "Hello! I'm Lyo, your AI learning assistant. What would you like to learn today?",
+            isFromUser: false,
+            timestamp: Date()
+        ))
+        HapticManager.shared.playSuccess()
+    }
+    
+    private func loadConversation(_ conversation: SavedConversation) {
+        // Clear current messages and load from saved conversation
+        viewModel.messages.removeAll()
+        for message in conversation.messages {
+            viewModel.messages.append(LyoMessage(
+                id: UUID().uuidString,
+                content: message.content,
+                isFromUser: message.role == .user,
+                timestamp: message.timestamp
+            ))
+        }
+        conversationManager.loadConversation(conversation)
+    }
+    
     private func submitText() {
         guard !viewModel.inputText.isEmpty else { return }
         
@@ -215,7 +294,7 @@ struct LyoOverlayView: View {
         }
         
         Task {
-            await viewModel.sendMessage()
+            await viewModel.sendMessage(mode: selectedMode.rawValue)
             
                 await MainActor.run {
                     withAnimation {
@@ -231,6 +310,25 @@ struct LyoOverlayView: View {
                 let responseGenerator = UINotificationFeedbackGenerator()
                 responseGenerator.notificationOccurred(.success)
             }
+        }
+    }
+}
+
+// MARK: - Chat Mode Enum
+enum ChatMode: String, CaseIterable {
+    case chat = "Chat"
+    case study = "Study"
+    case course = "Course"
+    case quiz = "Quiz"
+    case tutor = "Tutor"
+    
+    var icon: String {
+        switch self {
+        case .chat: return "bubble.left.fill"
+        case .study: return "book.fill"
+        case .course: return "graduationcap.fill"
+        case .quiz: return "checkmark.circle.fill"
+        case .tutor: return "person.fill.questionmark"
         }
     }
 }
@@ -258,54 +356,173 @@ struct LyoSuggestionChip: View {
 struct HybridInputBar: View {
     @Binding var text: String
     @Binding var isListening: Bool
+    @Binding var selectedMode: ChatMode
     var onSubmit: () -> Void
     
+    @State private var showModeSelector = false
+    @State private var showAttachments = false
+    
+    // Brand gradient colors
+    private let gradientColors = [Color(hex: "6366F1"), Color(hex: "8B5CF6")]
+    
     var body: some View {
-        HStack(spacing: 12) {
-            // Text Input with Send Button
-            HStack {
-                TextField("Ask Lyo...", text: $text)
-                    .foregroundColor(.white)
-                    .onSubmit(onSubmit)
+        // Docked Console Container
+        VStack(spacing: 0) {
+            // 1. Glowing Horizon Border
+            Rectangle()
+                .fill(
+                    LinearGradient(colors: gradientColors, startPoint: .leading, endPoint: .trailing)
+                )
+                .frame(height: 1)
+                .shadow(color: gradientColors[0].opacity(0.8), radius: 8, x: 0, y: -2) // Upward glow
+            
+            // 2. Control Row
+            HStack(spacing: 16) {
+                // "Ghost" Plus Button
+                Button(action: { showAttachments = true }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .light))
+                        .foregroundColor(.gray)
+                        .frame(width: 40, height: 40)
+                        .background(Color.clear) // Ghost style
+                        .contentShape(Rectangle())
+                }
                 
-                // Create Course Button (Hidden when typing)
-                if text.isEmpty {
-                    Button(action: {
-                        text = "Create a course"
-                        onSubmit()
-                    }) {
-                        Image(systemName: "book.fill")
-                            .font(.body)
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(8)
-                            .background(Color.white.opacity(0.1))
+                // Input Field & Mode
+                HStack(spacing: 8) {
+                    // Mode Selector (Minimalist)
+                    Button(action: { showModeSelector = true }) {
+                        HStack(spacing: 4) {
+                            Text(selectedMode.rawValue.prefix(1)) // Just first letter? Or icon?
+                                .font(.system(size: 12, weight: .bold))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .foregroundStyle(Color.white.opacity(0.7))
+                        .padding(6)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                    }
+                    .confirmationDialog("Select Mode", isPresented: $showModeSelector) {
+                        ForEach(ChatMode.allCases, id: \.self) { mode in
+                            Button {
+                                selectedMode = mode
+                            } label: {
+                                Label(mode.rawValue, systemImage: mode.icon)
+                            }
+                        }
+                    }
+                    
+                    TextField("Command or ask...", text: $text)
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, design: .monospaced)) // Terminal feel
+                        .onSubmit(onSubmit)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(hex: "1A1A1A"))
+                .cornerRadius(12)
+                
+                // Mic / Send Button
+                if !text.isEmpty {
+                    // Send Button
+                    Button(action: onSubmit) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
                             .clipShape(Circle())
                     }
-                    .transition(.scale)
+                } else {
+                    // Mic Button (Gradient)
+                    Button(action: { isListening.toggle() }) {
+                        Image(systemName: isListening ? "waveform" : "mic.fill")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
+                            .clipShape(Circle())
+                            .shadow(color: gradientColors[0].opacity(0.3), radius: 5)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8) // Internal padding
+        }
+        .background(Color(hex: "0E0E0E").ignoresSafeArea(edges: .bottom)) // Matte Black, flush to bottom
+        .clipShape(CustomRoundedCorner(radius: 24, corners: [.topLeft, .topRight]))
+        // .padding(.bottom, 20) -> Handled by parent or safe area
+        .sheet(isPresented: $showAttachments) {
+            AttachmentPickerSheet()
+        }
+    }
+}
+
+// Helper Shape (since iOS 16 doesn't fully expose UnevenRoundedRectangle in all contexts without check)
+struct CustomRoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
+// MARK: - Attachment Picker Sheet
+
+struct AttachmentPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                Button {
+                    // Camera action
+                    dismiss()
+                } label: {
+                    Label("Camera", systemImage: "camera.fill")
                 }
                 
-                if !text.isEmpty {
-                    Button(action: onSubmit) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(Color(hex: "FF8C00"))
-                    }
-                    .transition(.scale.combined(with: .opacity))
+                Button {
+                    // Photo library action
+                    dismiss()
+                } label: {
+                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                }
+                
+                Button {
+                    // Document action
+                    dismiss()
+                } label: {
+                    Label("Document", systemImage: "doc.fill")
+                }
+                
+                Button {
+                    // Link action
+                    dismiss()
+                } label: {
+                    Label("Paste Link", systemImage: "link")
                 }
             }
-            .padding()
-            .background(Color.black.opacity(0.3))
-            .cornerRadius(25)
-            
-            // Mic Button (Smaller)
-            Button(action: { isListening.toggle() }) {
-                Image(systemName: isListening ? "waveform" : "mic.fill")
-                    .font(.body) // Smaller font
-                    .foregroundColor(.white)
-                    .padding(10) // Smaller padding
-                    .background(Color(hex: "FF8C00"))
-                    .clipShape(Circle())
+            .navigationTitle("Add Attachment")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") { dismiss() }
+                }
             }
         }
+        .presentationDetents([.height(280)])
     }
 }

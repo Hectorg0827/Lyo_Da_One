@@ -265,3 +265,79 @@ struct QuickActionsBar: View {
     }
     .padding()
 }
+
+// MARK: - Inline Suggestions View (A2UI)
+/// Renders suggestions directly inline within a message bubble
+/// Used by EnhancedMessageBubble for .suggestions content type
+
+struct InlineSuggestionsView: View {
+    let title: String
+    let options: [String]
+    let onSelect: (String) -> Void
+    
+    @State private var appeared = false
+    
+    private func iconForOption(_ option: String) -> String {
+        let lowered = option.lowercased()
+        if lowered.contains("course") { return "plus.circle" }
+        if lowered.contains("quiz") { return "brain" }
+        if lowered.contains("example") { return "lightbulb" }
+        if lowered.contains("more") { return "text.bubble" }
+        if lowered.contains("explain") { return "questionmark.circle" }
+        if lowered.contains("help") { return "lifepreserver" }
+        return "sparkles"
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Title
+            if !title.isEmpty {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.secondary)
+            }
+            
+            // Horizontal scrollable chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                        Button {
+                            HapticManager.shared.playSelection()
+                            onSelect(option)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: iconForOption(option))
+                                    .font(.caption)
+                                Text(option)
+                                    .font(.subheadline)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18)
+                                    .fill(Color(.systemGray6))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18)
+                                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .foregroundColor(.primary)
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 10)
+                        .animation(
+                            .spring(response: 0.4, dampingFraction: 0.7)
+                                .delay(Double(index) * 0.08),
+                            value: appeared
+                        )
+                    }
+                }
+            }
+        }
+        .onAppear {
+            appeared = true
+        }
+    }
+}
+

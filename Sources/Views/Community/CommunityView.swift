@@ -144,24 +144,26 @@ struct CommunityGoogleStyleMap: View {
     @ObservedObject var viewModel: CommunityViewModel
     
     var body: some View {
-        Map(coordinateRegion: $viewModel.region, annotationItems: viewModel.beacons) { beacon in
-            MapAnnotation(coordinate: beacon.coordinate) {
-                // Interactive Beacon Pin
-                Button(action: {
-                    // Selection logic could go here
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(beacon.type.color)
-                            .frame(width: 30, height: 30)
-                            .shadow(radius: 2)
-                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                        
-                        Image(systemName: beacon.type.icon)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
+        Map(position: $viewModel.mapCameraPosition) {
+            ForEach(viewModel.beacons) { beacon in
+                Annotation(beacon.title, coordinate: beacon.coordinate) {
+                    // Interactive Beacon Pin
+                    Button(action: {
+                        // Selection logic could go here
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(beacon.type.color)
+                                .frame(width: 30, height: 30)
+                                .shadow(radius: 2)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                            
+                            Image(systemName: beacon.type.icon)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .scaleEffect(1.0) // Animation hook
                     }
-                    .scaleEffect(1.0) // Animation hook
                 }
             }
         }

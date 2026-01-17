@@ -11,10 +11,10 @@ import SwiftUI
 /// Represents a saved conversation
 struct SavedConversation: Identifiable, Codable {
     let id: String
-    let title: String
-    let lastMessagePreview: String
-    let lastUpdated: Date
-    let messageCount: Int
+    var title: String
+    var lastMessagePreview: String
+    var lastUpdated: Date
+    var messageCount: Int
     var messages: [MultimodalMessage]
     
     init(
@@ -83,11 +83,11 @@ class ConversationManager: ObservableObject {
         
         // Add welcome message
         let welcomeMessage = MultimodalMessage(
-            id: UUID(),
+            id: UUID().uuidString,
             role: .assistant,
             content: "Hello! I'm Lyo, your AI learning assistant. I can help you with courses, studying, quizzes, tutoring, and more. What would you like to learn today?",
-            timestamp: Date(),
-            attachments: []
+            attachments: [],
+            timestamp: Date()
         )
         
         var newConv = conversation

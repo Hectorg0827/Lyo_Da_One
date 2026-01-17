@@ -540,7 +540,7 @@ enum Endpoints {
             switch self {
             case .createSession: return "/api/v1/gen-curriculum/generate"
             case .getSession(let id): return "/api/v1/gen-curriculum/\(id)"
-            case .interruptSession(let id, _): return "/api/v1/ai-study/chat"
+            case .interruptSession(_, _): return "/api/v1/ai-study/chat"
             case .saveCheckpoint(_, _): return "/api/v1/analytics/event"
             case .getCourses: return "/api/v1/learning/courses"
             case .getCourse(let id): return "/api/v1/learning/courses/\(id)"
@@ -971,7 +971,7 @@ enum Endpoints {
             case .deleteListing(let id): return "/api/v1/community/marketplace/\(id)"
 
             // Beacons & Questions
-            case .getBeacons: return "/api/v1/community/map/beacons"
+            case .getBeacons: return "/api/v1/community/beacons"
             case .createQuestion: return "/api/v1/community/questions"
             case .answerQuestion(let id, _): return "/api/v1/community/questions/\(id)/answers"
 
@@ -1461,7 +1461,7 @@ enum Endpoints {
             case .getComments(let id, _, _): return "/api/v1/posts/\(id)/comments"
             case .addComment(let id, _, _): return "/api/v1/posts/\(id)/comments"
             case .deleteComment(let pid, let cid): return "/api/v1/posts/\(pid)/comments/\(cid)"
-            case .followUser(let id): return "/api/v1/follow"
+            case .followUser(_): return "/api/v1/follow"
             case .unfollowUser(let id): return "/api/v1/follow/\(id)"
             case .getFollowers(let id, _, _): return "/api/v1/users/\(id)/followers"
             case .getFollowing(let id, _, _): return "/api/v1/users/\(id)/following"

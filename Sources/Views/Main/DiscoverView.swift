@@ -67,6 +67,8 @@ struct DiscoverView: View {
                     lessonTitle: "Lesson"
                 )
                 .environmentObject(uiStackStore)
+                .environmentObject(uiState)
+                .environmentObject(lyoAIViewModel)
             }
         }
         .sheet(isPresented: $showLioChat) {

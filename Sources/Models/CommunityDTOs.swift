@@ -3,8 +3,14 @@ import Foundation
 /// DTOs matching the actual Backend JSON response for Community features
 /// These differ from the Domain Models in Sources/Models/Community.swift (which expect nested User objects)
 
+struct APIUserPreview: Codable {
+    let id: Int
+    let name: String
+    let avatar: String?
+}
+
 struct APIStudyGroup: Codable, Identifiable {
-    let id: String
+    let id: Int
     let name: String
     let description: String
     let subject: String
@@ -18,12 +24,6 @@ struct APIStudyGroup: Codable, Identifiable {
     let tags: [String]
     let host: APIUserPreview
     
-    struct APIUserPreview: Codable {
-        let id: String
-        let name: String
-        let avatar: String?
-    }
-    
     enum CodingKeys: String, CodingKey {
         case id, name, description, subject
         case memberCount = "member_count"
@@ -36,32 +36,37 @@ struct APIStudyGroup: Codable, Identifiable {
 }
 
 struct APIEducationalEvent: Codable, Identifiable {
-    let id: String
+    let id: Int
     let title: String
     let description: String
     let date: Date
-    let durationMinutes: Int
+    let durationMinutes: Int?
     let locationName: String
     let lat: Double?
     let lng: Double?
-    let organizer: String
+    let organizerId: Int
     let imageURL: String?
-    let attendeesCount: Int
+    let attendeeCount: Int
     let cost: Double?
+    let roomId: String?
+    let organizerProfile: APIUserPreview?
     
     enum CodingKeys: String, CodingKey {
-        case id, title, description, date
+        case id, title, description, cost
+        case organizerId = "organizer_id"
+        case date = "start_time"
         case durationMinutes = "duration_minutes"
-        case locationName = "location_name"
-        case lat, lng, organizer
+        case locationName = "location"
+        case lat, lng
         case imageURL = "image_url"
-        case attendeesCount = "attendees_count"
-        case cost
+        case attendeeCount = "attendee_count"
+        case roomId = "room_id"
+        case organizerProfile = "organizer_profile"
     }
 }
 
 struct APIMarketplaceListing: Codable, Identifiable {
-    let id: String
+    let id: Int
     let title: String
     let description: String
     let price: Double
@@ -74,7 +79,9 @@ struct APIMarketplaceListing: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, title, description, price, currency
         case sellerAvatar = "seller_avatar"
-        case images, lat, lng
+        case images = "image_urls"
+        case lat = "latitude"
+        case lng = "longitude"
     }
 }
 

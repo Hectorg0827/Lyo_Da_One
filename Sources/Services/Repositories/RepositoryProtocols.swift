@@ -154,6 +154,37 @@ struct ChatResponse: Codable {
     let type: String?
     let openClassroomPayload: OpenClassroomPayload?
     
+    // A2UI Content
+    let contentTypes: [A2UIContent]?
+    
+    init(
+        response: String,
+        provider: String? = nil,
+        cost: Double? = nil,
+        tokens: Int? = nil,
+        cached: Bool? = nil,
+        responseMode: ResponseMode? = nil,
+        quickExplainer: QuickExplainerData? = nil,
+        courseProposal: CourseProposalData? = nil,
+        conversationHistory: [ChatMessageDTO]? = nil,
+        type: String? = nil,
+        openClassroomPayload: OpenClassroomPayload? = nil,
+        contentTypes: [A2UIContent]? = nil
+    ) {
+        self.response = response
+        self.provider = provider
+        self.cost = cost
+        self.tokens = tokens
+        self.cached = cached
+        self.responseMode = responseMode
+        self.quickExplainer = quickExplainer
+        self.courseProposal = courseProposal
+        self.conversationHistory = conversationHistory
+        self.type = type
+        self.openClassroomPayload = openClassroomPayload
+        self.contentTypes = contentTypes
+    }
+    
     // Handle both "response" and "content" from different backend endpoints
     enum CodingKeys: String, CodingKey {
         case response
@@ -168,6 +199,7 @@ struct ChatResponse: Codable {
         case responseMode = "response_mode"
         case quickExplainer = "quick_explainer"
         case courseProposal = "course_proposal"
+        case contentTypes = "content_types"
 
         // Chat module (camelCase)
         case responseModeCamel = "responseMode"
@@ -193,6 +225,9 @@ struct ChatResponse: Codable {
         } else {
             response = ""
         }
+        
+        // A2UI Content
+        contentTypes = try? container.decode([A2UIContent].self, forKey: .contentTypes)
         
         // Provider/cost/tokens are optional across endpoints
         if let providerValue = try? container.decode(String.self, forKey: .provider) {
@@ -258,19 +293,7 @@ struct ChatResponse: Codable {
         try container.encodeIfPresent(openClassroomPayload, forKey: .payload)
     }
     
-    init(response: String, provider: String?, cost: Double?, tokens: Int?, cached: Bool?, responseMode: ResponseMode? = nil, quickExplainer: QuickExplainerData? = nil, courseProposal: CourseProposalData? = nil, conversationHistory: [ChatMessageDTO]? = nil, type: String? = nil, openClassroomPayload: OpenClassroomPayload? = nil) {
-        self.response = response
-        self.provider = provider
-        self.cost = cost
-        self.tokens = tokens
-        self.cached = cached
-        self.responseMode = responseMode
-        self.quickExplainer = quickExplainer
-        self.courseProposal = courseProposal
-        self.conversationHistory = conversationHistory
-        self.type = type
-        self.openClassroomPayload = openClassroomPayload
-    }
+
 }
 
 struct ChatMessageDTO: Codable {

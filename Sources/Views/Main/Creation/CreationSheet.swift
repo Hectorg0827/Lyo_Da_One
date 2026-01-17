@@ -11,6 +11,7 @@ enum CreationOption {
 
 struct CreationSheet: View {
     @Binding var isPresented: Bool
+    @Binding var selectedOption: CreationOption
     let onOptionSelected: (CreationOption) -> Void
     
     var body: some View {
@@ -36,8 +37,10 @@ struct CreationSheet: View {
                         CreationOptionButton(
                             icon: "play.rectangle.fill",
                             label: "Discovery",
-                            color: .purple
+                            color: .purple,
+                            isSelected: selectedOption == .discovery
                         ) {
+                            selectedOption = .discovery
                             onOptionSelected(.discovery)
                         }
                         
@@ -45,8 +48,10 @@ struct CreationSheet: View {
                         CreationOptionButton(
                             icon: "clock.arrow.circlepath",
                             label: "Story",
-                            color: .orange
+                            color: .orange,
+                            isSelected: selectedOption == .story
                         ) {
+                            selectedOption = .story
                             onOptionSelected(.story)
                         }
                     }
@@ -56,8 +61,10 @@ struct CreationSheet: View {
                         CreationOptionButton(
                             icon: "square.and.pencil",
                             label: "Post",
-                            color: .blue
+                            color: .blue,
+                            isSelected: selectedOption == .post
                         ) {
+                            selectedOption = .post
                             onOptionSelected(.post)
                         }
                         
@@ -65,8 +72,10 @@ struct CreationSheet: View {
                         CreationOptionButton(
                             icon: "person.3.fill",
                             label: "Community",
-                            color: .green
+                            color: .green,
+                            isSelected: selectedOption == .community
                         ) {
+                            selectedOption = .community
                             onOptionSelected(.community)
                         }
                     }
@@ -99,6 +108,7 @@ struct CreationOptionButton: View {
     let icon: String
     let label: String
     let color: Color
+    let isSelected: Bool
     let action: () -> Void
     
     var body: some View {
@@ -108,6 +118,11 @@ struct CreationOptionButton: View {
                     Circle()
                         .fill(color.opacity(0.2))
                         .frame(width: 70, height: 70)
+                        .overlay(
+                            Circle()
+                                .stroke(color.opacity(isSelected ? 0.9 : 0.0), lineWidth: 2)
+                        )
+                        .shadow(color: color.opacity(isSelected ? 0.45 : 0.0), radius: isSelected ? 8 : 0)
                     
                     Image(systemName: icon)
                         .font(.system(size: 30))
@@ -119,6 +134,7 @@ struct CreationOptionButton: View {
                     .foregroundColor(.white)
             }
             .frame(width: 90)
+            .scaleEffect(isSelected ? 1.05 : 1.0)
         }
     }
 }
@@ -127,5 +143,5 @@ struct CreationOptionButton: View {
 
 
 #Preview {
-    CreationSheet(isPresented: .constant(true)) { _ in }
+    CreationSheet(isPresented: .constant(true), selectedOption: .constant(.discovery)) { _ in }
 }

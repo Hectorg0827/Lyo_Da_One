@@ -8,6 +8,7 @@
 import SwiftUI
 import AVFoundation
 import Photos
+import MapKit
 
 // MARK: - Creation Modes
 
@@ -126,7 +127,13 @@ class CreateViewModel: ObservableObject {
     
     private let repository = LyoRepository.shared
     private let courseService = CourseGenerationService.shared
+    private let network = NetworkClient.shared
     
+    // MARK: - Init
+    init(initialMode: CreateMode = .reel) {
+        self.selectedMode = initialMode
+    }
+
     // MARK: - Camera Permissions
     
     func checkCameraPermission() async -> Bool {
@@ -232,6 +239,15 @@ class CreateViewModel: ObservableObject {
     
     // MARK: - Publishing Implementation
     
+    private func buildLocation() -> Location {
+        let trimmed = eventLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isVirtual = trimmed.isEmpty
+        let name = isVirtual ? "Virtual" : trimmed
+        let type: Location.LocationType = isVirtual ? .virtual : .coordinates
+        let coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        return Location(type: type, name: name, coordinate: coordinate)
+    }
+
     private func publishReel() async throws {
         guard let videoURL = capturedVideoURL else {
             throw CreateError.missingContent
@@ -357,28 +373,74 @@ class CreateViewModel: ObservableObject {
             throw CreateError.missingContent
         }
         
-        progress = 0.5
+        progress = 0.4
         
-        // TODO: Create event via Community API
-        // For now, add placeholder to Stack
-        
-        progress = 1.0
-        
-        // Add to Stack
-        await addToStack(
-            type: isGroup ? .group : .event,
-            title: eventTitle,
-            subtitle: eventDescription
+        let organizer = User(
+            id: 0,
+            email: "",
+            name: "Me",
+            avatarURL: nil,
+            createdAt: Date(),
+            level: 1,
+            xp: 0,
+            streak: 0,
+            totalLessonsCompleted: 0,
+            achievements: []
         )
+        let location = buildLocation()
+        let description = eventDescription.isEmpty ? "Created via +" : eventDescription
+        
+        if isGroup {
+            let group = StudyGroup(
+                id: UUID().uuidString,
+                title: eventTitle,
+                description: description,
+                organizer: organizer,
+                location: location,
+                schedule: .oneTime(date: eventDate, duration: 3600),
+                maxAttendees: 10,
+                currentAttendees: [],
+                skillLevel: .beginner,
+                relatedCourse: nil,
+                cost: 0,
+                tags: [],
+                createdAt: Date(),
+                isVerified: false
+            )
+            let created: StudyGroup = try await network.request(Endpoints.Community.createStudyGroup(group: group))
+            progress = 1.0
+            await addToStack(type: .group, title: created.title, subtitle: created.description, refId: created.id)
+        } else {
+            let event = EducationalEvent(
+                id: UUID().uuidString,
+                title: eventTitle,
+                description: description,
+                organizer: organizer,
+                location: location,
+                dateTime: eventDate,
+                duration: 3600,
+                capacity: 50,
+                registeredUsers: [],
+                cost: 0,
+                skillLevel: .beginner,
+                category: .workshop,
+                tags: [],
+                coverImageURL: nil,
+                isVerified: false
+            )
+            let created: EducationalEvent = try await network.request(Endpoints.Community.createEvent(event: event))
+            progress = 1.0
+            await addToStack(type: .event, title: created.title, subtitle: created.description, refId: created.id)
+        }
     }
     
     // MARK: - Stack Integration
     
-    private func addToStack(type: StackItemType, title: String, subtitle: String) async {
+    private func addToStack(type: StackItemType, title: String, subtitle: String, refId: String = UUID().uuidString) async {
         do {
             let request = CreateStackItemRequest(
                 type: type,
-                refId: UUID().uuidString,
+                refId: refId,
                 tags: [subtitle],
                 contextData: ["title": title, "source": "create"]
             )

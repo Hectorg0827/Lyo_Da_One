@@ -28,6 +28,7 @@ struct LioChatResponse: Codable {
     let action: LioChatAction?
     let suggestions: [String]?
     let meta: [String: String]?
+    let contentTypes: [MessageContentType]?
     
     enum CodingKeys: String, CodingKey {
         case text
@@ -35,6 +36,16 @@ struct LioChatResponse: Codable {
         case action
         case suggestions
         case meta
+        case contentTypes
+    }
+    
+    init(text: String, source: String? = nil, action: LioChatAction? = nil, suggestions: [String]? = nil, meta: [String: String]? = nil, contentTypes: [MessageContentType]? = nil) {
+        self.text = text
+        self.source = source
+        self.action = action
+        self.suggestions = suggestions
+        self.meta = meta
+        self.contentTypes = contentTypes
     }
 }
 
@@ -74,7 +85,12 @@ struct LioGreetingResponse: Codable {
 
 @MainActor final class LioChatService {
     static let shared = LioChatService()
-    private init() {}
+    
+    private let networkClient: NetworkRequestable
+    
+    init(networkClient: NetworkRequestable = NetworkClient.shared) {
+        self.networkClient = networkClient
+    }
     
     private var baseURL: String { AppConfig.baseURL }
     private let tokenManager = TokenManager.shared
@@ -172,7 +188,7 @@ struct LioGreetingResponse: Codable {
         let payloadData = try jsonEncoder.encode(payload)
         let endpoint = Endpoints.ChatModule.sendMessage(payload: payloadData)
         
-        let backend: ChatResponse = try await NetworkClient.shared.request(endpoint)
+        let backend: ChatResponse = try await self.networkClient.request(endpoint)
         
         // 1. Check for Top-Level JSON Event (Ideal Case)
         if backend.type == "OPEN_CLASSROOM", let payload = backend.openClassroomPayload {
@@ -244,12 +260,51 @@ struct LioGreetingResponse: Codable {
             chatAction = LioChatAction(type: "open_classroom", parameters: params)
         }
         
+        // Map A2UI Content
+        var mappedContentTypes: [MessageContentType]? = nil
+        
+        if let backendTypes = backend.contentTypes {
+            mappedContentTypes = backendTypes.compactMap { content -> MessageContentType? in
+                switch content.type {
+                case .quiz:
+                    guard let quiz = content.quiz, let firstQ = quiz.questions.first else { return nil }
+                    let correctIndex = firstQ.options.firstIndex(of: firstQ.correctAnswer) ?? 0
+                    return .quiz(
+                        question: firstQ.question,
+                        options: firstQ.options,
+                        correctIndex: correctIndex,
+                        explanation: nil
+                    )
+                case .courseRoadmap:
+                    guard let map = content.courseRoadmap else { return nil }
+                    let modules = map.modules.enumerated().map { index, mod in
+                        CourseModule(
+                            id: "mod_\(index)",
+                            title: mod.title,
+                            duration: "\(mod.lessons?.count ?? 0) lessons",
+                            isCompleted: false,
+                            isLocked: index > 0
+                        )
+                    }
+                    return .courseRoadmap(
+                        title: map.title,
+                        modules: modules,
+                        totalModules: modules.count,
+                        completedModules: 0
+                    )
+                default:
+                    return nil
+                }
+            }
+        }
+
         return LioChatResponse(
             text: validatedText,
             source: "backend_chat",
             action: chatAction,
             suggestions: backend.quickExplainer?.chips,
-            meta: ["provider": backend.provider ?? "chat"]
+            meta: ["provider": backend.provider ?? "chat"],
+            contentTypes: mappedContentTypes
         )
     }
     
@@ -258,43 +313,89 @@ struct LioGreetingResponse: Codable {
     // MARK: - Helper: Extract JSON from Markdown
     
     private func extractOpenClassroomPayload(from text: String) -> OpenClassroomPayload? {
-        print("🔍 Extracting JSON from: \(text.prefix(50))...")
+        print("🔍 Extracting OPEN_CLASSROOM JSON from response (\(text.count) chars)")
+        print("🔍 Contains OPEN_CLASSROOM: \(text.contains("OPEN_CLASSROOM"))")
         
-        // 1. Try Regex for Code Block: ```json ... ```
-        // Using raw string for cleaner regex pattern
-        let pattern = #"(?s)```json\s*(\{.*?\})\s*```"#
+        // Quick exit if no OPEN_CLASSROOM present
+        guard text.contains("OPEN_CLASSROOM") else {
+            print("🔍 No OPEN_CLASSROOM found in text, skipping extraction")
+            return nil
+        }
         
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-            let nsString = text as NSString
-            let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
-            
-            if let match = results.first, match.numberOfRanges > 1 {
-                let jsonString = nsString.substring(with: match.range(at: 1))
-                print("🔍 Regex match found: \(jsonString.prefix(20))...")
-                if let payload = decodePayload(from: jsonString) {
-                    return payload
+        // 1. Try multiple regex patterns for code blocks
+        let patterns = [
+            #"(?s)```json\s*(\{.+\})\s*```"#,     // ```json {...} ``` (greedy)
+            #"(?s)```\s*(\{.+\})\s*```"#,         // ``` {...} ``` (no json specifier)
+        ]
+        
+        for (index, pattern) in patterns.enumerated() {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let nsString = text as NSString
+                let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+                
+                if let match = results.first, match.numberOfRanges > 1 {
+                    let jsonString = nsString.substring(with: match.range(at: 1))
+                    print("🔍 Pattern \(index + 1) matched: \(jsonString.prefix(50))...")
+                    if let payload = decodePayload(from: jsonString) {
+                        print("✅ Successfully extracted payload from pattern \(index + 1)")
+                        return payload
+                    }
                 }
-            } else {
-                print("🔍 Regex no match.")
+            }
+        }
+        print("🔍 No code block patterns matched")
+        
+        // 2. Fallback: Find balanced JSON block containing "OPEN_CLASSROOM"
+        // Use a more robust approach: find the outermost {} that contains OPEN_CLASSROOM
+        if let jsonString = extractBalancedJSON(from: text) {
+            print("🔍 Balanced JSON extraction found: \(jsonString.prefix(50))...")
+            if let payload = decodePayload(from: jsonString) {
+                print("✅ Successfully extracted payload from balanced JSON")
+                return payload
             }
         }
         
-        // 2. Fallback: Try finding the largest outer {} block containing "OPEN_CLASSROOM"
+        // 3. Last resort: Simple first-to-last brace extraction
         if let start = text.range(of: "{"), let end = text.range(of: "}", options: .backwards) {
             let jsonString = String(text[start.lowerBound...end.upperBound])
             if jsonString.contains("OPEN_CLASSROOM") {
-                print("🔍 Fallback found JSON candidate.")
+                print("🔍 Simple brace extraction found candidate (\(jsonString.count) chars)")
                 if let payload = decodePayload(from: jsonString) {
+                    print("✅ Successfully extracted payload from simple extraction")
                     return payload
                 }
-            } else {
-                 print("🔍 Fallback block does not contain OPEN_CLASSROOM.")
             }
-        } else {
-            print("🔍 Fallback found no braces.")
         }
         
+        print("⚠️ Failed to extract OPEN_CLASSROOM payload from text")
         return nil
+    }
+    
+    /// Extract balanced JSON by counting braces
+    private func extractBalancedJSON(from text: String) -> String? {
+        guard let startIndex = text.firstIndex(of: "{") else { return nil }
+        
+        var braceCount = 0
+        var endIndex: String.Index?
+        
+        for index in text.indices[startIndex...] {
+            let char = text[index]
+            if char == "{" {
+                braceCount += 1
+            } else if char == "}" {
+                braceCount -= 1
+                if braceCount == 0 {
+                    endIndex = index
+                    break
+                }
+            }
+        }
+        
+        guard let end = endIndex else { return nil }
+        let jsonString = String(text[startIndex...end])
+        
+        // Only return if it contains OPEN_CLASSROOM
+        return jsonString.contains("OPEN_CLASSROOM") ? jsonString : nil
     }
     
     private func decodePayload(from jsonString: String) -> OpenClassroomPayload? {
@@ -559,29 +660,35 @@ struct LioGreetingResponse: Codable {
         // Fallback: Public AI Chat (if auth failed or no token)
         if authFailed {
             do {
-                let (response, source, wasCommand) = try await BackendAIService.shared.studySession(
+                let (response, source, uiContent, wasCommand) = try await BackendAIService.shared.studySession(
                     message: text,
                     resourceId: contextHint,
                     mode: mode
                 )
 
                 let validatedText = validateNotCourseContent(response)
+                
+                // Convert UI Content (A2UI -> LyoMessage Types)
+                let mappedContentTypes = convertToMessageContentType(uiContent)
+                
                 let aiMessage = LyoMessage(
                     id: UUID().uuidString,
                     content: validatedText,
                     isFromUser: false,
-                    timestamp: Date()
+                    timestamp: Date(),
+                    contentTypes: mappedContentTypes
                 )
                 conversationHistory.append(aiMessage)
                 
-                print("📝 LioChatService: Response was\(wasCommand ? "" : " not") a command")
+                print("📝 LioChatService: Response was\(wasCommand ? "" : " not") a command. UI Content: \(uiContent?.count ?? 0) decoded")
 
                 return LioChatResponse(
                     text: validatedText,
                     source: "backend_public_ai",
                     action: nil,
                     suggestions: nil,
-                    meta: ["provider": source, "fallback": "unauthorized"]
+                    meta: ["provider": source, "fallback": "unauthorized"],
+                    contentTypes: mappedContentTypes
                 )
             } catch {
                 // If the public fallback also fails, continue to the normal fallback chain below.
@@ -994,5 +1101,47 @@ extension WizardResponse {
             suggestions: self.chips,
             meta: ["wizard_step": "active"]
         )
+    }
+}
+
+// MARK: - A2UI Content Converter
+
+extension LioChatService {
+    private func convertToMessageContentType(_ uiContent: [A2UIContent]?) -> [MessageContentType]? {
+        guard let content = uiContent, !content.isEmpty else { return nil }
+        
+        return content.compactMap { item -> MessageContentType? in
+            switch item.type {
+            case .courseRoadmap:
+                guard let roadmap = item.courseRoadmap else { return nil }
+                // Map A2UIModule to CourseModule
+                let modules = roadmap.modules.map { mod in
+                    CourseModule(
+                        title: mod.title,
+                        duration: mod.lessons?.compactMap { $0.duration }.joined(separator: ", ") ?? ""
+                    )
+                }
+                return .courseRoadmap(
+                    title: roadmap.title,
+                    modules: modules,
+                    totalModules: modules.count,
+                    completedModules: 0
+                )
+                
+            case .quiz:
+                guard let quiz = item.quiz, let firstQ = quiz.questions.first else { return nil }
+                // Convert first question to quiz bubble
+                let correctIndex = firstQ.options.firstIndex(of: firstQ.correctAnswer) ?? 0
+                return .quiz(
+                    question: firstQ.question,
+                    options: firstQ.options,
+                    correctIndex: correctIndex,
+                    explanation: nil
+                )
+                
+            default:
+                return nil
+            }
+        }
     }
 }

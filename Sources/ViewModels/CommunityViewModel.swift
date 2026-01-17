@@ -99,6 +99,12 @@ class CommunityViewModel: ObservableObject {
         center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Default SF
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
+    @Published var mapCameraPosition: MapCameraPosition = .region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        )
+    )
     @Published var selectedPin: MapPin?  // For dock view selection tracking
     
     // Location Manager
@@ -115,6 +121,7 @@ class CommunityViewModel: ObservableObject {
         locationManager.requestWhenInUseAuthorization()
         if let loc = locationManager.location {
             region.center = loc.coordinate
+            mapCameraPosition = .region(region)
             loadData()
         }
     }
@@ -140,7 +147,7 @@ class CommunityViewModel: ObservableObject {
                 // Process Groups
                 newItems.append(contentsOf: groups.map { group in
                     CommunityItem(
-                        id: group.id,
+                        id: String(group.id),
                         type: .group,
                         title: group.name,
                         subtitle: "\(group.memberCount) members • \(group.subject)",
@@ -155,13 +162,13 @@ class CommunityViewModel: ObservableObject {
                 // Process Events
                 newItems.append(contentsOf: events.map { event in
                     CommunityItem(
-                        id: event.id,
+                        id: String(event.id),
                         type: .event,
                         title: event.title,
                         subtitle: event.locationName,
                         coordinate: CLLocationCoordinate2D(latitude: event.lat ?? 0, longitude: event.lng ?? 0),
                         imageURL: event.imageURL,
-                        userAvatar: nil,
+                        userAvatar: event.organizerProfile?.avatar,
                         timestamp: event.date,
                         eventData: event
                     )
@@ -170,7 +177,7 @@ class CommunityViewModel: ObservableObject {
                 // Process Listings
                 newItems.append(contentsOf: listings.map { listing in
                     CommunityItem(
-                        id: listing.id,
+                        id: String(listing.id),
                         type: .marketplace,
                         title: listing.title,
                         subtitle: "\(listing.currency)\(listing.price)",
@@ -275,5 +282,6 @@ class CommunityViewModel: ObservableObject {
     func centerMapOnPin(_ pin: MapPin) {
         selectedPin = pin
         region.center = pin.coordinate
+        mapCameraPosition = .region(MKCoordinateRegion(center: pin.coordinate, span: region.span))
     }
 }

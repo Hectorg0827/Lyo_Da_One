@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Network Client
 /// Actor-based thread-safe networking client with interceptors, retry logic, and automatic token refresh
-actor NetworkClient {
+actor NetworkClient: NetworkRequestable {
 
     // MARK: - Properties
     static let shared = NetworkClient()

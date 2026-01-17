@@ -18,17 +18,19 @@ struct CommunityMapView: View {
     var body: some View {
         ZStack {
             // Map with annotations
-            Map(coordinateRegion: $viewModel.region, annotationItems: viewModel.beacons) { beacon in
-                MapAnnotation(coordinate: beacon.coordinate) {
-                    BeaconMarkerView(
-                        beacon: beacon,
-                        isSelected: selectedBeacon?.id == beacon.id,
-                        onTap: {
-                            withAnimation(.spring(response: 0.3)) {
-                                selectedBeacon = beacon
+            Map(position: $viewModel.mapCameraPosition) {
+                ForEach(viewModel.beacons) { beacon in
+                    Annotation(beacon.title, coordinate: beacon.coordinate) {
+                        BeaconMarkerView(
+                            beacon: beacon,
+                            isSelected: selectedBeacon?.id == beacon.id,
+                            onTap: {
+                                withAnimation(.spring(response: 0.3)) {
+                                    selectedBeacon = beacon
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
             .ignoresSafeArea()

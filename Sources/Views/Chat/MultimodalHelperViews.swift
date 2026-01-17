@@ -52,7 +52,7 @@ private struct WaveformBar: View {
             .onAppear {
                 updateHeight()
             }
-            .onChange(of: level) { _ in
+            .onChange(of: level) { _, _ in
                 updateHeight()
             }
     }

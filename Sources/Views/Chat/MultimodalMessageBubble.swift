@@ -272,7 +272,7 @@ struct MultimodalMessageBubble: View {
                 .disabled(quiz.selectedAnswer != nil)
             }
             
-            if let selected = quiz.selectedAnswer, let explanation = quiz.explanation {
+            if quiz.selectedAnswer != nil, let explanation = quiz.explanation {
                 Text(explanation)
                     .font(.caption)
                     .foregroundColor(.secondary)

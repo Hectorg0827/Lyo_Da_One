@@ -202,11 +202,7 @@ final class MonetizationService: ObservableObject {
                     
                     await transaction.finish()
                     
-                    await MainActor.run {
-                        Task {
-                            _ = await self.updatePurchasedProducts()
-                        }
-                    }
+                    await self.updatePurchasedProducts()
                 } catch {
                     print("❌ Transaction verification failed: \(error)")
                 }
@@ -295,7 +291,7 @@ final class MonetizationService: ObservableObject {
     
     /// Get subscription status from backend
     func getSubscriptionStatus() async throws -> SubscriptionStatusResponse {
-        guard let authToken = await tokenManager.getToken() else {
+        guard await tokenManager.getToken() != nil else {
             throw MonetizationError.notAuthenticated
         }
         

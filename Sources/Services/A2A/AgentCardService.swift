@@ -7,57 +7,9 @@
 
 import Foundation
 
-// MARK: - A2A Agent Card Models (Google A2A Spec)
+// Note: A2AAgentCard, A2ACapabilities, A2AAuthentication, A2ASkill, A2AExample
+// are defined in A2AModels.swift
 
-struct A2AAgentCard: Codable {
-    let name: String
-    let description: String
-    let url: String
-    let version: String
-    let capabilities: A2ACapabilities
-    let authentication: A2AAuthentication?
-    let defaultInputModes: [String]
-    let defaultOutputModes: [String]
-    let skills: [A2ASkill]
-    
-    enum CodingKeys: String, CodingKey {
-        case name, description, url, version, capabilities, authentication
-        case defaultInputModes = "defaultInputModes"
-        case defaultOutputModes = "defaultOutputModes"
-        case skills
-    }
-}
-
-struct A2ACapabilities: Codable {
-    let streaming: Bool
-    let pushNotifications: Bool
-    let stateTransitionHistory: Bool
-    
-    enum CodingKeys: String, CodingKey {
-        case streaming
-        case pushNotifications = "pushNotifications"
-        case stateTransitionHistory = "stateTransitionHistory"
-    }
-}
-
-struct A2AAuthentication: Codable {
-    let schemes: [String]
-    let credentials: String?
-}
-
-struct A2ASkill: Codable {
-    let id: String
-    let name: String
-    let description: String
-    let inputModes: [String]?
-    let outputModes: [String]?
-    let examples: [A2AExample]?
-}
-
-struct A2AExample: Codable {
-    let name: String
-    let description: String
-}
 
 // MARK: - Agent Card Service
 
@@ -116,55 +68,50 @@ final class AgentCardService {
             name: "Lyo Learning Agent",
             description: "AI-powered personal learning mentor that creates courses, quizzes, and provides tutoring",
             url: baseURL,
+            provider: A2AAgentProvider(
+                organization: "Lyo AI",
+                url: baseURL
+            ),
             version: AppConfig.version,
-            capabilities: A2ACapabilities(
+            capabilities: A2AAgentCapabilities(
                 streaming: true,
                 pushNotifications: true,
-                stateTransitionHistory: true
+                batchProcessing: false
             ),
-            authentication: A2AAuthentication(
-                schemes: ["bearer", "api_key"],
-                credentials: nil
-            ),
-            defaultInputModes: ["text", "text/plain", "application/json"],
-            defaultOutputModes: ["text", "text/plain", "application/json"],
             skills: [
-                A2ASkill(
+                A2AAgentSkill(
                     id: "course_generation",
                     name: "Course Generation",
                     description: "Generate personalized learning courses on any topic",
                     inputModes: ["text"],
-                    outputModes: ["application/json"],
-                    examples: [
-                        A2AExample(name: "Create Python Course", description: "Generate a beginner Python course"),
-                        A2AExample(name: "Create Math Course", description: "Generate algebra fundamentals course")
-                    ]
+                    outputModes: ["application/json"]
                 ),
-                A2ASkill(
+                A2AAgentSkill(
                     id: "quiz_generation",
                     name: "Quiz Generation",
                     description: "Generate quizzes and assessments",
                     inputModes: ["text"],
-                    outputModes: ["application/json"],
-                    examples: nil
+                    outputModes: ["application/json"]
                 ),
-                A2ASkill(
+                A2AAgentSkill(
                     id: "tutoring",
                     name: "AI Tutoring",
                     description: "Socratic-style tutoring and explanations",
                     inputModes: ["text"],
-                    outputModes: ["text"],
-                    examples: nil
+                    outputModes: ["text"]
                 ),
-                A2ASkill(
+                A2AAgentSkill(
                     id: "answer_verification",
                     name: "Answer Verification",
                     description: "Verify and explain quiz answers",
                     inputModes: ["application/json"],
-                    outputModes: ["application/json"],
-                    examples: nil
+                    outputModes: ["application/json"]
                 )
-            ]
+            ],
+            authentication: A2AAuthentication(
+                schemes: ["bearer", "api_key"],
+                credentials: nil
+            )
         )
     }
     

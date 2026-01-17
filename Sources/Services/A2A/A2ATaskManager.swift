@@ -24,7 +24,7 @@ struct A2ATask: Codable, Identifiable {
     let sessionId: String?
     var state: A2ATaskState
     let message: A2AMessage
-    var artifacts: [A2AArtifact]?
+    var artifacts: [A2ATaskArtifact]?
     var history: [A2AMessage]?
     var metadata: [String: String]?
     
@@ -58,7 +58,9 @@ struct A2AFile: Codable {
     let uri: String?
 }
 
-struct A2AArtifact: Codable {
+// Note: This is different from A2AArtifact in A2AModels.swift (used for course generation)
+// This version is for the A2A task protocol
+struct A2ATaskArtifact: Codable {
     let name: String
     let description: String?
     let parts: [A2APart]
@@ -95,7 +97,7 @@ struct A2ATaskResponse: Codable {
     let sessionId: String?
     let state: A2ATaskState
     let message: A2AMessage?
-    let artifacts: [A2AArtifact]?
+    let artifacts: [A2ATaskArtifact]?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -178,7 +180,7 @@ final class A2ATaskManager: ObservableObject {
         to agentURL: String,
         message: String,
         onUpdate: @escaping (A2ATaskResponse) -> Void,
-        onArtifact: @escaping (A2AArtifact) -> Void,
+        onArtifact: @escaping (A2ATaskArtifact) -> Void,
         onComplete: @escaping (A2ATask) -> Void
     ) async throws {
         isProcessing = true
@@ -218,7 +220,7 @@ final class A2ATaskManager: ObservableObject {
             
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
-                throw A2AError.invalidResponse
+                throw A2ATaskError.invalidResponse
             }
             
             for try await line in bytes.lines {
@@ -338,7 +340,7 @@ final class A2ATaskManager: ObservableObject {
 private struct A2ASSEEvent: Codable {
     let type: String  // "task", "artifact"
     let task: A2ATaskUpdate?
-    let artifact: A2AArtifact?
+    let artifact: A2ATaskArtifact?
 }
 
 private struct A2ATaskUpdate: Codable {
@@ -346,9 +348,9 @@ private struct A2ATaskUpdate: Codable {
     let message: A2AMessage?
 }
 
-// MARK: - A2A Errors
-
-enum A2AError: LocalizedError {
+// MARK: - A2A Task Errors
+// Note: A2AError is defined in A2ACourseService.swift, so we name this one differently
+enum A2ATaskError: LocalizedError {
     case agentNotFound
     case skillNotSupported(String)
     case invalidResponse

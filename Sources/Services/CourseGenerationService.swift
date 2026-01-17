@@ -33,7 +33,7 @@ struct GeneratedCourseResponse: Codable {
     let courseId: String
     let title: String
     let description: String
-    let modules: [CourseModule]
+    let modules: [GenerationCourseModule]
     let estimatedDuration: Int
     let difficulty: String
     
@@ -47,15 +47,15 @@ struct GeneratedCourseResponse: Codable {
     }
 }
 
-struct CourseModule: Codable, Identifiable {
+struct GenerationCourseModule: Codable, Identifiable {
     let id: String
     let title: String
     let description: String
-    let lessons: [CourseLesson]
+    let lessons: [GenerationCourseLesson]
     let order: Int
 }
 
-struct CourseLesson: Codable, Identifiable {
+struct GenerationCourseLesson: Codable, Identifiable {
     let id: String
     let title: String
     let content: String
@@ -409,7 +409,7 @@ final class CourseGenerationService: ObservableObject {
         let difficulty = json["difficulty"] as? String ?? json["level"] as? String ?? "beginner"
         
         // Parse modules
-        var modules: [CourseModule] = []
+        var modules: [GenerationCourseModule] = []
         
         if let modulesArray = json["modules"] as? [[String: Any]] {
             for (index, moduleJson) in modulesArray.enumerated() {
@@ -419,10 +419,10 @@ final class CourseGenerationService: ObservableObject {
                 let moduleOrder = moduleJson["order"] as? Int ?? index + 1
                 
                 // Parse lessons
-                var lessons: [CourseLesson] = []
+                var lessons: [GenerationCourseLesson] = []
                 if let lessonsArray = moduleJson["lessons"] as? [[String: Any]] {
                     for (lessonIndex, lessonJson) in lessonsArray.enumerated() {
-                        let lesson = CourseLesson(
+                        let lesson = GenerationCourseLesson(
                             id: lessonJson["id"] as? String ?? "les_\(index + 1)_\(lessonIndex + 1)",
                             title: lessonJson["title"] as? String ?? "Lesson \(lessonIndex + 1)",
                             content: lessonJson["content"] as? String ?? lessonJson["description"] as? String ?? "",
@@ -433,7 +433,7 @@ final class CourseGenerationService: ObservableObject {
                     }
                 }
                 
-                let module = CourseModule(
+                let module = GenerationCourseModule(
                     id: moduleId,
                     title: moduleTitle,
                     description: moduleDesc,
@@ -444,9 +444,9 @@ final class CourseGenerationService: ObservableObject {
             }
         } else if let lessonsArray = json["lessons"] as? [[String: Any]] {
             // Backend returned flat lessons, group into single module
-            var lessons: [CourseLesson] = []
+            var lessons: [GenerationCourseLesson] = []
             for (index, lessonJson) in lessonsArray.enumerated() {
-                let lesson = CourseLesson(
+                let lesson = GenerationCourseLesson(
                     id: lessonJson["id"] as? String ?? "les_\(index + 1)",
                     title: lessonJson["title"] as? String ?? "Lesson \(index + 1)",
                     content: lessonJson["content"] as? String ?? lessonJson["description"] as? String ?? "",
@@ -456,7 +456,7 @@ final class CourseGenerationService: ObservableObject {
                 lessons.append(lesson)
             }
             
-            modules.append(CourseModule(
+            modules.append(GenerationCourseModule(
                 id: "mod_1",
                 title: "Course Content",
                 description: "Main course material",
@@ -574,19 +574,19 @@ final class CourseGenerationService: ObservableObject {
             title: "Introduction to \(topic)",
             description: "A comprehensive guide to mastering \(topic) fundamentals.",
             modules: [
-                CourseModule(
+                GenerationCourseModule(
                     id: "mod_1",
                     title: "Getting Started",
                     description: "Core concepts and setup",
                     lessons: [
-                        CourseLesson(
+                        GenerationCourseLesson(
                             id: "les_1_1",
                             title: "What is \(topic)?",
                             content: "\(topic) is a fascinating subject. In this lesson, we'll explore the basics.\n\nIt is essential for understanding modern systems.",
                             durationMinutes: 5,
                             order: 1
                         ),
-                        CourseLesson(
+                        GenerationCourseLesson(
                             id: "les_1_2",
                             title: "Key Principles",
                             content: "There are three main principles you need to know.\n\n1. Consistency\n2. Practice\n3. Application",
@@ -596,12 +596,12 @@ final class CourseGenerationService: ObservableObject {
                     ],
                     order: 1
                 ),
-                CourseModule(
+                GenerationCourseModule(
                     id: "mod_2",
                     title: "Advanced Concepts",
                     description: "Taking it to the next level",
                     lessons: [
-                        CourseLesson(
+                        GenerationCourseLesson(
                             id: "les_2_1",
                             title: "Deep Dive",
                             content: "Now that you know the basics, let's look at advanced topics.",
@@ -619,7 +619,7 @@ final class CourseGenerationService: ObservableObject {
 
     // MARK: - Create Lesson Blocks from Generated Course
     
-    func createLiveLessonFromGenerated(lesson: CourseLesson, moduleTitle: String) -> LiveLesson {
+    func createLiveLessonFromGenerated(lesson: GenerationCourseLesson, moduleTitle: String) -> LiveLesson {
         var blocks: [LessonBlock] = []
         
         // Get user context for personalization

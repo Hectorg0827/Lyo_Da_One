@@ -11,6 +11,8 @@ struct LiveClassroomView: View {
     @StateObject private var viewModel = LiveClassroomViewModel()
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var uiStackStore: UIStackStore
+    @EnvironmentObject var uiState: AppUIState
+    @EnvironmentObject var aiViewModel: LyoAIViewModel
     
     // MARK: - Body
     
@@ -58,6 +60,9 @@ struct LiveClassroomView: View {
                     await viewModel.askQuestion(question)
                 }
             }
+        }
+        .sheet(isPresented: $uiState.isLioChatPresented) {
+            LioChatSheet(isPresented: $uiState.isLioChatPresented)
         }
         .onAppear {
             // Register in stack
@@ -125,18 +130,30 @@ struct LiveClassroomView: View {
             
             Spacer()
             
-            // More options (placeholder)
-            Button(action: {}) {
-                Image(systemName: "ellipsis")
+            // AI Assistant Button
+            Button(action: {
+                HapticManager.shared.light()
+                // Set context for the AI
+                uiState.lioContextHint = "Watching lesson: \(viewModel.lesson?.title ?? lessonTitle)"
+                uiState.isLioChatPresented = true
+            }) {
+                Image(systemName: "sparkles")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
                     .frame(width: 44, height: 44)
-                    .background(Material.thinMaterial)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(hex: "8B5CF6"), Color(hex: "6366F1")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .clipShape(Circle())
                     .overlay(
                         Circle()
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
                     )
+                    .shadow(color: Color(hex: "8B5CF6").opacity(0.5), radius: 8, x: 0, y: 0)
             }
         }
         .padding(.horizontal, 16)

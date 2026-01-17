@@ -61,7 +61,8 @@ class LyoAIViewModel: ObservableObject {
     
     // MARK: - Dependencies
     private let repository = LyoRepository.shared 
-    private let aiService = OpenAIService.shared 
+    // private let aiService = OpenAIService.shared // Deprecated
+    private let unifiedChat = UnifiedChatService.shared
     private let ttsService = TextToSpeechService.shared
     private let sttService = VoiceInputService.shared
     private let cinemaService = InteractiveCinemaService.shared 
@@ -112,36 +113,43 @@ class LyoAIViewModel: ObservableObject {
             self.startListening()
         }
         
-        // A2UI: Listen for Course Orchestrator triggers (DISABLED - notification not defined)
-        // NotificationCenter.default.publisher(for: .openClassroom)
-        //     .receive(on: RunLoop.main)
-        //     .sink { [weak self] notification in
-        //         guard let self = self,
-        //               let courseId = notification.userInfo?["courseId"] as? String else { return }
-        //         
-        //         print("🚀 ViewModel received .openClassroom for: \(courseId)")
-        //         
-        //         // Create a placeholder ContentItem for immediate navigation
-        //         // The actual view will load data from cache/backend using this ID
-        //         let placeholderItem = ContentItem(
-        //             id: courseId,
-        //             type: .anchorCourse,
-        //             title: "Loading Course...",
-        //             description: "Preparing your personalized curriculum...",
-        //             coverImage: "sparkles",
-        //             duration: 0,
-        //             author: ContentAuthor(name: "Lio AI", avatar: "sparkles", role: "AI"),
-        //             tags: [], // Will be filled by View
-        //             level: .beginner, // Default
-        //             stats: ContentStats(views: 0, likes: 0, rating: 0),
-        //             progress: 0,
-        //             childContentIds: []
-        //         )
-        //         
-        //         self.uiState?.courseToDisplay = placeholderItem
-        //         self.uiState?.showCourseDetail = true
-        //     }
-        //     .store(in: &cancellables)
+        // SYNC WITH UNIFIED CHAT
+        unifiedChat.$messages
+            .receive(on: RunLoop.main)
+            .assign(to: &$messages)
+            
+        unifiedChat.$isLoading
+            .receive(on: RunLoop.main)
+            .assign(to: &$isLoading)
+            
+        unifiedChat.$suggestions
+            .receive(on: RunLoop.main)
+            .assign(to: &$suggestions)
+            
+        // Handle Course Navigation from Unified Chat
+        unifiedChat.$shouldNavigateToClassroom
+            .receive(on: RunLoop.main)
+            .sink { [weak self] shouldNavigate in
+                if shouldNavigate, let course = self?.unifiedChat.pendingCourse {
+                    print("🚀 ViewModel received navigation to course: \(course.title)")
+                    // Bridge to AICommandHandler for View transparency
+                    // Convert CourseCreationData to CoursePayload
+                    let payload = CoursePayload(
+                        id: course.id,
+                        title: course.title,
+                        topic: course.topic,
+                        level: course.level,
+                        language: "English",
+                        duration: "\(course.modules.count) modules",
+                        objectives: course.modules.map { $0.title }
+                    )
+                    AICommandHandler.shared.pendingClassroomCourse = payload
+                    AICommandHandler.shared.shouldOpenClassroom = true
+                    
+                    self?.unifiedChat.clearNavigation()
+                }
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Voice Control
@@ -198,35 +206,19 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Proactive Greeting
     
     func fetchProactiveGreeting() async {
-        // Only fetch if we don't have any messages yet (new session)
-        guard messages.isEmpty else { return }
+        // Delegate to Unified Chat Service
+        await unifiedChat.fetchProactiveGreeting()
         
-        isLoading = true
-        do {
-            let response = try await LioChatService.shared.getProactiveGreeting()
-            
-            let greetingMessage = LyoMessage(
-                id: UUID().uuidString,
-                content: response.greeting,
-                isFromUser: false,
-                timestamp: Date(),
-                attachments: nil,
-                actions: nil,
-                status: .sent
-            )
-            
-            withAnimation {
-                messages.append(greetingMessage)
-            }
-            
-            // If voice is active, speak the greeting
-            if isVoiceActive {
-                speak(text: response.greeting)
-            }
-        } catch {
-            print("⚠️ Failed to fetch proactive greeting: \(error)")
+        // Voice is handled by observing changes in messages via binding
+        // Logic for auto-speaking is effectively handled in sendMessage() for now,
+        // but for initial greeting, we might need a reaction.
+        // However, since we sink $messages in setupBindings(),
+        // we can add side-effects there if needed.
+        
+        // For now, if we want to speak the greeting explicitly here:
+        if isVoiceActive, let last = unifiedChat.messages.last, !last.isFromUser {
+             speak(text: last.content)
         }
-        isLoading = false
     }
     
     // MARK: - Next Best Action (NEXR)
@@ -382,29 +374,15 @@ class LyoAIViewModel: ObservableObject {
     
     // MARK: - Message Handling (Intent-Based Architecture)
     
-    // MARK: - Message Handling (Delegated to LioChatService)
+    // MARK: - Message Handling (Delegated to UnifiedChatService)
     
-    func sendMessage() async {
+    func sendMessage(mode: String? = nil) async {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
         let messageText = inputText
         let messageAttachments = attachments
         inputText = ""
         attachments = []
-        
-        // Create user message
-        let userMessage = LyoMessage(
-            id: UUID().uuidString,
-            content: messageText,
-            isFromUser: true,
-            timestamp: Date(),
-            attachments: messageAttachments.isEmpty ? nil : messageAttachments,
-            actions: nil,
-            status: .sent
-        )
-        
-        // Optimistically add message
-        messages.append(userMessage)
         
         // Update affect signals (debounced)
         if Date().timeIntervalSince(lastAffectUpdate) > 30 {
@@ -414,59 +392,19 @@ class LyoAIViewModel: ObservableObject {
             }
         }
         
-        isLoading = true
+        // No manual loading state needed, observed from service
         
-        do {
-            // Use the SINGLE SOURCE OF TRUTH: LioChatService
-            let response = try await LioChatService.shared.sendMessage(
-                text: messageText,
-                mode: uiState?.currentAIMode ?? "focus"
-            )
-            
-            // --- A2UI INTEGRATION DISABLED (Parser not in build) ---
-            // Using simple response display instead
-            
-            let aiMessage = LyoMessage(
-                id: UUID().uuidString,
-                content: response.text,
-                isFromUser: false,
-                timestamp: Date(),
-                attachments: nil,
-                actions: response.action != nil ? convertAction(response.action!) : nil,
-                status: .sent
-            )
-            
-            withAnimation {
-                messages.append(aiMessage)
-                isLoading = false
-            }
-            
-            // Update Suggestions
-            if let newSuggestions = response.suggestions {
-                self.suggestions = newSuggestions.map { 
-                    SuggestionChip(
-                        id: UUID().uuidString,
-                        text: $0,
-                        icon: nil,
-                        actionType: "suggestion",
-                        context: nil
-                    )
-                }
-            }
-            
-            // Auto-speak response if in voice mode
-            if isVoiceActive {
-                speak(text: response.text)
-            }
-            
-            // --- A2UI INTEGRATION END ---
-            
-        } catch {
-            print("❌ LioChatService Error: \(error)")
-            await MainActor.run {
-                isLoading = false
-                addErrorMessage(chatErrorMessage(for: error))
-            }
+        // Delegate to Unified Chat Service
+        let responseText = await unifiedChat.sendMessage(
+            messageText,
+            attachments: messageAttachments,
+            context: nil, // Can be improved to pass current context
+            mode: mode ?? uiState?.currentAIMode ?? "focus"
+        )
+        
+        // Auto-speak response if in voice mode
+        if isVoiceActive, let text = responseText {
+            speak(text: text)
         }
     }
     
@@ -1102,7 +1040,7 @@ class LyoAIViewModel: ObservableObject {
             
             do {
                 // Generate structured quiz
-                let quiz = try await aiService.generateStructuredQuiz(topic: topic)
+                let quiz = try await OpenAIService.shared.generateStructuredQuiz(topic: topic)
                 
                 await MainActor.run {
                     self.activeQuiz = quiz
@@ -1373,69 +1311,47 @@ class LyoAIViewModel: ObservableObject {
         inputText = ""
         self.attachments = []
         
-        // Create user message with attachments
-        let userMessage = LyoMessage(
-            id: UUID().uuidString,
-            content: text,
-            isFromUser: true,
-            timestamp: Date(),
-            attachments: attachments.isEmpty ? nil : attachments,
-            actions: nil,
-            status: .sent
+        // Delegate to UnifiedChatService
+        let responseText = await unifiedChat.sendMessage(
+            text,
+            attachments: attachments,
+            context: nil,
+            mode: uiState?.currentAIMode ?? "focus"
         )
         
-        messages.append(userMessage)
         HapticManager.shared.playMessageSent()
         
-        isLoading = true
-        
-        do {
-            // Build context hint for attachments
-            var contextHint: String? = nil
-            if !attachments.isEmpty {
-                let types = attachments.map { $0.type.rawValue }.joined(separator: ", ")
-                contextHint = "User attached: \(types)"
-            }
-            
-            let response = try await LioChatService.shared.sendMessage(
-                text: text,
-                mode: uiState?.currentAIMode ?? "focus",
-                contextHint: contextHint
-            )
-            
-            let aiMessage = LyoMessage(
-                id: UUID().uuidString,
-                content: response.text,
-                isFromUser: false,
-                timestamp: Date(),
-                attachments: nil,
-                actions: nil,
-                status: .sent
-            )
-            
-            withAnimation {
-                messages.append(aiMessage)
-            }
-            
-            // Update suggestions
-            if let newSuggestions = response.suggestions {
-                suggestions = newSuggestions.enumerated().map { index, text in
-                    SuggestionChip(id: UUID().uuidString, text: text, icon: "sparkles")
-                }
-            }
-            
-            // Auto-speak if in voice mode
-            if isVoiceActive {
-                speak(text: response.text)
-            }
-            
-        } catch {
-            print("❌ Send message error: \(error)")
-            addErrorMessage(chatErrorMessage(for: error))
+        // Auto-speak response if in voice mode
+        if isVoiceActive, let text = responseText {
+            speak(text: text)
         }
-        
-        isLoading = false
     }
+    // MARK: - Navigation Triggers
+    
+    func openCourse(id: String) {
+        print("🚀 Opening course: \(id)")
+        
+        let placeholderItem = ContentItem(
+            id: id,
+            type: .anchorCourse,
+            title: "Loading Course...",
+            description: "Preparing your personalized curriculum...",
+            coverImage: "book.fill",
+            duration: 0,
+            author: ContentAuthor(name: "Lio AI", avatar: "sparkles", role: "AI"),
+            tags: ["AI Generated"],
+            level: .beginner,
+            stats: ContentStats(views: 0, likes: 0, rating: 0),
+            progress: 0,
+            childContentIds: []
+        )
+        
+        Task { @MainActor in
+            self.uiState?.courseToDisplay = placeholderItem
+            self.uiState?.showCourseDetail = true
+        }
+    }
+
 }
 
 

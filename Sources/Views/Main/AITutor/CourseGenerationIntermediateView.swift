@@ -153,11 +153,11 @@ struct AIGeneratedClassroomView: View {
     @State private var currentModuleIndex = 0
     @State private var currentLessonIndex = 0
     
-    var currentModule: CourseModule {
+    var currentModule: GenerationCourseModule {
         course.modules[currentModuleIndex]
     }
     
-    var currentLesson: CourseLesson {
+    var currentLesson: GenerationCourseLesson {
         currentModule.lessons[currentLessonIndex]
     }
     

@@ -182,7 +182,7 @@ final class A2ACourseService: ObservableObject {
         try await parseStreamingEvents(bytes.lines, onEvent: onEvent)
         
         // If streaming completed without explicit completion event, fetch final result
-        if await streamingState == .streaming {
+        if streamingState == .streaming {
             await MainActor.run {
                 self.streamingState = .completed
                 self.isGenerating = false
@@ -190,7 +190,7 @@ final class A2ACourseService: ObservableObject {
         }
         
         // Fetch final course if we have a pipeline ID
-        if let pipelineId = await currentPipelineId {
+        if let pipelineId = currentPipelineId {
             await fetchFinalCourse(pipelineId: pipelineId)
         }
         
@@ -223,7 +223,7 @@ final class A2ACourseService: ObservableObject {
                     do {
                         let event = try decoder.decode(A2AStreamingEvent.self, from: data)
                         
-                        print("📥 A2A Event: \(event.type.rawValue) - \(event.message ?? "") (\(event.progress)%)")
+                        print("📥 A2A Event: \(event.type.rawValue) - \(event.message) (\(event.progress)%)")
                         
                         await MainActor.run {
                             self.streamingEvents.append(event)
@@ -257,7 +257,7 @@ final class A2ACourseService: ObservableObject {
                                 
                             case .error:
                                 self.errorMessage = event.data?.error ?? event.message
-                                self.streamingState = .failed(A2AError.pipelineFailed(event.message ?? "Unknown error"))
+                                self.streamingState = .failed(A2AError.pipelineFailed(event.message))
                                 self.isGenerating = false
                                 
                             default:
@@ -460,7 +460,7 @@ final class A2ACourseService: ObservableObject {
     private func updatePhaseStatus(phase: A2APipelinePhase, status: A2APhaseStatus) {
         if let index = phases.firstIndex(where: { $0.phase == phase }) {
             // Update existing
-            var updated = phases[index]
+            let updated = phases[index]
             phases[index] = A2APhaseProgress(
                 phase: updated.phase,
                 status: status,
@@ -533,12 +533,12 @@ extension A2ACourseService {
     /// Convert A2A generated course to the existing GeneratedCourseResponse format
     func convertToLegacyFormat(_ a2aCourse: A2AGeneratedCourse) -> GeneratedCourseResponse {
         let modules = a2aCourse.modules.map { module in
-            CourseModule(
+            GenerationCourseModule(
                 id: module.id,
                 title: module.title,
                 description: module.description,
                 lessons: module.lessons.map { lesson in
-                    CourseLesson(
+                    GenerationCourseLesson(
                         id: lesson.id,
                         title: lesson.title,
                         content: lesson.content,

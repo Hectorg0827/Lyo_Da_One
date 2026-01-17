@@ -2,6 +2,7 @@
 import XCTest
 @testable import Lyo
 
+@MainActor
 final class A2AIntegrationTests: XCTestCase {
     
     override func setUp() async throws {

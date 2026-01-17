@@ -30,6 +30,9 @@ struct MainTabView: View {
     
     // Creation Flow State
     @State private var isCreationSheetPresented = false
+    @State private var isCreateHubPresented = false
+    @State private var lastCreationOption: CreationOption = .discovery
+    @State private var lastCreateMode: CreateMode = .reel
     @State private var isVideoRecorderPresented = false
     @State private var isPostEditorPresented = false
     
@@ -136,7 +139,17 @@ struct MainTabView: View {
                         }
                     },
                     lyoButtonFrame: $lyoButtonFrame,
-                    isCreationSheetPresented: $isCreationSheetPresented
+                    isCreationSheetPresented: $isCreationSheetPresented,
+                    isCreateActive: isCreationSheetPresented || isCreateHubPresented,
+                    onCreateTap: {
+                        lastCreationOption = creationOption(for: lastCreateMode)
+                        isCreationSheetPresented = true
+                    },
+                    onCreateLongPress: {
+                        lastCreationOption = creationOption(for: lastCreateMode)
+                        isCreationSheetPresented = false
+                        isCreateHubPresented = true
+                    }
                 )
                 .offset(y: isLyoOverlayPresented ? 200 : 0) // Slide down when overlay is active
                 .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isLyoOverlayPresented)
@@ -203,6 +216,8 @@ struct MainTabView: View {
                     lessonTitle: data.lessonTitle
                 )
                 .environmentObject(uiStackStore)
+                .environmentObject(uiState)
+                .environmentObject(aiViewModel)
             }
         }
         .fullScreenCover(isPresented: $isVideoRecorderPresented) {
@@ -217,11 +232,50 @@ struct MainTabView: View {
         .sheet(isPresented: $isSearchPresented) {
             GlobalSearchView()
         }
-        .fullScreenCover(isPresented: $isCreationSheetPresented) {
-            CreateHubView()
+        .sheet(isPresented: $isCreationSheetPresented) {
+            CreationSheet(isPresented: $isCreationSheetPresented, selectedOption: $lastCreationOption) { option in
+                lastCreationOption = option
+                lastCreateMode = createMode(for: option)
+                isCreationSheetPresented = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isCreateHubPresented = true
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $isCreateHubPresented) {
+            CreateHubView(initialMode: lastCreateMode) { mode in
+                lastCreateMode = mode
+                switch mode {
+                case .reel, .story:
+                    selectedTab = .clips
+                case .post, .event:
+                    selectedTab = .community
+                case .course:
+                    selectedTab = .focus
+                }
+            }
         }
     }
     
+    private func createMode(for option: CreationOption) -> CreateMode {
+        switch option {
+        case .discovery: return .reel
+        case .story: return .story
+        case .post: return .post
+        case .community: return .event
+        }
+    }
+
+    private func creationOption(for mode: CreateMode) -> CreationOption {
+        switch mode {
+        case .reel: return .discovery
+        case .story: return .story
+        case .post: return .post
+        case .course: return .discovery
+        case .event: return .community
+        }
+    }
+
     // MARK: - Stack Navigation Handler
     
     private func handleStackNavigation(_ action: StackNavigationAction) {
@@ -318,6 +372,7 @@ struct CustomNavBar: View {
     let onLyoTap: () -> Void
     @Binding var lyoButtonFrame: CGRect
     @Binding var isCreationSheetPresented: Bool
+    let isCreateActive: Bool
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -582,6 +637,9 @@ struct LivingHubTabBar: View {
     let onLyoTap: () -> Void
     @Binding var lyoButtonFrame: CGRect
     @Binding var isCreationSheetPresented: Bool
+    let isCreateActive: Bool
+    let onCreateTap: () -> Void
+    let onCreateLongPress: () -> Void
     
     // Progress for the mascot glow (0.0 to 1.0)
     // In a real app, this would come from a ViewModel
@@ -634,13 +692,11 @@ struct LivingHubTabBar: View {
                         isSelected: selectedTab == .community
                     ) { selectedTab = .community }
                     
-                    GhostTabButton(
-                        icon: "plus.app", // Instagram-style create icon
-                        label: "Create",
-                        isSelected: selectedTab == .create
-                    ) {
+                    CreateTabButton(isActive: isCreateActive, onLongPress: {
+                        onCreateLongPress()
+                    }) {
                         // Trigger creation flow
-                        isCreationSheetPresented = true
+                        onCreateTap()
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -742,6 +798,69 @@ struct GhostTabButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Create Tab Button
+struct CreateTabButton: View {
+    let isActive: Bool
+    let onLongPress: (() -> Void)?
+    let action: () -> Void
+    @State private var isPressed = false
+    
+    private var borderGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(hex: "FDBA74"), // warm orange
+                Color(hex: "FB7185"), // coral
+                Color(hex: "A855F7")  // violet
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(borderGradient, lineWidth: 2)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+                            .padding(1.5)
+                    )
+                    .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 6)
+                    .shadow(color: Color(hex: "FB7185").opacity(isActive ? 0.35 : 0.2),
+                            radius: isActive ? 16 : 10,
+                            x: 0,
+                            y: isActive ? 6 : 4)
+                
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 1)
+            }
+            .frame(width: 48, height: 48)
+            .scaleEffect(isPressed ? 0.95 : (isActive ? 1.05 : 1.0))
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isPressed)
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isActive)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onLongPressGesture(minimumDuration: 0.01, maximumDistance: 20, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.35)
+                .onEnded { _ in
+                    onLongPress?()
+                }
+        )
     }
 }
 

@@ -11,6 +11,18 @@ struct LioChatSheet: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showMasteryProfile = false
     
+    // Current mode for display
+    private var currentModeName: String {
+        // This could be enhanced to reflect actual mode state
+        // For now, using the tab context
+        switch uiState.currentTab {
+        case .focus: return "Study"
+        case .discover: return "Explore"
+        case .campus: return "Chat"
+        default: return "Study"
+        }
+    }
+    
     // Voice Animation State
     @State private var waveformPhase: CGFloat = 0
     
@@ -23,10 +35,8 @@ struct LioChatSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Content-Aware Background
-                AnimatedGradient(colors: contextColors)
-                    .ignoresSafeArea()
-                    .opacity(0.15)
+                // FORCE BLACK BACKGROUND
+                Color.black.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                     // Custom Header
@@ -460,9 +470,13 @@ struct LioChatSheet: View {
                 standardInputBar
             }
         }
-        .background(Material.regularMaterial)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 20)
+        // Solid Black Background
+        .background(Color.black)
         .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+        .shadow(color: Color.white.opacity(0.1), radius: 15, x: 0, y: 5)
         .sheet(isPresented: $showMediaPicker) {
             mediaPickerSheet
         }
@@ -484,77 +498,119 @@ struct LioChatSheet: View {
     }
     
     private var standardInputBar: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            // Media Menu Button
-            Menu {
-                Button(action: { openPhotoPicker() }) {
-                    Label("Photo Library", systemImage: "photo.on.rectangle")
-                }
-                Button(action: { openCamera() }) {
-                    Label("Take Photo", systemImage: "camera")
-                }
-                Button(action: { openFilePicker() }) {
-                    Label("Choose File", systemImage: "doc")
-                }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(width: 36, height: 36)
-                    .background(Color.black.opacity(0.05))
-                    .clipShape(Circle())
-            }
-            
-            // Text Input
-            TextField("Ask Lio anything…", text: $viewModel.inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .padding(12)
-                .background(Color.black.opacity(0.05))
-                .cornerRadius(20)
-                .lineLimit(1...5)
-            
-            // Voice / Send Button
-            if viewModel.inputText.isEmpty && viewModel.attachments.isEmpty {
-                // Mic Button with Long Press
-                Button(action: {
-                    HapticManager.shared.playMediumImpact()
-                    viewModel.toggleVoiceMode()
-                }) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .frame(width: 36, height: 36)
-                }
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.3)
-                        .onEnded { _ in
-                            HapticManager.shared.playRecordingStarted()
-                            viewModel.startVoiceRecording()
-                        }
-                )
-            } else {
-                // Send Button
-                Button(action: send) {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: contextColors,
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+        VStack(spacing: 16) {
+            // Row 1: Text Input + Send/Mic Button
+            HStack(alignment: .bottom, spacing: 12) {
+                // Text Input Field (Expanded Height)
+                TextField("Ask anything...", text: $viewModel.inputText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14) // Increased vertical padding
+                    .frame(minHeight: 52)   // Enforce minimum height
+                    .background(Color(white: 0.1)) // Dark gray
+                    .cornerRadius(26)       // Pill shape
+                    .foregroundColor(.white)
+                    .accentColor(.white)
+                    .lineLimit(1...6)
+                
+                // Voice/Send Button - Next to text bar
+                if viewModel.inputText.isEmpty && viewModel.attachments.isEmpty {
+                    // Mic Button
+                    Button(action: {
+                        HapticManager.shared.playMediumImpact()
+                        viewModel.toggleVoiceMode()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
+                                .frame(width: 45, height: 45)
+                                .shadow(color: Color(hex: "8B5CF6").opacity(0.4), radius: 8, x: 0, y: 4)
+                            
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                } else {
+                    // Send Button
+                    Button(action: {
+                        HapticManager.shared.playSuccess()
+                        Task { await viewModel.sendMessage() }
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(hex: "8B5CF6"))
+                                .frame(width: 45, height: 45)
+                            
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                        }
                     }
                 }
-                .disabled(viewModel.isLoading)
+            }
+            
+            // Row 2: (+) Attachment + Mode Selector
+            HStack(spacing: 16) {
+                // "+" Button
+                Menu {
+                    Button(action: { openPhotoPicker() }) {
+                        Label("Photo Library", systemImage: "photo.on.rectangle")
+                    }
+                    Button(action: { openCamera() }) {
+                        Label("Take Photo", systemImage: "camera")
+                    }
+                    Button(action: { openFilePicker() }) {
+                        Label("Choose File", systemImage: "doc")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white) // White icon
+                        .frame(width: 40, height: 40)
+                        .background(Color(white: 0.1)) // Dark gray bg
+                        .clipShape(Circle())
+                }
+                
+                // Mode Selector
+                Menu {
+                    Button(action: { /* Switch to Study mode */ }) {
+                        Label("Study", systemImage: "book.fill")
+                    }
+                    Button(action: { /* Switch to Quiz mode */ }) {
+                        Label("Quiz", systemImage: "questionmark.circle")
+                    }
+                    Button(action: { /* Switch to Chat mode */ }) {
+                        Label("Chat", systemImage: "message")
+                    }
+                    Button(action: { /* Switch to Course mode */ }) {
+                        Label("Course", systemImage: "graduationcap")
+                    }
+                } label: {
+                    HStack(spacing: 6) { // Tighter spacing
+                        Text(currentModeName)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white) // White text
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(.secondarySystemBackground)) // Match text field bg style
+                    .clipShape(Capsule())
+                }
+                
+                Spacer()
             }
         }
-        .padding(12)
     }
     
     private var voiceRecordingBar: some View {

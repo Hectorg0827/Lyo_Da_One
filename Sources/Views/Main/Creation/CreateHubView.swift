@@ -11,8 +11,15 @@ import AVFoundation
 
 struct CreateHubView: View {
     @Environment(\.dismiss) var dismiss
-    @StateObject private var viewModel = CreateViewModel()
+    @StateObject private var viewModel: CreateViewModel
     @State private var showModeDetail = false
+    let onPublish: ((CreateMode) -> Void)?
+
+    init(initialMode: CreateMode = .reel, onPublish: ((CreateMode) -> Void)? = nil) {
+        _viewModel = StateObject(wrappedValue: CreateViewModel(initialMode: initialMode))
+        self.onPublish = onPublish
+    }
+
     
     var body: some View {
         ZStack {
@@ -313,6 +320,7 @@ struct CreateHubView: View {
                         Task {
                             await viewModel.publish()
                             if case .complete = viewModel.state {
+                                onPublish?(viewModel.selectedMode)
                                 dismiss()
                             }
                         }
@@ -340,7 +348,7 @@ struct CameraPreviewLayer: View {
                     .resizable()
                     .scaledToFill()
                     .ignoresSafeArea()
-            } else if let videoURL = capturedVideoURL {
+            } else if let _ = capturedVideoURL {
                 // Video preview would go here
                 Color.black
                     .ignoresSafeArea()

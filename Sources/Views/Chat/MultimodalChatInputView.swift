@@ -40,24 +40,33 @@ struct MultimodalChatInputView: View {
                 voiceRecordingIndicator
             }
             
-            // Main Input Bar
-            HStack(alignment: .bottom, spacing: 12) {
-                // Attachment Button
-                attachmentButton
-                
-                // Text Input or Voice Waveform
-                if voiceService.isRecording {
-                    voiceWaveform
-                } else {
-                    textInputField
+            // Main Input Area
+            VStack(spacing: 12) {
+                // Row 1: Text Input + Send/Mic
+                HStack(alignment: .bottom, spacing: 12) {
+                    // Text Input or Voice Waveform
+                    if voiceService.isRecording {
+                        voiceWaveform
+                    } else {
+                        textInputField
+                    }
+                    
+                    // Voice / Send Button
+                    voiceOrSendButton
                 }
                 
-                // Voice / Send Button
-                voiceOrSendButton
+                // Row 2: Attachments
+                HStack {
+                    attachmentButton
+                    Spacer()
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(inputBackground)
+            .padding(.top, 16)
+            .padding(.bottom, 24) // Extra bottom padding
+            .background(Color(.systemBackground)) // Solid background
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .shadow(color: Color.black.opacity(0.08), radius: 15, x: 0, y: -5)
         }
         .photosPicker(
             isPresented: $showPhotoPicker,
@@ -103,7 +112,7 @@ struct MultimodalChatInputView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
     }
     
     // MARK: - Voice Recording Indicator
@@ -139,7 +148,7 @@ struct MultimodalChatInputView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.red.opacity(0.1))
+        .background(Color.red.opacity(0.05))
     }
     
     // MARK: - Attachment Button
@@ -164,12 +173,12 @@ struct MultimodalChatInputView: View {
                 Label("Document", systemImage: "doc")
             }
         } label: {
-            Image(systemName: isExpanded ? "xmark.circle.fill" : "plus.circle.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(
-                    isExpanded ? Color.secondary : Color.accentColor
-                )
-                .contentTransition(.symbolEffect(.replace))
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundColor(.primary)
+                .frame(width: 40, height: 40)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(Circle())
         }
         .onTapGesture {
             HapticManager.shared.playLightImpact()
@@ -179,16 +188,15 @@ struct MultimodalChatInputView: View {
     // MARK: - Text Input Field
     
     private var textInputField: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("Message Lyo...", text: $text, axis: .vertical)
-                .lineLimit(1...5)
-                .focused($isTextFieldFocused)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-        }
+        TextField("Message Lyo...", text: $text, axis: .vertical)
+            .lineLimit(1...6)
+            .focused($isTextFieldFocused)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(minHeight: 52)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(26)
     }
     
     // MARK: - Voice Waveform
@@ -207,11 +215,9 @@ struct MultimodalChatInputView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 36)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .frame(height: 52)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(26)
     }
     
     private func waveformHeight(for index: Int) -> CGFloat {
@@ -231,34 +237,61 @@ struct MultimodalChatInputView: View {
             Button {
                 stopRecording()
             } label: {
-                Image(systemName: "stop.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(Color.red)
+                ZStack {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 48, height: 48)
+                        .shadow(color: Color.red.opacity(0.4), radius: 8, x: 0, y: 4)
+                    
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                }
             }
-            .contentTransition(.symbolEffect(.replace))
         } else if canSend {
             // Send Button
             Button {
                 Task { await sendMessage() }
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(
-                        isLoading || isUploading ? Color.secondary : Color.accentColor
-                    )
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 48, height: 48)
+                        .shadow(color: Color.accentColor.opacity(0.4), radius: 8, x: 0, y: 4)
+                    
+                    if isLoading || isUploading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
             }
             .disabled(isLoading || isUploading)
-            .contentTransition(.symbolEffect(.replace))
         } else {
             // Voice Button
             Button {
                 startRecording()
             } label: {
-                Image(systemName: "mic.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(Color.accentColor)
+                ZStack {
+                    Circle()
+                        .fill(
+                             LinearGradient(
+                                 colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                                 startPoint: .topLeading,
+                                 endPoint: .bottomTrailing
+                             )
+                        )
+                        .frame(width: 48, height: 48)
+                        .shadow(color: Color(hex: "8B5CF6").opacity(0.4), radius: 8, x: 0, y: 4)
+                    
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.white)
+                }
             }
-            .contentTransition(.symbolEffect(.replace))
         }
     }
     

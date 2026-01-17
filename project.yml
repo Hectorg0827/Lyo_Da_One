@@ -48,17 +48,29 @@ targets:
       - package: Firebase
         product: FirebaseCrashlytics
 
+  LyoTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - Sources/Tests
+    dependencies:
+      - target: Lyo
+
 schemes:
   Lyo:
     build:
       targets:
         Lyo: all
+        LyoTests: all
     run:
       environmentVariables:
         IDE_DISABLED_OS_ACTIVITY_MODE: "disable"
     test:
       targets:
-        - Lyo
+        - LyoTests
     profile:
       config: Release
     analyze:

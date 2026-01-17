@@ -27,56 +27,8 @@ struct EnhancedAIChatView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Messages List
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 16) {
-                                ForEach(viewModel.messages) { message in
-                                    EnhancedMessageBubble(
-                                        message: message,
-                                        onTTSToggle: {
-                                            viewModel.toggleTTS(for: message)
-                                        },
-                                        onQuizAnswer: { answerIndex in
-                                            viewModel.handleQuizAnswer(messageId: message.id, answerIndex: answerIndex)
-                                        },
-                                        onCourseOpen: { courseId in
-                                            viewModel.openCourse(courseId)
-                                        }
-                                    )
-                                    .id(message.id)
-                                }
-                                
-                                // Loading indicator
-                                if viewModel.isLoading {
-                                    loadingIndicator
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-                        .onChange(of: viewModel.messages.count) { _, _ in
-                            // Auto-scroll to bottom on new message
-                            if let lastMessage = viewModel.messages.last {
-                                withAnimation(.easeOut(duration: 0.3)) {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Enhanced Input Bar
-                    EnhancedChatInputBar(
-                        text: $userInput,
-                        isLoading: $viewModel.isLoading,
-                        selectedMode: $selectedMode,
-                        onSend: { attachmentIds in
-                            await viewModel.sendMessage(
-                                content: userInput,
-                                mode: selectedMode,
-                                attachmentIds: attachmentIds
-                            )
-                        }
-                    )
+                    messageList
+                    inputArea
                 }
             }
             .navigationTitle("AI Chat")
@@ -168,11 +120,73 @@ struct EnhancedAIChatView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(Color(.systemGray6))
-            .clipShape(Capsule())
             
             Spacer()
         }
         .padding(.horizontal, 16)
+    }
+}
+
+// MARK: - Subviews
+
+extension EnhancedAIChatView {
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(viewModel.messages) { message in
+                        EnhancedMessageBubble(
+                            message: message,
+                            onTTSToggle: {
+                                viewModel.toggleTTS(for: message)
+                            },
+                            onQuizAnswer: { answerIndex in
+                                viewModel.handleQuizAnswer(messageId: message.id, answerIndex: answerIndex)
+                            },
+                            onCourseOpen: { courseId in
+                                viewModel.openCourse(courseId)
+                            },
+                            onTopicSelect: { topic in
+                                viewModel.handleTopicSelection(topic)
+                            },
+                            onModuleSelect: { module in
+                                viewModel.handleModuleSelection(module)
+                            }
+                        )
+                        .id(message.id)
+                    }
+                    
+                    // Loading indicator
+                    if viewModel.isLoading {
+                        loadingIndicator
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                // Auto-scroll to bottom on new message
+                if let lastMessage = viewModel.messages.last {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+    
+    private var inputArea: some View {
+        EnhancedChatInputBar(
+            text: $userInput,
+            isLoading: $viewModel.isLoading,
+            selectedMode: $selectedMode,
+            onSend: { attachmentIds in
+                await viewModel.sendMessage(
+                    content: userInput,
+                    mode: selectedMode,
+                    attachmentIds: attachmentIds
+                )
+            }
+        )
     }
 }
 
@@ -207,11 +221,11 @@ class AIChatViewModel: ObservableObject {
     
     func loadWelcomeMessage() {
         let welcome = MultimodalMessage(
-            id: UUID(),
+            id: UUID().uuidString,
             role: .assistant,
             content: "Hello! I'm Lyo, your AI learning assistant. I can help you with courses, studying, quizzes, tutoring, and more. What would you like to learn today?",
-            timestamp: Date(),
-            attachments: []
+            attachments: [],
+            timestamp: Date()
         )
         messages.append(welcome)
     }
@@ -219,50 +233,144 @@ class AIChatViewModel: ObservableObject {
     func sendMessage(content: String, mode: AIChatMode, attachmentIds: [String]?) async {
         guard !content.isEmpty else { return }
         
+        // Debug Demo Command
+        if content.lowercased() == "/demo" {
+            // Add user message
+            let userMessage = MultimodalMessage(
+                id: UUID().uuidString,
+                role: .user,
+                content: content,
+                attachments: [],
+                timestamp: Date()
+            )
+            messages.append(userMessage)
+            
+            // Show Topic Selection
+            let topicMsg = MultimodalMessage(
+                id: UUID().uuidString,
+                role: .assistant,
+                content: "",
+                contentTypes: [.topicSelection(title: "Choose a Subject", topics: [
+                    TopicOption(title: "Physics", icon: "atom", gradientColors: ["#FF00CC", "#333399"]),
+                    TopicOption(title: "Math", icon: "x.squareroot", gradientColors: ["#00C9FF", "#92FE9D"]),
+                    TopicOption(title: "History", icon: "book.closed.fill", gradientColors: ["#F2994A", "#F2C94C"])
+                ])],
+                timestamp: Date()
+            )
+            messages.append(topicMsg)
+            
+            // Show Course Roadmap
+            let roadMsg = MultimodalMessage(
+                id: UUID().uuidString,
+                role: .assistant,
+                content: "",
+                contentTypes: [.courseRoadmap(
+                    title: "SwiftUI Mastery",
+                    modules: [
+                        CourseModule(title: "Introduction", duration: "5 min", isCompleted: true),
+                        CourseModule(title: "Views & Modifiers", duration: "12 min", isCompleted: false),
+                        CourseModule(title: "State Management", duration: "15 min", isLocked: true)
+                    ],
+                    totalModules: 10,
+                    completedModules: 1
+                )],
+                timestamp: Date()
+            )
+            messages.append(roadMsg)
+            
+            // Show Flashcards
+            let flashMsg = MultimodalMessage(
+                id: UUID().uuidString,
+                role: .assistant,
+                content: "",
+                contentTypes: [.flashcards(title: "Swift Keywords", cards: [
+                    Flashcard(front: "let", back: "Constant property"),
+                    Flashcard(front: "var", back: "Mutable variable"),
+                    Flashcard(front: "func", back: "A function definition")
+                ])],
+                timestamp: Date()
+            )
+            messages.append(flashMsg)
+            
+            // Show Quiz
+            let quizMsg = MultimodalMessage(
+                id: UUID().uuidString,
+                role: .assistant,
+                content: "",
+                contentTypes: [.quiz(
+                    question: "What wrapper property is used for local state in a View?",
+                    options: ["@Binding", "@State", "@ObservedObject", "@Environment"],
+                    correctIndex: 1,
+                    explanation: "@State is designed for simple local state that is owned by the View."
+                )],
+                timestamp: Date()
+            )
+            messages.append(quizMsg)
+            
+            return
+        }
+        
         // Add user message
         let userMessage = MultimodalMessage(
-            id: UUID(),
+            id: UUID().uuidString,
             role: .user,
             content: content,
-            timestamp: Date(),
-            attachments: []
+            attachments: [],
+            timestamp: Date()
         )
         messages.append(userMessage)
         
         // Start loading
         isLoading = true
         
+        // Dynamic UI: Add "Thinking" bubble
+        let processingId = UUID().uuidString
+        let processingMessage = MultimodalMessage(
+            id: processingId,
+            role: .assistant,
+            content: "Thinking...",
+            contentTypes: [.processing(step: "Analyzing request...", progress: nil)],
+            timestamp: Date()
+        )
+        messages.append(processingMessage)
+        
         do {
             // Include mode context in the request
             let modeContext = getModeContext(for: mode)
             let fullContent = modeContext.isEmpty ? content : "\(modeContext)\n\n\(content)"
             
-            // Send to backend
+            // Send to backend - matches LioChatService.sendMessage(text:mode:context:contextHint:)
             let response = try await chatService.sendMessage(
-                content: fullContent,
-                conversationId: nil
+                text: fullContent,
+                mode: mode.rawValue
             )
+            
+            // Remove processing message
+            messages.removeAll { $0.id == processingId }
             
             // Add AI response
             let aiMessage = MultimodalMessage(
-                id: UUID(),
+                id: UUID().uuidString,
                 role: .assistant,
-                content: response.message,
-                timestamp: Date(),
-                attachments: []
+                content: response.text,
+                attachments: [],
+                timestamp: Date()
             )
             messages.append(aiMessage)
             
         } catch {
             print("❌ Failed to send message: \(error)")
             
+            // Remove processing message
+            messages.removeAll { $0.id == processingId }
+            
             // Add error message
             let errorMessage = MultimodalMessage(
-                id: UUID(),
+                id: UUID().uuidString,
                 role: .assistant,
                 content: "I apologize, but I encountered an error. Please try again.",
-                timestamp: Date(),
-                attachments: []
+                attachments: [],
+                timestamp: Date()
             )
             messages.append(errorMessage)
         }
@@ -275,12 +383,12 @@ class AIChatViewModel: ObservableObject {
             audioService.pause()
         } else {
             Task {
-                await audioService.playTTS(message.content, messageId: message.id)
+                await audioService.playTTS(text: message.content, messageId: message.id)
             }
         }
     }
     
-    func handleQuizAnswer(messageId: UUID, answerIndex: Int) {
+    func handleQuizAnswer(messageId: String, answerIndex: Int) {
         // Handle quiz answer selection
         print("Quiz answer selected: \(answerIndex) for message \(messageId)")
     }
@@ -288,6 +396,21 @@ class AIChatViewModel: ObservableObject {
     func openCourse(_ courseId: String) {
         // Navigate to course detail
         print("Opening course: \(courseId)")
+    }
+    
+    func handleTopicSelection(_ topic: TopicOption) {
+        print("Selected topic: \(topic.title)")
+        Task {
+            await sendMessage(content: "I choose \(topic.title)", mode: .chat, attachmentIds: nil)
+        }
+    }
+    
+    func handleModuleSelection(_ module: CourseModule) {
+        print("Selected module: \(module.title)")
+        Task {
+            // Switch to Tutor mode implicitly
+            await sendMessage(content: "Let's start module: \(module.title)", mode: .tutor, attachmentIds: nil)
+        }
     }
     
     private func getModeContext(for mode: AIChatMode) -> String {

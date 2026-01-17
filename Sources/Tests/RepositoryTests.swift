@@ -1,10 +1,12 @@
 import Foundation
+import XCTest
+@testable import Lyo
 
 // MARK: - Repository Test Suite
 /// Comprehensive tests for all repositories
 /// Use MockRepositories for UI testing, DefaultRepositories for backend integration
-
-class RepositoryTests {
+@MainActor
+class RepositoryTests: XCTestCase {
 
     // MARK: - Test Results
     struct TestResult {
@@ -372,6 +374,7 @@ class RepositoryTests {
 // MARK: - Test Execution Helper
 
 /// Run this to test all repositories
+@MainActor
 func runRepositoryTests() async {
     let tests = RepositoryTests()
     await tests.runAllTests()
@@ -380,6 +383,7 @@ func runRepositoryTests() async {
 // MARK: - Quick Tests for Development
 
 /// Quick test for specific repository
+@MainActor
 func testSpecificRepository() async {
     print("🔍 Quick Repository Test\n")
 
@@ -404,6 +408,7 @@ func testSpecificRepository() async {
 // MARK: - Backend Integration Test
 
 /// Test against actual backend (requires backend running)
+@MainActor
 func testBackendIntegration() async {
     print("""
     ================================================

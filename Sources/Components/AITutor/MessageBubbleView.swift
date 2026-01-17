@@ -8,25 +8,41 @@ struct LyoMessageBubbleView: View {
     var onAudioToggle: ((String, String) -> Void)?  // (messageId, text) -> Void
     var isPlayingAudio: Bool = false
     var audioProgress: Double = 0
+    
+    // A2UI callbacks for rich content interactions
+    var onA2UICourseStart: ((CourseCreationData) -> Void)?
+    var onA2UIQuizAnswer: ((String, Int) -> Void)?
+    
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     
     var body: some View {
-        HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
+        VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: 8) {
+            // AI Header: Mascot on TOP (not side)
             if !message.isFromUser {
-                // Enhanced Lyo avatar with gradient
-                PremiumLyoAvatar(size: 32)
+                HStack(spacing: 8) {
+                    PremiumLyoAvatar(size: 24)
+                    Text("Lyo")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                    Spacer()
+                }
+                .padding(.leading, 12)
+                .padding(.bottom, 2)
             }
             
+            // Main Bubble Content
             VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: DesignTokens.Spacing.xs) {
                 // Message content with premium styling
                 HStack(alignment: .top, spacing: 8) {
                     Text(message.content)
                         .font(DesignTokens.Typography.bodyMedium)
-                        .foregroundColor(DesignTokens.Colors.textPrimary)
+                        .foregroundColor(.white) // Force white text
+                        .fixedSize(horizontal: false, vertical: true) // Wrap text
                         .lineSpacing(4)
                     
                     // TTS Audio Button (AI messages only)
                     if !message.isFromUser && onAudioToggle != nil {
+                        Spacer()
                         MessageAudioButton(
                             messageId: message.id,
                             text: message.content,
@@ -39,11 +55,21 @@ struct LyoMessageBubbleView: View {
                     }
                 }
                 .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.sm)
-                .padding(.vertical, DesignTokens.Spacing.sm)
+                .padding(.vertical, DesignTokens.Spacing.md) // Increased padding
                 .background(messageBackground)
                 
-                // Mentor Mode Content
+                // ==== A2UI RICH CONTENT RENDERING ====
+                // This renders Course Roadmaps, Quizzes, Flashcards inline
+                if let contentTypes = message.contentTypes, !contentTypes.isEmpty {
+                    VStack(spacing: 12) {
+                        ForEach(Array(contentTypes.enumerated()), id: \.offset) { index, contentType in
+                            renderContentType(contentType)
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                
+                // Mentor Mode Content (Legacy support)
                 if let mode = message.responseMode {
                     switch mode {
                     case .explainer:
@@ -51,6 +77,7 @@ struct LyoMessageBubbleView: View {
                             QuickExplainerView(data: data) { chip in
                                 onQuickChipTap?(chip)
                             }
+                            .padding(.horizontal, 4) // Indent slightly
                         }
                     case .course:
                         if let data = message.courseProposal {
@@ -80,42 +107,150 @@ struct LyoMessageBubbleView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, 4)
                 }
                 
                 // Timestamp and status
                 HStack(spacing: 4) {
                     Text(formatTime(message.timestamp))
                         .font(DesignTokens.Typography.caption)
-                        .foregroundColor(DesignTokens.Colors.textSecondary)
+                        .foregroundColor(.gray)
                     
                     if message.isFromUser, let status = message.status {
                         StatusIcon(status: status)
                     }
                 }
+                .padding(.horizontal, 8)
+            }
+            .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.98, alignment: message.isFromUser ? .trailing : .leading) // 98% width for AI
+            
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, DesignTokens.Spacing.xs)
+    }
+    
+    // MARK: - A2UI Content Type Rendering
+    
+    @ViewBuilder
+    private func renderContentType(_ contentType: MessageContentType) -> some View {
+        switch contentType {
+        case .courseRoadmap(let title, let modules, _, _):
+            // Convert CourseModule to CourseModuleData
+            let convertedModules: [CourseModuleData] = modules.map { mod in
+                CourseModuleData(
+                    id: mod.id,
+                    title: mod.title,
+                    description: mod.duration ?? ""
+                )
+            }
+            let courseData = CourseCreationData(
+                id: UUID().uuidString,
+                title: title,
+                topic: title,
+                level: "intermediate",
+                modules: convertedModules
+            )
+            CourseRoadmapCardView(course: courseData) { course in
+                onA2UICourseStart?(course)
             }
             
-            if message.isFromUser {
-                Spacer(minLength: 60)
-            } else {
-                Spacer(minLength: 0)
+        case .quiz(let question, let options, let correctIndex, _):
+            // Single question quiz - use local QuizData/QuizQuestionData
+            let quizData = QuizData(
+                title: "Quick Quiz",
+                questions: [
+                    QuizQuestionData(
+                        id: UUID().uuidString,
+                        question: question,
+                        options: options,
+                        correctAnswer: options.indices.contains(correctIndex) ? options[correctIndex] : options.first ?? ""
+                    )
+                ]
+            )
+            QuizCardView(quiz: quizData) { questionText, answerIndex in
+                onA2UIQuizAnswer?(questionText, answerIndex)
             }
+            
+        case .flashcards(let title, let cards):
+            // Convert Flashcard to FlashcardItem
+            let convertedCards: [FlashcardItem] = cards.map { card in
+                FlashcardItem(id: card.id, front: card.front, back: card.back)
+            }
+            let flashcardData = FlashcardData(title: title, cards: convertedCards)
+            FlashcardsCardView(flashcards: flashcardData)
+            
+        case .courseCard(let courseId, let title, let subtitle, let thumbnail):
+            // Render as a mini course card
+            InlineCourseCardView(
+                courseId: courseId,
+                title: title,
+                subtitle: subtitle,
+                thumbnail: thumbnail
+            )
+            
+        case .codeSnippet(_, let code):
+            // CodeSnippetView in ModuleCardView.swift only takes code parameter
+            CodeSnippetView(code: code)
+            
+        case .richCard(let title, let body, let imageURLString, let actions):
+            RichCardView(
+                title: title,
+                content: body,
+                imageURL: imageURLString.flatMap { URL(string: $0) },
+                actions: actions ?? []
+            )
+            
+        case .processing(let step, let progress):
+            ProcessingIndicatorView(step: step, progress: progress)
+            
+        case .topicSelection(let title, let topics):
+            TopicSelectionView(title: title, topics: topics) { topic in
+                onQuickChipTap?(topic.title)
+            }
+            
+        default:
+            // Text, image, audio, video, file, poll - either already handled or not needed inline
+            EmptyView()
         }
-        .padding(.horizontal, DesignTokens.Spacing.md)
-        .padding(.vertical, DesignTokens.Spacing.xs)
     }
     
     @ViewBuilder
     private var messageBackground: some View {
         if message.isFromUser {
-            // User message: gradient background
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                .fill(DesignTokens.Colors.userMessageGradient)
-                .applyMultiLayerShadow()
+            // User message: Lighter black with depth + slim gradient trim
+            ZStack {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .fill(Color(white: 0.15)) // Lighter Black
+                
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
         } else {
-            // AI message: glassmorphic effect
-            RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                .glassmorphic(borderColor: DesignTokens.Colors.accent)
-                .applyShadow(DesignTokens.Shadow.md)
+            // AI message: Black with glowing gradient line
+            ZStack {
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .fill(Color.black) // Pure Black
+                
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")], // Purple to Blue
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            }
+            // Glowing effect
+            .shadow(color: Color(hex: "8B5CF6").opacity(0.4), radius: 10, x: 0, y: 0)
         }
     }
     
@@ -330,3 +465,62 @@ struct StatusIcon: View {
 
 // FlowLayout moved to Sources/Components/Common/FlowLayout.swift
 
+// MARK: - Inline Content Helper Views
+
+/// Inline Course Card (compact version for chat)
+struct InlineCourseCardView: View {
+    let courseId: String
+    let title: String
+    let subtitle: String?
+    let thumbnail: String?
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail or icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: "book.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.white)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                
+                if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .foregroundColor(.white.opacity(0.5))
+        }
+        .padding(12)
+        .background(Color(white: 0.12))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(hex: "8B5CF6").opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// Note: CodeSnippetView, RichCardView, ProcessingIndicatorView, and TopicSelectionView
+// are defined in Sources/Components/Common/ or Classroom/ to avoid duplication

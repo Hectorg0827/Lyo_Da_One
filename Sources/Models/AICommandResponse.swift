@@ -53,7 +53,7 @@ struct CoursePayload: Codable {
 
 // MARK: - Response Parser
 
-struct AIResponseParser {
+struct AICommandParser {
     
     /// Represents a parsed AI response - either a command or regular chat
     enum ParsedResponse {
