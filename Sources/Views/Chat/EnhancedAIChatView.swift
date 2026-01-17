@@ -151,6 +151,9 @@ extension EnhancedAIChatView {
                             },
                             onModuleSelect: { module in
                                 viewModel.handleModuleSelection(module)
+                            },
+                            onSuggestionSelect: { suggestion in
+                                viewModel.handleSuggestionSelect(suggestion)
                             }
                         )
                         .id(message.id)
@@ -410,6 +413,13 @@ class AIChatViewModel: ObservableObject {
         Task {
             // Switch to Tutor mode implicitly
             await sendMessage(content: "Let's start module: \(module.title)", mode: .tutor, attachmentIds: nil)
+        }
+    }
+    
+    func handleSuggestionSelect(_ suggestion: String) {
+        print("Selected suggestion: \(suggestion)")
+        Task {
+            await sendMessage(content: suggestion, mode: .chat, attachmentIds: nil)
         }
     }
     

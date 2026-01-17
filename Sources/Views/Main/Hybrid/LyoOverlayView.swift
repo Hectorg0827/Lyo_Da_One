@@ -73,7 +73,11 @@ struct LyoOverlayView: View {
                                                 viewModel.openCourse(id: id)
                                             },
                                             onTopicSelect: nil,
-                                            onModuleSelect: nil
+                                            onModuleSelect: nil,
+                                            onSuggestionSelect: { suggestion in
+                                                viewModel.inputText = suggestion
+                                                submitText()
+                                            }
                                         )
                                         .id(message.id)
                                     }
