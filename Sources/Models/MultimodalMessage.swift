@@ -21,11 +21,19 @@ enum MessageContentType: Codable, Equatable {
     case courseCard(courseId: String, title: String, subtitle: String?, thumbnail: String?)
     case poll(question: String, options: [String], votes: [Int]?)
     case richCard(title: String, body: String, imageURL: String?, actions: [CardAction]?)
+    case processing(step: String, progress: Double?)
+    case topicSelection(title: String, topics: [TopicOption])
+    case courseRoadmap(title: String, modules: [CourseModule], totalModules: Int, completedModules: Int)
+    case flashcards(title: String, cards: [Flashcard])
+    case suggestions(title: String, options: [String])
     
     enum CodingKeys: String, CodingKey {
         case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
         case language, code, question, options, correctIndex, explanation
         case courseId, title, subtitle, body, imageURL, actions, votes
+        case step, progress, topics
+        case modules, totalModules, completedModules
+        case cards
     }
     
     init(from decoder: Decoder) throws {
@@ -82,6 +90,28 @@ enum MessageContentType: Codable, Equatable {
             let imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
             let actions = try container.decodeIfPresent([CardAction].self, forKey: .actions)
             self = .richCard(title: title, body: body, imageURL: imageURL, actions: actions)
+        case "processing":
+            let step = try container.decode(String.self, forKey: .step)
+            let progress = try container.decodeIfPresent(Double.self, forKey: .progress)
+            self = .processing(step: step, progress: progress)
+        case "topic_selection":
+            let title = try container.decode(String.self, forKey: .title)
+            let topics = try container.decode([TopicOption].self, forKey: .topics)
+            self = .topicSelection(title: title, topics: topics)
+        case "course_roadmap":
+            let title = try container.decode(String.self, forKey: .title)
+            let modules = try container.decode([CourseModule].self, forKey: .modules)
+            let total = try container.decode(Int.self, forKey: .totalModules)
+            let completed = try container.decode(Int.self, forKey: .completedModules)
+            self = .courseRoadmap(title: title, modules: modules, totalModules: total, completedModules: completed)
+        case "flashcards":
+            let title = try container.decode(String.self, forKey: .title)
+            let cards = try container.decode([Flashcard].self, forKey: .cards)
+            self = .flashcards(title: title, cards: cards)
+        case "suggestions":
+            let title = try container.decode(String.self, forKey: .title)
+            let options = try container.decode([String].self, forKey: .options)
+            self = .suggestions(title: title, options: options)
         default:
             self = .text
         }
@@ -140,6 +170,49 @@ enum MessageContentType: Codable, Equatable {
             try container.encode(body, forKey: .body)
             try container.encodeIfPresent(imageURL, forKey: .imageURL)
             try container.encodeIfPresent(actions, forKey: .actions)
+        case .processing(let step, let progress):
+            try container.encode("processing", forKey: .type)
+            try container.encode(step, forKey: .step)
+            try container.encodeIfPresent(progress, forKey: .progress)
+        case .topicSelection(let title, let topics):
+            try container.encode("topic_selection", forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encode(topics, forKey: .topics)
+        case .courseRoadmap(let title, let modules, let total, let completed):
+            try container.encode("course_roadmap", forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encode(modules, forKey: .modules)
+            try container.encode(total, forKey: .totalModules)
+            try container.encode(completed, forKey: .completedModules)
+        case .flashcards(let title, let cards):
+            try container.encode("flashcards", forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encode(cards, forKey: .cards)
+        case .suggestions(let title, let options):
+            try container.encode("suggestions", forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encode(options, forKey: .options)
+        }
+    }
+    
+    static func == (lhs: MessageContentType, rhs: MessageContentType) -> Bool {
+        switch (lhs, rhs) {
+        case (.text, .text): return true
+        case (.image(let u1, let c1), .image(let u2, let c2)): return u1 == u2 && c1 == c2
+        case (.audio(let u1, let d1, let t1), .audio(let u2, let d2, let t2)): return u1 == u2 && d1 == d2 && t1 == t2
+        case (.video(let u1, let t1, let d1), .video(let u2, let t2, let d2)): return u1 == u2 && t1 == t2 && d1 == d2
+        case (.file(let u1, let n1, let m1, let s1), .file(let u2, let n2, let m2, let s2)): return u1 == u2 && n1 == n2 && m1 == m2 && s1 == s2
+        case (.codeSnippet(let l1, let c1), .codeSnippet(let l2, let c2)): return l1 == l2 && c1 == c2
+        case (.quiz(let q1, let o1, let c1, let e1), .quiz(let q2, let o2, let c2, let e2)): return q1 == q2 && o1 == o2 && c1 == c2 && e1 == e2
+        case (.courseCard(let i1, let t1, let s1, let th1), .courseCard(let i2, let t2, let s2, let th2)): return i1 == i2 && t1 == t2 && s1 == s2 && th1 == th2
+        case (.poll(let q1, let o1, let v1), .poll(let q2, let o2, let v2)): return q1 == q2 && o1 == o2 && v1 == v2
+        case (.richCard(let t1, let b1, let i1, let a1), .richCard(let t2, let b2, let i2, let a2)): return t1 == t2 && b1 == b2 && i1 == i2 && a1 == a2
+        case (.processing(let s1, let p1), .processing(let s2, let p2)): return s1 == s2 && p1 == p2
+        case (.topicSelection(let t1, let to1), .topicSelection(let t2, let to2)): return t1 == t2 && to1 == to2
+        case (.courseRoadmap(let t1, let m1, let tm1, let cm1), .courseRoadmap(let t2, let m2, let tm2, let cm2)): return t1 == t2 && m1 == m2 && tm1 == tm2 && cm1 == cm2
+        case (.flashcards(let t1, let c1), .flashcards(let t2, let c2)): return t1 == t2 && c1 == c2
+        case (.suggestions(let t1, let o1), .suggestions(let t2, let o2)): return t1 == t2 && o1 == o2
+        default: return false
         }
     }
 }
@@ -164,7 +237,7 @@ struct CardAction: Codable, Equatable, Identifiable {
 // MARK: - Chat Attachment
 
 /// Attachment for multimodal messages
-struct ChatAttachment: Identifiable, Equatable {
+struct ChatAttachment: Identifiable, Equatable, Codable {
     let id: String
     let type: AttachmentType
     var url: String?
@@ -204,7 +277,7 @@ struct ChatAttachment: Identifiable, Equatable {
 // MARK: - Multimodal Message
 
 /// Enhanced message model with multimodal support
-struct MultimodalMessage: Identifiable, Equatable {
+struct MultimodalMessage: Identifiable, Equatable, Codable {
     let id: String
     let role: MessageRole
     var content: String
@@ -220,7 +293,7 @@ struct MultimodalMessage: Identifiable, Equatable {
         case system
     }
     
-    struct MessageMetadata: Equatable {
+    struct MessageMetadata: Equatable, Codable {
         var aiSource: String?
         var responseTimeMs: Double?
         var tokensUsed: Int?
@@ -387,5 +460,52 @@ struct RichCardContent {
         self.body = body
         self.imageURL = imageURL
         self.actions = actions
+    }
+}
+
+/// Option for topic selection widget
+struct TopicOption: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let icon: String // System image name or emoji
+    let gradientColors: [String]? // Hex codes for gradient
+    
+    init(id: String = UUID().uuidString, title: String, icon: String, gradientColors: [String]? = nil) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+        self.gradientColors = gradientColors
+    }
+}
+
+/// Module info for course roadmap widget
+struct CourseModule: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let duration: String?
+    let isCompleted: Bool
+    let isLocked: Bool
+    
+    init(id: String = UUID().uuidString, title: String, duration: String?, isCompleted: Bool = false, isLocked: Bool = false) {
+        self.id = id
+        self.title = title
+        self.duration = duration
+        self.isCompleted = isCompleted
+        self.isLocked = isLocked
+    }
+}
+
+/// Flashcard for study mode widget
+struct Flashcard: Codable, Identifiable, Equatable {
+    let id: String
+    let front: String
+    let back: String
+    var isMastered: Bool
+    
+    init(id: String = UUID().uuidString, front: String, back: String, isMastered: Bool = false) {
+        self.id = id
+        self.front = front
+        self.back = back
+        self.isMastered = isMastered
     }
 }

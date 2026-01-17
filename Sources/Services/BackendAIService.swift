@@ -24,12 +24,148 @@ struct BackendAIChatRequest: Encodable {
     }
 }
 
+// MARK: - A2UI Models (Backend-Driven UI)
+/// A2UI Content payload from backend - supports multiple widget types
+struct A2UIContent: Codable {
+    let type: A2UIContentType
+    
+    // Course Roadmap Widget (nested structure)
+    let courseRoadmap: A2UICourseRoadmap?
+    
+    // Quiz Widget (nested structure)
+    let quiz: A2UIQuiz?
+    
+    // Topic Selection Widget
+    let title: String?
+    let topics: [A2UITopicOption]?
+    
+    // Flashcards Widget
+    let cards: [A2UIFlashcard]?
+    
+    // Flat course roadmap fields (backwards compatibility)
+    let modules: [A2UIFlatModule]?
+    let totalModules: Int?
+    let completedModules: Int?
+    
+    // Suggestions Widget (fallback for engagement)
+    let suggestions: [String]?
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+        case courseRoadmap = "course_roadmap"
+        case quiz
+        case title
+        case topics
+        case cards
+        case modules
+        case totalModules
+        case completedModules
+        case suggestions
+    }
+}
+
+enum A2UIContentType: String, Codable {
+    case text
+    case processing
+    case topicSelection = "topic_selection"
+    case courseRoadmap = "course_roadmap"
+    case flashcards
+    case quiz
+    case suggestions
+    case unknown
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        self = A2UIContentType(rawValue: value) ?? .unknown
+    }
+}
+
+// MARK: - Course Roadmap Models
+struct A2UICourseRoadmap: Codable {
+    let title: String
+    let topic: String
+    let level: String
+    let modules: [A2UIModule]
+}
+
+struct A2UIModule: Codable {
+    let title: String
+    let description: String?
+    let lessons: [A2UILesson]?
+    
+    // Memberwise initializer for manual construction
+    init(title: String, description: String? = nil, lessons: [A2UILesson]? = nil) {
+        self.title = title
+        self.description = description
+        self.lessons = lessons
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        lessons = try container.decodeIfPresent([A2UILesson].self, forKey: .lessons)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case title, description, lessons
+    }
+}
+
+struct A2UILesson: Codable {
+    let title: String
+    let duration: String?
+}
+
+// Flat module for backwards compatibility
+struct A2UIFlatModule: Codable {
+    let id: String?
+    let title: String
+    let duration: String?
+    let isCompleted: Bool?
+    let isLocked: Bool?
+}
+
+// MARK: - Quiz Models
+struct A2UIQuiz: Codable {
+    let title: String
+    let questions: [A2UIQuestion]
+}
+
+struct A2UIQuestion: Codable {
+    let question: String
+    let options: [String]
+    let correctAnswer: String
+    
+    enum CodingKeys: String, CodingKey {
+        case question
+        case options
+        case correctAnswer = "correct_answer"
+    }
+}
+
+// MARK: - Topic Selection Models
+struct A2UITopicOption: Codable {
+    let title: String
+    let icon: String?
+    let gradientColors: [String]?
+}
+
+// MARK: - Flashcard Models
+struct A2UIFlashcard: Codable {
+    let front: String
+    let back: String
+    let hint: String?
+}
+
 // Response from /api/v1/ai/chat
 // Backend returns: { "response": "...", "conversationHistory": [...] }
 struct BackendAIChatResponse: Codable {
     // Primary fields from backend ChatResponse
     let response: String?  // Backend's main response field
     let conversationHistory: [ConversationMessage]?
+    let contentTypes: [A2UIContent]?
     
     // Legacy fields for backward compatibility (may not be present anymore)
     let content: String?  // Some endpoints still use this
@@ -68,6 +204,7 @@ struct BackendAIChatResponse: Codable {
         case responseMode = "response_mode"
         case quickExplainer = "quick_explainer"
         case courseProposal = "course_proposal"
+        case contentTypes = "content_types"
     }
     
     // Computed property for easy access to the AI response text
@@ -299,7 +436,7 @@ final class BackendAIService {
         message: String,
         resourceId: String? = nil,
         mode: String = "focus"
-    ) async throws -> (response: String, source: String, wasCommand: Bool) {
+    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, wasCommand: Bool) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -342,7 +479,7 @@ final class BackendAIService {
             let rawResponse = response.responseText
             
             // Parse response to check for commands
-            let (displayText, wasCommand) = await AICommandHandler.shared.processResponse(rawResponse)
+            let (displayText, wasCommand) = AICommandHandler.shared.processResponse(rawResponse)
             
             // Update local conversation history with the original user message
             // and the display text (not raw JSON if it was a command)
@@ -354,7 +491,7 @@ final class BackendAIService {
                 conversationHistory = Array(conversationHistory.suffix(10))
             }
             
-            return (response: displayText, source: response.aiSource, wasCommand: wasCommand)
+            return (response: displayText, source: response.aiSource, uiContent: response.contentTypes, wasCommand: wasCommand)
             
         } catch {
             print("⚠️ Backend AI failed: \(error). Will fallback to local.")
