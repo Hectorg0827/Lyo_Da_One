@@ -314,10 +314,10 @@ struct LioChatSheet: View {
             }
             
             VStack(spacing: 8) {
-                Text("Hi! I'm Lio")
+                Text("Hello \(AuthService.shared.currentUserName.components(separatedBy: " ").first ?? "there"),")
                     .font(.title2.bold())
                 
-                Text("Your AI learning companion. Ask me anything about \(uiState.currentTab.displayName.lowercased())!")
+                Text("What would you like to learn today?")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -473,10 +473,25 @@ struct LioChatSheet: View {
         .padding(.horizontal, 16)
         .padding(.top, 16)
         .padding(.bottom, 20)
-        // Solid Black Background
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: Color.white.opacity(0.1), radius: 15, x: 0, y: 5)
+        // Solid Black Background with Gradient Trim (Island Style)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(Color.black)
+                
+                RoundedRectangle(cornerRadius: 28)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color(hex: "8B5CF6").opacity(0.6), Color(hex: "3B82F6").opacity(0.4)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            }
+        )
+        .padding(.horizontal, 12) // Outer padding to make it look like an island
+        .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
         .sheet(isPresented: $showMediaPicker) {
             mediaPickerSheet
         }
@@ -498,67 +513,24 @@ struct LioChatSheet: View {
     }
     
     private var standardInputBar: some View {
-        VStack(spacing: 16) {
-            // Row 1: Text Input + Send/Mic Button
-            HStack(alignment: .bottom, spacing: 12) {
-                // Text Input Field (Expanded Height)
+        VStack(spacing: 12) {
+            // Row 1: Text Input Area (Full Width)
+            HStack {
                 TextField("Ask anything...", text: $viewModel.inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 14) // Increased vertical padding
-                    .frame(minHeight: 52)   // Enforce minimum height
-                    .background(Color(white: 0.1)) // Dark gray
-                    .cornerRadius(26)       // Pill shape
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 48)
+                    .background(Color(white: 0.08))
+                    .cornerRadius(20)
                     .foregroundColor(.white)
-                    .accentColor(.white)
+                    .accentColor(DesignTokens.Colors.accent)
                     .lineLimit(1...6)
-                
-                // Voice/Send Button - Next to text bar
-                if viewModel.inputText.isEmpty && viewModel.attachments.isEmpty {
-                    // Mic Button
-                    Button(action: {
-                        HapticManager.shared.playMediumImpact()
-                        viewModel.toggleVoiceMode()
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 45, height: 45)
-                                .shadow(color: Color(hex: "8B5CF6").opacity(0.4), radius: 8, x: 0, y: 4)
-                            
-                            Image(systemName: "mic.fill")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                } else {
-                    // Send Button
-                    Button(action: {
-                        HapticManager.shared.playSuccess()
-                        Task { await viewModel.sendMessage() }
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color(hex: "8B5CF6"))
-                                .frame(width: 45, height: 45)
-                            
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                }
             }
             
-            // Row 2: (+) Attachment + Mode Selector
-            HStack(spacing: 16) {
-                // "+" Button
+            // Row 2: Bottom Toolbar Island
+            HStack(spacing: 12) {
+                // Left: Single "+" Menu button
                 Menu {
                     Button(action: { openPhotoPicker() }) {
                         Label("Photo Library", systemImage: "photo.on.rectangle")
@@ -571,14 +543,14 @@ struct LioChatSheet: View {
                     }
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white) // White icon
-                        .frame(width: 40, height: 40)
-                        .background(Color(white: 0.1)) // Dark gray bg
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color(white: 0.15))
                         .clipShape(Circle())
                 }
                 
-                // Mode Selector
+                // Middle: Mode Selector
                 Menu {
                     Button(action: { /* Switch to Study mode */ }) {
                         Label("Study", systemImage: "book.fill")
@@ -593,22 +565,78 @@ struct LioChatSheet: View {
                         Label("Course", systemImage: "graduationcap")
                     }
                 } label: {
-                    HStack(spacing: 6) { // Tighter spacing
+                    HStack(spacing: 6) {
                         Text(currentModeName)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white) // White text
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
                         
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color(.secondarySystemBackground)) // Match text field bg style
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color(white: 0.15))
                     .clipShape(Capsule())
                 }
                 
                 Spacer()
+                
+                // Right: Mic / Live / Send
+                HStack(spacing: 12) {
+                    // Live Mode Button
+                    Button(action: {
+                        HapticManager.shared.playLightImpact()
+                        // Handle Live Mode
+                    }) {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white.opacity(0.8))
+                            .frame(width: 36, height: 36)
+                            .background(Color(white: 0.15))
+                            .clipShape(Circle())
+                    }
+                    
+                    if viewModel.inputText.isEmpty && viewModel.attachments.isEmpty {
+                        // Mic (TTS) Button
+                        Button(action: {
+                            HapticManager.shared.playMediumImpact()
+                            viewModel.toggleVoiceMode()
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 36, height: 36)
+                                
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    } else {
+                        // Send Button
+                        Button(action: {
+                            HapticManager.shared.playSuccess()
+                            Task { await viewModel.sendMessage() }
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(DesignTokens.Colors.accent)
+                                    .frame(width: 36, height: 36)
+                                
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

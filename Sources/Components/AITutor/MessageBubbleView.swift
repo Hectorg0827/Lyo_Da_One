@@ -16,18 +16,41 @@ struct LyoMessageBubbleView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     
     var body: some View {
-        VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: 8) {
-            // AI Header: Mascot on TOP (not side)
+        VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: 0) {
+            // AI Header: Mascot OVERLAPPING (3D effect)
             if !message.isFromUser {
-                HStack(spacing: 8) {
-                    PremiumLyoAvatar(size: 24)
+                HStack {
+                    ZStack(alignment: .bottom) {
+                        // Decorative glowing gradient behind avatar for 3D depth
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "8B5CF6").opacity(0.8), Color(hex: "3B82F6").opacity(0.6)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 32, height: 32)
+                            .blur(radius: 6)
+                        
+                        PremiumLyoAvatar(size: 30)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+                    .offset(y: 15) // Overlap the bubble
+                    .zIndex(10)
+                    
                     Text("Lyo")
                         .font(.caption.bold())
                         .foregroundStyle(.white)
+                        .padding(.top, 10)
+                    
                     Spacer()
                 }
-                .padding(.leading, 12)
-                .padding(.bottom, 2)
+                .padding(.leading, 20)
+                .padding(.bottom, -8) // Pull content closer
             }
             
             // Main Bubble Content
@@ -122,7 +145,7 @@ struct LyoMessageBubbleView: View {
                 }
                 .padding(.horizontal, 8)
             }
-            .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.98, alignment: message.isFromUser ? .trailing : .leading) // 98% width for AI
+            .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.99, alignment: message.isFromUser ? .trailing : .leading) // 99% width for AI
             
         }
         .padding(.horizontal, 4)
@@ -234,10 +257,10 @@ struct LyoMessageBubbleView: View {
             }
             .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
         } else {
-            // AI message: Black with glowing gradient line
+            // AI message: Dark Transparent Black with glowing gradient line (3D effect under mascot)
             ZStack {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                    .fill(Color.black) // Pure Black
+                    .fill(Color.black.opacity(0.85)) // Darker but Maintain Transparency
                 
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
                     .stroke(
@@ -249,8 +272,8 @@ struct LyoMessageBubbleView: View {
                         lineWidth: 1.5
                     )
             }
-            // Glowing effect
-            .shadow(color: Color(hex: "8B5CF6").opacity(0.4), radius: 10, x: 0, y: 0)
+            // Deeper Glowing effect highlighting the trim
+            .shadow(color: Color(hex: "8B5CF6").opacity(0.3), radius: 12, x: 0, y: 0)
         }
     }
     

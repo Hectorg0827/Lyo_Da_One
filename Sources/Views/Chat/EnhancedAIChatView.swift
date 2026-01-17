@@ -351,15 +351,18 @@ class AIChatViewModel: ObservableObject {
             // Remove processing message
             messages.removeAll { $0.id == processingId }
             
-            // Add AI response
+            // Add AI response with contentTypes from backend
             let aiMessage = MultimodalMessage(
                 id: UUID().uuidString,
                 role: .assistant,
                 content: response.text,
+                contentTypes: response.contentTypes ?? [.text],
                 attachments: [],
                 timestamp: Date()
             )
             messages.append(aiMessage)
+            
+            print("✅ AI response received with \(response.contentTypes?.count ?? 0) contentTypes")
             
         } catch {
             print("❌ Failed to send message: \(error)")
