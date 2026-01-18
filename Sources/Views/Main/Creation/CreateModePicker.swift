@@ -13,22 +13,34 @@ struct CreateModePicker: View {
     let onModeSelected: (CreateMode) -> Void
     
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 20) {
-                ForEach(CreateMode.allCases) { mode in
-                    ModeButton(
-                        mode: mode,
-                        isSelected: selectedMode == mode
-                    ) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            selectedMode = mode
-                            onModeSelected(mode)
+        ZStack {
+            // Background Fade (TikTok style)
+            LinearGradient(
+                colors: [Color.black.opacity(0), Color.black.opacity(0.9)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 120)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(CreateMode.allCases) { mode in
+                        ModeButton(
+                            mode: mode,
+                            isSelected: selectedMode == mode
+                        ) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                selectedMode = mode
+                                onModeSelected(mode)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 20)
         }
+        .frame(height: 120)
     }
 }
 
@@ -41,48 +53,44 @@ struct ModeButton: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                // Icon Circle
-                ZStack {
-                    // Outer Glow (when selected)
-                    if isSelected {
-                        Circle()
-                            .fill(mode.color.opacity(0.3))
-                            .frame(width: 70, height: 70)
-                            .blur(radius: 10)
-                    }
-                    
-                    // Main Circle
-                    Circle()
-                        .fill(isSelected ? mode.color : Color.white.opacity(0.1))
-                        .frame(width: 60, height: 60)
-                    
-                    // Icon
-                    Image(systemName: mode.icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
-                }
-                .scaleEffect(isSelected ? 1.1 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            HStack(spacing: 6) {
+                Text(mode.iconForMode)
+                    .font(.system(size: 14))
                 
-                // Label
                 Text(mode.rawValue)
-                    .font(.caption.bold())
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.6))
-                
-                // Indicator Line
-                if isSelected {
-                    Capsule()
-                        .fill(mode.color)
-                        .frame(width: 30, height: 3)
-                        .transition(.scale.combined(with: .opacity))
-                } else {
-                    Capsule()
-                        .fill(.clear)
-                        .frame(width: 30, height: 3)
-                }
+                    .font(.system(size: 13, weight: .bold))
             }
-            .frame(width: 80)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Group {
+                    if isSelected {
+                        LinearGradient(
+                            colors: [Color(hex: "3B82F6"), Color(hex: "06B6D4")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    } else {
+                        Color.white.opacity(0.1)
+                    }
+                }
+            )
+            .foregroundColor(isSelected ? .white : .white.opacity(0.6))
+            .clipShape(Capsule())
+            .shadow(color: isSelected ? Color(hex: "3B82F6").opacity(0.5) : .clear, radius: 10)
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+        }
+    }
+}
+
+extension CreateMode {
+    var iconForMode: String {
+        switch self {
+        case .story: return "📸"
+        case .reel: return "🎬"
+        case .post: return "✏️"
+        case .course: return "📚"
+        case .event: return "🎉"
         }
     }
 }

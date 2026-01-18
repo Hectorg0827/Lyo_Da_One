@@ -408,6 +408,23 @@ class LyoAIViewModel: ObservableObject {
         }
     }
     
+    // MARK: - A2UI Interactions
+    
+    func onA2UICourseStart(course: CourseCreationData) {
+        print("🚀 LyoAIViewModel: Starting A2UI course -> \(course.title)")
+        HapticManager.shared.playSuccess()
+        unifiedChat.pendingCourse = course
+        unifiedChat.triggerCourseNavigation()
+    }
+    
+    func onA2UIQuizAnswer(question: String, answerIndex: Int) {
+        print("✍️ LyoAIViewModel: Quiz answer -> \(answerIndex)")
+        HapticManager.shared.playLightImpact()
+        // Send answer to AI
+        inputText = "My answer to '\(question)' is option \(answerIndex + 1)"
+        Task { await sendMessage() }
+    }
+    
     // MARK: - A2UI Action Handler (DISABLED - A2UI Parser not currently in build)
     
     // @MainActor

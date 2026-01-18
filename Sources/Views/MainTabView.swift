@@ -93,8 +93,8 @@ struct MainTabView: View {
                 DiscoverView() // Will rename to ClipsView later
                     .tag(Tab.clips)
                 
-                // Create Tab - Placeholder, will present sheet
-                Color.clear
+                // Create Tab - Multi-Mode Creation Interface
+                MultiModeCreationView()
                     .tag(Tab.create)
                 
                 // Community
@@ -142,12 +142,9 @@ struct MainTabView: View {
                     isCreationSheetPresented: $isCreationSheetPresented,
                     isCreateActive: isCreationSheetPresented || isCreateHubPresented,
                     onCreateTap: {
-                        lastCreationOption = creationOption(for: lastCreateMode)
-                        isCreationSheetPresented = true
+                        isCreateHubPresented = true
                     },
                     onCreateLongPress: {
-                        lastCreationOption = creationOption(for: lastCreateMode)
-                        isCreationSheetPresented = false
                         isCreateHubPresented = true
                     }
                 )
@@ -232,16 +229,6 @@ struct MainTabView: View {
         .sheet(isPresented: $isSearchPresented) {
             GlobalSearchView()
         }
-        .sheet(isPresented: $isCreationSheetPresented) {
-            CreationSheet(isPresented: $isCreationSheetPresented, selectedOption: $lastCreationOption) { option in
-                lastCreationOption = option
-                lastCreateMode = createMode(for: option)
-                isCreationSheetPresented = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    isCreateHubPresented = true
-                }
-            }
-        }
         .fullScreenCover(isPresented: $isCreateHubPresented) {
             CreateHubView(initialMode: lastCreateMode) { mode in
                 lastCreateMode = mode
@@ -315,6 +302,7 @@ struct MainTabView: View {
     
     private let tutorModePublisher = NotificationCenter.default.publisher(for: NSNotification.Name("TriggerTutorMode"))
     private let liveLessonPublisher = NotificationCenter.default.publisher(for: NSNotification.Name("TriggerLiveLesson"))
+    private let openClassroomPublisher = NotificationCenter.default.publisher(for: .openClassroom)
 }
 
 extension MainTabView {
@@ -339,6 +327,18 @@ extension MainTabView {
                         // Standard navigation (or existing mock fallback)
                         liveClassroomData = ("calculus_101", lessonId, "Calculus", "Introduction")
                     }
+                    isLiveClassroomPresented = true
+                }
+            }
+            .onReceive(openClassroomPublisher) { notification in
+                if let userInfo = notification.userInfo,
+                   let courseId = userInfo["courseId"] as? String {
+                    
+                    let lessonId = userInfo["lessonId"] as? String ?? "intro_1"
+                    let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
+                    let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
+                    
+                    liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
                     isLiveClassroomPresented = true
                 }
             }

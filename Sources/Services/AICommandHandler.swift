@@ -20,6 +20,9 @@ class AICommandHandler: ObservableObject {
     @Published var pendingStackItem: StackItemPayload?
     @Published var shouldOpenClassroom: Bool = false
     
+    /// Shared AppUIState to coordinate navigation
+    var uiState: AppUIState?
+    
     private init() {}
     
     // MARK: - Process AI Response
@@ -58,7 +61,7 @@ class AICommandHandler: ObservableObject {
         }
     }
     
-    private func handleOpenClassroom(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
+    public func handleOpenClassroom(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
         guard let course = payload?.course else {
             print("⚠️ OPEN_CLASSROOM command missing course payload")
             return ("I'd love to create a course for you! Could you tell me what topic you'd like to learn?", false)
@@ -66,12 +69,18 @@ class AICommandHandler: ObservableObject {
         
         print("🎓 Opening AI Classroom for: \(course.title)")
         
-        // Use the CourseOrchestrator for robust, optimistic creation
+        // 1. Set navigation state
+        self.pendingClassroomCourse = course
+        
+        // 2. Use the CourseOrchestrator for robust, optimistic creation
         Task {
             await CourseOrchestrator.shared.execute(proposal: course)
         }
         
-        // Also add to stack if provided
+        // 3. Trigger navigation
+        self.shouldOpenClassroom = true
+        
+        // 4. Also add to stack if provided
         if let stackItem = payload?.stackItem {
             Task {
                 await addToStack(stackItem, course: course)

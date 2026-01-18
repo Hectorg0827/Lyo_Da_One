@@ -256,7 +256,7 @@ struct CommunityItemCard: View {
                 
                 // Footer (Avatar etc)
                 HStack {
-                    if let avatar = item.userAvatar {
+                    if item.userAvatar != nil {
                         // User Avatar Mock
                         Circle() // AsyncImage here in real app
                             .fill(Color.gray.opacity(0.3))

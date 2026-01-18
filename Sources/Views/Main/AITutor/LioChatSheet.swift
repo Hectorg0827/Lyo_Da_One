@@ -59,15 +59,17 @@ struct LioChatSheet: View {
                                                 viewModel.inputText = chip
                                                 Task { await viewModel.sendMessage() }
                                             },
-                                            onCourseStart: { course in
-                                                viewModel.inputText = "Start course: \(course.title)"
-                                                Task { await viewModel.sendMessage() }
-                                            },
                                             onAudioToggle: { messageId, text in
                                                 viewModel.toggleMessageAudio(messageId: messageId, text: text)
                                             },
                                             isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
-                                            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0
+                                            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
+                                            onA2UICourseStart: { course in
+                                                viewModel.onA2UICourseStart(course: course)
+                                            },
+                                            onA2UIQuizAnswer: { question, answerIndex in
+                                                viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+                                            }
                                         )
                                         .id(msg.id)
                                     }
@@ -160,30 +162,10 @@ struct LioChatSheet: View {
             // AI Command Handler - Classroom Navigation
             .onChange(of: commandHandler.shouldOpenClassroom) { _, shouldOpen in
                 if shouldOpen {
-                    showingClassroom = true
+                    // Reset command handler state after notification is sent
+                    // MainTabView will handle the actual navigation via .openClassroom notification
+                    isPresented = false 
                     commandHandler.clearPendingNavigation()
-                }
-            }
-            .fullScreenCover(isPresented: $showingClassroom) {
-                if let course = commandHandler.pendingClassroomCourse {
-                    // Generate course and open classroom
-                    CourseGenerationIntermediateView(
-                        topic: course.topic,
-                        title: course.title,
-                        level: course.level,
-                        objectives: course.objectives,
-                        onComplete: {
-                            showingClassroom = false
-                        }
-                    )
-                } else {
-                    // Fallback if no course data
-                    Text("Opening Classroom...")
-                        .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                                showingClassroom = false
-                            }
-                        }
                 }
             }
         }

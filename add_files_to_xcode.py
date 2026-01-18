@@ -19,6 +19,7 @@ MISSING_FILES = [
     "Sources/Views/Components/ProactiveHintBanner.swift",
     "Sources/Views/Profile/HolisticProfileView.swift",
     "Sources/Views/Main/Creation/CreateHubView.swift",
+    "Sources/Views/Main/Creation/MultiModeCreationView.swift",
 ]
 
 def generate_uuid():

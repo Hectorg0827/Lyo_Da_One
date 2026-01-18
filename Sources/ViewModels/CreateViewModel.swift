@@ -103,19 +103,28 @@ class CreateViewModel: ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var cameraPosition: AVCaptureDevice.Position = .back
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
+    @Published var isCameraSource: Bool = true
     
     // Post/Course Content
-    @Published var contentText: String = ""
+    @Published var contentText: String = "" {
+        didSet {
+            updateCharCount()
+        }
+    }
+    @Published var charCount: Int = 0
     @Published var attachedFiles: [URL] = []
     
     // Course Generation
     @Published var courseTopic: String = ""
     @Published var courseLevel: String = "beginner"
     @Published var courseOutcomes: [String] = []
+    @Published var isAIOutlineActive: Bool = false
+    @Published var generatedModules: [String] = []
     
     // Event/Group Creation
     @Published var eventTitle: String = ""
     @Published var eventDescription: String = ""
+    // ...
     @Published var eventDate: Date = Date()
     @Published var eventLocation: String = ""
     @Published var isGroup: Bool = false
@@ -166,9 +175,31 @@ class CreateViewModel: ObservableObject {
         state = .idle
         progress = 0
         contentText = ""
+        charCount = 0
         capturedImage = nil
         capturedVideoURL = nil
         learnLayers = []
+        isAIOutlineActive = false
+        generatedModules = []
+    }
+    
+    private func updateCharCount() {
+        charCount = contentText.count
+    }
+    
+    func toggleAIOutline() {
+        isAIOutlineActive.toggle()
+        if isAIOutlineActive {
+            // Mock AI generation
+            generatedModules = [
+                "Module 1: Introduction",
+                "Module 2: Core Concepts",
+                "Module 3: Practice",
+                "Module 4: Assessment"
+            ]
+        } else {
+            generatedModules = []
+        }
     }
     
     // MARK: - Camera Actions

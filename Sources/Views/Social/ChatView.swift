@@ -374,6 +374,9 @@ struct MessageBubbleView: View {
                 .padding(12)
                 .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
                 .cornerRadius(16)
+                .onTapGesture {
+                    handleTap()
+                }
 
             // Read receipt for current user messages
             if isFromCurrentUser && message.readBy.count > 1 {
@@ -387,6 +390,15 @@ struct MessageBubbleView: View {
                 }
                 .padding(.horizontal, 12)
             }
+        }
+    }
+    
+    private func handleTap() {
+        guard !isFromCurrentUser else { return }
+        
+        let parsed = AICommandParser.parse(message.content)
+        if case .command(let command) = parsed, command.type == .openClassroom {
+            AICommandHandler.shared.handleOpenClassroom(command.payload)
         }
     }
 }

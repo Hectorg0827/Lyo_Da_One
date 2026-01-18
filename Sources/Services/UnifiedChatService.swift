@@ -127,10 +127,17 @@ final class UnifiedChatService: ObservableObject {
             )
             
             // 6. Parse response for commands and A2UI content
+            // We use the raw text and direct A2UI content from the backend
             let (parsedContent, a2uiElements, courseData) = parseResponse(
                 text: result.response,
                 a2uiContent: result.uiContent
             )
+            
+            // 6b. Trigger side effects for commands (Stack items, orchestrator)
+            // Even if we parsed it locally for the UI, let the CommandHandler handle system side effects
+            if result.response.contains("OPEN_CLASSROOM") || result.response.contains("ADD_TO_STACK") {
+                let _ = AICommandHandler.shared.processResponse(result.response)
+            }
             
             responseText = parsedContent
             
@@ -252,9 +259,39 @@ final class UnifiedChatService: ObservableObject {
     func navigateToCourse(_ course: CourseCreationData) {
         pendingCourse = course
         shouldNavigateToClassroom = true
+        
+        // Post global notification for cinematic flow
+        NotificationCenter.default.post(
+            name: .openClassroom, 
+            object: nil, 
+            userInfo: [
+                "courseId": "GENERATE:\(course.topic)",
+                "courseTitle": course.title,
+                "lessonId": "intro_1",
+                "lessonTitle": "Introduction"
+            ]
+        )
     }
     
-    /// Clear navigation flag after navigating
+    /// Explicitly trigger navigation to the current pending course
+    func triggerCourseNavigation() {
+        guard let course = pendingCourse else { return }
+        shouldNavigateToClassroom = true
+        
+        // Post global notification for cinematic flow
+        NotificationCenter.default.post(
+            name: .openClassroom, 
+            object: nil, 
+            userInfo: [
+                "courseId": "GENERATE:\(course.topic)",
+                "courseTitle": course.title,
+                "lessonId": "intro_1",
+                "lessonTitle": "Introduction"
+            ]
+        )
+    }
+    
+    /// Clear navigation flags
     func clearNavigation() {
         shouldNavigateToClassroom = false
     }
@@ -269,48 +306,57 @@ final class UnifiedChatService: ObservableObject {
         var elements: [MessageContentType] = []
         var courseData: CourseCreationData?
         
-        // 1. Check for OPEN_CLASSROOM JSON command
-        if let command = extractOpenClassroomCommand(from: text) {
-            let modules = command.course.objectives.enumerated().map { index, objective in
-                CourseModuleData(
-                    id: "mod_\(index + 1)",
-                    title: "Module \(index + 1)",
-                    description: objective,
-                    lessons: [
-                        CourseLessonData(id: "les_\(index + 1)_1", title: "Introduction", duration: "10 min"),
-                        CourseLessonData(id: "les_\(index + 1)_2", title: "Deep Dive", duration: "15 min"),
-                        CourseLessonData(id: "les_\(index + 1)_3", title: "Practice", duration: "10 min")
-                    ]
+        // 1. Check for JSON commands (OPEN_CLASSROOM, ADD_TO_STACK, etc.)
+        // Use the centralized AICommandParser for robust extraction
+        let commandParsed = AICommandParser.parse(text)
+        
+        switch commandParsed {
+        case .command(let command):
+            if command.type == .openClassroom, let payload = command.payload?.course {
+                // Map CoursePayload to CourseCreationData
+                let modules = payload.objectives.enumerated().map { index, objective in
+                    CourseModuleData(
+                        id: "mod_\(index + 1)",
+                        title: "Module \(index + 1)",
+                        description: objective,
+                        lessons: [
+                            CourseLessonData(id: "les_\(index + 1)_1", title: "Introduction", duration: "10 min"),
+                            CourseLessonData(id: "les_\(index + 1)_2", title: "Deep Dive", duration: "15 min"),
+                            CourseLessonData(id: "les_\(index + 1)_1", title: "Practice", duration: "10 min")
+                        ]
+                    )
+                }
+                
+                courseData = CourseCreationData(
+                    id: "course_\(UUID().uuidString.prefix(8))",
+                    title: payload.title,
+                    topic: payload.topic,
+                    level: payload.level,
+                    modules: modules
                 )
+                
+                // Add courseRoadmap to elements for UI rendering
+                let uiModules = modules.map { mod in
+                    CourseModule(
+                        id: mod.id,
+                        title: mod.title,
+                        duration: mod.lessons.first?.duration,
+                        isCompleted: false,
+                        isLocked: false
+                    )
+                }
+                elements.append(.courseRoadmap(
+                    title: payload.title,
+                    modules: uiModules,
+                    totalModules: uiModules.count,
+                    completedModules: 0
+                ))
+                
+                // Set cleaned text to a friendly message
+                cleanedText = "I've created a learning path for **\(payload.title)**! 🎓\n\nTap 'Start Learning' below to begin."
             }
-            
-            courseData = CourseCreationData(
-                id: "course_\(UUID().uuidString.prefix(8))",
-                title: command.course.title,
-                topic: command.course.topic,
-                level: command.course.level,
-                modules: modules
-            )
-            
-            // Add courseRoadmap to elements - convert CourseModuleData to CourseModule for UI
-            let uiModules = modules.map { mod in
-                CourseModule(
-                    id: mod.id,
-                    title: mod.title,
-                    duration: mod.lessons.first?.duration,
-                    isCompleted: false,
-                    isLocked: false
-                )
-            }
-            elements.append(.courseRoadmap(
-                title: command.course.title,
-                modules: uiModules,
-                totalModules: uiModules.count,
-                completedModules: 0
-            ))
-            
-            // Replace JSON with friendly message
-            cleanedText = "I've created a learning path for **\(command.course.title)**! 🎓\n\nTap 'Start Learning' below to begin."
+        case .chat(let originalText):
+            cleanedText = originalText
         }
         
         // 2. Convert backend A2UI content to MessageContentType

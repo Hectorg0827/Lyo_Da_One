@@ -113,9 +113,18 @@ struct EnhancedLyoHomeView: View {
             
             // Messages
             ForEach(viewModel.messages) { message in
-                LyoMessageBubbleView(message: message) { action in
-                    handleAction(action)
-                }
+                LyoMessageBubbleView(
+                    message: message,
+                    onActionTap: { action in
+                        handleAction(action)
+                    },
+                    onA2UICourseStart: { course in
+                        viewModel.onA2UICourseStart(course: course)
+                    },
+                    onA2UIQuizAnswer: { question, answerIndex in
+                        viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+                    }
+                )
             }
             
             // Suggestion chips (above composer)
@@ -459,7 +468,18 @@ struct EnhancedLyoHomeView: View {
                 await MainActor.run {
                     self.classroomSessionId = session.id
                     self.isCreatingSession = false
-                    self.showClassroom = true
+                    
+                    // Post global notification for cinematic flow
+                    NotificationCenter.default.post(
+                        name: .openClassroom, 
+                        object: nil, 
+                        userInfo: [
+                            "courseId": session.id,
+                            "courseTitle": lessonData["title"] as? String ?? "New Lesson",
+                            "lessonId": lessonData["id"] as? String ?? "temp-lesson",
+                            "lessonTitle": lessonData["title"] as? String ?? "Introduction"
+                        ]
+                    )
                 }
             } catch {
                 await MainActor.run {

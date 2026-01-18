@@ -39,8 +39,17 @@ final class CourseOrchestrator: ObservableObject {
         // 3. Trigger Navigation immediately (Don't wait for backend)
         self.activeCourseId = localCourse.id
         
-        // Use NotificationCenter to trigger UI if ViewModel isn't observing directly
-        NotificationCenter.default.post(name: .openClassroom, object: nil, userInfo: ["courseId": localCourse.id])
+        // Use NotificationCenter to trigger UI globally (MainTabView listens to this)
+        NotificationCenter.default.post(
+            name: .openClassroom, 
+            object: nil, 
+            userInfo: [
+                "courseId": "GENERATE:\(proposal.topic)",
+                "courseTitle": proposal.title,
+                "lessonId": "intro_1",
+                "lessonTitle": "Introduction"
+            ]
+        )
         
         self.showClassroom = true
         

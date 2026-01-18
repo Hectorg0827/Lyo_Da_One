@@ -478,20 +478,17 @@ final class BackendAIService {
             
             let rawResponse = response.responseText
             
-            // Parse response to check for commands
-            let (displayText, wasCommand) = AICommandHandler.shared.processResponse(rawResponse)
-            
             // Update local conversation history with the original user message
-            // and the display text (not raw JSON if it was a command)
+            // Note: We keep the raw response in history so the AI knows what it sent (including JSON)
             conversationHistory.append(ConversationMessage(role: "user", content: message))
-            conversationHistory.append(ConversationMessage(role: "assistant", content: displayText))
+            conversationHistory.append(ConversationMessage(role: "assistant", content: rawResponse))
             
             // Keep history reasonable size
             if conversationHistory.count > 10 {
                 conversationHistory = Array(conversationHistory.suffix(10))
             }
             
-            return (response: displayText, source: response.aiSource, uiContent: response.contentTypes, wasCommand: wasCommand)
+            return (response: rawResponse, source: response.aiSource, uiContent: response.contentTypes, wasCommand: false)
             
         } catch {
             print("⚠️ Backend AI failed: \(error). Will fallback to local.")
