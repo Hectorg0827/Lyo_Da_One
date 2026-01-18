@@ -134,10 +134,8 @@ final class UnifiedChatService: ObservableObject {
             )
             
             // 6b. Trigger side effects for commands (Stack items, orchestrator)
-            // Even if we parsed it locally for the UI, let the CommandHandler handle system side effects
-            if result.response.contains("OPEN_CLASSROOM") || result.response.contains("ADD_TO_STACK") {
-                let _ = AICommandHandler.shared.processResponse(result.response)
-            }
+            // We call this on every response to ensure structured commands are handled
+            let _ = AICommandHandler.shared.processResponse(result.response)
             
             responseText = parsedContent
             

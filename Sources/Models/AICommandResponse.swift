@@ -65,12 +65,7 @@ struct AICommandParser {
     static func parse(_ responseText: String) -> ParsedResponse {
         let trimmed = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Quick check: if it doesn't start with {, it's definitely chat
-        guard trimmed.hasPrefix("{") else {
-            return .chat(responseText)
-        }
-        
-        // Try to extract JSON (handle cases where AI adds text before/after)
+        // Try to extract JSON (handle cases where AI adds text before/after or markdown blocks)
         guard let jsonString = extractJSON(from: trimmed),
               let jsonData = jsonString.data(using: .utf8) else {
             return .chat(responseText)
@@ -82,6 +77,10 @@ struct AICommandParser {
             let command = try decoder.decode(AICommandResponse.self, from: jsonData)
             
             // Validate it's a known command type
+            if command.type == .normalChat {
+                return .chat(responseText)
+            }
+            
             print("🎯 Parsed AI command: \(command.type.rawValue)")
             return .command(command)
             

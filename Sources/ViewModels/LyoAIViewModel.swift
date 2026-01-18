@@ -132,8 +132,7 @@ class LyoAIViewModel: ObservableObject {
             .sink { [weak self] shouldNavigate in
                 if shouldNavigate, let course = self?.unifiedChat.pendingCourse {
                     print("🚀 ViewModel received navigation to course: \(course.title)")
-                    // Bridge to AICommandHandler for View transparency
-                    // Convert CourseCreationData to CoursePayload
+                    // Bridge properly to AICommandHandler to trigger the centralized navigation logic (Notification + State)
                     let payload = CoursePayload(
                         id: course.id,
                         title: course.title,
@@ -143,8 +142,11 @@ class LyoAIViewModel: ObservableObject {
                         duration: "\(course.modules.count) modules",
                         objectives: course.modules.map { $0.title }
                     )
-                    AICommandHandler.shared.pendingClassroomCourse = payload
-                    AICommandHandler.shared.shouldOpenClassroom = true
+                    
+                    // CALL handleOpenClassroom instead of setting state variables directly.
+                    // This ensures the Notification is actually posted to move MainTabView.
+                    let commandPayload = AICommandPayload(stackItem: nil, course: payload)
+                    _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
                     
                     self?.unifiedChat.clearNavigation()
                 }

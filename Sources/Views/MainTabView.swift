@@ -331,15 +331,26 @@ extension MainTabView {
                 }
             }
             .onReceive(openClassroomPublisher) { notification in
-                if let userInfo = notification.userInfo,
-                   let courseId = userInfo["courseId"] as? String {
-                    
-                    let lessonId = userInfo["lessonId"] as? String ?? "intro_1"
-                    let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
-                    let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
-                    
-                    liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
-                    isLiveClassroomPresented = true
+                print("🎓 MainTabView: Received openClassroom notification")
+                
+                // Add a small delay to ensure any currently presented sheets (like LioChatSheet) 
+                // have time to start dismissing before we present the fullScreenCover.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let userInfo = notification.userInfo,
+                       let courseId = userInfo["courseId"] as? String {
+                        
+                        let lessonId = userInfo["lessonId"] as? String ?? "intro_1"
+                        let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
+                        let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
+                        
+                        self.liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
+                        
+                        withAnimation {
+                            self.isLiveClassroomPresented = true
+                        }
+                        
+                        print("🚀 MainTabView: Transitioning to LiveClassroomView for \(courseTitle)")
+                    }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SaveCourseToLibrary"))) { notification in

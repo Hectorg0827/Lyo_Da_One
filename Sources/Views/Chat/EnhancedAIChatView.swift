@@ -348,21 +348,33 @@ class AIChatViewModel: ObservableObject {
                 mode: mode.rawValue
             )
             
+            // NEW: Process response through AICommandHandler for structured redirections
+            // This ensures that strings with embedded JSON are caught and acted upon.
+            let (displayText, wasCommand) = AICommandHandler.shared.processResponse(response.text)
+            
             // Remove processing message
             messages.removeAll { $0.id == processingId }
+            
+            // Use cleaned text if it was a command
+            let finalOutput = wasCommand ? displayText : response.text
             
             // Add AI response with contentTypes from backend
             let aiMessage = MultimodalMessage(
                 id: UUID().uuidString,
                 role: .assistant,
-                content: response.text,
+                content: finalOutput,
                 contentTypes: response.contentTypes ?? [.text],
                 attachments: [],
                 timestamp: Date()
             )
             messages.append(aiMessage)
             
-            print("✅ AI response received with \(response.contentTypes?.count ?? 0) contentTypes")
+            // Also handle explicit actions from LioChatResponse (legacy support)
+            if let action = response.action {
+                handleLioChatAction(action)
+            }
+            
+            print("✅ AI response processed. Action detected: \(wasCommand || response.action != nil)")
             
         } catch {
             print("❌ Failed to send message: \(error)")
@@ -423,6 +435,26 @@ class AIChatViewModel: ObservableObject {
         print("Selected suggestion: \(suggestion)")
         Task {
             await sendMessage(content: suggestion, mode: .chat, attachmentIds: nil)
+        }
+    }
+    
+    private func handleLioChatAction(_ action: LioChatAction) {
+        print("⚡ Handling LioChatAction: \(action.type)")
+        
+        switch action.type {
+        case "open_classroom", "generate_course":
+            if let courseId = action.parameters?["courseId"] {
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("openClassroom"),
+                    object: nil,
+                    userInfo: [
+                        "courseId": courseId,
+                        "courseTitle": action.parameters?["courseTitle"] ?? "New Course"
+                    ]
+                )
+            }
+        default:
+            print("⚠️ Unhandled action type: \(action.type)")
         }
     }
     

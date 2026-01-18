@@ -167,8 +167,8 @@ struct DiscoverView: View {
     // MARK: - Feed Content
     
     private var feedContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 0) {
+        GeometryReader { geometry in
+            TabView {
                 ForEach(viewModel.filteredItems) { item in
                     DiscoverReelView(
                         item: item,
@@ -186,9 +186,11 @@ struct DiscoverView: View {
                         onStart: { startAction(for: item) },
                         onConvertToCourse: { viewModel.convertToCourse(item: item) }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
         }
         .ignoresSafeArea()
     }
