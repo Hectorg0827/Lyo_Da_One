@@ -236,6 +236,29 @@ class AIChatViewModel: ObservableObject {
     func sendMessage(content: String, mode: AIChatMode, attachmentIds: [String]?) async {
         guard !content.isEmpty else { return }
         
+        // ✅ TEST COMMAND: Manually trigger classroom
+        if content.lowercased() == "/testclassroom" {
+            print("🧪 TEST: Manually triggering classroom...")
+            let testJSON = """
+            {
+                "type": "OPEN_CLASSROOM",
+                "payload": {
+                    "course": {
+                        "title": "Test Course",
+                        "topic": "Swift Programming",
+                        "level": "beginner",
+                        "duration": "2 hours",
+                        "objectives": ["Learn Swift basics", "Build first app"]
+                    }
+                }
+            }
+            """
+            let (displayText, wasCommand) = AICommandHandler.shared.processResponse(testJSON)
+            print("🧪 Command processed: wasCommand=\(wasCommand)")
+            print("🧪 Display text: \(displayText)")
+            return
+        }
+        
         // Debug Demo Command
         if content.lowercased() == "/demo" {
             // Add user message
@@ -348,9 +371,24 @@ class AIChatViewModel: ObservableObject {
                 mode: mode.rawValue
             )
             
+            print("📥 AI Response received:")
+            print("   - Text length: \(response.text.count) chars")
+            print("   - Contains 'OPEN_CLASSROOM': \(response.text.contains("OPEN_CLASSROOM"))")
+            print("   - Has action: \(response.action != nil)")
+            print("   - Content types: \(response.contentTypes?.count ?? 0)")
+            if response.text.count < 500 {
+                print("   - Full text: \(response.text)")
+            } else {
+                print("   - Text preview: \(String(response.text.prefix(200)))...")
+            }
+            
             // NEW: Process response through AICommandHandler for structured redirections
             // This ensures that strings with embedded JSON are caught and acted upon.
             let (displayText, wasCommand) = AICommandHandler.shared.processResponse(response.text)
+            
+            print("🎯 Command Handler Result:")
+            print("   - Was command: \(wasCommand)")
+            print("   - Display text length: \(displayText.count)")
             
             // Remove processing message
             messages.removeAll { $0.id == processingId }

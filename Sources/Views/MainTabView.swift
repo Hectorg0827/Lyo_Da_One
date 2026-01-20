@@ -32,7 +32,7 @@ struct MainTabView: View {
     @State private var isCreationSheetPresented = false
     @State private var isCreateHubPresented = false
     @State private var lastCreationOption: CreationOption = .discovery
-    @State private var lastCreateMode: CreateMode = .reel
+    @State private var lastCreateMode: CreateMode = .clip
     @State private var isVideoRecorderPresented = false
     @State private var isPostEditorPresented = false
     
@@ -233,7 +233,7 @@ struct MainTabView: View {
             CreateHubView(initialMode: lastCreateMode) { mode in
                 lastCreateMode = mode
                 switch mode {
-                case .reel, .story:
+                case .clip, .story, .reel:
                     selectedTab = .clips
                 case .post, .event:
                     selectedTab = .community
@@ -246,7 +246,7 @@ struct MainTabView: View {
     
     private func createMode(for option: CreationOption) -> CreateMode {
         switch option {
-        case .discovery: return .reel
+        case .discovery: return .clip
         case .story: return .story
         case .post: return .post
         case .community: return .event
@@ -255,7 +255,7 @@ struct MainTabView: View {
 
     private func creationOption(for mode: CreateMode) -> CreationOption {
         switch mode {
-        case .reel: return .discovery
+        case .clip, .reel: return .discovery
         case .story: return .story
         case .post: return .post
         case .course: return .discovery

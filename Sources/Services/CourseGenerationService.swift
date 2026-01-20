@@ -137,6 +137,11 @@ final class CourseGenerationService: ObservableObject {
             let course = try await generateFromBackendStreaming(request: request)
             
             print("✅ SUCCESS: Backend generated course: \(course.title)")
+            print("📦 Cached Course ID: \(course.courseId)")
+            print("📚 Modules count: \(course.modules.count)")
+            if let firstMod = course.modules.first, let firstLess = firstMod.lessons.first {
+                print("📖 First lesson: \(firstLess.title) (ID: \(firstLess.id))")
+            }
             
             currentStep = "Course ready!"
             progress = 1.0
@@ -152,6 +157,7 @@ final class CourseGenerationService: ObservableObject {
             do {
                 let course = try await generateFromOpenAI(topic: topic, level: level, outcomes: learningOutcomes)
                 print("✅ SUCCESS: OpenAI generated course: \(course.title)")
+                print("📦 Cached Course ID: \(course.courseId)")
                 
                 currentStep = "Course ready!"
                 progress = 1.0
@@ -164,6 +170,9 @@ final class CourseGenerationService: ObservableObject {
                 // Fallback to mock (Last Resort)
                 print("🛠 LAST RESORT: Generating mock course")
                 let course = generateMockCourse(topic: topic)
+                print("✅ SUCCESS: Mock generated course: \(course.title)")
+                print("📦 Cached Course ID: \(course.courseId)")
+                print("📚 Modules count: \(course.modules.count)")
                 
                 currentStep = "Course ready (Offline Mode)!"
                 progress = 1.0
@@ -569,44 +578,109 @@ final class CourseGenerationService: ObservableObject {
     // MARK: - Mock Fallback Generation
     
     private func generateMockCourse(topic: String) -> GeneratedCourseResponse {
+        // Generate a richer, more complete mock course
+        let cleanTopic = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        
         return GeneratedCourseResponse(
             courseId: "mock_\(UUID().uuidString.prefix(8))",
-            title: "Introduction to \(topic)",
-            description: "A comprehensive guide to mastering \(topic) fundamentals.",
+            title: "Introduction to \(cleanTopic)",
+            description: "A comprehensive guide to mastering \(cleanTopic) fundamentals.",
             modules: [
                 GenerationCourseModule(
                     id: "mod_1",
-                    title: "Getting Started",
-                    description: "Core concepts and setup",
+                    title: "Getting Started with \(cleanTopic)",
+                    description: "Build a solid foundation by understanding the core concepts",
                     lessons: [
                         GenerationCourseLesson(
                             id: "les_1_1",
-                            title: "What is \(topic)?",
-                            content: "\(topic) is a fascinating subject. In this lesson, we'll explore the basics.\n\nIt is essential for understanding modern systems.",
+                            title: "What is \(cleanTopic)?",
+                            content: """
+                            Welcome to your journey into \(cleanTopic)! 🚀
+                            
+                            \(cleanTopic) is an exciting topic that forms the foundation for many real-world applications. In this course, we'll break it down into digestible pieces so you can truly understand it.
+                            
+                            By the end of this lesson, you'll have a clear picture of what \(cleanTopic) is and why it matters. Let's dive in!
+                            """,
                             durationMinutes: 5,
                             order: 1
                         ),
                         GenerationCourseLesson(
                             id: "les_1_2",
-                            title: "Key Principles",
-                            content: "There are three main principles you need to know.\n\n1. Consistency\n2. Practice\n3. Application",
+                            title: "Core Principles of \(cleanTopic)",
+                            content: """
+                            Now that you know what \(cleanTopic) is, let's explore the key principles:
+                            
+                            1️⃣ **Consistency** - Regular practice helps reinforce your understanding.
+                            
+                            2️⃣ **Building Blocks** - Each concept connects to the next. Master the basics first.
+                            
+                            3️⃣ **Application** - The best way to learn is by doing. We'll have hands-on exercises.
+                            
+                            These principles will guide you throughout this course and beyond!
+                            """,
                             durationMinutes: 8,
                             order: 2
+                        ),
+                        GenerationCourseLesson(
+                            id: "les_1_3",
+                            title: "Practical Example",
+                            content: """
+                            Let's see \(cleanTopic) in action with a practical example! 🎯
+                            
+                            Imagine you're working on a real project. Here's how you'd apply what we've learned:
+                            
+                            Step 1: Identify the problem you're trying to solve
+                            Step 2: Break it down into smaller pieces
+                            Step 3: Apply the core principles we discussed
+                            Step 4: Test your solution and iterate
+                            
+                            This systematic approach works for any challenge you'll face in \(cleanTopic).
+                            """,
+                            durationMinutes: 10,
+                            order: 3
                         )
                     ],
                     order: 1
                 ),
                 GenerationCourseModule(
                     id: "mod_2",
-                    title: "Advanced Concepts",
-                    description: "Taking it to the next level",
+                    title: "Going Deeper into \(cleanTopic)",
+                    description: "Advanced concepts and real-world applications",
                     lessons: [
                         GenerationCourseLesson(
                             id: "les_2_1",
-                            title: "Deep Dive",
-                            content: "Now that you know the basics, let's look at advanced topics.",
+                            title: "Advanced Concepts",
+                            content: """
+                            You've mastered the basics - now let's level up! 📈
+                            
+                            In this module, we'll explore more sophisticated aspects of \(cleanTopic):
+                            
+                            • Pattern recognition and best practices
+                            • Common pitfalls and how to avoid them
+                            • Real-world case studies
+                            
+                            Don't worry if some concepts feel challenging at first. That's a sign you're growing!
+                            """,
                             durationMinutes: 12,
                             order: 1
+                        ),
+                        GenerationCourseLesson(
+                            id: "les_2_2",
+                            title: "Putting It All Together",
+                            content: """
+                            🎉 Congratulations on reaching the final lesson!
+                            
+                            Let's recap what you've learned:
+                            
+                            ✅ You understand what \(cleanTopic) is and why it matters
+                            ✅ You know the core principles that guide success
+                            ✅ You've seen practical applications
+                            ✅ You've explored advanced concepts
+                            
+                            You're now equipped with the knowledge to apply \(cleanTopic) in your own projects. Keep practicing, stay curious, and you'll continue to grow!
+                            """,
+                            durationMinutes: 8,
+                            order: 2
                         )
                     ],
                     order: 2

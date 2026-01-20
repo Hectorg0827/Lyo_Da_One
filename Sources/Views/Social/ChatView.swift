@@ -398,7 +398,7 @@ struct MessageBubbleView: View {
         
         let parsed = AICommandParser.parse(message.content)
         if case .command(let command) = parsed, command.type == .openClassroom {
-            AICommandHandler.shared.handleOpenClassroom(command.payload)
+            _ = AICommandHandler.shared.handleOpenClassroom(command.payload)
         }
     }
 }

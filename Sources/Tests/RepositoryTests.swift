@@ -301,8 +301,6 @@ class RepositoryTests: XCTestCase {
     private func testVisionService() async {
         print("👁️ Testing Vision Service...")
 
-        let service = VisionService.shared
-
         // Note: Vision tests require actual images, so we'll test the service structure
         print("ℹ️ Vision service requires actual images for testing")
         print("✅ Vision Service initialized successfully")
@@ -431,7 +429,7 @@ func testBackendIntegration() async {
         // Test Get Profile
         print("\n2. Testing Get Profile...")
         let profile = try await authRepo.getCurrentUser()
-        print("✅ Profile fetched: Level \(profile.level ?? 0), XP: \(profile.xp ?? 0)")
+        print("✅ Profile fetched: Level \(profile.level), XP: \(profile.xp)")
 
         print("\n✅ Backend integration successful!")
 

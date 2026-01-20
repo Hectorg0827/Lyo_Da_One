@@ -13,6 +13,8 @@ enum AttachmentType: String, Codable {
 
 struct LyoMessage: Identifiable, Codable {
     let id: String
+    // Added session ID for isolating chat contexts
+    var sessionId: String?
     let content: String
     let isFromUser: Bool
     let timestamp: Date

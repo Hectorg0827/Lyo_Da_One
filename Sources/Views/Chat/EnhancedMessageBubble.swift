@@ -51,18 +51,12 @@ struct EnhancedMessageBubble: View {
     
     // MARK: - AI Message View (Full Width, Gemini Style)
     
-    // MARK: - AI Message View (Full-Width Stream)
+    // MARK: - AI Message View (Enhanced Island Style)
     
     private var aiMessageView: some View {
-        HStack(alignment: .top, spacing: 16) {
-            // Avatar (Small, floating left of content)
-            avatarView
-                .frame(width: 32, height: 32)
-                .padding(.top, 4) // Align with first line of text
-            
-            // Full-width content area
+        VStack(alignment: .leading, spacing: 12) {
+            // Content Area
             VStack(alignment: .leading, spacing: 12) {
-                // Iterate over content types
                 ForEach(message.contentTypes.indices, id: \.self) { index in
                     let contentType = message.contentTypes[index]
                     
@@ -71,10 +65,10 @@ struct EnhancedMessageBubble: View {
                         if !message.content.isEmpty {
                             Text(LocalizedStringKey(message.content))
                                 .font(.body)
-                                .foregroundColor(.primary) // White in dark mode
+                                .foregroundColor(.white)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true) // Ensure wraps correctly
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         
                     case .processing(let step, let progress):
@@ -88,7 +82,7 @@ struct EnhancedMessageBubble: View {
                                 onTopicSelect?(topic)
                             }
                         )
-                        .padding(.horizontal, -8) // Slight bleed
+                        .padding(.horizontal, -8)
                         
                     case .courseRoadmap(let title, let modules, let total, let completed):
                         CourseRoadmapBubbleView(
@@ -147,26 +141,66 @@ struct EnhancedMessageBubble: View {
                 if !message.attachments.isEmpty {
                     attachmentsGrid(message.attachments)
                 }
+            }
+            
+            // Action Footer (Share, Copy, Read Aloud)
+            HStack(spacing: 16) {
+                Spacer()
                 
-                // Message footer with TTS and timestamp
-                HStack(spacing: 12) {
-                    Text(message.timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    // TTS button
-                    ttsButton
+                // Copy
+                Button(action: {
+                    UIPasteboard.general.string = message.content
+                    HapticManager.shared.light()
+                }) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                // Share
+                Button(action: {
+                    // Start simple share sheet
+                    let activityVC = UIActivityViewController(activityItems: [message.content], applicationActivities: nil)
+                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                       let rootVC = windowScene.windows.first?.rootViewController {
+                        rootVC.present(activityVC, animated: true)
+                    }
+                }) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                // Read Aloud (TTS)
+                Button(action: {
+                    onTTSToggle?()
+                }) {
+                    Image(systemName: audioService.isSpeaking ? "stop.circle.fill" : "speaker.wave.2")
+                        .font(.system(size: 14))
+                        .foregroundColor(audioService.isSpeaking ? .red : .white.opacity(0.6))
                 }
             }
         }
-        .padding(.horizontal, 16) // "Internal padding of 16px"
-        .padding(.vertical, 8)    // "Minimal vertical spacing"
-        .frame(maxWidth: .infinity) // "Width: 99% to 100%"
+        .padding(16)
+        .frame(maxWidth: .infinity) // Take up available width
+        // 99% logic handled by parent padding or frame, but here we enforce taking space
         .background(
-            Color(hex: "181818").opacity(0.3) // "Transparent or extremely subtle dark overlay"
+            ZStack {
+                Color.black.opacity(0.4) // Darker, transparent, enough for white text
+                
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
         )
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 4) // Slight padding from screen edge for the "99%" feel
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
                 showFullImage = false

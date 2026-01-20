@@ -2,18 +2,20 @@
 //  CreateViewModel.swift
 //  Lyo
 //
-//  ViewModel for managing creation flows (Reel/Story/Post/Course/Event)
+//  ViewModel for managing creation flows (Clip/Story/Post/Course/Event)
 //
 
 import SwiftUI
 import AVFoundation
 import Photos
 import MapKit
+import PhotosUI
 
 // MARK: - Creation Modes
 
 enum CreateMode: String, CaseIterable, Identifiable {
-    case reel = "Reel"
+    case clip = "Clip"
+    case reel = "Reel"     // Alias for compatibility
     case story = "Story"
     case post = "Post"
     case course = "Course"
@@ -23,7 +25,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
     
     var icon: String {
         switch self {
-        case .reel: return "play.rectangle.fill"
+        case .clip, .reel: return "film.stack"
         case .story: return "clock.arrow.circlepath"
         case .post: return "square.and.pencil"
         case .course: return "graduationcap.fill"
@@ -33,7 +35,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
     
     var color: Color {
         switch self {
-        case .reel: return Color(hex: "8B5CF6") // Purple
+        case .clip, .reel: return Color(hex: "8B5CF6") // Purple
         case .story: return Color(hex: "F97316") // Orange
         case .post: return Color(hex: "3B82F6") // Blue
         case .course: return Color(hex: "10B981") // Green
@@ -43,7 +45,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
     
     var description: String {
         switch self {
-        case .reel: return "Short video for Discover"
+        case .clip, .reel: return "Educational video clip"
         case .story: return "Share for 24 hours"
         case .post: return "Share to your feed"
         case .course: return "AI-generated course"
@@ -53,7 +55,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
     
     var requiresCamera: Bool {
         switch self {
-        case .reel, .story: return true
+        case .clip, .story, .reel: return true
         case .post, .course, .event: return false
         }
     }
@@ -93,7 +95,7 @@ enum CreateState: Equatable {
 class CreateViewModel: ObservableObject {
     // MARK: - Published State
     
-    @Published var selectedMode: CreateMode = .reel
+    @Published var selectedMode: CreateMode = .clip  // Default to Clip (formerly Reel)
     @Published var state: CreateState = .idle
     @Published var progress: Double = 0
     
@@ -104,6 +106,20 @@ class CreateViewModel: ObservableObject {
     @Published var cameraPosition: AVCaptureDevice.Position = .back
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
     @Published var isCameraSource: Bool = true
+    @Published var videoThumbnail: UIImage?
+    
+    // Video Picker State
+    @Published var showVideoPicker: Bool = false
+    @Published var selectedPhotoItem: PhotosPickerItem?
+    
+    // Clip Metadata (for AI course generation)
+    @Published var clipTitle: String = ""
+    @Published var clipDescription: String = ""
+    @Published var clipSubject: ClipSubject?
+    @Published var clipLevel: LearningLevel = .beginner
+    @Published var clipKeyPoints: [String] = []
+    @Published var enableClipCourseGeneration: Bool = true
+    @Published var showClipMetadataSheet: Bool = false
     
     // Post/Course Content
     @Published var contentText: String = "" {
@@ -117,6 +133,7 @@ class CreateViewModel: ObservableObject {
     // Course Generation
     @Published var courseTopic: String = ""
     @Published var courseLevel: String = "beginner"
+    @Published var courseDescription: String = ""
     @Published var courseOutcomes: [String] = []
     @Published var isAIOutlineActive: Bool = false
     @Published var generatedModules: [String] = []
@@ -124,7 +141,6 @@ class CreateViewModel: ObservableObject {
     // Event/Group Creation
     @Published var eventTitle: String = ""
     @Published var eventDescription: String = ""
-    // ...
     @Published var eventDate: Date = Date()
     @Published var eventLocation: String = ""
     @Published var isGroup: Bool = false
@@ -136,6 +152,7 @@ class CreateViewModel: ObservableObject {
     
     private let repository = LyoRepository.shared
     private let courseService = CourseGenerationService.shared
+    private let storyService = StoryService.shared
     private let network = NetworkClient.shared
     
     // MARK: - Init
@@ -178,9 +195,18 @@ class CreateViewModel: ObservableObject {
         charCount = 0
         capturedImage = nil
         capturedVideoURL = nil
+        videoThumbnail = nil
         learnLayers = []
         isAIOutlineActive = false
         generatedModules = []
+        
+        // Reset clip metadata
+        clipTitle = ""
+        clipDescription = ""
+        clipSubject = nil
+        clipLevel = .beginner
+        clipKeyPoints = []
+        enableClipCourseGeneration = true
     }
     
     private func updateCharCount() {
@@ -249,8 +275,8 @@ class CreateViewModel: ObservableObject {
         
         do {
             switch selectedMode {
-            case .reel:
-                try await publishReel()
+            case .clip, .reel:
+                try await publishClip()
             case .story:
                 try await publishStory()
             case .post:
@@ -279,63 +305,101 @@ class CreateViewModel: ObservableObject {
         return Location(type: type, name: name, coordinate: coordinate)
     }
 
-    private func publishReel() async throws {
+    /// Publish a clip with metadata using ClipService
+    private func publishClip() async throws {
         guard let videoURL = capturedVideoURL else {
             throw CreateError.missingContent
         }
         
-        progress = 0.3
+        guard !clipTitle.isEmpty else {
+            throw CreateError.missingTitle
+        }
         
-        // Upload video to storage
-        let videoAttachment = try await repository.uploadFile(url: videoURL)
-        
-        progress = 0.6
-        
-        // Create social post with video
-        let _ = try await repository.createPost(
-            content: contentText,
-            attachments: [videoAttachment.id]
+        // Build clip metadata
+        let metadata = ClipMetadata(
+            subject: clipSubject?.rawValue,
+            topic: nil,
+            level: clipLevel,
+            keyPoints: clipKeyPoints,
+            transcript: nil, // Can be auto-generated later
+            tags: [],
+            enableCourseGeneration: enableClipCourseGeneration
         )
         
-        progress = 1.0
+        // Use ClipService for real upload with progress
+        let clip = try await ClipService.shared.createClip(
+            videoURL: videoURL,
+            title: clipTitle,
+            description: clipDescription.isEmpty ? nil : clipDescription,
+            metadata: metadata,
+            isPublic: true
+        ) { [weak self] progress in
+            Task { @MainActor in
+                self?.progress = progress
+            }
+        }
+        
+        print("✅ Clip published: \(clip.title)")
         
         // Add to Stack
-        await addToStack(type: .video, title: "Reel", subtitle: "Shared to Discover")
+        await addToStack(
+            type: .video, 
+            title: clip.title, 
+            subtitle: clipDescription.isEmpty ? "Shared to Discover" : clipDescription,
+            refId: clip.id
+        )
     }
     
     private func publishStory() async throws {
-        guard let image = capturedImage else {
+        progress = 0.1
+        
+        // Support both image and video for stories
+        var mediaURL: String = ""
+        var mediaType: Story.MediaType = .image
+        
+        if let image = capturedImage {
+            // Convert image to data and upload
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                throw CreateError.invalidImage
+            }
+            
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("jpg")
+            
+            try imageData.write(to: tempURL)
+            
+            progress = 0.3
+            
+            // Upload to storage via StoryService
+            mediaURL = try await storyService.uploadStoryMedia(imageURL: tempURL)
+            mediaType = .image
+            
+            // Clean up temp file
+            try? FileManager.default.removeItem(at: tempURL)
+            
+        } else if let videoURL = capturedVideoURL {
+            progress = 0.3
+            
+            // Upload video
+            mediaURL = try await storyService.uploadStoryMedia(videoURL: videoURL)
+            mediaType = .video
+            
+        } else {
             throw CreateError.missingContent
         }
         
-        progress = 0.3
-        
-        // Convert image to data and create temporary file URL
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            throw CreateError.invalidImage
-        }
-        
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("jpg")
-        
-        try imageData.write(to: tempURL)
-        
         progress = 0.6
         
-        // Upload to storage
-        let attachment = try await repository.uploadFile(url: tempURL)
-        
-        // Create story post (24h expiry)
-        let _ = try await repository.createPost(
-            content: contentText,
-            attachments: [attachment.id]
+        // Create story via StoryService (handles backend call)
+        try await storyService.addStory(
+            mediaURL: mediaURL,
+            mediaType: mediaType,
+            caption: contentText.isEmpty ? nil : contentText,
+            isLive: false
         )
         
         progress = 1.0
-        
-        // Clean up temp file
-        try? FileManager.default.removeItem(at: tempURL)
         
         // Add to Stack
         await addToStack(type: .video, title: "Story", subtitle: "Expires in 24h")
@@ -397,6 +461,49 @@ class CreateViewModel: ObservableObject {
         
         // Add to Stack
         await addToStack(type: .course, title: generatedCourse.title, subtitle: generatedCourse.description)
+    }
+    
+    // MARK: - Course Creation with Classroom Navigation
+    
+    /// Generates a course using AI and immediately navigates to the classroom (cinematic view)
+    func generateCourseAndOpenClassroom() async {
+        guard !courseTopic.isEmpty else { return }
+        
+        state = .uploading
+        progress = 0.1
+        
+        // Build CoursePayload for orchestrator
+        let payload = CoursePayload(
+            id: nil,
+            title: courseTopic,
+            topic: courseTopic,
+            level: courseLevel,
+            language: "en",
+            duration: "~45 min",
+            objectives: courseOutcomes.isEmpty 
+                ? ["Learn \(courseTopic) fundamentals", "Apply practical skills"]
+                : courseOutcomes
+        )
+        
+        // Use CourseOrchestrator (optimistic navigation)
+        // This will open the classroom immediately with a shell course
+        // while real AI content loads in the background
+        await CourseOrchestrator.shared.execute(proposal: payload)
+        
+        progress = 0.5
+        
+        // Add to stack for later access
+        let description = courseDescription.isEmpty 
+            ? "Learn \(courseTopic) at the \(courseLevel) level" 
+            : courseDescription
+        await addToStack(
+            type: .course, 
+            title: courseTopic, 
+            subtitle: description
+        )
+        
+        progress = 1.0
+        state = .complete
     }
     
     private func publishEvent() async throws {
@@ -525,6 +632,7 @@ struct LearnLayer: Identifiable {
 
 enum CreateError: LocalizedError {
     case missingContent
+    case missingTitle
     case invalidImage
     case uploadFailed
     case permissionDenied
@@ -533,6 +641,8 @@ enum CreateError: LocalizedError {
         switch self {
         case .missingContent:
             return "Please add content before publishing"
+        case .missingTitle:
+            return "Please add a title for your clip"
         case .invalidImage:
             return "Invalid image format"
         case .uploadFailed:

@@ -496,49 +496,146 @@ final class LiveClassroomViewModel: ObservableObject {
     }
     
     private func convertPlaybackToLesson(playbackState: PlaybackState, courseTitle: String) -> LiveLesson {
-        // Extract the current node content
+        var blocks: [LessonBlock] = []
+        
+        // STEP 1: Check if we have a generated course in cache with FULL content
+        // This is the key fix - use the FULL generated course, not just playback nodes
+        if let generatedCourse = CourseGenerationService.shared.generatedCourse {
+            print("🎬 Converting FULL generated course to LiveLesson: \(generatedCourse.title)")
+            print("   Modules: \(generatedCourse.modules.count)")
+            
+            // Iterate through ALL modules and lessons
+            for (moduleIndex, module) in generatedCourse.modules.enumerated() {
+                // Add module header
+                blocks.append(LessonBlock(
+                    id: "mod_header_\(moduleIndex)",
+                    type: .explain,
+                    title: "📚 \(module.title)",
+                    body: module.description
+                ))
+                
+                for lesson in module.lessons {
+                    // Add lesson introduction
+                    blocks.append(LessonBlock(
+                        id: "intro_\(lesson.id)",
+                        type: .explain,
+                        title: lesson.title,
+                        body: lesson.content
+                    ))
+                    
+                    // Add visual break every other lesson
+                    if lesson.order % 2 == 0 {
+                        blocks.append(LessonBlock(
+                            id: "visual_\(lesson.id)",
+                            type: .image,
+                            title: "Key Insight",
+                            assetURL: URL(string: "LyoThinking")
+                        ))
+                    }
+                }
+                
+                // Add quiz at the end of each module
+                blocks.append(LessonBlock(
+                    id: "quiz_mod_\(moduleIndex)",
+                    type: .quizMcq,
+                    title: "Quick Check: \(module.title)",
+                    body: "Let's make sure you understood the key concepts!",
+                    options: [
+                        "I understand the key concepts",
+                        "I need more examples",
+                        "I have questions",
+                        "Ready for next module"
+                    ],
+                    correctIndex: 0,
+                    explanation: "Great job! You've completed this module."
+                ))
+            }
+            
+            // Add final summary
+            blocks.append(LessonBlock(
+                id: "final_summary",
+                type: .summary,
+                title: "🎉 Course Complete!",
+                body: "Congratulations! You've completed '\(generatedCourse.title)'. You covered \(generatedCourse.modules.count) modules and learned the fundamentals. Keep practicing!"
+            ))
+            
+            print("✅ Created \(blocks.count) blocks from generated course")
+            
+            return LiveLesson(
+                courseId: playbackState.courseId,
+                lessonId: generatedCourse.modules.first?.lessons.first?.id ?? "generated",
+                title: courseTitle,
+                subtitle: "Interactive Course",
+                blocks: blocks,
+                estimatedDuration: generatedCourse.estimatedDuration
+            )
+        }
+        
+        // FALLBACK: Extract from playback state nodes (limited content)
+        print("⚠️ No cached generated course, using playback nodes")
+        
         let currentNode = playbackState.currentNode
         let content = currentNode.content
         
-        // Build lesson blocks from the graph node
-        var blocks: [LessonBlock] = []
+        // Current node content
+        if let text = content["text"]?.value as? String, !text.isEmpty {
+            blocks.append(LessonBlock(
+                id: currentNode.id,
+                type: .explain,
+                title: content["title"]?.value as? String ?? currentNode.title,
+                body: text
+            ))
+        } else if let narration = content["narration"]?.value as? String {
+            blocks.append(LessonBlock(
+                id: currentNode.id,
+                type: .explain,
+                title: currentNode.title,
+                body: narration
+            ))
+        } else if currentNode.nodeType == "interaction",
+                  let prompt = content["prompt"]?.value as? String,
+                  let optionsArray = content["options"]?.value as? [[String: Any]] {
+            let optionLabels = optionsArray.compactMap { $0["label"] as? String }
+            let correctIdx = optionsArray.firstIndex { ($0["is_correct"] as? Bool) == true }
+            let explanation = content["explanation"]?.value as? String
+            
+            blocks.append(LessonBlock(
+                id: currentNode.id,
+                type: .quizMcq,
+                title: prompt,
+                options: optionLabels,
+                correctIndex: correctIdx,
+                explanation: explanation
+            ))
+        }
         
-        // Narrative nodes → Explain blocks
-        if currentNode.nodeType == "narrative" {
-            if let narration = content["narration"]?.value as? String {
+        // Add FULL content from nextNodes (not just placeholders)
+        for nextNode in playbackState.nextNodes {
+            let nodeContent = nextNode.content
+            if let text = nodeContent["text"]?.value as? String, !text.isEmpty {
                 blocks.append(LessonBlock(
+                    id: nextNode.id,
                     type: .explain,
-                    title: currentNode.title,
+                    title: nodeContent["title"]?.value as? String ?? nextNode.title,
+                    body: text
+                ))
+            } else if let narration = nodeContent["narration"]?.value as? String {
+                blocks.append(LessonBlock(
+                    id: nextNode.id,
+                    type: .explain,
+                    title: nextNode.title,
                     body: narration
                 ))
             }
         }
         
-        // Interaction nodes → Quiz blocks
-        else if currentNode.nodeType == "interaction" {
-            if let prompt = content["prompt"]?.value as? String,
-               let optionsArray = content["options"]?.value as? [[String: Any]] {
-                
-                let optionLabels = optionsArray.compactMap { $0["label"] as? String }
-                let correctIdx = optionsArray.firstIndex { ($0["is_correct"] as? Bool) == true }
-                let explanation = content["explanation"]?.value as? String
-                
-                blocks.append(LessonBlock(
-                    type: .quizMcq,
-                    title: prompt,
-                    options: optionLabels,
-                    correctIndex: correctIdx,
-                    explanation: explanation
-                ))
-            }
-        }
-        
-        // Add upcoming nodes as previews
-        for nextNode in playbackState.nextNodes.prefix(2) {
+        // Add a completion block if we have content
+        if !blocks.isEmpty {
             blocks.append(LessonBlock(
-                type: .explain,
-                title: nextNode.title,
-                body: "Coming up next..."
+                id: "completion",
+                type: .summary,
+                title: "Lesson Complete",
+                body: "Great job completing this lesson! You're making excellent progress."
             ))
         }
         
@@ -547,7 +644,7 @@ final class LiveClassroomViewModel: ObservableObject {
             lessonId: currentNode.id,
             title: courseTitle,
             subtitle: "Interactive Cinema Experience",
-            blocks: blocks,
+            blocks: blocks.isEmpty ? [LessonBlock(id: "empty", type: .explain, title: "Loading...", body: "Please wait while we prepare your lesson.")] : blocks,
             estimatedDuration: 15
         )
     }

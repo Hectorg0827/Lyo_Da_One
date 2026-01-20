@@ -279,6 +279,8 @@ struct ChatAttachment: Identifiable, Equatable, Codable {
 /// Enhanced message model with multimodal support
 struct MultimodalMessage: Identifiable, Equatable, Codable {
     let id: String
+    // Added session ID for isolating chat contexts
+    var sessionId: String?
     let role: MessageRole
     var content: String
     var contentTypes: [MessageContentType]
@@ -302,6 +304,7 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
     }
     
     init(id: String = UUID().uuidString,
+         sessionId: String? = nil,
          role: MessageRole,
          content: String,
          contentTypes: [MessageContentType] = [.text],
@@ -310,6 +313,7 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
          isStreaming: Bool = false,
          metadata: MessageMetadata? = nil) {
         self.id = id
+        self.sessionId = sessionId
         self.role = role
         self.content = content
         self.contentTypes = contentTypes

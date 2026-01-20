@@ -280,7 +280,7 @@ struct CreateHubView: View {
             switch viewModel.selectedMode {
             case .story:
                 StoryModeView(viewModel: viewModel)
-            case .reel:
+            case .reel, .clip:
                 ReelModeView(viewModel: viewModel)
             case .post:
                 PostModeView(viewModel: viewModel)
@@ -300,7 +300,7 @@ struct CreateHubView: View {
         NavigationView {
             VStack(spacing: 0) {
                 switch viewModel.selectedMode {
-                case .reel, .story:
+                case .reel, .story, .clip:
                     MediaEditorView(viewModel: viewModel)
                 case .post:
                     PostComposeView(viewModel: viewModel)

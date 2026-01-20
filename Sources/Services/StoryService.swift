@@ -58,7 +58,7 @@ class StoryService: ObservableObject {
     
     // MARK: - Create Story
     
-    func addStory(mediaURL: String, mediaType: Story.MediaType = .video, isLive: Bool = false) async throws {
+    func addStory(mediaURL: String, mediaType: Story.MediaType = .video, caption: String? = nil, isLive: Bool = false) async throws {
         isLoading = true
         error = nil
         
@@ -66,7 +66,11 @@ class StoryService: ObservableObject {
             let request = CreateStoryRequest(
                 mediaURL: mediaURL,
                 mediaType: mediaType,
-                isLive: isLive
+                isLive: isLive,
+                caption: caption,
+                linkedCourseId: nil,
+                linkedGroupId: nil,
+                tags: []
             )
             
             let newStory = try await apiClient.createStory(request)
@@ -131,6 +135,40 @@ class StoryService: ObservableObject {
             data: data,
             filename: filename,
             contentType: "video/mp4",
+            folder: "stories"
+        )
+        guard let publicURL = result.publicURL else {
+            throw StoryError.uploadFailed
+        }
+        return publicURL
+    }
+    
+    func uploadStoryMedia(imageURL: URL) async throws -> String {
+        // Upload image to cloud storage
+        let filename = "\(UUID().uuidString).jpg"
+        let data = try Data(contentsOf: imageURL)
+        let result = try await cloudStorage.uploadFile(
+            data: data,
+            filename: filename,
+            contentType: "image/jpeg",
+            folder: "stories"
+        )
+        guard let publicURL = result.publicURL else {
+            throw StoryError.uploadFailed
+        }
+        return publicURL
+    }
+    
+    func uploadStoryMedia(image: UIImage) async throws -> String {
+        // Compress and upload image to cloud storage
+        guard let data = image.jpegData(compressionQuality: 0.8) else {
+            throw StoryError.uploadFailed
+        }
+        let filename = "\(UUID().uuidString).jpg"
+        let result = try await cloudStorage.uploadFile(
+            data: data,
+            filename: filename,
+            contentType: "image/jpeg",
             folder: "stories"
         )
         guard let publicURL = result.publicURL else {

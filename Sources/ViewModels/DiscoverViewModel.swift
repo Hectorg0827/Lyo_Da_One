@@ -50,7 +50,7 @@ final class DiscoverViewModel: ObservableObject {
         HapticManager.shared.success()
         
         switch item.type {
-        case .courseSuggestion, .videoSnippet:
+        case .courseSuggestion, .videoSnippet, .userClip:
             if let courseId = item.courseId {
                 stackStore.upsertCourse(
                     courseId: courseId,

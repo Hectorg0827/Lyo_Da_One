@@ -35,7 +35,9 @@ final class UnifiedChatPersistence {
         }
         
         // Sort by updated date
-        conversations.sort { $0.updatedAt > $1.updatedAt }
+        conversations.sort(by: { (a: SavedConversation, b: SavedConversation) -> Bool in
+            a.lastUpdated > b.lastUpdated
+        })
         
         // Save
         if let data = try? JSONEncoder().encode(conversations) {

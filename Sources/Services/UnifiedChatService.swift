@@ -68,6 +68,27 @@ final class UnifiedChatService: ObservableObject {
     
     // MARK: - Public API
     
+    /// Start a completely new chat session
+    /// Clears local state and generates a new session ID to ensure isolation
+    func startNewChat(withId id: String? = nil) {
+        // 1. Generate new session ID
+        currentConversationId = id ?? UUID().uuidString
+        
+        // 2. Clear UI messages
+        messages = []
+        
+        // 3. Clear LLM context
+        conversationHistory = []
+        
+        // 4. Reset other state
+        error = nil
+        pendingCourse = nil
+        shouldNavigateToClassroom = false
+        suggestions = []
+        
+        print("🆕 Started new chat session: \(currentConversationId)")
+    }
+
     /// Send a message and get AI response with full A2UI support
     /// - Parameters:
     ///   - text: The message text
@@ -86,6 +107,7 @@ final class UnifiedChatService: ObservableObject {
         // 1. Create and add user message
         let userMessage = LyoMessage(
             id: UUID().uuidString,
+            sessionId: currentConversationId,
             content: trimmedText,
             isFromUser: true,
             timestamp: Date(),
@@ -142,6 +164,7 @@ final class UnifiedChatService: ObservableObject {
             // 7. Create AI message using LyoMessage
             let aiMessage = LyoMessage(
                 id: UUID().uuidString,
+                sessionId: currentConversationId,
                 content: parsedContent,
                 isFromUser: false,
                 timestamp: Date(),
@@ -183,6 +206,7 @@ final class UnifiedChatService: ObservableObject {
             // Add error message using LyoMessage
             let errorMessage = LyoMessage(
                 id: UUID().uuidString,
+                sessionId: currentConversationId,
                 content: "Sorry, I encountered an error. Please try again.",
                 isFromUser: false,
                 timestamp: Date(),
@@ -246,11 +270,30 @@ final class UnifiedChatService: ObservableObject {
         isLoading = false
     }
     
-    /// Load a saved conversation
-    func loadConversation(id: String) async {
-        // TODO: Implement full conversation loading from persistence
-        // For now, conversations are managed session-by-session
-        print("📂 Load conversation requested: \(id)")
+    /// Load a specific saved conversation
+    func loadConversation(_ conversation: SavedConversation) {
+        // 1. Set ID
+        currentConversationId = conversation.id
+        
+        // 2. Set messages
+        messages = conversation.messages
+        
+        // 3. Rebuild context history for LLM
+        // We map LyoMessage back to ConversationMessage format for the AI context
+        conversationHistory = conversation.messages.suffix(10).map { msg in
+            ConversationMessage(
+                role: msg.isFromUser ? "user" : "assistant",
+                content: msg.content
+            )
+        }
+        
+        // 4. Reset state
+        error = nil
+        pendingCourse = nil
+        shouldNavigateToClassroom = false
+        suggestions = []
+        
+        print("📂 Loaded saved conversation: \(conversation.id) with \(messages.count) messages")
     }
     
     /// Navigate to course that was just created

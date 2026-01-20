@@ -96,6 +96,11 @@ class ConversationManager: ObservableObject {
         currentConversation = newConv
         saveConversation(newConv)
         
+        // Sync with UnifiedChatService for session isolation
+        Task { @MainActor in
+            UnifiedChatService.shared.startNewChat(withId: newConv.id)
+        }
+        
         return newConv
     }
     
@@ -139,6 +144,11 @@ class ConversationManager: ObservableObject {
     func loadConversation(_ conversation: SavedConversation) {
         currentConversation = conversation
         userDefaults.set(conversation.id, forKey: currentConversationKey)
+        
+        // Sync with UnifiedChatService for session context
+        Task { @MainActor in
+            UnifiedChatService.shared.loadConversation(conversation)
+        }
     }
     
     /// Delete a conversation

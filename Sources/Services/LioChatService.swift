@@ -168,6 +168,7 @@ struct LioGreetingResponse: Codable {
 
     private func sendChatModuleMessage(
         message: String,
+        sessionId: String? = nil,
         modeHint: String?,
         action: String?,
         contextHint: String?
@@ -177,8 +178,8 @@ struct LioGreetingResponse: Codable {
             message: message,
             modeHint: modeHint,
             action: action,
-            conversationId: nil,
-            sessionId: nil,
+            conversationId: sessionId,
+            sessionId: sessionId,
             conversationHistory: chatHistoryPayload(),
             context: contextHint,
             includeCtas: true,
@@ -260,12 +261,37 @@ struct LioGreetingResponse: Codable {
             chatAction = LioChatAction(type: "open_classroom", parameters: params)
         }
         
-        // Map A2UI Content
+        // Map A2UI Content - Convert ALL backend A2UIContent types to MessageContentType
         var mappedContentTypes: [MessageContentType]? = nil
         
         if let backendTypes = backend.contentTypes {
             mappedContentTypes = backendTypes.compactMap { content -> MessageContentType? in
                 switch content.type {
+                case .text:
+                    // Text type is represented by the message content itself
+                    return .text
+                    
+                case .processing:
+                    // Processing/loading indicator
+                    return .processing(step: "Processing...", progress: nil)
+                    
+                case .topicSelection:
+                    // Topic selection widget
+                    if let topics = content.topics {
+                        let topicOptions = topics.map { topic in
+                            TopicOption(
+                                title: topic.title,
+                                icon: topic.icon ?? "book.fill",
+                                gradientColors: topic.gradientColors
+                            )
+                        }
+                        return .topicSelection(
+                            title: content.title ?? "Choose a Topic",
+                            topics: topicOptions
+                        )
+                    }
+                    return nil
+                    
                 case .quiz:
                     guard let quiz = content.quiz, let firstQ = quiz.questions.first else { return nil }
                     let correctIndex = firstQ.options.firstIndex(of: firstQ.correctAnswer) ?? 0
@@ -275,24 +301,75 @@ struct LioGreetingResponse: Codable {
                         correctIndex: correctIndex,
                         explanation: nil
                     )
+                    
                 case .courseRoadmap:
-                    guard let map = content.courseRoadmap else { return nil }
-                    let modules = map.modules.enumerated().map { index, mod in
-                        CourseModule(
-                            id: "mod_\(index)",
-                            title: mod.title,
-                            duration: "\(mod.lessons?.count ?? 0) lessons",
-                            isCompleted: false,
-                            isLocked: index > 0
+                    // Handle nested structure first
+                    if let map = content.courseRoadmap {
+                        let modules = map.modules.enumerated().map { index, mod in
+                            CourseModule(
+                                id: "mod_\(index)",
+                                title: mod.title,
+                                duration: mod.lessons.map { "\($0.count) lessons" } ?? "TBD",
+                                isCompleted: false,
+                                isLocked: index > 0
+                            )
+                        }
+                        return .courseRoadmap(
+                            title: map.title,
+                            modules: modules,
+                            totalModules: modules.count,
+                            completedModules: 0
                         )
                     }
-                    return .courseRoadmap(
-                        title: map.title,
-                        modules: modules,
-                        totalModules: modules.count,
-                        completedModules: 0
-                    )
-                default:
+                    // Fallback: flat modules format
+                    if let flatModules = content.modules {
+                        let uiModules = flatModules.map { mod in
+                            CourseModule(
+                                id: mod.id ?? UUID().uuidString,
+                                title: mod.title,
+                                duration: mod.duration,
+                                isCompleted: mod.isCompleted ?? false,
+                                isLocked: mod.isLocked ?? false
+                            )
+                        }
+                        return .courseRoadmap(
+                            title: content.title ?? "Course Roadmap",
+                            modules: uiModules,
+                            totalModules: content.totalModules ?? uiModules.count,
+                            completedModules: content.completedModules ?? 0
+                        )
+                    }
+                    return nil
+                    
+                case .flashcards:
+                    // Flashcard carousel widget
+                    if let cards = content.cards {
+                        let flashcardModels = cards.map { card in
+                            Flashcard(
+                                front: card.front,
+                                back: card.back,
+                                isMastered: false
+                            )
+                        }
+                        return .flashcards(
+                            title: content.title ?? "Study Flashcards",
+                            cards: flashcardModels
+                        )
+                    }
+                    return nil
+                    
+                case .suggestions:
+                    // Smart follow-up suggestions widget
+                    if let suggestions = content.suggestions, !suggestions.isEmpty {
+                        return .suggestions(
+                            title: content.title ?? "What's next?",
+                            options: suggestions
+                        )
+                    }
+                    return nil
+                    
+                case .unknown:
+                    print("⚠️ Unknown A2UI content type received in handleBackendResponse")
                     return nil
                 }
             }
@@ -425,11 +502,20 @@ struct LioGreetingResponse: Codable {
     func getProactiveGreeting() async throws -> LioGreetingResponse {
         return try await NetworkClient.shared.request(Endpoints.ChatModule.getGreeting)
     }
+
+    // MARK: - Session Management
+
+    func startNewSession() {
+        conversationHistory.removeAll()
+        intentClassifier.reset() // Reset wizard state if active
+        print("🆕 LioChatService: Session cleared")
+    }
     
     // MARK: - Send Message (Hybrid: Backend -> OpenAI -> Local)
     
     func sendMessage(
         text: String,
+        sessionId: String? = nil,
         mode: String,
         context: [String: Any]? = nil,
         contextHint: String? = nil
@@ -516,6 +602,7 @@ struct LioGreetingResponse: Codable {
                 print("⚠️ Course generation failed, falling back to chat: \(error)")
                 let backend = try await sendChatModuleMessage(
                     message: text,
+                    sessionId: sessionId,
                     modeHint: "course_planner",
                     action: "create_course",
                     contextHint: topic
@@ -601,6 +688,7 @@ struct LioGreetingResponse: Codable {
                 print("🧠 LioChatService: Attempting backend chat module...")
                 let backend = try await sendChatModuleMessage(
                     message: text,
+                    sessionId: sessionId,
                     modeHint: nil,
                     action: nil,
                     contextHint: contextHint
@@ -788,50 +876,106 @@ struct LioGreetingResponse: Codable {
     
     private func buildSystemPrompt(for mode: String, context: [String: Any]?) -> String {
         let basePrompt = """
-        You are Lio, an enthusiastic and supportive AI learning companion in the Lyo app. 
-        You have a warm, encouraging personality. Use emojis occasionally to keep things engaging.
-        Keep responses concise but helpful (2-4 paragraphs max).
+        You are **Lyo**, the AI assistant inside the **Lyo** learning app.
+        Lyo is an AI-powered learning and life-long growth platform that should feel:
+        * Friendly, modern, slightly playful (not like a boring school LMS)
+        * Smart and "AI-powered" but not overwhelming
+        * Useful for both students and life-learners
+
+        The app has multiple main surfaces:
+        1. **Chat Screen (this screen)** – conversational interface with Lyo.
+        2. **AI Classroom** – a dedicated area where full courses, lessons, and structured learning flows live.
+        3. **Stack** – a "today's stack" view of the user's active items (courses, tutors, chats, tasks, etc.), shown as cards.
+
+        Your job in this chat:
+        * Answer normal questions directly in chat.
+        * Detect when the user wants a **course / class / structured learning plan**, and in that case:
+          * Do NOT build the whole course in chat.
+          * Instead, send a structured JSON "UI event" so the app can:
+            1. Open the AI Classroom for that topic, and
+            2. Add an item to the user's Stack.
+
+        ## When to trigger the AI Classroom
+
+        You must treat the user as requesting a **course / class / structured plan** when they clearly ask for:
+        * "Create a course on X…"
+        * "Make a full course about…"
+        * "Create a study plan / learning plan for…"
+        * "Teach me X from zero / from scratch."
+        * "Start a class on…"
+        * "I want to learn [topic]"
+
+        ## Output format for classroom requests
+
+        When the user clearly wants a course, respond with **only** this JSON (no extra text):
+
+        ```json
+        {
+          "type": "OPEN_CLASSROOM",
+          "payload": {
+            "stack_item": {
+              "category": "Course",
+              "title": "<short course title>",
+              "subtitle": "<one-line description>",
+              "status": "active",
+              "due": null
+            },
+            "course": {
+              "title": "<short course title>",
+              "topic": "<main topic>",
+              "level": "<beginner|intermediate|advanced>",
+              "language": "English",
+              "duration": "<e.g. '6 lessons'>",
+              "objectives": [
+                "<objective 1>",
+                "<objective 2>",
+                "<objective 3>"
+              ]
+            }
+          }
+        }
+        ```
+
+        Examples that should **stay in chat** (normal answer, no JSON):
+        * "What is a variable in Python?" → Answer directly
+        * "Explain lists vs dictionaries" → Answer directly
+        
+        Examples that should **trigger classroom** (return JSON):
+        * "Create a course on Python" → Return JSON
+        * "Teach me web development from scratch" → Return JSON
+        * "I want to learn machine learning" → Return JSON
         
         """
         
         switch mode {
         case "focus":
             return basePrompt + """
+            
             You're in Focus Mode - helping the user concentrate on their learning goals.
-            - Help them stay on track with their current course or study session
-            - Provide explanations, examples, and practice questions
-            - Encourage progress and celebrate achievements
-            - Suggest next steps in their learning journey
             """
         case "discover":
             return basePrompt + """
+            
             You're in Discover Mode - helping the user explore new topics.
-            - Suggest interesting courses and learning paths
-            - Share fun facts and connections between topics
-            - Spark curiosity and recommend related subjects
-            - Help them find their next learning adventure
             """
         case "campus":
             return basePrompt + """
+            
             You're in Campus Mode - helping with campus life and events.
-            - Share information about campus events and activities
-            - Help find study groups and collaboration opportunities
-            - Provide guidance on campus resources
-            - Connect users with relevant communities
             """
         case "collab":
             return basePrompt + """
+            
             You're in Collab Mode - helping with group learning and collaboration.
-            - Facilitate study group discussions
-            - Help coordinate group projects
-            - Suggest collaborative learning activities
-            - Support peer-to-peer learning
+            """
+        case "course":
+            return basePrompt + """
+            
+            You're in Course Creation Mode - the user wants to create a structured learning course.
+            **IMPORTANT**: Generate the OPEN_CLASSROOM JSON immediately, don't ask clarifying questions first.
             """
         default:
-            return basePrompt + """
-            Help the user with whatever they need - learning, questions, or guidance.
-            Be friendly, supportive, and helpful.
-            """
+            return basePrompt
         }
     }
     
@@ -1112,25 +1256,78 @@ extension LioChatService {
         
         return content.compactMap { item -> MessageContentType? in
             switch item.type {
-            case .courseRoadmap:
-                guard let roadmap = item.courseRoadmap else { return nil }
-                // Map A2UIModule to CourseModule
-                let modules = roadmap.modules.map { mod in
-                    CourseModule(
-                        title: mod.title,
-                        duration: mod.lessons?.compactMap { $0.duration }.joined(separator: ", ") ?? ""
+            case .text:
+                return .text
+                
+            case .processing:
+                return .processing(step: "Processing...", progress: nil)
+                
+            case .topicSelection:
+                guard let topics = item.topics else { return nil }
+                let topicOptions = topics.map { topic in
+                    TopicOption(
+                        title: topic.title,
+                        icon: topic.icon ?? "book.fill",
+                        gradientColors: topic.gradientColors
                     )
                 }
-                return .courseRoadmap(
-                    title: roadmap.title,
-                    modules: modules,
-                    totalModules: modules.count,
-                    completedModules: 0
+                return .topicSelection(
+                    title: item.title ?? "Choose a Topic",
+                    topics: topicOptions
+                )
+                
+            case .courseRoadmap:
+                // Handle nested structure first
+                if let roadmap = item.courseRoadmap {
+                    let modules = roadmap.modules.map { mod in
+                        CourseModule(
+                            title: mod.title,
+                            duration: mod.lessons?.compactMap { $0.duration }.joined(separator: ", ") ?? ""
+                        )
+                    }
+                    return .courseRoadmap(
+                        title: roadmap.title,
+                        modules: modules,
+                        totalModules: modules.count,
+                        completedModules: 0
+                    )
+                }
+                // Fallback: flat modules format
+                if let flatModules = item.modules {
+                    let uiModules = flatModules.map { mod in
+                        CourseModule(
+                            id: mod.id ?? UUID().uuidString,
+                            title: mod.title,
+                            duration: mod.duration,
+                            isCompleted: mod.isCompleted ?? false,
+                            isLocked: mod.isLocked ?? false
+                        )
+                    }
+                    return .courseRoadmap(
+                        title: item.title ?? "Course Roadmap",
+                        modules: uiModules,
+                        totalModules: item.totalModules ?? uiModules.count,
+                        completedModules: item.completedModules ?? 0
+                    )
+                }
+                return nil
+                
+            case .flashcards:
+                guard let cards = item.cards else { return nil }
+                let flashcardModels = cards.map { card in
+                    Flashcard(
+                        front: card.front,
+                        back: card.back,
+                        isMastered: false
+                    )
+                }
+                return .flashcards(
+                    title: item.title ?? "Study Flashcards",
+                    cards: flashcardModels
                 )
                 
             case .quiz:
                 guard let quiz = item.quiz, let firstQ = quiz.questions.first else { return nil }
-                // Convert first question to quiz bubble
                 let correctIndex = firstQ.options.firstIndex(of: firstQ.correctAnswer) ?? 0
                 return .quiz(
                     question: firstQ.question,
@@ -1139,7 +1336,15 @@ extension LioChatService {
                     explanation: nil
                 )
                 
-            default:
+            case .suggestions:
+                guard let suggestions = item.suggestions, !suggestions.isEmpty else { return nil }
+                return .suggestions(
+                    title: item.title ?? "What's next?",
+                    options: suggestions
+                )
+                
+            case .unknown:
+                print("⚠️ Unknown A2UI content type in convertToMessageContentType")
                 return nil
             }
         }

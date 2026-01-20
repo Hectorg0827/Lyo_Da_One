@@ -20,9 +20,6 @@ class AICommandHandler: ObservableObject {
     @Published var pendingStackItem: StackItemPayload?
     @Published var shouldOpenClassroom: Bool = false
     
-    /// Shared AppUIState to coordinate navigation
-    var uiState: AppUIState?
-    
     private init() {}
     
     // MARK: - Process AI Response
@@ -43,7 +40,7 @@ class AICommandHandler: ObservableObject {
     
     // MARK: - Handle Commands
     
-    private func handleCommand(_ command: AICommandResponse) -> (displayText: String, wasCommand: Bool) {
+    func handleCommand(_ command: AICommandResponse) -> (displayText: String, wasCommand: Bool) {
         switch command.type {
         case .openClassroom:
             return handleOpenClassroom(command.payload)
@@ -69,38 +66,47 @@ class AICommandHandler: ObservableObject {
         
         print("🎓 Opening AI Classroom for: \(course.title)")
         
-        // 1. Set navigation state
+        // Store the course details for navigation
         self.pendingClassroomCourse = course
+        self.pendingStackItem = payload?.stackItem
         
-        // 2. Use the CourseOrchestrator for robust, optimistic creation
-        Task {
-            await CourseOrchestrator.shared.execute(proposal: course)
-        }
-        
-        // 3. Trigger navigation
+        // Trigger local navigation flag
         self.shouldOpenClassroom = true
         
-        // 4. Also add to stack if provided
+        // Post notification for MainTabView to trigger fullScreenCover
+        // Using the central Notification.Name extension if available
+        NotificationCenter.default.post(
+            name: Notification.Name("openClassroom"),
+            object: nil,
+            userInfo: [
+                "courseId": "GENERATE:\(course.topic)",
+                "lessonId": "intro_1",
+                "courseTitle": course.title,
+                "lessonTitle": "Introduction"
+            ]
+        )
+        
+        // Also add to stack if provided
         if let stackItem = payload?.stackItem {
             Task {
                 await addToStack(stackItem, course: course)
             }
         }
         
-        // Return confirmation message
+        // Return confirmation message (will be displayed while navigating)
         let confirmationMessage = """
-        🎓 Fantastic! I'm weaving together your **\(course.title)** course right now.
+        🎓 Perfect! I'm setting up your **\(course.title)** course now!
         
-        **Curriculum:**
+        **What you'll learn:**
         \(course.objectives.prefix(3).map { "• \($0)" }.joined(separator: "\n"))
         
-        Opening the classroom...
+        Opening the AI Classroom...
         """
         
         return (confirmationMessage, true)
     }
     
-    private func handleAddToStack(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
+    func handleAddToStack(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
         guard let stackItem = payload?.stackItem else {
             return ("I'll add that to your stack!", true)
         }
@@ -165,4 +171,3 @@ class AICommandHandler: ObservableObject {
         shouldOpenClassroom = false
     }
 }
-

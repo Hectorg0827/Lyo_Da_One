@@ -87,7 +87,7 @@ extension CreateMode {
     var iconForMode: String {
         switch self {
         case .story: return "📸"
-        case .reel: return "🎬"
+        case .reel, .clip: return "🎬"
         case .post: return "✏️"
         case .course: return "📚"
         case .event: return "🎉"
