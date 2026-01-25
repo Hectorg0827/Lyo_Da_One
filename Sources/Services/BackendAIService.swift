@@ -24,7 +24,18 @@ struct BackendAIChatRequest: Encodable {
     }
 }
 
-// MARK: - A2UI Models (Backend-Driven UI)
+// MARK: - A2UI Models 
+
+// NOTE: We use the shared OpenClassroomPayload from Models/LyoChat.swift 
+// and StackItemPayload/CoursePayload from Models/AICommandResponse.swift
+// to avoid ambiguity.
+
+// Private envelope for decoding the raw JSON structure
+private struct OpenClassroomEnvelope: Codable {
+    let type: String
+    let payload: OpenClassroomPayload
+}
+
 /// A2UI Content payload from backend - supports multiple widget types
 struct A2UIContent: Codable {
     let type: A2UIContentType
@@ -159,13 +170,19 @@ struct A2UIFlashcard: Codable {
     let hint: String?
 }
 
-// Response from /api/v1/ai/chat
-// Backend returns: { "response": "...", "conversationHistory": [...] }
+// Response from /api/v1/chat (Chat Module with A2UI support)
+// Backend returns: { "response": "...", "type": "OPEN_CLASSROOM", "payload": {...}, "conversationHistory": [...] }
 struct BackendAIChatResponse: Codable {
     // Primary fields from backend ChatResponse
     let response: String?  // Backend's main response field
     let conversationHistory: [ConversationMessage]?
     let contentTypes: [A2UIContent]?
+    let uiComponent: DynamicComponent?  // Standard A2UI Component Tree
+
+    
+    // A2UI Command fields (OPEN_CLASSROOM, etc.)
+    let type: String?  // e.g. "OPEN_CLASSROOM"
+    let payload: OpenClassroomPayload?  // The course/classroom payload
     
     // Legacy fields for backward compatibility (may not be present anymore)
     let content: String?  // Some endpoints still use this
@@ -188,7 +205,9 @@ struct BackendAIChatResponse: Codable {
     
     enum CodingKeys: String, CodingKey {
         case response
-        case conversationHistory
+        case conversationHistory = "conversationHistory" // Backend uses CamelCase alias
+        case type
+        case payload
         case content
         case primaryAi = "primary_ai"
         case secondaryAi = "secondary_ai"
@@ -201,10 +220,11 @@ struct BackendAIChatResponse: Codable {
         case confidenceScore = "confidence_score"
         case modelVersions = "model_versions"
         case userId = "user_id"
-        case responseMode = "response_mode"
-        case quickExplainer = "quick_explainer"
-        case courseProposal = "course_proposal"
-        case contentTypes = "content_types"
+        case responseMode = "responseMode" // Backend uses CamelCase alias
+        case quickExplainer = "quickExplainer" // Backend uses CamelCase alias
+        case courseProposal = "courseProposal" // Backend uses CamelCase alias
+        case contentTypes = "contentTypes" // Backend sends dictionary list as contentTypes
+        case uiComponent = "uiComponent" // Backend sends standard A2UI as uiComponent
     }
     
     // Computed property for easy access to the AI response text
@@ -215,6 +235,52 @@ struct BackendAIChatResponse: Codable {
     // Computed property for AI source (with fallback)
     var aiSource: String {
         return primaryAi ?? "gemini"
+    }
+    
+    // MARK: - A2UI Extractor (The Markdown Trap Fix)
+    /// Robustly extracts A2UI JSON payloads even if wrapped in Markdown code blocks
+    var extractedUI: OpenClassroomPayload? {
+        let text = responseText
+        
+        // 1. Fast check: text must contain the type identifier
+        guard text.contains("OPEN_CLASSROOM") else { return nil }
+        
+        // 2. Try to find JSON block pattern
+        // Regex looks for ```json ... ``` or just { ... "type": "OPEN_CLASSROOM" ... }
+        let pattern = #"(?s)\{.*"type"\s*:\s*"OPEN_CLASSROOM".*\}"#
+        
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+        let nsString = text as NSString
+        let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+        
+        // Check finding
+        for match in results {
+            let jsonString = nsString.substring(with: match.range)
+            
+            // Clean up potentially persistent markdown markers inside the match? 
+            // Usually the regex above grabs the brace-to-brace content.
+            // But if there are markdown ticks inside, we might need a stricter clean.
+            // A common case: ```json\n{...}\n```. The regex above matches { to }.
+            
+            if let data = jsonString.data(using: .utf8),
+               let envelope = try? JSONDecoder().decode(OpenClassroomEnvelope.self, from: data) {
+                return envelope.payload
+            }
+        }
+        
+        // Fallback: If the entire string is just the JSON (no markdown wrapping caught by regex or mixed text)
+        // Clean markdown code blocks blindly
+        let cleaned = text
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+        if let data = cleaned.data(using: .utf8),
+           let envelope = try? JSONDecoder().decode(OpenClassroomEnvelope.self, from: data) {
+            return envelope.payload
+        }
+        
+        return nil
     }
 }
 
@@ -268,12 +334,34 @@ struct CourseGenerationJobResponse: Codable {
     let pollUrl: String
     
     enum CodingKeys: String, CodingKey {
-        case jobId = "job_id"
+        case jobId
         case status
-        case qualityTier = "quality_tier"
-        case estimatedCostUSD = "estimated_cost_usd"
+        case qualityTier
+        case estimatedCostUSD
         case message
-        case pollUrl = "poll_url"
+        case pollUrl
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Debugging: Check for keys
+        if !container.contains(.jobId) {
+             let keys = container.allKeys.map { $0.stringValue }.joined(separator: ", ")
+             print("❌ DEBUG DECODING ERROR: Missing job_id. Available keys: [\(keys)]")
+             
+             // Check if we received a primitive container (Raw JSON string check hack)
+             // ...
+             
+             throw DecodingError.keyNotFound(CodingKeys.jobId, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing job_id. Keys found: [\(keys)]"))
+        }
+
+        self.jobId = try container.decode(String.self, forKey: .jobId)
+        self.status = try container.decode(String.self, forKey: .status)
+        self.qualityTier = try container.decode(String.self, forKey: .qualityTier)
+        self.estimatedCostUSD = try container.decode(Double.self, forKey: .estimatedCostUSD)
+        self.message = try container.decode(String.self, forKey: .message)
+        self.pollUrl = try container.decode(String.self, forKey: .pollUrl)
     }
 }
 
@@ -289,14 +377,14 @@ struct CourseGenerationStatusResponse: Codable {
     let error: String?
     
     enum CodingKeys: String, CodingKey {
-        case jobId = "job_id"
+        case jobId
         case status
-        case progressPercent = "progress_percent"
-        case currentStep = "current_step"
-        case stepsCompleted = "steps_completed"
-        case estimatedTimeRemainingSec = "estimated_time_remaining_seconds"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
+        case progressPercent
+        case currentStep
+        case stepsCompleted
+        case estimatedTimeRemainingSec
+        case createdAt
+        case updatedAt
         case error
     }
 }
@@ -435,14 +523,17 @@ final class BackendAIService {
     func studySession(
         message: String,
         resourceId: String? = nil,
-        mode: String = "focus"
-    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, wasCommand: Bool) {
+        mode: String = "focus",
+        history: [ConversationMessage]? = nil
+    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: DynamicComponent?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
             if resourceId != currentResourceId {
-                // New topic - reset conversation
-                conversationHistory.removeAll()
+                // New topic - reset conversation (only if using internal history)
+                if history == nil {
+                     conversationHistory.removeAll()
+                }
                 currentResourceId = resourceId
             }
         }
@@ -455,12 +546,15 @@ final class BackendAIService {
         var historyWithSystem: [ConversationMessage] = []
         
         // Add system prompt as first message if this is a new conversation
-        if conversationHistory.isEmpty {
+        // Use provided history or internal history
+        let previousHistory = history ?? conversationHistory
+        
+        if previousHistory.isEmpty {
             historyWithSystem.append(ConversationMessage(role: "system", content: systemPrompt))
         }
         
         // Add existing conversation history
-        historyWithSystem.append(contentsOf: conversationHistory.suffix(8))
+        historyWithSystem.append(contentsOf: previousHistory.suffix(8))
         
         // Build request - context should be simple metadata, not the full prompt
         let contextMetadata = "mode=\(mode),topic=\(currentResourceId)"
@@ -471,7 +565,10 @@ final class BackendAIService {
             context: contextMetadata
         )
         
-        let endpoint = "\(baseURL)/api/v1/ai/chat"
+        // CRITICAL: Use /api/v1/chat (Chat Module) NOT /api/v1/ai/chat (AI Study)
+        // The Chat Module returns A2UI payloads with type: "OPEN_CLASSROOM" and payload fields
+        // that trigger classroom navigation in the iOS app
+        let endpoint = "\(baseURL)/api/v1/chat"
         
         do {
             let response: BackendAIChatResponse = try await postPublic(endpoint: endpoint, body: request)
@@ -480,15 +577,19 @@ final class BackendAIService {
             
             // Update local conversation history with the original user message
             // Note: We keep the raw response in history so the AI knows what it sent (including JSON)
-            conversationHistory.append(ConversationMessage(role: "user", content: message))
-            conversationHistory.append(ConversationMessage(role: "assistant", content: rawResponse))
-            
-            // Keep history reasonable size
-            if conversationHistory.count > 10 {
-                conversationHistory = Array(conversationHistory.suffix(10))
+            if history == nil {
+                conversationHistory.append(ConversationMessage(role: "user", content: message))
+                conversationHistory.append(ConversationMessage(role: "assistant", content: rawResponse))
+                // Keep history reasonable size
+                if conversationHistory.count > 10 {
+                    conversationHistory = Array(conversationHistory.suffix(10))
+                }
             }
             
-            return (response: rawResponse, source: response.aiSource, uiContent: response.contentTypes, wasCommand: false)
+            // Check if this is an OPEN_CLASSROOM command
+            let isCommand = response.type == "OPEN_CLASSROOM"
+            
+            return (response: rawResponse, source: response.aiSource, uiContent: response.contentTypes, uiComponent: response.uiComponent, wasCommand: isCommand, openClassroomPayload: response.payload)
             
         } catch {
             print("⚠️ Backend AI failed: \(error). Will fallback to local.")

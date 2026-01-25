@@ -4,6 +4,7 @@ import MapKit
 struct CommunityView: View {
     @StateObject private var viewModel = CommunityViewModel()
     @State private var showCreateSheet = false
+    @State private var showingActivities = false
     
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -20,7 +21,9 @@ struct CommunityView: View {
             
             // TOP BAR OVERLAY
             VStack(spacing: 0) {
-                CommunityTopBar(viewModel: viewModel)
+                CommunityTopBar(viewModel: viewModel) {
+                    showingActivities = true
+                }
                     .background(.ultraThinMaterial)
                     .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 5)
                 Spacer()
@@ -44,6 +47,9 @@ struct CommunityView: View {
         .sheet(isPresented: $showCreateSheet) {
             CreateCommunityItemSheet(viewModel: viewModel)
         }
+        .sheet(isPresented: $showingActivities) {
+            MyActivitiesView()
+        }
         .onAppear {
             viewModel.loadData()
         }
@@ -54,6 +60,7 @@ struct CommunityView: View {
 
 struct CommunityTopBar: View {
     @ObservedObject var viewModel: CommunityViewModel
+    var onShowActivities: () -> Void
     @FocusState private var isSearchFocused: Bool
     
     var body: some View {
@@ -80,6 +87,16 @@ struct CommunityTopBar: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 100)
+                
+                // Activities Button
+                Button(action: onShowActivities) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.title3)
+                        .foregroundColor(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color(.systemGray6))
+                        .clipShape(Circle())
+                }
             }
             .padding(.horizontal)
             
@@ -184,7 +201,7 @@ struct CommunityListView: View {
                 if viewModel.isLoading {
                     ProgressView()
                         .padding(.top, 50)
-                } else if viewModel.items.isEmpty {
+                } else if viewModel.filteredItems.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "magnifyingglass")
                             .font(.largeTitle)
@@ -194,8 +211,13 @@ struct CommunityListView: View {
                     }
                     .padding(.top, 50)
                 } else {
-                    ForEach(viewModel.items) { item in
-                        CommunityItemCard(item: item)
+                    ForEach(viewModel.filteredItems) { item in
+                        NavigationLink {
+                            destinationView(for: item)
+                        } label: {
+                            CommunityItemCard(item: item)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -203,6 +225,123 @@ struct CommunityListView: View {
         }
         .background(Color(.systemGroupedBackground))
     }
+    
+    // MARK: - Navigation Helper
+    
+    @ViewBuilder
+    private func destinationView(for item: CommunityItem) -> some View {
+        switch item.type {
+        case .privateLesson:
+            if let lessonData = item.lessonData {
+                PrivateLessonDetailView(lesson: lessonData)
+            } else {
+                // Fallback: Create a lesson from item data
+                PrivateLessonDetailView(lesson: APIPrivateLesson(
+                    id: Int(item.id.hashValue),
+                    title: item.title,
+                    subject: "General",
+                    instructor: APIUserPreview(id: 1, name: "Instructor", avatar: item.userAvatar),
+                    cost: 50,
+                    durationMinutes: 60,
+                    description: item.subtitle,
+                    lat: item.coordinate.latitude,
+                    lng: item.coordinate.longitude,
+                    imageURL: item.imageURL
+                ))
+            }
+            
+        case .educationalCenter:
+            if let centerData = item.centerData {
+                EducationalCenterDetailView(center: centerData)
+            } else {
+                // Fallback: Create a center from item data
+                EducationalCenterDetailView(center: APIEducationalCenter(
+                    id: Int(item.id.hashValue),
+                    name: item.title,
+                    category: "Education",
+                    description: item.subtitle ?? "",
+                    lat: item.coordinate.latitude,
+                    lng: item.coordinate.longitude,
+                    imageURL: item.imageURL,
+                    address: nil,
+                    openingHours: nil
+                ))
+            }
+            
+        default:
+            // Generic detail view for other types (events, groups, etc.)
+            CommunityItemDetailPlaceholder(item: item)
+        }
+    }
+}
+
+// MARK: - Placeholder Detail View
+
+struct CommunityItemDetailPlaceholder: View {
+    let item: CommunityItem
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Hero
+                ZStack {
+                    if let imageURL = item.imageURL, let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            default:
+                                item.type.color.opacity(0.3)
+                            }
+                        }
+                    } else {
+                        item.type.color.opacity(0.3)
+                    }
+                    
+                    VStack {
+                        Spacer()
+                        Text(item.title)
+                            .font(.title.bold())
+                            .foregroundColor(.white)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+                            )
+                    }
+                }
+                .frame(height: 200)
+                .clipped()
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    // Type badge
+                    Label(item.type.rawValue, systemImage: item.type.icon)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(item.type.color.opacity(0.1))
+                        .foregroundColor(item.type.color)
+                        .clipShape(Capsule())
+                    
+                    if let subtitle = item.subtitle {
+                        Text(subtitle)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text("Timestamp: \(item.timestamp, style: .date)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Spacer()
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
 }
 
 struct CommunityItemCard: View {

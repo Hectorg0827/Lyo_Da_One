@@ -4,6 +4,7 @@ import SwiftUI
 struct ChatView: View {
 
     @StateObject private var viewModel = ChatViewModel()
+    var recipient: APIUserPreview? = nil
 
     var body: some View {
         NavigationView {
@@ -80,6 +81,22 @@ struct ChatView: View {
             }
             .task {
                 await viewModel.loadConversations()
+                if let recipient = recipient {
+                    // Convert APIUserPreview to User
+                    let user = User(
+                        id: recipient.id,
+                        email: "",
+                        name: recipient.name,
+                        avatarURL: recipient.avatar,
+                        createdAt: Date(),
+                        level: 0, 
+                        xp: 0, 
+                        streak: 0, 
+                        totalLessonsCompleted: 0, 
+                        achievements: []
+                    )
+                    await viewModel.startDirectMessage(with: user)
+                }
             }
             .onDisappear {
                 viewModel.disconnect()

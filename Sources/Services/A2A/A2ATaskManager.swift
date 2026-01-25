@@ -373,9 +373,9 @@ enum A2ATaskError: LocalizedError {
     }
 }
 
-// MARK: - AnyCodableValue for dynamic data
+// MARK: - A2AAnyCodableValue for dynamic data
 
-struct AnyCodableValue: Codable {
+struct A2AAnyCodableValue: Codable {
     let value: Any
     
     init(_ value: Any) {
@@ -393,9 +393,9 @@ struct AnyCodableValue: Codable {
             value = double
         } else if let bool = try? container.decode(Bool.self) {
             value = bool
-        } else if let array = try? container.decode([AnyCodableValue].self) {
+        } else if let array = try? container.decode([A2AAnyCodableValue].self) {
             value = array.map { $0.value }
-        } else if let dict = try? container.decode([String: AnyCodableValue].self) {
+        } else if let dict = try? container.decode([String: A2AAnyCodableValue].self) {
             value = dict.mapValues { $0.value }
         } else {
             value = NSNull()
@@ -415,9 +415,9 @@ struct AnyCodableValue: Codable {
         case let bool as Bool:
             try container.encode(bool)
         case let array as [Any]:
-            try container.encode(array.map { AnyCodableValue($0) })
+            try container.encode(array.map { A2AAnyCodableValue($0) })
         case let dict as [String: Any]:
-            try container.encode(dict.mapValues { AnyCodableValue($0) })
+            try container.encode(dict.mapValues { A2AAnyCodableValue($0) })
         default:
             try container.encodeNil()
         }

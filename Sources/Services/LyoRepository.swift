@@ -381,6 +381,10 @@ class LyoRepository: ObservableObject {
     func getMyEvents() async throws -> [EducationalEvent] {
         return try await get(endpoint: "/api/v1/community/my-events")
     }
+
+    func getUserBookings() async throws -> [APIUserBooking] {
+        return try await NetworkClient.shared.request(Endpoints.Community.getUserBookings)
+    }
     
     func getCommunityStats() async throws -> CommunityStats {
         return try await get(endpoint: "/api/v1/community/stats")
@@ -464,6 +468,8 @@ enum NetworkError: Error {
     case unauthorized
     case registrationFailed(String)
     case loginFailed(String)
+    case serverError(Int)
+    case networkError(String)
 }
 
 extension NetworkError: LocalizedError {
@@ -479,6 +485,10 @@ extension NetworkError: LocalizedError {
             return "Registration failed: \(message)"
         case .loginFailed(let message):
             return "Login failed: \(message)"
+        case .serverError(let code):
+            return "Server error: \(code)"
+        case .networkError(let message):
+            return "Network error: \(message)"
         }
     }
 }

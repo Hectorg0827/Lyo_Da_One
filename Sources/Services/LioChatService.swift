@@ -507,7 +507,7 @@ struct LioGreetingResponse: Codable {
 
     func startNewSession() {
         conversationHistory.removeAll()
-        intentClassifier.reset() // Reset wizard state if active
+        intentClassifier.resetWizard() // Reset wizard state if active
         print("🆕 LioChatService: Session cleared")
     }
     
@@ -748,7 +748,7 @@ struct LioGreetingResponse: Codable {
         // Fallback: Public AI Chat (if auth failed or no token)
         if authFailed {
             do {
-                let (response, source, uiContent, wasCommand) = try await BackendAIService.shared.studySession(
+                let (response, source, uiContent, _, wasCommand, openClassroomPayload) = try await BackendAIService.shared.studySession(
                     message: text,
                     resourceId: contextHint,
                     mode: mode
@@ -758,6 +758,24 @@ struct LioGreetingResponse: Codable {
                 
                 // Convert UI Content (A2UI -> LyoMessage Types)
                 let mappedContentTypes = convertToMessageContentType(uiContent)
+                
+                // Handle OPEN_CLASSROOM command directly from backend
+                if wasCommand, let classroomPayload = openClassroomPayload {
+                    print("🎓 LioChatService: OPEN_CLASSROOM payload received - triggering navigation")
+                    let commandPayload = AICommandPayload(
+                        stackItem: nil,
+                        course: CoursePayload(
+                            id: classroomPayload.course.id,
+                            title: classroomPayload.course.title,
+                            topic: classroomPayload.course.topic,
+                            level: classroomPayload.course.level,
+                            language: "English",
+                            duration: classroomPayload.course.duration ?? "~45 min",
+                            objectives: classroomPayload.course.objectives
+                        )
+                    )
+                    let _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
+                }
                 
                 let aiMessage = LyoMessage(
                     id: UUID().uuidString,
@@ -936,321 +954,55 @@ struct LioGreetingResponse: Codable {
         }
         ```
 
-        Examples that should **stay in chat** (normal answer, no JSON):
-        * "What is a variable in Python?" → Answer directly
-        * "Explain lists vs dictionaries" → Answer directly
-        
-        Examples that should **trigger classroom** (return JSON):
-        * "Create a course on Python" → Return JSON
-        * "Teach me web development from scratch" → Return JSON
-        * "I want to learn machine learning" → Return JSON
-        
+        ## Chat mode
+
+        When the user is asking a general question or having a conversation, respond naturally. Keep responses concise and helpful.
         """
-        
-        switch mode {
-        case "focus":
-            return basePrompt + """
-            
-            You're in Focus Mode - helping the user concentrate on their learning goals.
-            """
-        case "discover":
-            return basePrompt + """
-            
-            You're in Discover Mode - helping the user explore new topics.
-            """
-        case "campus":
-            return basePrompt + """
-            
-            You're in Campus Mode - helping with campus life and events.
-            """
-        case "collab":
-            return basePrompt + """
-            
-            You're in Collab Mode - helping with group learning and collaboration.
-            """
-        case "course":
-            return basePrompt + """
-            
-            You're in Course Creation Mode - the user wants to create a structured learning course.
-            **IMPORTANT**: Generate the OPEN_CLASSROOM JSON immediately, don't ask clarifying questions first.
-            """
-        default:
-            return basePrompt
-        }
+
+        return basePrompt
     }
-    
-    // MARK: - Detect Actions
-    
-    private func detectAction(in userMessage: String, response: String) -> LioChatAction? {
-        let lower = userMessage.lowercased()
+
+    /// Detects any implicit action requests in user text
+    private func detectAction(in userText: String, response: String) -> LioChatAction? {
+        let lowerText = userText.lowercased()
         
-        // Detect learning intent - user wants to learn a topic
-        if detectLearningIntent(in: lower) {
-            let topic = extractTopic(from: userMessage)
-            return LioChatAction(
-                type: "generate_course",
-                parameters: ["topic": topic, "source": "learning_intent"]
-            )
-        }
-        
-        // Detect explicit course creation request
-        if lower.contains("create") && (lower.contains("course") || lower.contains("curriculum")) {
-            let topic = extractTopic(from: userMessage)
-            return LioChatAction(
-                type: "generate_course",
-                parameters: ["topic": topic, "source": "explicit_request"]
-            )
-        }
-        
-        // Detect quiz intent
-        if lower.contains("quiz") || lower.contains("test me") {
-            return LioChatAction(type: "start_quiz", parameters: nil)
-        }
-        
-        // Detect tutor session intent
-        if lower.contains("tutor") || lower.contains("explain") {
-            return LioChatAction(type: "start_tutor", parameters: nil)
+        // Detect course/classroom intent
+        if lowerText.contains("create a course") ||
+           lowerText.contains("teach me") ||
+           lowerText.contains("start a class") {
+            return LioChatAction(type: "suggest_classroom", parameters: nil)
         }
         
         return nil
     }
-    
-    // MARK: - Learning Intent Detection
-    
-    private func detectLearningIntent(in text: String) -> Bool {
-        let learningPhrases = [
-            "want to learn",
-            "teach me",
-            "help me learn",
-            "i want to study",
-            "show me how to",
-            "can you teach",
-            "help me understand",
-            "i'd like to learn",
-            "learn about",
-            "study for",
-            "prepare for",
-            "get better at",
-            "improve my",
-            "master"
+
+    /// Generates a local fallback response when all else fails
+    private func generateLocalResponse(for text: String, mode: String) -> LioChatResponse {
+        let fallbackResponses = [
+            "I'm having trouble connecting right now. Let me try again in a moment.",
+            "My apologies, I couldn't process that. Could you rephrase?",
+            "I'm experiencing some connectivity issues. Please try again."
         ]
-        
-        return learningPhrases.contains { text.contains($0) }
-    }
-    
-    // MARK: - Topic Extraction
-    
-    private func extractTopic(from message: String) -> String {
-        let lower = message.lowercased()
-        
-        // Common patterns to remove
-        let patternsToRemove = [
-            "i want to learn",
-            "teach me",
-            "help me learn",
-            "i'd like to learn",
-            "can you teach me",
-            "help me understand",
-            "show me how to",
-            "learn about",
-            "create a course on",
-            "create a course about",
-            "make a course on",
-            "please",
-            "could you",
-            "would you",
-            "i need to"
-        ]
-        
-        var cleaned = lower
-        for pattern in patternsToRemove {
-            cleaned = cleaned.replacingOccurrences(of: pattern, with: "")
-        }
-        
-        // Clean up and capitalize
-        let topic = cleaned
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Capitalize first letter of each word
-        return topic.split(separator: " ")
-            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-            .joined(separator: " ")
-    }
-    
-    // MARK: - Clear History
-    
-    func clearHistory() {
-        conversationHistory.removeAll()
-    }
-    
-    // MARK: - Fallback Local Response
-    
-    func generateLocalResponse(for message: String, mode: String) -> LioChatResponse {
-        let lower = message.lowercased()
-        
-        // Smart local responses based on keywords
-        if lower.contains("hello") || lower.contains("hi") || lower.contains("hey") {
-            return LioChatResponse(
-                text: "Hey there! 👋 I'm Lio, your AI learning companion. What would you like to explore today?",
-                source: "local",
-                action: nil,
-                suggestions: ["Create a course", "Help me study", "Quiz me"],
-                meta: nil
-            )
-        }
-        
-        if lower.contains("course") || lower.contains("learn") {
-            return LioChatResponse(
-                text: "I'd love to help you learn! 📚 What topic interests you? I can create a personalized learning path, explain concepts, or quiz you on what you know.",
-                source: "local",
-                action: nil,
-                suggestions: ["Python basics", "History of Art", "Calculus"],
-                meta: nil
-            )
-        }
-        
-        if lower.contains("quiz") || lower.contains("test") {
-            return LioChatResponse(
-                text: "Ready for a challenge! 🎯 What subject should I quiz you on? I can create practice questions to help reinforce your learning.",
-                source: "local",
-                action: nil,
-                suggestions: ["Math Quiz", "Science Quiz", "History Quiz"],
-                meta: nil
-            )
-        }
-        
-        if lower.contains("math") {
-            return LioChatResponse(
-                text: "Math is fascinating! 🧮 Whether it's algebra, calculus, or statistics - I'm here to help. What specific topic would you like to explore?",
-                source: "local",
-                action: nil,
-                suggestions: ["Algebra", "Calculus", "Statistics"],
-                meta: nil
-            )
-        }
-        
-        if lower.contains("code") || lower.contains("programming") || lower.contains("python") || lower.contains("swift") {
-            return LioChatResponse(
-                text: "Coding is a superpower! 💻 I can help you learn programming concepts, debug code, or build projects. What language or concept interests you?",
-                source: "local",
-                action: nil,
-                suggestions: ["Python", "Swift", "JavaScript"],
-                meta: nil
-            )
-        }
-        
-        if lower.contains("help") {
-            return LioChatResponse(
-                text: "I'm here to help! 🌟 I can:\n• Create personalized courses\n• Explain complex topics\n• Generate practice quizzes\n• Answer your questions\n\nWhat would you like to do?",
-                source: "local",
-                action: nil,
-                suggestions: ["Start a course", "Quick explanation", "Quiz"],
-                meta: nil
-            )
-        }
-        
-        if lower.contains("thank") {
-            return LioChatResponse(
-                text: "You're welcome! 😊 I'm always here to help you learn and grow. What else can I help you with?",
-                source: "local",
-                action: nil,
-                suggestions: nil,
-                meta: nil
-            )
-        }
-        
-        // Mode-specific fallbacks
-        let modeResponses: [String: [String]] = [
-            "focus": [
-                "I'm here to help you focus on your learning goals! What topic are you working on? 📚",
-                "Let's make progress together! What would you like to learn about today? 🎯",
-                "Ready to dive deep! Tell me what subject you'd like to explore. 💡"
-            ],
-            "discover": [
-                "Looking to discover something new? I can suggest courses based on your interests! 🔍",
-                "There's so much to explore! What subjects spark your curiosity? ✨",
-                "Let me help you find your next learning adventure! What interests you? 🚀"
-            ],
-            "campus": [
-                "Want to know what's happening around campus? I can help you find events and study groups! 🏫",
-                "I can guide you to campus resources and activities. What are you looking for? 📍",
-                "Campus life is exciting! Let me help you discover events and connect with others. 🎉"
-            ],
-            "collab": [
-                "Collaboration makes learning better! Looking to join a study group? 👥",
-                "Working together is powerful! How can I help your team today? 🤝",
-                "Let's connect you with others learning similar topics! What are you studying? 📖"
-            ]
-        ]
-        
-        let responses = modeResponses[mode] ?? modeResponses["focus"]!
-        let randomResponse = responses.randomElement() ?? "I'm here to support your learning journey. What can I help you with today?"
         
         return LioChatResponse(
-            text: randomResponse,
-            source: "local",
+            text: fallbackResponses.randomElement() ?? fallbackResponses[0],
+            source: "local_fallback",
             action: nil,
-            suggestions: nil,
-            meta: ["fallback": "true"]
+            suggestions: ["Try again", "Help"],
+            meta: ["mode": mode, "fallback": "local"]
         )
     }
-}
 
-// MARK: - Errors
-
-enum LioChatError: LocalizedError {
-    case invalidResponse
-    case unauthorized
-    case rateLimited
-    case serverError(String)
-    case networkError(String)
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidResponse:
-            return "Invalid response from server"
-        case .unauthorized:
-            return "Please log in to chat with Lio"
-        case .rateLimited:
-            return "Too many requests. Please wait a moment."
-        case .serverError(let message):
-            return message
-        case .networkError(let message):
-            return message
+    /// Converts difficulty score to level string
+    private func difficultyToLevel(_ difficulty: Int) -> String {
+        switch difficulty {
+        case 0...3: return "beginner"
+        case 4...6: return "intermediate"
+        default: return "advanced"
         }
     }
-}
 
-// MARK: - Wizard Response Extension
-
-extension WizardResponse {
-    func toLioChatResponse() -> LioChatResponse {
-        var action: LioChatAction? = nil
-        
-        // If the wizard is complete or has specific actions, map them
-        if self.shouldStartCourseGeneration {
-            let topic = self.courseGenerationTopic ?? self.outline?.title ?? "Course"
-            action = LioChatAction(
-                type: "generate_course",
-                parameters: ["topic": topic]
-            )
-        }
-        
-        return LioChatResponse(
-            text: self.message,
-            source: "course_wizard",
-            action: action,
-            suggestions: self.chips,
-            meta: ["wizard_step": "active"]
-        )
-    }
-}
-
-// MARK: - A2UI Content Converter
-
-extension LioChatService {
+    /// Converts UI content types
     private func convertToMessageContentType(_ uiContent: [A2UIContent]?) -> [MessageContentType]? {
         guard let content = uiContent, !content.isEmpty else { return nil }
         
@@ -1258,74 +1010,8 @@ extension LioChatService {
             switch item.type {
             case .text:
                 return .text
-                
             case .processing:
                 return .processing(step: "Processing...", progress: nil)
-                
-            case .topicSelection:
-                guard let topics = item.topics else { return nil }
-                let topicOptions = topics.map { topic in
-                    TopicOption(
-                        title: topic.title,
-                        icon: topic.icon ?? "book.fill",
-                        gradientColors: topic.gradientColors
-                    )
-                }
-                return .topicSelection(
-                    title: item.title ?? "Choose a Topic",
-                    topics: topicOptions
-                )
-                
-            case .courseRoadmap:
-                // Handle nested structure first
-                if let roadmap = item.courseRoadmap {
-                    let modules = roadmap.modules.map { mod in
-                        CourseModule(
-                            title: mod.title,
-                            duration: mod.lessons?.compactMap { $0.duration }.joined(separator: ", ") ?? ""
-                        )
-                    }
-                    return .courseRoadmap(
-                        title: roadmap.title,
-                        modules: modules,
-                        totalModules: modules.count,
-                        completedModules: 0
-                    )
-                }
-                // Fallback: flat modules format
-                if let flatModules = item.modules {
-                    let uiModules = flatModules.map { mod in
-                        CourseModule(
-                            id: mod.id ?? UUID().uuidString,
-                            title: mod.title,
-                            duration: mod.duration,
-                            isCompleted: mod.isCompleted ?? false,
-                            isLocked: mod.isLocked ?? false
-                        )
-                    }
-                    return .courseRoadmap(
-                        title: item.title ?? "Course Roadmap",
-                        modules: uiModules,
-                        totalModules: item.totalModules ?? uiModules.count,
-                        completedModules: item.completedModules ?? 0
-                    )
-                }
-                return nil
-                
-            case .flashcards:
-                guard let cards = item.cards else { return nil }
-                let flashcardModels = cards.map { card in
-                    Flashcard(
-                        front: card.front,
-                        back: card.back,
-                        isMastered: false
-                    )
-                }
-                return .flashcards(
-                    title: item.title ?? "Study Flashcards",
-                    cards: flashcardModels
-                )
-                
             case .quiz:
                 guard let quiz = item.quiz, let firstQ = quiz.questions.first else { return nil }
                 let correctIndex = firstQ.options.firstIndex(of: firstQ.correctAnswer) ?? 0
@@ -1335,16 +1021,7 @@ extension LioChatService {
                     correctIndex: correctIndex,
                     explanation: nil
                 )
-                
-            case .suggestions:
-                guard let suggestions = item.suggestions, !suggestions.isEmpty else { return nil }
-                return .suggestions(
-                    title: item.title ?? "What's next?",
-                    options: suggestions
-                )
-                
-            case .unknown:
-                print("⚠️ Unknown A2UI content type in convertToMessageContentType")
+            default:
                 return nil
             }
         }

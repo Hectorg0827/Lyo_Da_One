@@ -6,6 +6,27 @@ struct ChatBubbleView: View {
     @State private var displayedText: String = ""
     @State private var isAnimating = false
     
+
+    // Private envelope for decoding
+    private struct OpenClassroomEnvelope: Decodable {
+        let type: String
+        let payload: OpenClassroomPayload
+    }
+
+    // Computed property to detect A2UI payload using the robust extractor
+    private var a2uiPayload: OpenClassroomPayload? {
+        let text = message.content
+        guard text.contains("OPEN_CLASSROOM") else { return nil }
+        
+        let cleaned = text
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+        guard let data = cleaned.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(OpenClassroomEnvelope.self, from: data).payload
+    }
+    
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if message.isFromUser {
@@ -22,8 +43,36 @@ struct ChatBubbleView: View {
                     .frame(width: 32, height: 32)
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(displayedText)
-                        .foregroundColor(.white)
+                    // 1. A2UI Detection: If valid JSON, render the Component instead of text
+                    if let payload = a2uiPayload {
+                        let modules = payload.course.objectives.enumerated().map { index, objective in
+                            CourseModuleData(
+                                id: "mod_\(index + 1)",
+                                title: "Module \(index + 1)",
+                                description: objective
+                            )
+                        }
+                        let courseData = CourseCreationData(
+                            title: payload.course.title,
+                            topic: payload.course.topic,
+                            level: payload.course.level,
+                            modules: modules
+                        )
+                        CourseRoadmapCardView(course: courseData) { _ in
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("TriggerLiveLesson"),
+                                object: nil,
+                                userInfo: [
+                                    "lessonId": payload.course.id ?? "intro_1",
+                                    "topic": payload.course.topic
+                                ]
+                            )
+                        }
+                    } else {
+                        // 2. Normal Text Fallback
+                        Text(displayedText)
+                            .foregroundColor(.white)
+                    }
                     
                     // Action Card: Check for Create Course / Quiz actions
                     if let actions = message.actions, !actions.isEmpty {

@@ -459,7 +459,7 @@ struct EnhancedLyoHomeView: View {
         
         isCreatingSession = true
         
-        Task {
+        Task<Void, Never> {
             do {
                 let session = try await LyoRepository.shared.createClassroomSession(
                     lessonId: lessonData["id"] as? String ?? "temp-lesson"

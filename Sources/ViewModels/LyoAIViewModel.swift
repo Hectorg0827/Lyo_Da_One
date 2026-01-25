@@ -109,8 +109,12 @@ class LyoAIViewModel: ObservableObject {
             
         // Continuous Conversation: Start listening when AI finishes speaking
         ttsService.onSpeechFinished = { [weak self] in
-            guard let self = self, self.isVoiceActive else { return }
-            self.startListening()
+            guard let self = self else { return }
+            self.currentlyPlayingMessageId = nil // Reset playing state
+            
+            if self.isVoiceActive {
+                self.startListening()
+            }
         }
         
         // SYNC WITH UNIFIED CHAT
@@ -193,8 +197,13 @@ class LyoAIViewModel: ObservableObject {
         }
     }
     
-    func speak(text: String) {
+    func speak(text: String, messageId: String? = nil) {
         ttsService.speak(text: text)
+        // Update state if a specific message is being read
+        if let messageId = messageId {
+            currentlyPlayingMessageId = messageId
+        }
+        
         // Ensure we are listening for barge-in
         if !sttService.isRecording {
             startListening()
@@ -203,6 +212,7 @@ class LyoAIViewModel: ObservableObject {
     
     func stopSpeaking() {
         ttsService.stop()
+        currentlyPlayingMessageId = nil
     }
     
     // MARK: - Proactive Greeting
@@ -478,15 +488,14 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Full Course Generation (Only after wizard approval)
     
     private func startFullCourseGeneration(topic: String, level: String) async {
-        print("🚀 Starting FULL course generation for: \(topic) at \(level) level")
-        
+        print("🚀 Starting course generation for: \(topic)")
         isGeneratingCourse = true
         
         // Update last message to show progress
         if let lastIndex = messages.indices.last {
             messages[lastIndex] = LyoMessage(
                 id: messages[lastIndex].id,
-                content: "🔨 Building your course on **\(topic)**... This takes about 30 seconds.",
+                content: "🔨 Creating your course on **\(topic)**...",
                 isFromUser: false,
                 timestamp: Date(),
                 attachments: nil,
@@ -496,85 +505,49 @@ class LyoAIViewModel: ObservableObject {
         }
         
         do {
-            // Generate graph-based course using Interactive Cinema
-            print("🎬 Generating Interactive Cinema course for: \(topic)")
+            // Use InteractiveCinemaService which has proper fallback chain:
+            // Backend → OpenAI → Mock (all via CourseGenerationService)
+            print("🎬 Generating course via InteractiveCinemaService")
             let graphCourse = try await cinemaService.generateGraphCourse(
                 topic: topic,
                 level: level
             )
             
-            print("✅ Graph course generated: \(graphCourse.title) with \(graphCourse.totalNodes) nodes")
+            print("✅ Course generated: \(graphCourse.title)")
             
-            // Start cinematic playback (requires auth token)
-            let playbackState = try await cinemaService.startCourse(courseId: graphCourse.id)
-            
-            print("✅ Cinematic playback started at node: \(playbackState.currentNode.title)")
-            
-            // Reset wizard
-            // courseWizard.reset() // Legacy
-            // intentClassifier.resetWizard() // Legacy
-
-            
-            // Create ContentItem for the course detail sheet
-            let contentItem = ContentItem(
+            // Navigate using the ACTUAL course ID (mock_ if backend failed, gen_ if succeeded)
+            // This ensures LiveClassroomViewModel can find it in CourseGenerationService.shared.generatedCourse
+            let payload = CoursePayload(
                 id: graphCourse.id,
-                type: .anchorCourse,
                 title: graphCourse.title,
-                description: graphCourse.description,
-                coverImage: "book.fill",
-                duration: TimeInterval(graphCourse.estimatedMinutes * 60),
-                author: ContentAuthor(
-                    name: "Lio AI",
-                    avatar: "sparkles",
-                    role: "AI Learning Assistant"
-                ),
-                tags: [topic, level.capitalized, "Interactive Cinema"],
-                level: level.lowercased() == "advanced" ? .advanced : level.lowercased() == "intermediate" ? .intermediate : .beginner,
-                stats: ContentStats(
-                    views: 1,
-                    likes: 0,
-                    rating: 5.0
-                ),
-                progress: 0.0,
-                childContentIds: [] // Graph courses use nodes, not modules
+                topic: topic,
+                level: level,
+                language: "English",
+                duration: "\(graphCourse.estimatedMinutes) min",
+                objectives: []
             )
+            
+            // Navigate to classroom
+            let commandPayload = AICommandPayload(stackItem: nil, course: payload)
+            _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
             
             // Show success message
             let successMessage = LyoMessage(
                 id: UUID().uuidString,
                 content: """
-                🎉 **Your Interactive Cinema course is ready!**
+                ✅ **Course Ready: \(graphCourse.title)**
                 
-                **\(graphCourse.title)**
-                \(graphCourse.totalNodes) nodes • \(graphCourse.estimatedMinutes) min
-                
-                Opening cinematic experience now...
+                Opening classroom now...
                 """,
                 isFromUser: false,
                 timestamp: Date(),
-                attachments: nil,
-                actions: [
-                    MessageAction(id: "view_course", label: "Start Experience", actionType: .openClassroom, data: ["courseId": graphCourse.id])
-                ],
                 status: .sent
             )
             messages.append(successMessage)
             
-            // Trigger the course detail sheet via AppUIState
-            if let uiState = self.uiState {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay for UX
-                uiState.courseToDisplay = contentItem
-                uiState.showCourseDetail = true
-            }
-            
         } catch {
-            print("❌ Course generation failed: \(error)")
-            
-            // courseWizard.reset()
-            // intentClassifier.resetWizard()
-
-            
-            addErrorMessage("😕 I had trouble creating that course. Let's try again - what topic would you like to learn?")
+            print("❌ Course generation failed completely: \(error)")
+            addErrorMessage("I had trouble creating that course. Please try again.")
         }
         
         isGeneratingCourse = false
@@ -1265,41 +1238,19 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Multimodal TTS Playback
     
     func playMessageAudio(messageId: String, text: String) {
-        Task {
-                currentlyPlayingMessageId = messageId
-                HapticManager.shared.playLightImpact()
-                
-                await audioPlaybackService.playTTS(text: text, messageId: messageId)
-                
-                // Observe playback state
-                audioPlaybackService.$currentProgress
-                    .receive(on: RunLoop.main)
-                    .assign(to: &$playbackProgress)
-                
-                audioPlaybackService.$isPlaying
-                    .receive(on: RunLoop.main)
-                    .sink { [weak self] isPlaying in
-                        if !isPlaying {
-                            self?.currentlyPlayingMessageId = nil
-                        }
-                    }
-                    .store(in: &cancellables)
-        }
+        // Use local TTS instead of AudioPlaybackService for reliability
+        speak(text: text, messageId: messageId)
     }
     
     func stopMessageAudio() {
-        audioPlaybackService.stop()
-        currentlyPlayingMessageId = nil
+        stopSpeaking()
     }
     
     func toggleMessageAudio(messageId: String, text: String) {
         if currentlyPlayingMessageId == messageId {
-            if audioPlaybackService.isPlaying {
-                audioPlaybackService.pause()
-            } else {
-                audioPlaybackService.resume()
-            }
+            stopSpeaking()
         } else {
+            stopSpeaking() // Stop any previous
             playMessageAudio(messageId: messageId, text: text)
         }
     }

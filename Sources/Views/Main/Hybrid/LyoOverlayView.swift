@@ -163,7 +163,7 @@ struct LyoOverlayView: View {
                                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
                             .padding(.horizontal, 40)
-                            .padding(.bottom, 40)
+                            .padding(.bottom, 250)
                         }
                         
                         Spacer()
@@ -502,7 +502,7 @@ struct HybridInputBar: View {
     var onSubmit: () -> Void
     
     @EnvironmentObject var viewModel: LyoAIViewModel
-    @ObservedObject var audioService = AudioPlaybackService.shared
+    @StateObject var audioService = AudioPlaybackService.shared
     
     @State private var showModeSelector = false
     @State private var gradientRotation = 0.0

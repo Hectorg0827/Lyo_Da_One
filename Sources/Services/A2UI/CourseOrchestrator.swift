@@ -44,10 +44,10 @@ final class CourseOrchestrator: ObservableObject {
             name: .openClassroom, 
             object: nil, 
             userInfo: [
-                "courseId": "GENERATE:\(proposal.topic)",
+                "courseId": localCourse.id, // Use the shell ID directly
                 "courseTitle": proposal.title,
-                "lessonId": "intro_1",
-                "lessonTitle": "Introduction"
+                "lessonId": "welcome_1", // Matches Welcome node in InteractiveCinemaService
+                "lessonTitle": "Getting Ready"
             ]
         )
         
@@ -106,5 +106,4 @@ final class CourseOrchestrator: ObservableObject {
 
 extension Notification.Name {
     static let courseDataUpdated = Notification.Name("courseDataUpdated")
-    static let openClassroom = Notification.Name("openClassroom")
 }

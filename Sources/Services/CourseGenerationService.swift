@@ -117,69 +117,198 @@ final class CourseGenerationService: ObservableObject {
             "Build confidence in \(topic)"
         ]
         
-        let request = CourseGenerationRequest(
-            topic: topic,
-            level: level,
-            outcomes: learningOutcomes,
-            teachingStyle: teachingStyle,
-            systemPrompt: nil,
-            diagnosticData: nil
-        )
-        
-        // Use Backend Generation (Gemini via Dual AI Orchestrator)
-        currentStep = "Generating course with AI..."
-        progress = 0.3
+        // 🚀 CALLING REAL BACKEND Multi-Agent Pipeline (A2A Orchestrator)
+        print("🎯 Calling REAL Backend Multi-Agent Pipeline for: \(topic)")
         
         do {
-            print("🎯 Attempting Backend course generation for topic: \(topic)")
-            
-            // Enable streaming for better UX - shows content as it arrives
-            let course = try await generateFromBackendStreaming(request: request)
-            
-            print("✅ SUCCESS: Backend generated course: \(course.title)")
-            print("📦 Cached Course ID: \(course.courseId)")
-            print("📚 Modules count: \(course.modules.count)")
-            if let firstMod = course.modules.first, let firstLess = firstMod.lessons.first {
-                print("📖 First lesson: \(firstLess.title) (ID: \(firstLess.id))")
+            // Step 1: Map level to CourseGenerationOptions
+            let options: CourseGenerationOptions
+            switch level.lowercased() {
+            case "beginner":
+                options = .economical
+            case "intermediate":
+                options = .recommended
+            case "advanced":
+                options = .premium
+            default:
+                options = .recommended
             }
+            
+            currentStep = "Submitting to AI agents..."
+            progress = 0.1
+            
+            // Step 2: Submit course generation job to backend
+            let jobResponse = try await BackendAIService.shared.generateCourse(
+                topic: topic,
+                options: options,
+                userContext: [
+                    "level": level,
+                    "style": teachingStyle,
+                    "outcomes": learningOutcomes.joined(separator: ", ")
+                ]
+            )
+            
+            print("✅ Job submitted: \(jobResponse.jobId)")
+            print("💰 Estimated cost: $\(jobResponse.estimatedCostUSD)")
+            
+            currentStep = "AI agents working..."
+            progress = 0.3
+            
+            // Step 3: Poll for completion
+            let finalCourse = try await pollForCourseCompletion(jobId: jobResponse.jobId)
+            
+            print("✅ SUCCESS: Backend generated course: \(finalCourse.title)")
+            print("📦 Course ID: \(finalCourse.courseId)")
+            print("📚 Modules count: \(finalCourse.modules.count)")
             
             currentStep = "Course ready!"
             progress = 1.0
             
-            generatedCourse = course
-            return course
+            generatedCourse = finalCourse
+            return finalCourse
             
-        } catch let apiError {
-            print("⚠️ Backend generation error: \(apiError)")
+        } catch {
+            print("❌ Backend generation failed: \(error)")
             
-            // Fallback to OpenAI (Direct) if backend fails
-            print("🔄 Falling back to OpenAI (Direct)")
-            do {
-                let course = try await generateFromOpenAI(topic: topic, level: level, outcomes: learningOutcomes)
-                print("✅ SUCCESS: OpenAI generated course: \(course.title)")
-                print("📦 Cached Course ID: \(course.courseId)")
-                
-                currentStep = "Course ready!"
-                progress = 1.0
-                
-                generatedCourse = course
-                return course
-            } catch {
-                print("❌ OpenAI fallback failed: \(error)")
-                
-                // Fallback to mock (Last Resort)
-                print("🛠 LAST RESORT: Generating mock course")
+            // Only use mock if explicitly allowed
+            if AppConfig.allowMockFallbacks {
+                print("🛠 FALLBACK: Using mock course (LYO_ALLOW_MOCKS=1)")
                 let course = generateMockCourse(topic: topic)
-                print("✅ SUCCESS: Mock generated course: \(course.title)")
-                print("📦 Cached Course ID: \(course.courseId)")
-                print("📚 Modules count: \(course.modules.count)")
                 
                 currentStep = "Course ready (Offline Mode)!"
                 progress = 1.0
                 
                 generatedCourse = course
                 return course
+            } else {
+                print("❌ PRODUCTION MODE: No mock fallback allowed")
+                currentStep = "Failed to generate course"
+                self.error = error.localizedDescription
+                throw error
             }
+        }
+    }
+    
+    // MARK: - Poll for Course Completion
+    
+    private func pollForCourseCompletion(jobId: String) async throws -> GeneratedCourseResponse {
+        let maxAttempts = 60  // 5 minutes max (5 second intervals)
+        var attempts = 0
+        
+        while attempts < maxAttempts {
+            let status = try await BackendAIService.shared.getCourseGenerationStatus(jobId: jobId)
+            
+            print("📊 Status: \(status.status) - Progress: \(status.progressPercent)%")
+            
+            currentStep = status.currentStep ?? "Processing..."
+            progress = 0.3 + (Double(status.progressPercent) / 100.0 * 0.6)  // 30% to 90%
+            
+            switch status.status {
+            case "completed":
+                print("✅ Course generation completed!")
+                currentStep = "Fetching course..."
+                progress = 0.95
+                return try await fetchGeneratedCourse(jobId: jobId)
+                
+            case "failed":
+                let errorMsg = status.error ?? "Unknown error"
+                print("❌ Course generation failed: \(errorMsg)")
+                throw CourseGenerationError.serverError
+                
+            case "processing":
+                // Continue polling
+                break
+                
+            default:
+                break
+            }
+            
+            attempts += 1
+            try await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
+        }
+        
+        throw CourseGenerationError.serverError
+    }
+    
+    // MARK: - Fetch Generated Course
+    
+    private func fetchGeneratedCourse(jobId: String) async throws -> GeneratedCourseResponse {
+        // Call backend to get final course structure
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v2/courses/\(jobId)/result",
+            method: .get,
+            requiresAuth: true
+        )
+        
+        let backendCourse: BackendCourseResult = try await NetworkClient.shared.request(endpoint)
+        return mapBackendCourseToGenerated(backendCourse)
+    }
+    
+    // MARK: - Map Backend Course to Generated Response
+    
+    private func mapBackendCourseToGenerated(_ backendCourse: BackendCourseResult) -> GeneratedCourseResponse {
+        let modules = backendCourse.modules.enumerated().map { index, module in
+            GenerationCourseModule(
+                id: module.id,
+                title: module.title,
+                description: module.description,
+                lessons: module.lessons.enumerated().map { lessonIndex, lesson in
+                    GenerationCourseLesson(
+                        id: lesson.id,
+                        title: lesson.title,
+                        content: lesson.content,
+                        durationMinutes: lesson.durationMinutes,
+                        order: lessonIndex + 1
+                    )
+                },
+                order: index + 1
+            )
+        }
+        
+        return GeneratedCourseResponse(
+            courseId: backendCourse.courseId,
+            title: backendCourse.title,
+            description: backendCourse.description,
+            modules: modules,
+            estimatedDuration: backendCourse.estimatedDuration,
+            difficulty: backendCourse.difficulty
+        )
+    }
+    
+    // MARK: - Backend Course Result Model
+    
+    struct BackendCourseResult: Codable {
+        let courseId: String
+        let title: String
+        let description: String
+        let modules: [BackendModule]
+        let estimatedDuration: Int
+        let difficulty: String
+        
+        struct BackendModule: Codable {
+            let id: String
+            let title: String
+            let description: String
+            let lessons: [BackendLesson]
+        }
+        
+        struct BackendLesson: Codable {
+            let id: String
+            let title: String
+            let content: String
+            let durationMinutes: Int
+            
+            enum CodingKeys: String, CodingKey {
+                case id, title, content
+                case durationMinutes = "duration_minutes"
+            }
+        }
+        
+        enum CodingKeys: String, CodingKey {
+            case courseId = "course_id"
+            case title, description, modules
+            case estimatedDuration = "estimated_duration"
+            case difficulty
         }
     }
     

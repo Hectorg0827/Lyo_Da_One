@@ -46,8 +46,8 @@ struct CoursePayload: Codable {
     let title: String
     let topic: String
     let level: String
-    let language: String
-    let duration: String
+    let language: String?  // Optional - backend may not include it
+    let duration: String?
     let objectives: [String]
 }
 

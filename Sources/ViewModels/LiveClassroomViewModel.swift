@@ -105,7 +105,39 @@ final class LiveClassroomViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        // Check for Generation Request
+        // Check for Generated Course (mock_, gen_, etc.)
+        // These courses were already generated and cached in CourseGenerationService
+        if courseId.starts(with: "mock_") || courseId.starts(with: "gen_") || courseId.starts(with: "temp_") {
+            print("🎨 LiveClassroom: Loading generated course: \(courseId)")
+            
+            do {
+                // Start playback from the cached/generated course
+                let playbackState = try await cinemaService.startCourse(courseId: courseId)
+                currentCourseId = courseId
+                
+                // Convert PlaybackState to LiveLesson for compatibility
+                self.lesson = convertPlaybackToLesson(
+                    playbackState: playbackState,
+                    courseTitle: playbackState.currentNode.title
+                )
+                
+                print("✅ LiveClassroom: Loaded generated course with \(lesson?.blocks.count ?? 0) blocks")
+                
+            } catch {
+                print("❌ LiveClassroom: Failed to load generated course: \(error.localizedDescription)")
+                errorMessage = "Failed to load course. Please try again."
+                isLoading = false
+                return
+            }
+            
+            isLoading = false
+            if currentBlock != nil {
+                await speakCurrentBlock()
+            }
+            return
+        }
+        
+        // Check for Generation Request (Legacy support for GENERATE: prefix)
         if courseId.hasPrefix("GENERATE:") {
             let topic = String(courseId.dropFirst(9))
             print("🎨 LiveClassroom: Generating GRAPH-BASED course for topic: \(topic)")
@@ -450,6 +482,12 @@ final class LiveClassroomViewModel: ObservableObject {
     /// Sync progress to backend (called on each block completion)
     private func syncProgressToBackend() async {
         guard let lesson = lesson else { return }
+        
+        // Fix 404: Do not sync progress for mock or temp (shell) courses
+        if lesson.courseId.hasPrefix("mock_") || lesson.courseId.hasPrefix("temp_") || lesson.courseId.hasPrefix("gen_") {
+            print("🚫 Skipping backend sync for local/mock course: \(lesson.courseId)")
+            return
+        }
         
         // Calculate overall progress as percentage
         let overallProgress = Double(completedBlocks.count) / Double(max(lesson.totalBlocks, 1))

@@ -26,6 +26,8 @@ enum MessageContentType: Codable, Equatable {
     case courseRoadmap(title: String, modules: [CourseModule], totalModules: Int, completedModules: Int)
     case flashcards(title: String, cards: [Flashcard])
     case suggestions(title: String, options: [String])
+    case recursiveUI(component: DynamicComponent)
+    case a2ui(component: A2UIComponent)
     
     enum CodingKeys: String, CodingKey {
         case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
@@ -33,7 +35,7 @@ enum MessageContentType: Codable, Equatable {
         case courseId, title, subtitle, body, imageURL, actions, votes
         case step, progress, topics
         case modules, totalModules, completedModules
-        case cards
+        case cards, component
     }
     
     init(from decoder: Decoder) throws {
@@ -112,6 +114,12 @@ enum MessageContentType: Codable, Equatable {
             let title = try container.decode(String.self, forKey: .title)
             let options = try container.decode([String].self, forKey: .options)
             self = .suggestions(title: title, options: options)
+        case "recursive_ui":
+            let component = try container.decode(DynamicComponent.self, forKey: .component)
+            self = .recursiveUI(component: component)
+        case "a2ui":
+            let component = try container.decode(A2UIComponent.self, forKey: .component)
+            self = .a2ui(component: component)
         default:
             self = .text
         }
@@ -192,6 +200,12 @@ enum MessageContentType: Codable, Equatable {
             try container.encode("suggestions", forKey: .type)
             try container.encode(title, forKey: .title)
             try container.encode(options, forKey: .options)
+        case .recursiveUI(let component):
+            try container.encode("recursive_ui", forKey: .type)
+            try container.encode(component, forKey: .component)
+        case .a2ui(let component):
+            try container.encode("a2ui", forKey: .type)
+            try container.encode(component, forKey: .component)
         }
     }
     
@@ -212,6 +226,7 @@ enum MessageContentType: Codable, Equatable {
         case (.courseRoadmap(let t1, let m1, let tm1, let cm1), .courseRoadmap(let t2, let m2, let tm2, let cm2)): return t1 == t2 && m1 == m2 && tm1 == tm2 && cm1 == cm2
         case (.flashcards(let t1, let c1), .flashcards(let t2, let c2)): return t1 == t2 && c1 == c2
         case (.suggestions(let t1, let o1), .suggestions(let t2, let o2)): return t1 == t2 && o1 == o2
+        case (.recursiveUI(let c1), .recursiveUI(let c2)): return c1.id == c2.id
         default: return false
         }
     }
@@ -482,6 +497,22 @@ struct TopicOption: Codable, Equatable, Identifiable {
     }
 }
 
+/// Payload for Quiz widget
+struct QuizPayload: Codable, Equatable {
+    let question: String
+    let options: [String]
+    let correctIndex: Int
+    let explanation: String?
+}
+
+/// Payload for Course Roadmap widget
+struct CourseRoadmapPayload: Codable, Equatable {
+    let title: String
+    let modules: [CourseModule]
+    let totalModules: Int
+    let completedModules: Int
+}
+
 /// Module info for course roadmap widget
 struct CourseModule: Codable, Identifiable, Equatable {
     let id: String
@@ -513,3 +544,404 @@ struct Flashcard: Codable, Identifiable, Equatable {
         self.isMastered = isMastered
     }
 }
+
+// MARK: - A2UI Recursive Types (Moved for build fix)
+
+// MARK: - Component Types
+enum UIComponentType: String, Codable, CaseIterable {
+    case vstack, hstack, card
+    case text, button, image, divider, spacer
+    case quiz, courseRoadmap = "course_roadmap"
+    case coursePreview = "course_preview"
+    case learningNode = "learning_node"
+    case progressTracker = "progress_tracker"
+    case interactiveLesson = "interactive_lesson"
+    
+    // Standard A2UI Components
+    case lessonCard = "lessoncard"
+    case courseCard = "coursecard"
+    case progressBar = "progressbar"
+}
+
+// MARK: - Polymorphic Component Wrapper
+struct DynamicComponent: Identifiable, Codable {
+    let id: String
+    let type: UIComponentType
+    let payload: ComponentPayload
+
+    enum CodingKeys: String, CodingKey { case id, type }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decode(UIComponentType.self, forKey: .type)
+
+        switch type {
+        case .vstack: payload = .vstack(try VStackPayload(from: decoder))
+        case .hstack: payload = .hstack(try HStackPayload(from: decoder))
+        case .card: payload = .card(try CardPayload(from: decoder))
+        case .text: payload = .text(try TextPayload(from: decoder))
+        case .button: payload = .button(try ButtonPayload(from: decoder))
+        case .image: payload = .image(try ImagePayload(from: decoder))
+        case .divider: payload = .divider(try DividerPayload(from: decoder))
+        case .spacer: payload = .spacer(try SpacerPayload(from: decoder))
+        case .quiz: payload = .quiz(try A2UIQuizPayload(from: decoder))
+        case .courseRoadmap: payload = .courseRoadmap(try A2UICourseRoadmapPayload(from: decoder))
+        case .coursePreview: payload = .coursePreview(try CoursePreviewPayload(from: decoder))
+        case .learningNode: payload = .learningNode(try LearningNodePayload(from: decoder))
+        case .progressTracker: payload = .progressTracker(try ProgressTrackerPayload(from: decoder))
+        case .interactiveLesson: payload = .interactiveLesson(try InteractiveLessonPayload(from: decoder))
+        case .lessonCard: payload = .lessonCard(try LessonCardPayload(from: decoder))
+        case .courseCard: payload = .courseCard(try A2UICourseCardPayload(from: decoder))
+        case .progressBar: payload = .progressBar(try ProgressBarPayload(from: decoder))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+
+        switch payload {
+        case .vstack(let data): try data.encode(to: encoder)
+        case .hstack(let data): try data.encode(to: encoder)
+        case .card(let data): try data.encode(to: encoder)
+        case .text(let data): try data.encode(to: encoder)
+        case .button(let data): try data.encode(to: encoder)
+        case .image(let data): try data.encode(to: encoder)
+        case .divider(let data): try data.encode(to: encoder)
+        case .spacer(let data): try data.encode(to: encoder)
+        case .quiz(let data): try data.encode(to: encoder)
+        case .courseRoadmap(let data): try data.encode(to: encoder)
+        case .coursePreview(let data): try data.encode(to: encoder)
+        case .learningNode(let data): try data.encode(to: encoder)
+        case .progressTracker(let data): try data.encode(to: encoder)
+        case .interactiveLesson(let data): try data.encode(to: encoder)
+        case .lessonCard(let data): try data.encode(to: encoder)
+        case .courseCard(let data): try data.encode(to: encoder)
+        case .progressBar(let data): try data.encode(to: encoder)
+        }
+    }
+}
+
+// MARK: - Component Payloads
+enum ComponentPayload {
+    case vstack(VStackPayload)
+    case hstack(HStackPayload)
+    case card(CardPayload)
+    case text(TextPayload)
+    case button(ButtonPayload)
+    case image(ImagePayload)
+    case divider(DividerPayload)
+    case spacer(SpacerPayload)
+    case quiz(A2UIQuizPayload)
+    case courseRoadmap(A2UICourseRoadmapPayload)
+    case coursePreview(CoursePreviewPayload)
+    case learningNode(LearningNodePayload)
+    case progressTracker(ProgressTrackerPayload)
+    case interactiveLesson(InteractiveLessonPayload)
+    case lessonCard(LessonCardPayload)
+    case courseCard(A2UICourseCardPayload)
+    case progressBar(ProgressBarPayload)
+}
+
+// MARK: - Layout Payloads
+struct VStackPayload: Codable {
+    let spacing: CGFloat?
+    let alignment: String
+    let children: [DynamicComponent]
+}
+
+struct HStackPayload: Codable {
+    let spacing: CGFloat?
+    let alignment: String
+    let children: [DynamicComponent]
+}
+
+struct CardPayload: Codable {
+    let title: String?
+    let subtitle: String?
+    let backgroundColor: String?
+    let children: [DynamicComponent]
+
+    enum CodingKeys: String, CodingKey {
+        case title, subtitle
+        case backgroundColor = "background_color"
+        case children
+    }
+}
+
+// MARK: - Content Payloads
+struct TextPayload: Codable {
+    let content: String
+    let fontStyle: String
+    let color: String?
+    let alignment: String
+
+    enum CodingKeys: String, CodingKey {
+        case content, color, alignment
+        case fontStyle = "font_style"
+    }
+}
+
+struct ButtonPayload: Codable {
+    let label: String
+    let actionId: String
+    let variant: String
+    let isDisabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case label, variant
+        case actionId = "action_id"
+        case isDisabled = "is_disabled"
+    }
+}
+
+struct ImagePayload: Codable {
+    let url: String
+    let altText: String?
+    let aspectRatio: String?
+
+    enum CodingKeys: String, CodingKey {
+        case url
+        case altText = "alt_text"
+        case aspectRatio = "aspect_ratio"
+    }
+}
+
+struct DividerPayload: Codable {
+    let color: String?
+}
+
+struct SpacerPayload: Codable {
+    let height: CGFloat?
+}
+
+// MARK: - Legacy Payloads
+struct A2UIQuizPayload: Codable {
+    let question: String
+    let options: [String]
+    let correctIndex: Int?
+    let explanation: String?
+
+    enum CodingKeys: String, CodingKey {
+        case question, options, explanation
+        case correctIndex = "correct_index"
+    }
+}
+
+struct A2UICourseRoadmapPayload: Codable {
+    let title: String
+    let modules: [A2UICourseModule]
+    let totalModules: Int
+    let completedModules: Int
+
+    enum CodingKeys: String, CodingKey {
+        case title, modules
+        case totalModules = "total_modules"
+        case completedModules = "completed_modules"
+    }
+}
+
+// Supporting structures (Renamed to prevent conflict with MultimodalMessage structures)
+struct A2UICourseModule: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String?
+    let lessons: [A2UICourseLesson]?
+    let duration: Int?
+    let status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, lessons, duration, status
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let stringId = try? container.decode(String.self, forKey: .id) {
+            id = stringId
+        } else if let intId = try? container.decode(Int.self, forKey: .id) {
+            id = String(intId)
+        } else {
+            id = UUID().uuidString
+        }
+
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        lessons = try container.decodeIfPresent([A2UICourseLesson].self, forKey: .lessons)
+        duration = try container.decodeIfPresent(Int.self, forKey: .duration)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+    }
+}
+
+struct A2UICourseLesson: Codable, Identifiable {
+    let id: String
+    let title: String
+    let duration: String?
+    
+    enum CodingKeys: String, CodingKey { case id, title, duration }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let idValue = try? container.decode(String.self, forKey: .id) {
+            id = idValue
+        } else {
+            id = UUID().uuidString
+        }
+
+        title = try container.decode(String.self, forKey: .title)
+        duration = try container.decodeIfPresent(String.self, forKey: .duration)
+    }
+}
+
+// MARK: - AI Classroom Integration Payloads
+struct CoursePreviewPayload: Codable {
+    let courseId: String
+    let title: String
+    let description: String
+    let subject: String
+    let gradeBand: String
+    let estimatedMinutes: Int
+    let totalNodes: Int
+    let thumbnailUrl: String?
+    let startActionId: String
+    let previewActionId: String
+
+    enum CodingKeys: String, CodingKey {
+        case courseId = "course_id"
+        case title, description, subject
+        case gradeBand = "grade_band"
+        case estimatedMinutes = "estimated_minutes"
+        case totalNodes = "total_nodes"
+        case thumbnailUrl = "thumbnail_url"
+        case startActionId = "start_action_id"
+        case previewActionId = "preview_action_id"
+    }
+}
+
+struct LearningNodePayload: Codable {
+    let nodeId: String
+    let title: String
+    let content: String
+    let nodeType: String
+    let isCompleted: Bool
+    let isCurrent: Bool
+    let estimatedMinutes: Int?
+    let continueActionId: String
+
+    enum CodingKeys: String, CodingKey {
+        case nodeId = "node_id"
+        case title, content
+        case nodeType = "node_type"
+        case isCompleted = "is_completed"
+        case isCurrent = "is_current"
+        case estimatedMinutes = "estimated_minutes"
+        case continueActionId = "continue_action_id"
+    }
+}
+
+struct ProgressTrackerPayload: Codable {
+    let courseTitle: String
+    let currentNode: Int
+    let totalNodes: Int
+    let completedPercentage: Double
+    let currentNodeTitle: String?
+    let nextNodeTitle: String?
+    let continueActionId: String
+
+    enum CodingKeys: String, CodingKey {
+        case courseTitle = "course_title"
+        case currentNode = "current_node"
+        case totalNodes = "total_nodes"
+        case completedPercentage = "completed_percentage"
+        case currentNodeTitle = "current_node_title"
+        case nextNodeTitle = "next_node_title"
+        case continueActionId = "continue_action_id"
+    }
+}
+
+struct InteractiveLessonPayload: Codable {
+    let lessonId: String
+    let title: String
+    let content: String
+    let lessonType: String
+    let mediaUrl: String?
+    let durationSeconds: Int?
+    let hasQuiz: Bool
+    let quizActionId: String
+    let continueActionId: String
+
+    enum CodingKeys: String, CodingKey {
+        case lessonId = "lesson_id"
+        case title, content
+        case lessonType = "lesson_type"
+        case mediaUrl = "media_url"
+        case durationSeconds = "duration_seconds"
+        case hasQuiz = "has_quiz"
+        case quizActionId = "quiz_action_id"
+        case continueActionId = "continue_action_id"
+    }
+}
+
+// MARK: - Standard A2UI Payloads
+
+struct LessonCardPayload: Codable {
+    let title: String
+    let description: String
+    let type: String
+    let duration: String
+    let completed: Bool
+    let action: String
+}
+
+struct A2UICourseCardPayload: Codable {
+    let title: String
+    let description: String
+    let progress: Double
+    let difficulty: String
+    let duration: String
+    let action: String
+    let imageUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case title, description, progress, difficulty, duration, action
+        case imageUrl = "image_url"
+    }
+}
+
+struct ProgressBarPayload: Codable {
+    let progress: Double
+    let color: String?
+}
+
+// MARK: - Updated Chat Response
+struct RecursiveChatResponse: Codable {
+    let response: String
+    let uiLayout: DynamicComponent?
+    let sessionId: String?
+    let conversationId: String?
+    let responseMode: String?
+
+    // Legacy compatibility fields
+    let contentTypes: [String]?
+    let quickExplainer: [String: AnyCodable]?
+    let courseProposal: [String: AnyCodable]?
+    let actions: [[String: AnyCodable]]?
+    let suggestions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case response
+        case uiLayout = "ui_layout"
+        case sessionId = "session_id"
+        case conversationId = "conversation_id"
+        case responseMode = "response_mode"
+        case contentTypes = "content_types"
+        case quickExplainer = "quick_explainer"
+        case courseProposal = "course_proposal"
+        case actions, suggestions
+    }
+}
+
+

@@ -19,6 +19,8 @@ struct CommunityItem: Identifiable, Equatable {
     var eventData: APIEducationalEvent?
     var groupData: APIStudyGroup?
     var listingData: APIMarketplaceListing?
+    var lessonData: APIPrivateLesson? // NEW
+    var centerData: APIEducationalCenter? // NEW
     
     static func == (lhs: CommunityItem, rhs: CommunityItem) -> Bool {
         return lhs.id == rhs.id
@@ -29,6 +31,8 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
     case all = "All"
     case event = "Events"
     case group = "Groups"
+    case privateLesson = "Lessons" // NEW
+    case educationalCenter = "Centers" // NEW
     case question = "Questions"
     case spot = "Spots"
     case marketplace = "Market"
@@ -40,6 +44,8 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
         case .all: return "square.grid.2x2.fill"
         case .event: return "calendar"
         case .group: return "person.3.fill"
+        case .privateLesson: return "graduationcap.fill"
+        case .educationalCenter: return "building.columns.fill"
         case .question: return "bubble.left.and.bubble.right.fill"
         case .spot: return "mappin.and.ellipse"
         case .marketplace: return "tag.fill"
@@ -51,6 +57,8 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
         case .all: return .primary
         case .event: return .orange
         case .group: return .blue
+        case .privateLesson: return .indigo
+        case .educationalCenter: return .teal
         case .question: return .purple
         case .spot: return .green
         case .marketplace: return .pink
@@ -77,8 +85,12 @@ struct CommunityBeacon: Identifiable {
 @MainActor
 class CommunityViewModel: ObservableObject {
     // UI State
-    @Published var searchText: String = ""
-    @Published var selectedFilter: CommunityItemType = .all
+    @Published var searchText: String = "" {
+        didSet { updateBeacons() }
+    }
+    @Published var selectedFilter: CommunityItemType = .all {
+        didSet { updateBeacons() }
+    }
     @Published var currentFilter: CommunityFilter = .all
     @Published var viewMode: ViewMode = .map
     @Published var isLoading: Bool = false
@@ -90,7 +102,10 @@ class CommunityViewModel: ObservableObject {
     }
     
     // Data State
-    @Published var items: [CommunityItem] = []
+    @Published var items: [CommunityItem] = [] {
+        didSet { updateBeacons() }
+    }
+    @Published var filteredItems: [CommunityItem] = [] // NEW: For List View
     @Published var beacons: [CommunityBeacon] = []
     @Published var mapPins: [MapPin] = []  // For CommunityDockView compatibility
     
@@ -138,6 +153,9 @@ class CommunityViewModel: ObservableObject {
                 async let groupsTask = fetchStudyGroups()
                 async let eventsTask = fetchEvents()
                 async let listingsTask = fetchListings()
+                // Mocking new types for now as endpoints might not be ready
+                // async let lessonsTask = fetchPrivateLessons()
+                // async let centersTask = fetchEducationalCenters()
                 
                 let (groups, events, listings) = try await (groupsTask, eventsTask, listingsTask)
                 
@@ -189,6 +207,38 @@ class CommunityViewModel: ObservableObject {
                     )
                 })
                 
+                // MOCK Private Lessons
+                let mockLessons = [
+                    CommunityItem(
+                        id: "lesson-1",
+                        type: .privateLesson,
+                        title: "Piano Mastery",
+                        subtitle: "with Hector • $50/hr",
+                        coordinate: CLLocationCoordinate2D(latitude: region.center.latitude + 0.002, longitude: region.center.longitude + 0.002),
+                        imageURL: nil,
+                        userAvatar: nil,
+                        timestamp: Date(),
+                        lessonData: APIPrivateLesson(id: 1, title: "Piano Mastery", subject: "Music", instructor: APIUserPreview(id: 99, name: "Hector", avatar: nil), cost: 50, durationMinutes: 60, description: "Advanced piano techniques", lat: region.center.latitude + 0.002, lng: region.center.longitude + 0.002, imageURL: nil)
+                    )
+                ]
+                newItems.append(contentsOf: mockLessons)
+                
+                // MOCK Educational Centers
+                let mockCenters = [
+                    CommunityItem(
+                        id: "center-1",
+                        type: .educationalCenter,
+                        title: "City Library",
+                        subtitle: "Library • Open 9AM-8PM",
+                        coordinate: CLLocationCoordinate2D(latitude: region.center.latitude - 0.002, longitude: region.center.longitude - 0.002),
+                        imageURL: nil,
+                        userAvatar: nil,
+                        timestamp: Date(),
+                        centerData: APIEducationalCenter(id: 1, name: "City Library", category: "Library", description: "Main public library", lat: region.center.latitude - 0.002, lng: region.center.longitude - 0.002, imageURL: nil, address: "123 Main St", openingHours: "9AM-8PM")
+                    )
+                ]
+                newItems.append(contentsOf: mockCenters)
+                
                 // Update Main Thread
                 let finalItems = newItems
                 await MainActor.run {
@@ -205,9 +255,27 @@ class CommunityViewModel: ObservableObject {
         }
     }
     
+    func createPrivateLesson(_ lesson: APIPrivateLesson) async throws {
+        // Mock success
+        loadData()
+    }
+    
+    func createEducationalCenter(_ center: APIEducationalCenter) async throws {
+        // Mock success
+        loadData()
+    }
+    
     private func updateBeacons() {
-        // Filter items based on selectedFilter
-        let filtered = selectedFilter == .all ? items : items.filter { $0.type == selectedFilter }
+        // 1. Filter by Type
+        var filtered = selectedFilter == .all ? items : items.filter { $0.type == selectedFilter }
+        
+        // 2. Filter by Search Text
+        if !searchText.isEmpty {
+            filtered = filtered.filter { item in
+                item.title.localizedCaseInsensitiveContains(searchText) ||
+                (item.subtitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
         
         self.beacons = filtered.compactMap { item in
             // Only include items with valid coordinates
@@ -220,6 +288,9 @@ class CommunityViewModel: ObservableObject {
                 subtitle: item.subtitle
             )
         }
+        // Also update the list view items if they are driven by a separate published property, 
+        // but here CommunityListView seems to use `viewModel.items`. 
+        // We should probably expose a `displayedItems` property for the list/map to share logic.
     }
     
     // MARK: - API Calls (Real Backend)

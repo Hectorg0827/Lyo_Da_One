@@ -6,6 +6,7 @@ actor NetworkClient: NetworkRequestable {
 
     // MARK: - Properties
     static let shared = NetworkClient()
+    static var baseURL: String { AppConfig.baseURL }
 
     private let session: URLSession
     private var tokenRefreshTask: Task<String, Error>?
@@ -458,5 +459,20 @@ extension JSONEncoder {
         encoder.dateEncodingStrategy = .iso8601
         encoder.keyEncodingStrategy = .convertToSnakeCase
         return encoder
+    }
+}
+
+extension URLRequest {
+    static func authenticatedRequest(url: URL, method: String, body: Data?, token: String? = nil) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        return request
     }
 }

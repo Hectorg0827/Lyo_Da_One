@@ -5,6 +5,7 @@ struct FocusView: View {
     @EnvironmentObject var uiState: AppUIState
     @StateObject private var socialService = CourseSocialService.shared
     
+    @StateObject private var feedViewModel = FeedViewModel()
     @State private var animateWelcome = false
     @State private var streakCount = 7
     @State private var xpToday = 150
@@ -12,7 +13,7 @@ struct FocusView: View {
     @State private var isBreathing = false
     @State private var messageText = ""
     @State private var activeCourseIndex = 0
-    @State private var focusFeedItems: [FocusFeedItemModel] = FocusFeedItemModel.mock
+
     
     var body: some View {
         NavigationView {
@@ -41,6 +42,7 @@ struct FocusView: View {
                 }
                 Task {
                     await stackService.fetchStackItems()
+                    await feedViewModel.loadFeed(refresh: true)
                 }
             }
         }
@@ -191,14 +193,23 @@ struct FocusView: View {
     }
     
     private var feedRenderItems: [FocusFeedItemModel] {
-        // Repeat items to simulate endless scroll
-        var items: [FocusFeedItemModel] = []
-        let base = focusFeedItems
-        let multiplier = 3
-        for i in 0..<multiplier {
-            items.append(contentsOf: base.map { $0.withIteration(i) })
+        if feedViewModel.posts.isEmpty {
+            return FocusFeedItemModel.mock
         }
-        return items
+        
+        return feedViewModel.posts.enumerated().map { index, post in
+            // Map RepoPost to FocusFeedItemModel
+            FocusFeedItemModel(
+                id: post.id,
+                author: post.author.name,
+                title: post.content,
+                timeAgo: "2h ago", // Helper needed for real date
+                progress: nil, // Posts don't have progress yet
+                badge: (post.attachments ?? []).isEmpty ? "Post" : "Media",
+                accent: FocusCourseCardModel.palette[index % FocusCourseCardModel.palette.count].start,
+                thumbnail: post.attachments?.first
+            )
+        }
     }
     
     // MARK: - Community Feed Section
@@ -1031,7 +1042,7 @@ struct FocusFeedItemModel: Identifiable, Hashable {
     let author: String
     let title: String
     let timeAgo: String
-    let progress: Double
+    let progress: Double? // Made optional
     let badge: String
     let accent: Color
     let thumbnail: String?
@@ -1099,7 +1110,9 @@ struct FocusFeedCardView: View {
                 .lineSpacing(2)
                 .padding(.horizontal, 2)
             
-            progressBar
+            if let _ = item.progress {
+                progressBar
+            }
         }
         .padding(20)
         .background(
@@ -1133,7 +1146,7 @@ struct FocusFeedCardView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.white.opacity(0.7))
                 Spacer()
-                Text("\(Int(item.progress * 100))%")
+                Text("\(Int((item.progress ?? 0) * 100))%")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.white)
             }
@@ -1148,7 +1161,7 @@ struct FocusFeedCardView: View {
                             GeometryReader { geo in
                                 Capsule()
                                     .fill(item.accent)
-                                    .frame(width: geo.size.width * CGFloat(item.progress))
+                                    .frame(width: geo.size.width * CGFloat(item.progress ?? 0))
                             }
                         )
                 )

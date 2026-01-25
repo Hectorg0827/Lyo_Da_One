@@ -199,8 +199,7 @@ struct LyoMessageBubbleView: View {
             let convertedCards: [FlashcardItem] = cards.map { card in
                 FlashcardItem(id: card.id, front: card.front, back: card.back)
             }
-            let flashcardData = FlashcardData(title: title, cards: convertedCards)
-            FlashcardsCardView(flashcards: flashcardData)
+            FlashcardsCardView(title: title, cards: convertedCards)
             
         case .courseCard(let courseId, let title, let subtitle, let thumbnail):
             // Render as a mini course card
@@ -218,9 +217,12 @@ struct LyoMessageBubbleView: View {
         case .richCard(let title, let body, let imageURLString, let actions):
             RichCardView(
                 title: title,
-                content: body,
+                bodyText: body,
                 imageURL: imageURLString.flatMap { URL(string: $0) },
-                actions: actions ?? []
+                actions: actions,
+                onAction: { actionId in
+                    onQuickChipTap?(actionId)
+                }
             )
             
         case .processing(let step, let progress):
@@ -228,7 +230,7 @@ struct LyoMessageBubbleView: View {
             
         case .topicSelection(let title, let topics):
             TopicSelectionView(title: title, topics: topics) { topic in
-                onQuickChipTap?(topic.title)
+                onQuickChipTap?(topic)
             }
             
         default:

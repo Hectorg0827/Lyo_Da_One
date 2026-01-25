@@ -922,6 +922,7 @@ enum Endpoints {
         case createStudyGroup(group: StudyGroup)
         case joinStudyGroup(groupId: String)
         case leaveStudyGroup(groupId: String)
+        case getUserGroups // NEW
 
         // Events
         case getEvents(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
@@ -929,6 +930,7 @@ enum Endpoints {
         case createEvent(event: EducationalEvent)
         case registerForEvent(eventId: String)
         case unregisterFromEvent(eventId: String)
+        case getUserEvents // NEW
 
         // Marketplace
         case getListings(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
@@ -946,6 +948,18 @@ enum Endpoints {
         case getInstitutions(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
         case getInstitution(id: String)
         case searchInstitutions(query: String, location: CLLocationCoordinate2D?)
+        
+        // Private Lessons & Bookings (NEW)
+        case getPrivateLesson(id: Int)
+        case getAvailableSlots(lessonId: Int, date: Date)
+        case createBooking(request: APIBookingRequest)
+        case getUserBookings
+        case cancelBooking(bookingId: String)
+        
+        // Reviews (NEW)
+        case getReviews(targetType: String, targetId: String)
+        case submitReview(request: APIReviewRequest)
+        case getReviewStats(targetType: String, targetId: String)
 
         var path: String {
             switch self {
@@ -955,6 +969,7 @@ enum Endpoints {
             case .createStudyGroup: return "/api/v1/community/study-groups"
             case .joinStudyGroup(let id): return "/api/v1/community/study-groups/\(id)/join"
             case .leaveStudyGroup(let id): return "/api/v1/community/study-groups/\(id)/leave"
+            case .getUserGroups: return "/api/v1/community/study-groups/my"
 
             // Events
             case .getEvents: return "/api/v1/community/events"
@@ -962,6 +977,7 @@ enum Endpoints {
             case .createEvent: return "/api/v1/community/events"
             case .registerForEvent(let id): return "/api/v1/community/events/\(id)/register"
             case .unregisterFromEvent(let id): return "/api/v1/community/events/\(id)/unregister"
+            case .getUserEvents: return "/api/v1/community/events/my"
 
             // Marketplace
             case .getListings: return "/api/v1/community/marketplace"
@@ -979,22 +995,38 @@ enum Endpoints {
             case .getInstitutions: return "/api/v1/community/institutions"
             case .getInstitution(let id): return "/api/v1/community/institutions/\(id)"
             case .searchInstitutions: return "/api/v1/community/institutions/search"
+            
+            // Private Lessons & Bookings
+            case .getPrivateLesson(let id): return "/api/v1/community/lessons/\(id)"
+            case .getAvailableSlots(let id, _): return "/api/v1/community/lessons/\(id)/slots"
+            case .createBooking: return "/api/v1/community/bookings"
+            case .getUserBookings: return "/api/v1/community/bookings/my"
+            case .cancelBooking(let id): return "/api/v1/community/bookings/\(id)"
+            
+            // Reviews
+            case .getReviews(let type, let id): return "/api/v1/community/reviews/\(type)/\(id)"
+            case .submitReview: return "/api/v1/community/reviews"
+            case .getReviewStats(let type, let id): return "/api/v1/community/reviews/\(type)/\(id)/stats"
             }
         }
 
         var method: HTTPMethod {
             switch self {
-            case .getStudyGroups, .getStudyGroup, .getEvents, .getEvent,
-                 .getListings, .getListing, .getInstitutions, .getInstitution, .searchInstitutions,
-                 .getBeacons:
-                return .get
+             case .getStudyGroups, .getStudyGroup, .getEvents, .getEvent,
+                  .getListings, .getListing, .getInstitutions, .getInstitution, .searchInstitutions,
+                  .getBeacons,
+                  .getPrivateLesson, .getAvailableSlots, .getUserBookings,
+                  .getReviews, .getReviewStats,
+                  .getUserGroups, .getUserEvents:
+                 return .get
 
             case .createStudyGroup, .joinStudyGroup,
                  .createEvent, .registerForEvent,
-                 .createListing, .createQuestion, .answerQuestion:
+                 .createListing, .createQuestion, .answerQuestion,
+                 .createBooking, .submitReview:
                 return .post
             
-            case .leaveStudyGroup, .unregisterFromEvent:
+            case .leaveStudyGroup, .unregisterFromEvent, .cancelBooking:
                 return .delete
 
             case .updateListing:
@@ -1024,6 +1056,12 @@ enum Endpoints {
 
             case .updateListing(_, let status):
                 return ["status": status.rawValue]
+                
+            case .createBooking(let request):
+                return request
+                
+            case .submitReview(let request):
+                return request
 
             default:
                 return nil
@@ -1063,6 +1101,11 @@ enum Endpoints {
                 items.append(URLQueryItem(name: "include_events", value: "true"))
                 items.append(URLQueryItem(name: "include_users", value: "true"))
                 items.append(URLQueryItem(name: "include_questions", value: "true"))
+            
+            case .getAvailableSlots(_, let date):
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withFullDate] // YYYY-MM-DD
+                items.append(URLQueryItem(name: "date", value: formatter.string(from: date)))
 
             default:
                 break
@@ -1075,7 +1118,8 @@ enum Endpoints {
             switch self {
             case .getStudyGroups, .getEvents, .getListings, .getInstitutions:
                 return 60 // 1 minute for lists
-            case .getStudyGroup, .getEvent, .getListing, .getInstitution:
+            case .getStudyGroup, .getEvent, .getListing, .getInstitution,
+                 .getPrivateLesson, .getReviewStats:
                 return 300 // 5 minutes for details
             case .searchInstitutions:
                 return 180 // 3 minutes for search

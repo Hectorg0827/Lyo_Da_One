@@ -202,6 +202,39 @@ class ChatViewModel: ObservableObject {
         sortConversations()
         isLoading = false
     }
+    
+    func startDirectMessage(with user: User) async {
+        // 1. Check if conversation already exists
+        if let existing = conversations.first(where: { conv in
+            conv.type == .direct && conv.participants.contains(where: { $0.id == user.id })
+        }) {
+            await selectConversation(existing)
+            return
+        }
+        
+        // 2. Create new conversation
+        isLoading = true
+        // Simulate API call
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        
+        // Mock current user (should be fetched from session)
+        let currentUser = User(id: 1000, email: "you@lyo.app", name: "You", avatarURL: nil, createdAt: Date(), level: 6, xp: 3000, streak: 4, totalLessonsCompleted: 15, achievements: [])
+        
+        let newConversation = ChatConversation(
+            id: UUID().uuidString,
+            participants: [currentUser, user],
+            lastMessage: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            unreadCount: 0,
+            type: .direct
+        )
+        
+        conversations.insert(newConversation, at: 0)
+        isLoading = false
+        
+        await selectConversation(newConversation)
+    }
 
     func selectConversation(_ conversation: ChatConversation) async {
         selectedConversation = conversation

@@ -68,24 +68,11 @@ class OpenAIService {
         conversationHistory: [LyoMessage],
         systemPrompt: String?
     ) async throws -> String {
-        // The classroom endpoint doesn't accept system prompts/history directly,
-        // so we fold them into the message in a predictable way.
-        var composed = ""
-        if let systemPrompt, !systemPrompt.isEmpty {
-            composed += "SYSTEM:\n\(systemPrompt)\n\n"
-        }
-        if !conversationHistory.isEmpty {
-            composed += "CONVERSATION_HISTORY:\n"
-            for msg in conversationHistory.suffix(10) {
-                let role = msg.isFromUser ? "user" : "assistant"
-                composed += "- \(role): \(msg.content)\n"
-            }
-            composed += "\n"
-        }
-        composed += message
+        // Send clean message to backend - it handles course detection natively
+        let cleanMessage = message
 
         let body: [String: Any] = [
-            "message": composed,
+            "message": cleanMessage,
             "session_id": NSNull(),
             "include_audio": false
         ]
