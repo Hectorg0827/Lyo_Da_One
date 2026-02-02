@@ -6,6 +6,7 @@ struct MainTabView: View {
     @EnvironmentObject var rootViewModel: RootViewModel
     @EnvironmentObject var uiState: AppUIState
     @EnvironmentObject var uiStackStore: UIStackStore
+    @EnvironmentObject var deepLinkHandler: DeepLinkHandler // NEW
     @StateObject private var stackService = StackService()
     // Unified AI ViewModel
     @StateObject private var aiViewModel = LyoAIViewModel()
@@ -178,6 +179,11 @@ struct MainTabView: View {
                 )
             }
         }
+        .onChange(of: deepLinkHandler.pendingAction) { _, action in
+            if let action = action {
+                handleDeepLinkAction(action)
+            }
+        }
         .environmentObject(aiViewModel) // Inject at root of ZStack
         .detectOffline() // Wire up offline indicator banner
         .onAppear { aiViewModel.uiState = uiState }
@@ -293,9 +299,33 @@ struct MainTabView: View {
             let lessonTitle: String = courseItem.subtitle ?? "Lesson"
             liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
         } else {
-            liveClassroomData = (courseId, "lesson-1", "Course", "Lesson")
+            liveClassroomData = (courseId, "lesson-1", "Shared Course", "Introduction")
         }
         isLiveClassroomPresented = true
+    }
+    
+    // MARK: - Deep Link Handler Logic
+    
+    private func handleDeepLinkAction(_ action: DeepLinkHandler.DeepLinkAction) {
+        print("🚀 MainTabView: Handling deep link action: \(action)")
+        
+        switch action {
+        case .openCourse(let id):
+            navigateToCourse(id)
+            
+        case .openLesson(let courseId, let lessonId):
+            liveClassroomData = (courseId, lessonId, "Shared Course", "Lesson")
+            isLiveClassroomPresented = true
+            
+        case .openProfile:
+            selectedTab = .profile
+            
+        case .openChat:
+            selectedTab = .messages
+        }
+        
+        // Clear after handling
+        deepLinkHandler.clearPendingAction()
     }
     
     // MARK: - Notification Handlers

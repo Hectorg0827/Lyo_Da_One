@@ -41,7 +41,9 @@ class A2UITests: XCTestCase {
             modules: nil,
             totalModules: nil,
             completedModules: nil,
-            suggestions: nil
+            suggestions: nil,
+            cinematic: nil,
+            layout: nil
         )
         
         let response = ChatResponse(
@@ -97,7 +99,9 @@ class A2UITests: XCTestCase {
             modules: nil,
             totalModules: nil,
             completedModules: nil,
-            suggestions: nil
+            suggestions: nil,
+            cinematic: nil,
+            layout: nil
         )
         
         let response = ChatResponse(

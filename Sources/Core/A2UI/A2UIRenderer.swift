@@ -72,7 +72,14 @@ struct A2UIRenderer: View {
 
     var body: some View {
         renderComponent(component)
+            .onAppear {
+                // Register this UI tree for voice control
+                if let onAction = onAction {
+                    A2UIVoiceController.shared.registerActiveUI(component: component, onAction: onAction)
+                }
+            }
     }
+
 
     // MARK: - Component Router
 

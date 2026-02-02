@@ -581,6 +581,7 @@ struct RichCardView: View {
     let content: String
     let imageURL: URL?
     let actions: [CardAction]
+    let onAction: ((String) -> Void)?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -628,7 +629,7 @@ struct RichCardView: View {
                     HStack(spacing: 8) {
                         ForEach(actions) { action in
                             Button {
-                                // Handle action
+                                onAction?(action.id)
                             } label: {
                                 Text(action.label)
                                     .font(.caption.bold())
@@ -815,142 +816,4 @@ struct TopicSelectionView: View {
         .padding()
     }
     .background(Color.black)
-}
-// MARK: - Recursive Renderer
-struct A2UIRecursiveRenderer: View {
-    let component: DynamicComponent
-    let onAction: (String) -> Void
-    
-    var body: some View {
-        render(component)
-    }
-    
-    private func render(_ component: DynamicComponent) -> AnyView {
-        switch component.type {
-        case .vstack:
-            if case .vstack(let payload) = component.payload {
-                return AnyView(
-                    VStack(alignment: alignment(from: payload.alignment), spacing: payload.spacing) {
-                        ForEach(payload.children) { child in
-                            render(child)
-                        }
-                    }
-                )
-            }
-        case .hstack:
-            if case .hstack(let payload) = component.payload {
-                return AnyView(
-                    HStack(alignment: verticalAlignment(from: payload.alignment), spacing: payload.spacing) {
-                        ForEach(payload.children) { child in
-                            render(child)
-                        }
-                    }
-                )
-            }
-        case .text:
-            if case .text(let payload) = component.payload {
-                return AnyView(
-                    Text(payload.content)
-                        .font(font(from: payload.fontStyle))
-                        .foregroundColor(color(from: payload.color))
-                        .multilineTextAlignment(textAlignment(from: payload.alignment))
-                )
-            }
-        case .button:
-            if case .button(let payload) = component.payload {
-                return AnyView(
-                    Button {
-                        onAction(payload.actionId)
-                    } label: {
-                        Text(payload.label)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .disabled(payload.isDisabled)
-                )
-            }
-        case .image:
-            if case .image(let payload) = component.payload, let url = URL(string: payload.url) {
-                return AnyView(
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        Color.gray
-                    }
-                )
-            }
-        case .card:
-            if case .card(let payload) = component.payload {
-                return AnyView(
-                    VStack(alignment: .leading) {
-                        if let title = payload.title {
-                            Text(title).font(.headline)
-                        }
-                        if let subtitle = payload.subtitle {
-                            Text(subtitle).font(.subheadline)
-                        }
-                        ForEach(payload.children) { child in
-                            render(child)
-                        }
-                    }
-                    .padding()
-                    .background(Color(hex: payload.backgroundColor ?? "#FFFFFF").opacity(0.1))
-                    .cornerRadius(12)
-                )
-            }
-        case .divider:
-            return AnyView(Divider())
-        case .spacer:
-             if case .spacer(let payload) = component.payload {
-                 if let h = payload.height {
-                     return AnyView(Spacer().frame(height: h))
-                 } else {
-                     return AnyView(Spacer())
-                 }
-             }
-        default:
-            return AnyView(EmptyView())
-        }
-        return AnyView(EmptyView())
-    }
-    
-    private func alignment(from string: String) -> HorizontalAlignment {
-        switch string {
-        case "leading": return .leading
-        case "trailing": return .trailing
-        default: return .center
-        }
-    }
-    
-    private func verticalAlignment(from string: String) -> VerticalAlignment {
-        switch string {
-        case "top": return .top
-        case "bottom": return .bottom
-        default: return .center
-        }
-    }
-    
-    private func font(from string: String) -> Font {
-        switch string {
-        case "title": return .title
-        case "headline": return .headline
-        case "caption": return .caption
-        default: return .body
-        }
-    }
-    
-    private func color(from string: String?) -> Color {
-        guard let hex = string else { return .primary }
-        return Color(hex: hex)
-    }
-    
-    private func textAlignment(from string: String) -> TextAlignment {
-        switch string {
-        case "leading": return .leading
-        case "trailing": return .trailing
-        default: return .center
-        }
-    }
 }

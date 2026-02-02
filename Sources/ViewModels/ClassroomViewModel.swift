@@ -18,6 +18,9 @@ class ClassroomViewModel: NSObject, ObservableObject {
     @Published var reteachContent: ReteachContent?
     @Published var errorMessage: String?
     
+    // A2UI Migration
+    @Published var a2uiComponent: A2UIComponent?
+    
     // TTS State
     @Published var isNarrating: Bool = false
     @Published var narrationProgress: Double = 0.0
@@ -64,11 +67,30 @@ class ClassroomViewModel: NSObject, ObservableObject {
             if settings.autoplayNarration {
                 startNarration()
             }
+            
+            // Try loading A2UI version
+            await loadA2UISession(sessionId: sessionId)
+            
         } catch {
             print("❌ Failed to load session: \(error.localizedDescription)")
             errorMessage = "Failed to load lesson. Please check your internet connection and try again."
             state = .error
         }
+    }
+    
+    func loadA2UISession(sessionId: String) async {
+        // Attempt to fetch dynamic UI from backend
+        // In production, this would use A2UIBackendService
+        print("🔄 Attempting to load A2UI session...")
+        
+        // Use generic network client request if service wrapper unavailable
+        // Example fetch - assuming endpoint exists
+        // do {
+        //     let response: A2UIScreenResponse = try await LyoAPIClient.shared.request(path: "/api/v1/a2ui/screen/classroom/\(sessionId)")
+        //     self.a2uiComponent = response.component
+        // } catch {
+        //     print("⚠️ A2UI fetch failed (expected during migration): \(error)")
+        // }
     }
     
     func retryLoadSession() async {

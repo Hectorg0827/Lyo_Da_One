@@ -7,49 +7,42 @@
 
 import SwiftUI
 
+@MainActor
 class ReviewsViewModel: ObservableObject {
     @Published var reviews: [APIReview] = []
     @Published var stats: APIReviewStats?
     @Published var isLoading = false
+    @Published var error: Error?
     
     private let targetType: String
     private let targetId: String
+    private let service = ReviewService.shared
     
     init(targetType: String, targetId: String) {
         self.targetType = targetType
         self.targetId = targetId
-        // fetchReviews() // Auto-fetch on init or call manually
     }
     
     func fetchReviews() {
         isLoading = true
-        // Simulate network call
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.stats = APIReviewStats(averageRating: 4.8, reviewCount: 12)
-            self.reviews = [
-                APIReview(
-                    id: "1",
-                    author: APIUserPreview(id: 2, name: "Alice M.", avatar: nil),
-                    rating: 5,
-                    text: "Fantastic instructor! Learned so much in just one session.",
-                    timestamp: Date().addingTimeInterval(-86400 * 2)
-                ),
-                APIReview(
-                    id: "2",
-                    author: APIUserPreview(id: 3, name: "Bob D.", avatar: nil),
-                    rating: 4,
-                    text: "Great facility, very clean and organized.",
-                    timestamp: Date().addingTimeInterval(-86400 * 7)
-                ),
-                APIReview(
-                    id: "3",
-                    author: APIUserPreview(id: 4, name: "Charlie", avatar: nil),
-                    rating: 5,
-                    text: "Highly recommended for beginners.",
-                    timestamp: Date().addingTimeInterval(-86400 * 10)
-                )
-            ]
-            self.isLoading = false
+        error = nil
+        
+        Task {
+            do {
+                let fetchedReviews = try await service.fetchReviews(targetType: targetType, targetId: targetId)
+                let fetchedStats = try await service.fetchReviewStats(targetType: targetType, targetId: targetId)
+                
+                await MainActor.run {
+                    self.reviews = fetchedReviews
+                    self.stats = fetchedStats
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.error = error
+                    self.isLoading = false
+                }
+            }
         }
     }
 }

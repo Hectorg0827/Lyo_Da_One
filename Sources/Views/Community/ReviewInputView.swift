@@ -80,11 +80,25 @@ struct ReviewInputView: View {
         isSubmitting = true
         HapticManager.shared.playMediumImpact()
         
-        // Simulate API call
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            isSubmitting = false
-            HapticManager.shared.playSuccess()
-            dismiss()
+        Task {
+            do {
+                _ = try await ReviewService.shared.submitReview(
+                    targetType: targetType,
+                    targetId: targetId,
+                    rating: rating,
+                    text: text
+                )
+                await MainActor.run {
+                    isSubmitting = false
+                    HapticManager.shared.playSuccess()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isSubmitting = false
+                    // TODO: Show error alert
+                }
+            }
         }
     }
 }

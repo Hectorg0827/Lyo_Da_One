@@ -41,6 +41,15 @@ class LyoAIViewModel: ObservableObject {
     @Published var isVoiceActive: Bool = false
     @Published var showFloatingOrb: Bool = false
     
+    // MARK: - True Live Mode State
+    @Published var isLiveMode: Bool = false
+    @Published var userLiveAudioLevel: Float = 0
+    @Published var aiLiveAudioLevel: Float = 0
+    @Published var isAIThinking: Bool = false
+    @Published var isAISpeaking: Bool = false
+    @Published var lastLiveTranscript: String = ""
+    @Published var activeLiveWidget: [String: Any]?
+    
     // MARK: - Quiz State
     @Published var activeQuiz: Quiz?
     @Published var isQuizActive: Bool = false
@@ -130,6 +139,35 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .assign(to: &$suggestions)
             
+        // Live Mode Bindings
+        AudioStreamManager.shared.$isLive
+            .receive(on: RunLoop.main)
+            .assign(to: &$isLiveMode)
+            
+        AudioStreamManager.shared.$userAudioLevel
+            .receive(on: RunLoop.main)
+            .assign(to: &$userLiveAudioLevel)
+            
+        AudioStreamManager.shared.$aiAudioLevel
+            .receive(on: RunLoop.main)
+            .assign(to: &$aiLiveAudioLevel)
+            
+        AudioStreamManager.shared.$isAIThinking
+            .receive(on: RunLoop.main)
+            .assign(to: &$isAIThinking)
+            
+        AudioStreamManager.shared.$isAISpeaking
+            .receive(on: RunLoop.main)
+            .assign(to: &$isAISpeaking)
+            
+        AudioStreamManager.shared.$lastTranscript
+            .receive(on: RunLoop.main)
+            .assign(to: &$lastLiveTranscript)
+            
+        AudioStreamManager.shared.$activeWidget
+            .receive(on: RunLoop.main)
+            .assign(to: &$activeLiveWidget)
+            
         // Handle Course Navigation from Unified Chat
         unifiedChat.$shouldNavigateToClassroom
             .receive(on: RunLoop.main)
@@ -164,8 +202,39 @@ class LyoAIViewModel: ObservableObject {
         if isVoiceActive {
             stopListening()
         } else {
+            // Stop live mode if active before starting voice mode
+            if isLiveMode {
+                stopLiveMode()
+            }
             startListening()
         }
+    }
+    
+    // MARK: - True Live Mode Control
+    
+    func toggleLiveMode() {
+        if isLiveMode {
+            stopLiveMode()
+        } else {
+            startLiveMode()
+        }
+    }
+    
+    func startLiveMode() {
+        // Stop turn-based voice mode if active
+        if isVoiceActive {
+            stopListening()
+        }
+        
+        Task {
+            let userId = await TokenManager.shared.getUserId() ?? "anonymous"
+            let sessionId = "live-\(userId)"
+            await AudioStreamManager.shared.startLiveMode(sessionId: sessionId)
+        }
+    }
+    
+    func stopLiveMode() {
+        AudioStreamManager.shared.stopLiveMode()
     }
     
     func startListening() {
@@ -384,17 +453,27 @@ class LyoAIViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Message Handling (Intent-Based Architecture)
-    
-    // MARK: - Message Handling (Delegated to UnifiedChatService)
+    // MARK: - Message Handling (Unified Flow)
     
     func sendMessage(mode: String? = nil) async {
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         
-        let messageText = inputText
+        let messageText = text
         let messageAttachments = attachments
         inputText = ""
         attachments = []
+        
+        // Capture voice state
+        let shouldSpeak = isVoiceActive
+        
+        if isVoiceActive {
+            // Stop recording the current utterance
+            // We manually manage the restart below to ensure continuous conversation
+            sttService.stopRecording()
+            isVoiceActive = false
+            stopSpeaking() 
+        }
         
         // Update affect signals (debounced)
         if Date().timeIntervalSince(lastAffectUpdate) > 30 {
@@ -404,20 +483,61 @@ class LyoAIViewModel: ObservableObject {
             }
         }
         
-        // No manual loading state needed, observed from service
-        
-        // Delegate to Unified Chat Service
-        let responseText = await unifiedChat.sendMessage(
+        // Use Streaming Flow
+        await unifiedChat.sendMessageStreaming(
             messageText,
             attachments: messageAttachments,
-            context: nil, // Can be improved to pass current context
-            mode: mode ?? uiState?.currentAIMode ?? "focus"
+            context: nil,
+            mode: mode ?? uiState?.currentAIMode ?? "chat",
+            speakResponse: shouldSpeak
         )
         
-        // Auto-speak response if in voice mode
-        if isVoiceActive, let text = responseText {
-            speak(text: text)
+        // If we were in voice mode, restart listening immediately (Barge-in ready)
+        if shouldSpeak {
+            startListening()
         }
+    }
+    
+    private var currentConversationId: String {
+        // Reuse unified chat ID if possible
+        return unifiedChat.currentConversationId
+    }
+    
+    
+    private func extractTopicFromText(_ text: String) -> String {
+        let lowercased = text.lowercased()
+        
+        // Try to extract topic using common patterns (preserved for manual generation sub-flows)
+        if let range = lowercased.range(of: "course on ") {
+            let afterPhrase = String(lowercased[range.upperBound...])
+            return afterPhrase.components(separatedBy: CharacterSet.punctuationCharacters).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized ?? "General Topic"
+        }
+        
+        if let range = lowercased.range(of: "teach me ") {
+            let afterPhrase = String(lowercased[range.upperBound...])
+            return afterPhrase.components(separatedBy: CharacterSet.punctuationCharacters).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized ?? "General Topic"
+        }
+        
+        if let range = lowercased.range(of: "learn about ") {
+            let afterPhrase = String(lowercased[range.upperBound...])
+            return afterPhrase.components(separatedBy: CharacterSet.punctuationCharacters).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized ?? "General Topic"
+        }
+        
+        return text.prefix(50).trimmingCharacters(in: .whitespacesAndNewlines).capitalized
+    }
+    
+    private func extractLevelFromText(_ text: String) -> String {
+        let lowercased = text.lowercased()
+        if lowercased.contains("beginner") || lowercased.contains("basic") { return "beginner" }
+        if lowercased.contains("intermediate") { return "intermediate" }
+        if lowercased.contains("advanced") { return "advanced" }
+        return "beginner"
     }
     
     // MARK: - A2UI Interactions
@@ -592,6 +712,26 @@ class LyoAIViewModel: ObservableObject {
         
         // Show the A2A progress view
         showA2AProgressView = true
+        
+        // Start Generation Task
+        Task {
+            do {
+                let course = try await A2ACourseService.shared.generateCourse(
+                    topic: topic,
+                    qualityTier: qualityTier
+                )
+                await MainActor.run {
+                    self.handleA2AGenerationComplete(course: course)
+                }
+            } catch {
+                print("❌ A2A generation failed: \(error)")
+                await MainActor.run {
+                    self.showA2AProgressView = false
+                    self.isGeneratingCourse = false
+                    self.addErrorMessage("A2A Course Generation Failed: \(error.localizedDescription)")
+                }
+            }
+        }
     }
     
     func handleA2AGenerationComplete(course: A2AGeneratedCourse) {

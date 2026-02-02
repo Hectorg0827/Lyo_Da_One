@@ -7,8 +7,8 @@ struct DiscoverView: View {
     @EnvironmentObject var uiStackStore: UIStackStore
     
     @StateObject private var viewModel = DiscoverViewModel()
-    // Inject Lyo AI ViewModel for LioChatSheet to prevent missing EnvironmentObject crash
-    @StateObject private var lyoAIViewModel = LyoAIViewModel()
+    // Unified AI ViewModel from MainTabView environment
+    @EnvironmentObject var lyoAIViewModel: LyoAIViewModel
     
     // Navigation state
     @State private var selectedCourse: (id: String, lessonId: String?, title: String)?

@@ -195,11 +195,11 @@ struct LyoMessageBubbleView: View {
             }
             
         case .flashcards(let title, let cards):
-            // Convert Flashcard to FlashcardItem
+            // Convert Flashcard to FlashcardItem and wrap in FlashcardData
             let convertedCards: [FlashcardItem] = cards.map { card in
                 FlashcardItem(id: card.id, front: card.front, back: card.back)
             }
-            FlashcardsCardView(title: title, cards: convertedCards)
+            FlashcardsCardView(flashcards: FlashcardData(title: title, cards: convertedCards))
             
         case .courseCard(let courseId, let title, let subtitle, let thumbnail):
             // Render as a mini course card
@@ -217,9 +217,9 @@ struct LyoMessageBubbleView: View {
         case .richCard(let title, let body, let imageURLString, let actions):
             RichCardView(
                 title: title,
-                bodyText: body,
+                content: body,
                 imageURL: imageURLString.flatMap { URL(string: $0) },
-                actions: actions,
+                actions: actions ?? [],
                 onAction: { actionId in
                     onQuickChipTap?(actionId)
                 }
@@ -230,7 +230,13 @@ struct LyoMessageBubbleView: View {
             
         case .topicSelection(let title, let topics):
             TopicSelectionView(title: title, topics: topics) { topic in
-                onQuickChipTap?(topic)
+                onQuickChipTap?(topic.id)
+            }
+            
+        case .recursiveUI(let component):
+            // Use the centralized recursive renderer for rich A2UI components
+            A2UIRecursiveRenderer(component: component) { actionId in
+                onQuickChipTap?(actionId)
             }
             
         default:

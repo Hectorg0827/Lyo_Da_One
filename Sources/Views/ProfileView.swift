@@ -1,4 +1,7 @@
 import SwiftUI
+import Combine
+// Ensure Views/Gamification is imported if needed, or if it's in the same module it's fine.
+// Assuming AllAchievementsView is available in the module.
 
 // MARK: - Profile View
 struct ProfileView: View {
@@ -24,6 +27,11 @@ struct ProfileView: View {
                         coursesCompleted: viewModel.coursesCompleted,
                         streak: viewModel.currentStreak
                     )
+
+                    // 🔥 NEW: Personalized Recap Section
+                    if let memory = viewModel.memory {
+                        PersonalizedRecapView(memory: memory)
+                    }
 
                     // Active Courses Section
                     if !viewModel.activeStacks.isEmpty {
@@ -269,8 +277,7 @@ struct AchievementsSectionView: View {
                 Spacer()
 
                 NavigationLink("See All") {
-                    // TODO: All achievements view
-                    Text("All Achievements")
+                    AllAchievementsView()
                 }
                 .font(.caption)
                 .foregroundColor(.blue)
@@ -316,17 +323,13 @@ struct AchievementBadge: View {
         .cornerRadius(12)
     }
 
-    // Rarity feature disabled - Achievement model doesn't have rarity property
     private var rarityColor: Color {
-        // Default color for all achievements
-        return .blue
-        // switch achievement.rarity {
-        // case "common": return .gray
-        // case "rare": return .blue
-        // case "epic": return .purple
-        // case "legendary": return .orange
-        // default: return .gray
-        // }
+        switch achievement.rarity {
+        case .common: return .gray
+        case .rare: return .blue
+        case .epic: return .purple
+        case .legendary: return .orange
+        }
     }
 }
 
@@ -418,6 +421,88 @@ struct SettingsActionsView: View {
     }
 }
 
+// MARK: - Personalized Recap View
+
+struct PersonalizedRecapView: View {
+    let memory: LearningMemory
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Leo's Learning Recap")
+                    .font(.headline)
+                Spacer()
+                Image(systemName: "sparkles")
+                    .foregroundColor(.orange)
+            }
+            
+            if let summary = memory.lastSessionSummary {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundColor(.primary.opacity(0.9))
+                    .padding()
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(12)
+            }
+            
+            if !memory.struggles.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AREAS FOR GROWTH")
+                        .font(.caption2.bold())
+                        .foregroundColor(.secondary)
+                    
+                    ForEach(memory.struggles.prefix(2)) { struggle in
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.caption)
+                            Text(struggle.topic)
+                                .font(.caption.bold())
+                            Spacer()
+                            Text("\(struggle.frequency) struggles")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.05))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+            
+            if !memory.masteredConcepts.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("MASTERED CONCEPTS")
+                        .font(.caption2.bold())
+                        .foregroundColor(.secondary)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(memory.masteredConcepts.prefix(3), id: \.self) { concept in
+                                Text(concept)
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.green.opacity(0.1))
+                                    .foregroundColor(.green)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(LinearGradient(colors: [.orange.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+        )
+    }
+}
+
 // MARK: - Profile View Model
 @MainActor
 class ProfileViewModel: ObservableObject {
@@ -432,6 +517,7 @@ class ProfileViewModel: ObservableObject {
     @Published var activeStacks: [StackItem] = [] // Added for Profile Stacks
     @Published var myDiscoveries: [Discovery] = [] // Added for Discoveries
     @Published var myRank: LeaderboardRank?
+    @Published var memory: LearningMemory? // NEW
     @Published var isLoading = false
     
     private let repository = LyoRepository.shared
@@ -453,6 +539,9 @@ class ProfileViewModel: ObservableObject {
         
         // Load discoveries
         loadDiscoveries()
+        
+        // Load memory for recap
+        await loadMemory()
         
         isLoading = false
     }
@@ -541,6 +630,11 @@ class ProfileViewModel: ObservableObject {
         } catch {
             print("⚠️ Failed to load active stacks: \(error.localizedDescription)")
         }
+    }
+    
+    private func loadMemory() async {
+        await SmartMemoryService.shared.fetchMemory()
+        self.memory = SmartMemoryService.shared.memory
     }
 }
 

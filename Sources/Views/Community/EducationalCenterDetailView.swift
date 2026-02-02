@@ -397,8 +397,8 @@ private struct MapLocation: Identifiable {
                 description: "Premier salsa and bachata dance studio offering classes for all skill levels. Join our vibrant community and learn from professional instructors with years of experience.",
                 lat: 40.7128,
                 lng: -74.0060,
-                imageURL: nil,
                 address: "123 Dance Ave, New York, NY 10001",
+                imageURL: nil,
                 openingHours: "9AM - 10PM"
             )
         )

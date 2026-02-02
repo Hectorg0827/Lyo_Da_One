@@ -16,33 +16,36 @@ struct A2UICapabilityNegotiator {
     // MARK: - Current Capabilities
     
     /// Generates the capability header string to send to backend
-    static func generateClientCapabilities() -> String {
-        let caps = ClientCapabilities(
-            version: "2.0.0",
-            supportedCategories: A2UIElementCategory.allCases.map { $0.rawValue },
-            supportedComponents: A2UIElementType.allCases.map { $0.rawValue },
-            features: [
-                "streaming": true,
-                "interactive": true,
-                "audio_input": true,
-                "camera_input": true,
-                "haptics": true,
-                "dark_mode": true
-            ],
-            screen: ScreenInfo(
-                width: UIScreen.main.bounds.width,
-                height: UIScreen.main.bounds.height,
-                scale: UIScreen.main.scale,
-                dynamicTypeSize: UIApplication.shared.preferredContentSizeCategory.rawValue
+    /// Generates the capability header string to send to backend
+    static func generateClientCapabilities() async -> String {
+        return await MainActor.run {
+            let caps = ClientCapabilities(
+                version: "2.1.0", // Bump version to reflect expanded catalog
+                supportedCategories: A2UIElementType.allCases.map { $0.category.rawValue }, // Dynamic categories from elements
+                supportedComponents: A2UIElementType.allCases.map { $0.rawValue },
+                features: [
+                    "streaming": true,
+                    "interactive": true,
+                    "audio_input": true,
+                    "camera_input": true,
+                    "haptics": true,
+                    "dark_mode": true
+                ],
+                screen: ScreenInfo(
+                    width: UIScreen.main.bounds.width,
+                    height: UIScreen.main.bounds.height,
+                    scale: UIScreen.main.scale,
+                    dynamicTypeSize: UIApplication.shared.preferredContentSizeCategory.rawValue
+                )
             )
-        )
-        
-        do {
-            let data = try JSONEncoder().encode(caps)
-            return String(data: data, encoding: .utf8) ?? ""
-        } catch {
-            print("❌ Failed to encode client capabilities: \(error)")
-            return ""
+            
+            do {
+                let data = try JSONEncoder().encode(caps)
+                return String(data: data, encoding: .utf8) ?? ""
+            } catch {
+                print("❌ Failed to encode client capabilities: \(error)")
+                return ""
+            }
         }
     }
     

@@ -152,8 +152,19 @@ class DefaultCommunityRepository: CommunityRepository {
     }
 
     func createListing(listing: MarketplaceListing) async throws -> MarketplaceListing {
+        let request = APIMarketplaceListingRequest(
+            title: listing.title,
+            description: listing.description,
+            price: listing.listingType.priceValue ?? 0,
+            currency: listing.currencyCode ?? "USD",
+            category: listing.category.rawValue,
+            condition: listing.condition.rawValue,
+            lat: listing.location.latitude,
+            lng: listing.location.longitude,
+            images: listing.photos
+        )
         let created: MarketplaceListing = try await networkClient.request(
-            Endpoints.Community.createListing(listing: listing),
+            Endpoints.Community.createListing(listing: request),
             cachePolicy: .reloadIgnoringCache
         )
 
@@ -293,6 +304,7 @@ class MockCommunityRepository: CommunityRepository {
                 location: mockCoordinate,
                 tags: ["math", "calculus", "textbook"],
                 createdAt: Date(),
+                currencyCode: "USD",
                 status: .active
             )
         ]

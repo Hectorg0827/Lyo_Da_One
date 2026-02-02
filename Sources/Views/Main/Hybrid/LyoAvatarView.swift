@@ -4,6 +4,10 @@ struct LyoAvatarView: View {
     var size: CGFloat = 256
     var isListening: Bool = false
     var isThinking: Bool = false
+    var isLiveMode: Bool = false
+    var isSpeaking: Bool = false
+    var userLevel: Float = 0
+    var aiLevel: Float = 0
     var onTap: (() -> Void)? = nil
     
     @State private var isBreathing = false
@@ -12,18 +16,19 @@ struct LyoAvatarView: View {
     
     var body: some View {
         ZStack {
-            // Radar/Ripple Effect (when listening)
-            if isListening {
+            // Radar/Ripple Effect (when listening or live)
+            if isListening || isLiveMode {
                 ForEach(0..<3) { i in
                     Circle()
                         .stroke(Color(hex: "FF8C00").opacity(0.5), lineWidth: 2)
-                        .scaleEffect(isBreathing ? 1.5 : 1.0)
-                        .opacity(isBreathing ? 0.0 : 0.5)
+                        .scaleEffect(isLiveMode ? (1.0 + CGFloat(userLevel) * 0.5) : (isBreathing ? 1.5 : 1.0))
+                        .opacity(isLiveMode ? 0.8 : (isBreathing ? 0.0 : 0.5))
                         .animation(
+                            isLiveMode ? .interactiveSpring() :
                             Animation.easeOut(duration: 2)
                                 .repeatForever(autoreverses: false)
                                 .delay(Double(i) * 0.5),
-                            value: isBreathing
+                            value: isLiveMode ? userLevel : Float(isBreathing ? 1 : 0)
                         )
                 }
                 .frame(width: size, height: size)
@@ -33,22 +38,28 @@ struct LyoAvatarView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [Color(hex: "FF8C00").opacity(0.4), Color.clear],
+                        colors: [
+                            isSpeaking ? Color(hex: "10B981").opacity(0.6) : Color(hex: "FF8C00").opacity(0.4),
+                            Color.clear
+                        ],
                         center: .center,
                         startRadius: 0,
                         endRadius: size * 0.7
                     )
                 )
-                .frame(width: size * 1.2, height: size * 1.2)
-                .blur(radius: 20)
+                .frame(width: size * 1.5, height: size * 1.5)
+                .blur(radius: isSpeaking ? 30 : 20)
+                .scaleEffect(isSpeaking ? (1.0 + CGFloat(aiLevel) * 0.5) : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: isSpeaking)
             
             // Avatar
             avatarImage
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
-                .scaleEffect(isThinking ? 1.05 : (isSquished ? 0.9 : 1.0)) // Subtle scale for thinking
-                .scaleEffect(isBreathing ? 1.05 : 1.0)
+                .scaleEffect(isLiveMode ? (1.0 + CGFloat(aiLevel) * 0.25) : (isThinking ? 1.05 : (isSquished ? 0.9 : 1.0)))
+                .scaleEffect(isBreathing ? 1.03 : 1.0)
+                .shadow(color: isSpeaking ? Color(hex: "10B981").opacity(0.5) : .clear, radius: 10)
                 .onTapGesture {
                     triggerSquish()
                     onTap?()

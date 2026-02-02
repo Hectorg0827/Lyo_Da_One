@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Transcript Sheet
 
 struct TranscriptSheet: View {
-    let transcript: [ChatTurn]
+    let transcript: [TranscriptMessage]
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -48,7 +48,7 @@ struct TranscriptSheet: View {
 // MARK: - Transcript Bubble
 
 struct TranscriptBubble: View {
-    let turn: ChatTurn
+    let turn: TranscriptMessage
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -258,11 +258,11 @@ struct QuickPromptChip: View {
 
 #Preview("Transcript Sheet") {
     TranscriptSheet(transcript: [
-        ChatTurn(isUser: false, text: "Welcome to this lesson! Today we'll explore the fundamentals."),
-        ChatTurn(isUser: true, text: "Sounds good!"),
-        ChatTurn(isUser: false, text: "Great! Let's start with the basics..."),
-        ChatTurn(isUser: true, text: "I'm confused"),
-        ChatTurn(isUser: false, text: "No worries! Let me explain that differently...")
+        TranscriptMessage(isUser: false, text: "Welcome to this lesson! Today we'll explore the fundamentals."),
+        TranscriptMessage(isUser: true, text: "Sounds good!"),
+        TranscriptMessage(isUser: false, text: "Great! Let's start with the basics..."),
+        TranscriptMessage(isUser: true, text: "I'm confused"),
+        TranscriptMessage(isUser: false, text: "No worries! Let me explain that differently...")
     ])
 }
 

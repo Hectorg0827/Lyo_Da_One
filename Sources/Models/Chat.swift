@@ -19,11 +19,16 @@ struct ChatConversation: Identifiable, Codable {
         case studyGroup = "study_group"
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id, participants, lastMessage, createdAt, updatedAt, unreadCount, type
+    }
+
     var otherParticipant: User? {
         // For direct messages, return the other user
         guard type == .direct, participants.count == 2 else { return nil }
-        // TODO: Replace with actual current user ID
-        return participants.first { $0.id != -1 }
+        guard let currentUserID = UserSessionManager.shared.currentUserID,
+              let userID = Int(currentUserID) else { return participants.first }
+        return participants.first { $0.id != userID }
     }
 
     var displayName: String {
@@ -62,14 +67,19 @@ struct ChatMessage: Identifiable, Codable {
         case system
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id, conversationId, sender, content, type, attachments, createdAt, readBy, reactions, replyTo
+    }
+
     var isRead: Bool {
-        // TODO: Check if current user ID is in readBy
-        return !readBy.isEmpty
+        guard let currentUserID = UserSessionManager.shared.currentUserID else { return false }
+        return readBy.contains(currentUserID)
     }
 
     var isFromCurrentUser: Bool {
-        // TODO: Replace with actual current user ID check
-        sender.id == -1
+        guard let currentUserID = UserSessionManager.shared.currentUserID,
+              let userID = Int(currentUserID) else { return false }
+        return sender.id == userID
     }
 }
 
@@ -136,7 +146,8 @@ struct MessageGroup: Identifiable {
     let timestamp: Date
 
     var isFromCurrentUser: Bool {
-        // TODO: Replace with actual current user ID
-        sender.id == -1
+        guard let currentUserID = UserSessionManager.shared.currentUserID,
+              let userID = Int(currentUserID) else { return false }
+        return sender.id == userID
     }
 }

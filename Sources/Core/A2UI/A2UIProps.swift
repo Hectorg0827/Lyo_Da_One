@@ -26,6 +26,7 @@ struct A2UIProps: Codable, Equatable {
     var helperText: String?
     var errorMessage: String?
     var successMessage: String?
+    var streamId: String?
     
     // MARK: - Media Properties
     var imageUrl: String?
@@ -334,7 +335,8 @@ struct A2UIProps: Codable, Equatable {
         case altText = "alt_text"
         case aspectRatio = "aspect_ratio"
         case autoplay, loop, muted, controls
-        case width, height, padding, margin, alignment, spacing, flex
+        case width, height, padding, margin, spacing, flex
+        case alignment = "align"
         case minWidth = "min_width"
         case maxWidth = "max_width"
         case minHeight = "min_height"

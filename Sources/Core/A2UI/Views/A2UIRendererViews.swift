@@ -16,12 +16,32 @@ struct A2UITextRenderer: View {
     let context: A2UIRenderContext
     let onAction: ((A2UIAction) -> Void)?
 
+    @State private var streamedContent: String = ""
+
     var body: some View {
-        Text(component.props.text ?? component.props.title ?? "")
+        Text(displayContent)
             .font(fontForComponent())
             .foregroundColor(colorForComponent())
             .multilineTextAlignment(textAlignmentForComponent())
             .padding(paddingForComponent())
+            .onAppear {
+                if let initial = component.props.text ?? component.props.title {
+                     streamedContent = initial
+                }
+            }
+            .onReceive(A2UIStreamService.shared.stream(for: component.props.streamId ?? "")) { chunk in
+                // If we receive a chunk, we assume the content is cumulative or we append
+                // Ideally the service sends full text or we handle append logic here.
+                // For simplicity, let's assume the service sends the FULL text so far for this update model
+                streamedContent = chunk
+            }
+    }
+    
+    private var displayContent: String {
+        if let _ = component.props.streamId {
+            return streamedContent
+        }
+        return component.props.text ?? component.props.title ?? ""
     }
 
     private func fontForComponent() -> Font {

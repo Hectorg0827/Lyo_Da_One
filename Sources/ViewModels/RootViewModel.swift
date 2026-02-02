@@ -30,6 +30,13 @@ class RootViewModel: ObservableObject {
     init(authRepository: AuthRepository = DefaultAuthRepository()) {
         self.authRepository = authRepository
         loadColorScheme()
+
+        // Sync current user with UserSessionManager
+        $currentUser
+            .sink { user in
+                UserSessionManager.shared.setCurrentUser(user)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Authentication Check

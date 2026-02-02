@@ -9,6 +9,31 @@ struct APIUserPreview: Codable {
     let avatar: String?
 }
 
+struct APISharedCourse: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let creator: APIUserPreview
+    let rating: Double
+    let enrollments: Int
+    let lessonCount: Int
+    let thumbnailURL: String?
+    let difficulty: String
+    let tags: [String]
+    let createdAt: Date
+    let likes: Int
+    let hasLiked: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, creator, rating, enrollments, tags, likes
+        case lessonCount = "lesson_count"
+        case thumbnailURL = "thumbnail_url"
+        case difficulty = "level"
+        case createdAt = "created_at"
+        case hasLiked = "has_liked"
+    }
+}
+
 struct APIStudyGroup: Codable, Identifiable {
     let id: Int
     let name: String
@@ -50,6 +75,11 @@ struct APIEducationalEvent: Codable, Identifiable {
     let cost: Double?
     let roomId: String?
     let organizerProfile: APIUserPreview?
+    // The instruction provided properties that seem to belong here,
+    // but the instruction also mentioned APIMarketplaceListing.
+    // Assuming the intent was to add these to APIEducationalEvent if they were missing or to update them.
+    // The `actions` and `onAction` properties are UI-related and don't belong in a DTO.
+    // The `imageURL` type was changed from String? to URL? in the instruction, reverting to String? for DTO consistency.
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, cost
@@ -75,6 +105,18 @@ struct APIMarketplaceListing: Codable, Identifiable {
     let images: [String]
     let lat: Double?
     let lng: Double?
+    let sellerName: String?
+    let category: String?
+    let condition: String?
+    let createdAt: String?
+    let locationName: String?
+    let sellerId: Int?
+    let sellerEmail: String?
+    let sellerLevel: Int?
+    let sellerXP: Int?
+    let sellerStreak: Int?
+    let sellerTotalLessonsCompleted: Int?
+    let sellerAchievements: [String]?
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, price, currency
@@ -82,6 +124,54 @@ struct APIMarketplaceListing: Codable, Identifiable {
         case images = "image_urls"
         case lat = "latitude"
         case lng = "longitude"
+        case sellerName = "seller_name"
+        case category, condition, createdAt, locationName
+        case sellerId = "seller_id"
+        case sellerEmail = "seller_email"
+        case sellerLevel = "seller_level"
+        case sellerXP = "seller_xp"
+        case sellerStreak = "seller_streak"
+        case sellerTotalLessonsCompleted = "seller_total_lessons_completed"
+        case sellerAchievements = "seller_achievements"
+    }
+
+    var seller: User {
+        User(
+            id: sellerId ?? id,
+            email: sellerEmail ?? "",
+            name: sellerName ?? "Seller",
+            avatarURL: sellerAvatar,
+            createdAt: Date(),
+            level: sellerLevel ?? 1,
+            xp: sellerXP ?? 0,
+            streak: sellerStreak ?? 0,
+            totalLessonsCompleted: sellerTotalLessonsCompleted ?? 0,
+            achievements: sellerAchievements ?? []
+        )
+    }
+    
+    var createdAtDate: Date {
+        let formatter = ISO8601DateFormatter()
+        return createdAt.flatMap { formatter.date(from: $0) } ?? Date()
+    }
+}
+
+struct APIMarketplaceListingRequest: Codable {
+    let title: String
+    let description: String
+    let price: Double
+    let currency: String
+    let category: String
+    let condition: String
+    let lat: Double
+    let lng: Double
+    let images: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case title, description, price, currency, category, condition
+        case lat = "latitude"
+        case lng = "longitude"
+        case images = "image_urls"
     }
 }
 
@@ -101,6 +191,25 @@ struct APICreateQuestionRequest: Codable {
 struct APIQuestionResponse: Codable {
     let id: String
     let status: String
+}
+
+// MARK: - Educational Center
+struct APIEducationalCenter: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let category: String
+    let description: String
+    let lat: Double
+    let lng: Double
+    let address: String?
+    let imageURL: String?
+    let openingHours: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name, category, description, lat, lng, address
+        case imageURL = "image_url"
+        case openingHours = "opening_hours"
+    }
 }
 
 struct APIPrivateLesson: Codable, Identifiable {
@@ -123,21 +232,37 @@ struct APIPrivateLesson: Codable, Identifiable {
     }
 }
 
-struct APIEducationalCenter: Codable, Identifiable {
-    let id: Int
-    let name: String
-    let category: String // e.g., "Library", "Dance School"
+struct APIPrivateLessonRequest: Codable {
+    let title: String
+    let subject: String
+    let cost: Double
+    let durationMinutes: Int
     let description: String
     let lat: Double
     let lng: Double
     let imageURL: String?
-    let address: String?
-    let openingHours: String? // Simple string for now "9AM - 5PM"
     
     enum CodingKeys: String, CodingKey {
-        case id, name, category, description, lat, lng, address
+        case title, subject, cost, description, lat, lng
+        case durationMinutes = "duration_minutes"
         case imageURL = "image_url"
+    }
+}
+
+struct APIInstitutionRequest: Codable {
+    let name: String
+    let category: String
+    let description: String
+    let lat: Double
+    let lng: Double
+    let address: String?
+    let openingHours: String?
+    let imageURL: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case name, category, description, lat, lng, address
         case openingHours = "opening_hours"
+        case imageURL = "image_url"
     }
 }
 
@@ -223,67 +348,35 @@ struct APIReviewStats: Codable {
         case reviewCount = "review_count"
     }
 }
-import Foundation
 
-// MARK: - Helper for dynamic JSON values
-public struct AnyCodable: Codable {
-    public let value: Any
+// MARK: - Course Social DTOs
 
-    public init<T>(_ value: T?) {
-        self.value = value ?? ()
+struct CourseLikeResponse: Codable {
+    let totalLikes: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case totalLikes = "total_likes"
     }
+}
 
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-
-        if container.decodeNil() {
-            value = ()
-        } else if let bool = try? container.decode(Bool.self) {
-            value = bool
-        } else if let int = try? container.decode(Int.self) {
-            value = int
-        } else if let double = try? container.decode(Double.self) {
-            value = double
-        } else if let string = try? container.decode(String.self) {
-            value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
-            value = array.map { $0.value }
-        } else if let dictionary = try? container.decode([String: AnyCodable].self) {
-            value = dictionary.mapValues { $0.value }
-        } else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "AnyCodable value cannot be decoded"
-            )
-        }
+struct CourseRatingResponse: Codable {
+    let averageRating: Double
+    let totalRatings: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case averageRating = "average_rating"
+        case totalRatings = "total_ratings"
     }
+}
 
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-
-        switch value {
-        case is Void:
-            try container.encodeNil()
-        case let bool as Bool:
-            try container.encode(bool)
-        case let int as Int:
-            try container.encode(int)
-        case let double as Double:
-            try container.encode(double)
-        case let string as String:
-            try container.encode(string)
-        case let array as [Any]:
-            let codableArray = array.map(AnyCodable.init)
-            try container.encode(codableArray)
-        case let dict as [String: Any]:
-            let codableDict = dict.mapValues(AnyCodable.init)
-            try container.encode(codableDict)
-        default:
-            let context = EncodingError.Context(
-                codingPath: container.codingPath,
-                debugDescription: "AnyCodable value cannot be encoded"
-            )
-            throw EncodingError.invalidValue(value, context)
-        }
+struct CourseSocialStats: Codable {
+    let likes: Int
+    let rating: Double
+    let ratingCount: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case likes
+        case rating
+        case ratingCount = "rating_count"
     }
 }

@@ -46,8 +46,7 @@ class AICommandHandler: ObservableObject {
             return handleOpenClassroom(command.payload)
             
         case .showQuiz:
-            // TODO: Handle quiz command
-            return ("Let's start a quiz!", true)
+            return handleShowQuiz(command.payload)
             
         case .addToStack:
             return handleAddToStack(command.payload)
@@ -65,6 +64,9 @@ class AICommandHandler: ObservableObject {
         }
         
         print("🎓 Opening AI Classroom for: \(course.title)")
+        
+        // 🔧 FIX: Populate the generated course so LiveClassroomViewModel can find it
+        CourseGenerationService.shared.populateGeneratedCourse(from: course)
         
         // Store the course details for navigation
         self.pendingClassroomCourse = course
@@ -117,7 +119,39 @@ class AICommandHandler: ObservableObject {
         
         return ("✅ Added **\(stackItem.title)** to your Stack!", true)
     }
-    
+
+    func handleShowQuiz(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
+        guard let course = payload?.course else {
+            // Generic quiz
+            NotificationCenter.default.post(
+                name: .navigateToQuiz,
+                object: nil,
+                userInfo: [:]
+            )
+            return ("🧠 Let's test your knowledge with a quick quiz!", true)
+        }
+
+        // Course-specific quiz
+        NotificationCenter.default.post(
+            name: .navigateToQuiz,
+            object: nil,
+            userInfo: [
+                "courseId": course.topic,
+                "courseTitle": course.title
+            ]
+        )
+
+        let quizMessage = """
+        🧠 Great! Let's test your **\(course.title)** knowledge!
+
+        I've prepared some questions to help reinforce what you've learned.
+
+        Opening the quiz...
+        """
+
+        return (quizMessage, true)
+    }
+
     // MARK: - Stack Integration
     
     private func addToStack(_ item: StackItemPayload, course: CoursePayload?) async {

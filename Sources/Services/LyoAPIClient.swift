@@ -257,6 +257,10 @@ final class LyoAPIClient {
         return try await request(path: "/api/v1/community/questions")
     }
     
+    func discoverCommunityCourses(filters: String? = nil) async throws -> [APISharedCourse] {
+        return try await request(path: "/api/v1/community/courses/discover")
+    }
+    
     // MARK: - Gamification Endpoints (Real Backend)
     
     func fetchGamificationOverview() async throws -> GamificationOverview {
@@ -672,25 +676,25 @@ extension LyoAPIClient {
             subtitle: "Learn the fundamentals",
             blocks: [
                 LessonBlock(
-                    type: .explain,
+                    type: .paragraph,
                     title: "What is Programming?",
-                    body: "Programming is the process of creating instructions for computers to follow. Think of it like writing a recipe - you're telling the computer exactly what steps to take."
+                    content: "Programming is the process of creating instructions for computers to follow. Think of it like writing a recipe - you're telling the computer exactly what steps to take."
                 ),
                 LessonBlock(
                     type: .image,
                     title: "The Programming Workflow",
-                    body: "Here's how programmers typically work:",
-                    assetURL: nil
+                    content: "Here's how programmers typically work:",
+                    imageURL: nil
                 ),
                 LessonBlock(
-                    type: .example,
+                    type: .paragraph,
                     title: "Your First Code",
-                    body: "Let's look at a simple example:\n\n```python\nprint(\"Hello, World!\")\n```\n\nThis code tells the computer to display the text 'Hello, World!' on the screen."
+                    content: "Let's look at a simple example:\n\n```python\nprint(\"Hello, World!\")\n```\n\nThis code tells the computer to display the text 'Hello, World!' on the screen."
                 ),
                 LessonBlock(
                     type: .quizMcq,
                     title: "Quick Check",
-                    body: "What does the print() function do?",
+                    question: "What does the print() function do?",
                     options: [
                         "Sends a document to a printer",
                         "Displays text on the screen",
@@ -703,7 +707,7 @@ extension LyoAPIClient {
                 LessonBlock(
                     type: .summary,
                     title: "Key Takeaways",
-                    body: "In this lesson, you learned:\n\n• Programming is writing instructions for computers\n• Code follows a specific syntax (rules)\n• The print() function displays output\n\nGreat job completing your first lesson!"
+                    content: "In this lesson, you learned:\n\n• Programming is writing instructions for computers\n• Code follows a specific syntax (rules)\n• The print() function displays output\n\nGreat job completing your first lesson!"
                 )
             ],
             estimatedDuration: 15
@@ -868,24 +872,23 @@ extension LyoAPIClient {
     
     // Posts
     func createPost(_ request: CreatePostRequest) async throws -> Post {
-        // TODO: Implement when backend endpoint is available
-        throw APIError.serverError(501, "Not implemented")
+        let body = try jsonEncoder.encode(request)
+        return try await self.request(method: "POST", path: "/api/v1/posts", body: body)
     }
     
     func fetchPostsFeed(limit: Int = 20, offset: Int = 0) async throws -> PostsResponse {
-        // TODO: Implement when backend endpoint is available
-        return PostsResponse(posts: [], total: 0, hasMore: false)
+        return try await self.request(path: "/api/v1/posts/feed?limit=\(limit)&offset=\(offset)")
     }
     
     func deletePost(postId: String) async throws {
-        // TODO: Implement when backend endpoint is available
+        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(postId)")
     }
     
     func likePost(postId: String) async throws {
-        // TODO: Implement when backend endpoint is available
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/posts/\(postId)/like")
     }
     
     func unlikePost(postId: String) async throws {
-        // TODO: Implement when backend endpoint is available
+        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(postId)/like")
     }
 }

@@ -68,6 +68,10 @@ class LyoRepository: ObservableObject {
         return response.user
     }
     
+    func deleteAccount() async throws {
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Auth.deleteAccount)
+    }
+    
     // MARK: - Leo AI Chat
     
     func sendLyoMessage(message: String, attachmentIds: [String]? = nil, context: ChatContext? = nil) async throws -> LyoChatResponse {
@@ -251,6 +255,16 @@ class LyoRepository: ObservableObject {
         return try await get(endpoint: "/gamification/leaderboards/\(type)/my-rank")
     }
     
+    // MARK: - XP & Rewards
+    
+    func awardXP(amount: Int, category: String = "learning") async throws -> XPAwardResponse {
+        return try await post(endpoint: "/gamification/xp/award", body: ["amount": amount, "category": category])
+    }
+    
+    func awardContributorXP(courseId: String, action: String) async throws -> XPAwardResponse {
+        return try await post(endpoint: "/gamification/xp/contributor", body: ["course_id": courseId, "action": action])
+    }
+    
     // MARK: - Achievements
     
     func getAchievements() async throws -> [Achievement] {
@@ -326,11 +340,9 @@ class LyoRepository: ObservableObject {
     
     // MARK: - Course Management
     
-    func saveCourse(title: String, description: String, modules: [String]) async throws {
-        // Mock implementation until backend endpoint is ready
-        // In a real app, this would POST to /learning/courses
-        print("💾 Saving course to repository: \(title)")
-        try await Task.sleep(nanoseconds: 500_000_000) // Simulate network delay
+    func saveCourse(data: CourseCreationData) async throws {
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Learning.createCourse(data: data))
+        print("✅ Course saved to backend: \(data.title)")
     }
 
 
@@ -446,6 +458,50 @@ class LyoRepository: ObservableObject {
     
     // performRequest removed as we now use NetworkClient directly
 
+    // MARK: - Home Dashboard Support
+    
+    func getDailyChallenge() async throws -> Challenge? {
+        let response = try await getChallenges()
+        return response.dailyChallenges.first
+    }
+    
+    func getActiveCourses() async throws -> [Course] {
+        // For now, return all discovered courses. In the future, filter by enrollment status.
+        return try await getDiscoverCourses()
+    }
+    
+    func getRecommendations() async throws -> [Any] {
+        // Aggregate content from ContentRepository (simulating it via DefaultContentRepository logic for now)
+        // Since we don't have a backend endpoint for mixed recommendations yet, we'll return a mix
+        // This part uses the local DefaultContentRepository logic if available, or just mocks for now if strict
+        // But to be production ready, we should try to fetch real content.
+        
+        // Let's use getDiscoverCourses for now as recommendations
+        let courses = try await getDiscoverCourses()
+        return courses
+    }
+    
+    // MARK: - Notifications
+    
+    // MARK: - Notifications
+    
+    func getNotifications() async throws -> [APIAppNotification] {
+        let response: NotificationListResponse = try await NetworkClient.shared.request(Endpoints.Notifications.getAll)
+        return response.notifications
+    }
+    
+    func markNotificationAsRead(_ id: Int) async throws {
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Notifications.markRead(notificationId: id))
+    }
+
+    func markRead(notificationId: Int) async throws {
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Notifications.markRead(notificationId: notificationId))
+    }
+
+    func markAllNotificationsAsRead() async throws {
+        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Notifications.markAllRead())
+    }
+
 }
 
 // MARK: - Supporting Types
@@ -459,7 +515,10 @@ struct LoginResponse: Codable {
     let expiresIn: Int?
     let isNewUser: Bool?
     let tokenType: String?
-    
+
+    enum CodingKeys: String, CodingKey {
+        case user, accessToken, refreshToken, tenantId, expiresIn, isNewUser, tokenType
+    }
 }
 
 enum NetworkError: Error {
@@ -718,40 +777,5 @@ struct AnyEncodable: Encodable {
 
 // MARK: - Course Social Response Models
 
-struct CourseLikeResponse: Codable {
-    let totalLikes: Int
-    let userHasLiked: Bool
-    
-    enum CodingKeys: String, CodingKey {
-        case totalLikes = "total_likes"
-        case userHasLiked = "user_has_liked"
-    }
-}
-
-struct CourseRatingResponse: Codable {
-    let averageRating: Double
-    let totalRatings: Int
-    let userRating: Int?
-    
-    enum CodingKeys: String, CodingKey {
-        case averageRating = "average_rating"
-        case totalRatings = "total_ratings"
-        case userRating = "user_rating"
-    }
-}
-
-struct CourseSocialStats: Codable {
-    let likes: Int
-    let rating: Double
-    let ratingCount: Int
-    let userHasLiked: Bool
-    let userRating: Int?
-    
-    enum CodingKeys: String, CodingKey {
-        case likes
-        case rating
-        case ratingCount = "rating_count"
-        case userHasLiked = "user_has_liked"
-        case userRating = "user_rating"
-    }
-}
+// MARK: - Course Social Response Models
+// Removed duplicates - defined in CommunityDTOs.swift

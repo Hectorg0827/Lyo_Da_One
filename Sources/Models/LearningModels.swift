@@ -28,17 +28,17 @@ struct Course: Identifiable, Codable {
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, category, tags
-        case shortDescription = "short_description"
-        case instructorId = "instructor_id"
-        case difficultyLevel = "difficulty_level"
-        case thumbnailURL = "thumbnail_url"
-        case isPublished = "is_published"
-        case isFeatured = "is_featured"
-        case lessonCount = "lesson_count"
-        case enrollmentCount = "enrollment_count"
-        case estimatedDurationHours = "estimated_duration_hours"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
+        case shortDescription
+        case instructorId
+        case difficultyLevel
+        case thumbnailURL
+        case isPublished
+        case isFeatured
+        case lessonCount
+        case enrollmentCount
+        case estimatedDurationHours
+        case createdAt
+        case updatedAt
     }
     
     init(id: String, title: String, description: String, shortDescription: String? = nil, instructorId: Int? = nil, difficultyLevel: String? = nil, category: String? = nil, tags: [String]? = nil, thumbnailURL: String? = nil, isPublished: Bool? = nil, isFeatured: Bool? = nil, lessonCount: Int? = nil, enrollmentCount: Int? = nil, estimatedDurationHours: Int? = nil, createdAt: Date? = nil, updatedAt: Date? = nil) {
@@ -234,6 +234,18 @@ struct CourseProgress: Codable {
         case currentLessonId = "current_lesson_id"
         case lastAccessedAt = "last_accessed_at"
         case estimatedTimeRemaining = "estimated_time_remaining"
+    }
+}
+
+extension Course {
+    var progressPercentage: Double {
+        // Basic implementation for HomeView compatibility
+        return 0.0
+    }
+    
+    var currentLesson: Lesson? {
+        // References Lesson from RepositoryProtocols.swift
+        return nil
     }
 }
 

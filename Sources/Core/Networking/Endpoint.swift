@@ -80,8 +80,6 @@ enum CachePolicy {
 
 enum Endpoints {
 
-
-
     // MARK: - Authentication
     enum Auth: Endpoint {
         case login(email: String, password: String)
@@ -91,6 +89,7 @@ enum Endpoints {
         case profile
         case updateProfile(name: String?, avatar: String?)
         case firebase(idToken: String)
+        case deleteAccount
 
         var path: String {
             switch self {
@@ -101,6 +100,7 @@ enum Endpoints {
             case .profile: return "/auth/me"
             case .updateProfile: return "/auth/profile"
             case .firebase: return "/auth/firebase"
+            case .deleteAccount: return "/auth/account"
             }
         }
 
@@ -109,6 +109,7 @@ enum Endpoints {
             case .login, .register, .refresh, .logout, .firebase: return .post
             case .profile: return .get
             case .updateProfile: return .put
+            case .deleteAccount: return .delete
             }
         }
 
@@ -167,7 +168,7 @@ enum Endpoints {
             switch self {
             case .login, .register, .refresh, .firebase:
                 return false // These endpoints don't require auth token
-            case .logout, .profile, .updateProfile:
+            case .logout, .profile, .updateProfile, .deleteAccount:
                 return true // These require an existing session
             }
         }
@@ -535,6 +536,7 @@ enum Endpoints {
         case getCourse(courseId: String)
         case getLesson(lessonId: String)
         case completeLesson(lessonId: String, score: Int?)
+        case createCourse(data: CourseCreationData) // NEW
 
         var path: String {
             switch self {
@@ -546,6 +548,7 @@ enum Endpoints {
             case .getCourse(let id): return "/api/v1/learning/courses/\(id)"
             case .getLesson(let id): return "/api/v1/learning/lessons/\(id)"
             case .completeLesson(_, _): return "/api/v1/analytics/event"
+            case .createCourse: return "/api/v1/learning/courses"
             }
         }
 
@@ -553,7 +556,7 @@ enum Endpoints {
             switch self {
             case .getCourses, .getCourse, .getSession, .getLesson: return .get
             case .saveCheckpoint: return .put
-            default: return .post
+            case .createSession, .interruptSession, .completeLesson, .createCourse: return .post
             }
         }
 
@@ -579,6 +582,8 @@ enum Endpoints {
                     return ["score": score]
                 }
                 return nil
+            case .createCourse(let data): // NEW
+                return data
 
             default:
                 return nil
@@ -935,7 +940,7 @@ enum Endpoints {
         // Marketplace
         case getListings(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
         case getListing(id: String)
-        case createListing(listing: MarketplaceListing)
+        case createListing(listing: APIMarketplaceListingRequest)
         case updateListing(listingId: String, status: MarketplaceListing.ListingStatus)
         case deleteListing(listingId: String)
 
@@ -955,6 +960,9 @@ enum Endpoints {
         case createBooking(request: APIBookingRequest)
         case getUserBookings
         case cancelBooking(bookingId: String)
+        case createPrivateLesson(lesson: APIPrivateLessonRequest)
+        case createInstitution(institution: APIInstitutionRequest)
+        case discoverCourses(filters: String?)
         
         // Reviews (NEW)
         case getReviews(targetType: String, targetId: String)
@@ -1002,6 +1010,9 @@ enum Endpoints {
             case .createBooking: return "/api/v1/community/bookings"
             case .getUserBookings: return "/api/v1/community/bookings/my"
             case .cancelBooking(let id): return "/api/v1/community/bookings/\(id)"
+            case .createPrivateLesson: return "/api/v1/community/lessons"
+            case .createInstitution: return "/api/v1/community/institutions"
+            case .discoverCourses: return "/api/v1/community/courses/discover"
             
             // Reviews
             case .getReviews(let type, let id): return "/api/v1/community/reviews/\(type)/\(id)"
@@ -1017,13 +1028,15 @@ enum Endpoints {
                   .getBeacons,
                   .getPrivateLesson, .getAvailableSlots, .getUserBookings,
                   .getReviews, .getReviewStats,
-                  .getUserGroups, .getUserEvents:
+                  .getUserGroups, .getUserEvents,
+                  .discoverCourses:
                  return .get
 
             case .createStudyGroup, .joinStudyGroup,
                  .createEvent, .registerForEvent,
                  .createListing, .createQuestion, .answerQuestion,
-                 .createBooking, .submitReview:
+                 .createBooking, .submitReview,
+                 .createPrivateLesson, .createInstitution:
                 return .post
             
             case .leaveStudyGroup, .unregisterFromEvent, .cancelBooking:
@@ -1062,6 +1075,15 @@ enum Endpoints {
                 
             case .submitReview(let request):
                 return request
+            
+            case .createPrivateLesson(let lesson):
+                return lesson
+                
+            case .createInstitution(let institution):
+                return institution
+                
+            case .discoverCourses(let filters):
+                return filters != nil ? ["filters": filters!] : nil
 
             default:
                 return nil
@@ -1301,14 +1323,16 @@ enum Endpoints {
 
     // MARK: - Notifications
     enum Notifications: Endpoint {
+        case getAll
         case getNotifications(unreadOnly: Bool, category: String?, limit: Int, offset: Int)
         case getUnreadCount
         case markRead(notificationId: Int)
-        case markAllRead(category: String?)
+        case markAllRead(category: String? = nil)
         case deleteNotification(notificationId: Int, archive: Bool)
 
         var path: String {
             switch self {
+            case .getAll: return "/notifications"
             case .getNotifications: return "/notifications"
             case .getUnreadCount: return "/notifications/unread-count"
             case .markRead(let id): return "/notifications/\(id)/read"
@@ -1319,7 +1343,7 @@ enum Endpoints {
 
         var method: HTTPMethod {
             switch self {
-            case .getNotifications, .getUnreadCount: return .get
+            case .getAll, .getNotifications, .getUnreadCount: return .get
             case .markRead, .markAllRead: return .post
             case .deleteNotification: return .delete
             }
@@ -1327,6 +1351,11 @@ enum Endpoints {
 
         var queryItems: [URLQueryItem]? {
             switch self {
+            case .getAll:
+                return [
+                    URLQueryItem(name: "limit", value: "50"),
+                    URLQueryItem(name: "offset", value: "0")
+                ]
             case .getNotifications(let unreadOnly, let category, let limit, let offset):
                 var items = [
                     URLQueryItem(name: "unread_only", value: "\(unreadOnly)"),

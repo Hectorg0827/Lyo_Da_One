@@ -30,6 +30,10 @@ struct StudyGroup: Identifiable, Codable {
     }
 
     var distance: Double? // Set by location service
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, organizer, location, schedule, maxAttendees, currentAttendees, skillLevel, relatedCourse, cost, tags, createdAt, isVerified
+    }
 }
 
 // MARK: - Educational Event
@@ -67,6 +71,10 @@ struct EducationalEvent: Identifiable, Codable {
     }
 
     var distance: Double? // Set by location service
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, organizer, location, dateTime, duration, capacity, registeredUsers, cost, skillLevel, category, tags, coverImageURL, isVerified
+    }
 }
 
 // MARK: - Marketplace Listing
@@ -82,6 +90,7 @@ struct MarketplaceListing: Identifiable, Codable {
     let location: CLLocationCoordinate2D
     let tags: [String]
     let createdAt: Date
+    let currencyCode: String?
     let status: ListingStatus
 
     enum ItemCategory: String, Codable {
@@ -144,6 +153,13 @@ struct MarketplaceListing: Identifiable, Codable {
                 try container.encode("free", forKey: .type)
             }
         }
+
+        var priceValue: Double? {
+            if case .sell(let price) = self {
+                return price
+            }
+            return nil
+        }
     }
 
     enum ListingStatus: String, Codable {
@@ -163,6 +179,11 @@ struct MarketplaceListing: Identifiable, Codable {
         case .free:
             return "Free"
         }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, seller, title, description, category, condition, photos, listingType, location, tags, createdAt, status
+        case currencyCode = "currency_code"
     }
 }
 

@@ -375,8 +375,3 @@ struct SplashMascotParticles: View {
         particles.removeAll { $0.opacity <= 0 }
     }
 }
-import Foundation
-
-extension Notification.Name {
-    static let openClassroom = Notification.Name("openClassroom")
-}

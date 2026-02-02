@@ -87,7 +87,7 @@ class BookingViewModel: ObservableObject {
         
         Task { @MainActor in
             do {
-                let request = APIBookingRequest(
+                let _ = APIBookingRequest(
                     lessonId: lessonId,
                     slotId: slot.id,
                     notes: nil
@@ -216,7 +216,7 @@ struct BookingCalendarView: View {
             )
             .datePickerStyle(.graphical)
             .tint(.purple)
-            .onChange(of: viewModel.selectedDate) { _ in
+            .onChange(of: viewModel.selectedDate) {
                 selectedSlot = nil // Deselect slot on date change
             }
         }

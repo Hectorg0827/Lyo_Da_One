@@ -451,11 +451,23 @@ class CreateViewModel: ObservableObject {
         progress = 0.9
         
         // Save to library (via backend)
-        try await repository.saveCourse(
+        let persistenceData = CourseCreationData(
+            id: generatedCourse.courseId,
             title: generatedCourse.title,
-            description: generatedCourse.description,
-            modules: generatedCourse.modules.map { $0.id }
+            topic: courseTopic,
+            level: courseLevel,
+            modules: generatedCourse.modules.map { mod in
+                CourseModuleData(
+                    id: mod.id,
+                    title: mod.title,
+                    description: mod.description,
+                    lessons: mod.lessons.map { les in
+                        CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
+                    }
+                )
+            }
         )
+        try await repository.saveCourse(data: persistenceData)
         
         progress = 1.0
         

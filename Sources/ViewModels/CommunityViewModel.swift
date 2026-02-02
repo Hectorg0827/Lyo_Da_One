@@ -21,6 +21,7 @@ struct CommunityItem: Identifiable, Equatable {
     var listingData: APIMarketplaceListing?
     var lessonData: APIPrivateLesson? // NEW
     var centerData: APIEducationalCenter? // NEW
+    var courseData: APISharedCourse? // NEW
     
     static func == (lhs: CommunityItem, rhs: CommunityItem) -> Bool {
         return lhs.id == rhs.id
@@ -31,11 +32,16 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
     case all = "All"
     case event = "Events"
     case group = "Groups"
-    case privateLesson = "Lessons" // NEW
-    case educationalCenter = "Centers" // NEW
+    case privateLesson = "Lessons" 
+    case educationalCenter = "Centers"
+    case course = "Courses" // NEW
     case question = "Questions"
     case spot = "Spots"
     case marketplace = "Market"
+    case school = "Schools"
+    case library = "Libraries"
+    case gym = "Health & Fitness"
+    case placeOfWorship = "Places of Worship"
     
     var id: String { rawValue }
     
@@ -44,11 +50,16 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
         case .all: return "square.grid.2x2.fill"
         case .event: return "calendar"
         case .group: return "person.3.fill"
-        case .privateLesson: return "graduationcap.fill"
+        case .course: return "graduationcap.fill" // Icon for Courses
+        case .privateLesson: return "person.badge.key.fill" // Re-using for Lessons
         case .educationalCenter: return "building.columns.fill"
         case .question: return "bubble.left.and.bubble.right.fill"
         case .spot: return "mappin.and.ellipse"
         case .marketplace: return "tag.fill"
+        case .school: return "book.fill"
+        case .library: return "books.vertical.fill"
+        case .gym: return "figure.run"
+        case .placeOfWorship: return "hands.sparkles.fill"
         }
     }
     
@@ -59,9 +70,14 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
         case .group: return .blue
         case .privateLesson: return .indigo
         case .educationalCenter: return .teal
+        case .course: return .blue // Color for Courses
         case .question: return .purple
         case .spot: return .green
         case .marketplace: return .pink
+        case .school: return .blue
+        case .library: return .brown
+        case .gym: return .green
+        case .placeOfWorship: return .yellow
         }
     }
 }
@@ -83,7 +99,7 @@ struct CommunityBeacon: Identifiable {
 // MARK: - ViewModel
 
 @MainActor
-class CommunityViewModel: ObservableObject {
+class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
     // UI State
     @Published var searchText: String = "" {
         didSet { updateBeacons() }
@@ -95,6 +111,12 @@ class CommunityViewModel: ObservableObject {
     @Published var viewMode: ViewMode = .map
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var showNearbyPlaces: Bool = false {
+        didSet {
+            // Re-filter or reload data when toggle changes
+            loadData()
+        }
+    }
     
     enum ViewMode {
         case map
@@ -128,17 +150,54 @@ class CommunityViewModel: ObservableObject {
     // Repositories
     private let network = NetworkClient.shared
     
-    init() {
+    override init() {
+        super.init()
+        locationManager.delegate = self
         requestLocation()
     }
     
     func requestLocation() {
         locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+        
         if let loc = locationManager.location {
             region.center = loc.coordinate
             mapCameraPosition = .region(region)
             loadData()
+            fetchRealWorldCenters()
         }
+    }
+    
+    // Track map region changes to refresh real-world data
+    func handleMapRegionChange(_ newRegion: MKCoordinateRegion) {
+        // Only refresh if the change is significant (e.g. moved > 1km)
+        let latDiff = abs(newRegion.center.latitude - region.center.latitude)
+        let lonDiff = abs(newRegion.center.longitude - region.center.longitude)
+        
+        if latDiff > 0.01 || lonDiff > 0.01 {
+            self.region = newRegion
+            fetchRealWorldCenters()
+        }
+    }
+    
+    func centerOnUserLocation() {
+        if let loc = locationManager.location {
+            withAnimation(.spring()) {
+                region.center = loc.coordinate
+                mapCameraPosition = .region(MKCoordinateRegion(center: loc.coordinate, span: region.span))
+            }
+        }
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // Location updates handled via manager.location access in main actor calls usually,
+        // but we can trigger a refresh if needed.
+    }
+    
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("❌ Location Manager Error: \(error.localizedDescription)")
     }
     
     // MARK: - Operations
@@ -149,17 +208,17 @@ class CommunityViewModel: ObservableObject {
         
         Task {
             do {
-                // Fetch data in parallel
+                // Parallel fetch from all community endpoints
                 async let groupsTask = fetchStudyGroups()
                 async let eventsTask = fetchEvents()
                 async let listingsTask = fetchListings()
-                // Mocking new types for now as endpoints might not be ready
-                // async let lessonsTask = fetchPrivateLessons()
-                // async let centersTask = fetchEducationalCenters()
+                async let lessonsTask = fetchPrivateLessons()
+                async let centersTask = fetchEducationalCenters()
+                async let coursesTask = fetchSharedCourses() // NEW
                 
-                let (groups, events, listings) = try await (groupsTask, eventsTask, listingsTask)
+                let (groups, events, listings, lessons, centers, courses) = try await (groupsTask, eventsTask, listingsTask, lessonsTask, centersTask, coursesTask)
                 
-                // Convert to unified items
+                // Clear and re-populate with Backend Data only
                 var newItems: [CommunityItem] = []
                 
                 // Process Groups
@@ -202,48 +261,65 @@ class CommunityViewModel: ObservableObject {
                         coordinate: CLLocationCoordinate2D(latitude: listing.lat ?? 0, longitude: listing.lng ?? 0),
                         imageURL: listing.images.first,
                         userAvatar: listing.sellerAvatar,
-                        timestamp: Date(), // Listings timestamp?
+                        timestamp: Date(), 
                         listingData: listing
                     )
                 })
                 
-                // MOCK Private Lessons
-                let mockLessons = [
+                // Process Private Lessons
+                newItems.append(contentsOf: lessons.map { lesson in
                     CommunityItem(
-                        id: "lesson-1",
+                        id: "lesson-\(lesson.id)",
                         type: .privateLesson,
-                        title: "Piano Mastery",
-                        subtitle: "with Hector • $50/hr",
-                        coordinate: CLLocationCoordinate2D(latitude: region.center.latitude + 0.002, longitude: region.center.longitude + 0.002),
-                        imageURL: nil,
-                        userAvatar: nil,
+                        title: lesson.title,
+                        subtitle: "with \(lesson.instructor.name) • $\(lesson.cost)/hr",
+                        coordinate: CLLocationCoordinate2D(latitude: lesson.lat ?? 0, longitude: lesson.lng ?? 0),
+                        imageURL: lesson.imageURL,
+                        userAvatar: lesson.instructor.avatar,
                         timestamp: Date(),
-                        lessonData: APIPrivateLesson(id: 1, title: "Piano Mastery", subject: "Music", instructor: APIUserPreview(id: 99, name: "Hector", avatar: nil), cost: 50, durationMinutes: 60, description: "Advanced piano techniques", lat: region.center.latitude + 0.002, lng: region.center.longitude + 0.002, imageURL: nil)
+                        lessonData: lesson
                     )
-                ]
-                newItems.append(contentsOf: mockLessons)
+                })
                 
-                // MOCK Educational Centers
-                let mockCenters = [
+                // Process Educational Centers
+                newItems.append(contentsOf: centers.map { center in
                     CommunityItem(
-                        id: "center-1",
+                        id: "center-\(center.id)",
                         type: .educationalCenter,
-                        title: "City Library",
-                        subtitle: "Library • Open 9AM-8PM",
-                        coordinate: CLLocationCoordinate2D(latitude: region.center.latitude - 0.002, longitude: region.center.longitude - 0.002),
-                        imageURL: nil,
+                        title: center.name,
+                        subtitle: "\(center.category) • \(center.openingHours ?? "")",
+                        coordinate: CLLocationCoordinate2D(latitude: center.lat, longitude: center.lng),
+                        imageURL: center.imageURL,
                         userAvatar: nil,
                         timestamp: Date(),
-                        centerData: APIEducationalCenter(id: 1, name: "City Library", category: "Library", description: "Main public library", lat: region.center.latitude - 0.002, lng: region.center.longitude - 0.002, imageURL: nil, address: "123 Main St", openingHours: "9AM-8PM")
+                        centerData: center
                     )
-                ]
-                newItems.append(contentsOf: mockCenters)
+                })
+                
+                // Process Shared Courses (NEW)
+                newItems.append(contentsOf: courses.map { course in
+                    CommunityItem(
+                        id: "course-\(course.id)",
+                        type: .course,
+                        title: course.title,
+                        subtitle: "by \(course.creator.name) • \(course.difficulty)",
+                        coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0), // Courses often global
+                        imageURL: course.thumbnailURL,
+                        userAvatar: course.creator.avatar,
+                        timestamp: course.createdAt,
+                        courseData: course
+                    )
+                })
                 
                 // Update Main Thread
-                let finalItems = newItems
                 await MainActor.run {
-                    self.items = finalItems
-                    self.updateBeacons()
+                    self.items = newItems
+                    
+                    // Only supplement with real-world places if discovery is toggled ON
+                    if showNearbyPlaces {
+                        fetchRealWorldCenters()
+                    }
+                    
                     self.isLoading = false
                 }
                 
@@ -255,13 +331,13 @@ class CommunityViewModel: ObservableObject {
         }
     }
     
-    func createPrivateLesson(_ lesson: APIPrivateLesson) async throws {
-        // Mock success
+    func createPrivateLesson(_ lesson: APIPrivateLessonRequest) async throws {
+        let _: APIPrivateLesson = try await network.request(Endpoints.Community.createPrivateLesson(lesson: lesson))
         loadData()
     }
     
-    func createEducationalCenter(_ center: APIEducationalCenter) async throws {
-        // Mock success
+    func createEducationalCenter(_ center: APIInstitutionRequest) async throws {
+        let _: APIEducationalCenter = try await network.request(Endpoints.Community.createInstitution(institution: center))
         loadData()
     }
     
@@ -276,6 +352,8 @@ class CommunityViewModel: ObservableObject {
                 (item.subtitle?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
+        
+        self.filteredItems = filtered
         
         self.beacons = filtered.compactMap { item in
             // Only include items with valid coordinates
@@ -307,6 +385,80 @@ class CommunityViewModel: ObservableObject {
         return try await network.request(Endpoints.Community.getListings(filters: nil, location: region.center))
     }
     
+    private func fetchPrivateLessons() async throws -> [APIPrivateLesson] {
+        // TODO: Wire to backend lessons endpoint when available
+        return []
+    }
+    
+    private func fetchEducationalCenters() async throws -> [APIEducationalCenter] {
+        return try await network.request(Endpoints.Community.getInstitutions(filters: nil, location: region.center))
+    }
+    
+    private func fetchSharedCourses() async throws -> [APISharedCourse] {
+        return try await network.request(Endpoints.Community.discoverCourses(filters: nil))
+    }
+    
+    private func fetchRealWorldCenters() {
+        let categories: [(String, CommunityItemType)] = [
+            ("School", .school),
+            ("University", .school),
+            ("College", .school),
+            ("Library", .library),
+            ("Gym", .gym),
+            ("Fitness", .gym),
+            ("Church", .placeOfWorship),
+            ("Mosque", .placeOfWorship),
+            ("Synagogue", .placeOfWorship),
+            ("Temple", .placeOfWorship),
+            ("Community Center", .educationalCenter)
+        ]
+        
+        for (query, type) in categories {
+            performLocalSearch(query: query, type: type)
+        }
+    }
+    
+    private func performLocalSearch(query: String, type: CommunityItemType) {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = region
+        
+        let search = MKLocalSearch(request: request)
+        search.start { [weak self] response, error in
+            guard let self = self, let response = response, error == nil else { return }
+            
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                let newSearchItems = response.mapItems.map { mapItem in
+                    CommunityItem(
+                        id: "poi-\(mapItem.name ?? UUID().uuidString)-\(mapItem.placemark.coordinate.latitude)",
+                        type: type,
+                        title: mapItem.name ?? query,
+                        subtitle: mapItem.phoneNumber,
+                        coordinate: mapItem.placemark.coordinate,
+                        imageURL: nil,
+                        userAvatar: nil,
+                        timestamp: Date()
+                    )
+                }
+                
+                // Merge with existing items, avoiding duplicates
+                var hasNewItems = false
+                for item in newSearchItems {
+                    if !self.items.contains(where: { $0.id == item.id }) {
+                        self.items.append(item)
+                        hasNewItems = true
+                    }
+                }
+                
+                if hasNewItems {
+                    self.updateBeacons()
+                }
+            }
+        }
+    }
+    
     // MARK: - Filter
     
     func applyFilter(_ filter: CommunityFilter) {
@@ -326,6 +478,39 @@ class CommunityViewModel: ObservableObject {
     func createStudyGroup(_ group: StudyGroup) async throws {
         let _: StudyGroup = try await network.request(Endpoints.Community.createStudyGroup(group: group))
         loadData()
+    }
+    
+    func createListing(title: String, description: String, price: Double, category: String, condition: String, imageUrls: [String] = []) async throws {
+        let request = APIMarketplaceListingRequest(
+            title: title,
+            description: description,
+            price: price,
+            currency: "USD",
+            category: category,
+            condition: condition,
+            lat: region.center.latitude,
+            lng: region.center.longitude,
+            images: imageUrls
+        )
+        let _: APIMarketplaceListing = try await network.request(Endpoints.Community.createListing(listing: request))
+        loadData()
+    }
+    
+    func uploadImages(_ imagesData: [Data]) async throws -> [String] {
+        var urls: [String] = []
+        let storage = StorageService()
+        
+        for data in imagesData {
+            do {
+                let response = try await storage.uploadAvatar(imageData: data) // Reusing uploadAvatar logic for generic upload for now
+                if response.success {
+                    urls.append(response.publicUrl)
+                }
+            } catch {
+                print("❌ Image upload failed: \(error.localizedDescription)")
+            }
+        }
+        return urls
     }
     
     func createQuestion(content: String, tags: [String], isAnonymous: Bool) async throws {

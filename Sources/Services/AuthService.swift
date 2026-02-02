@@ -155,6 +155,20 @@ class AuthService: NSObject, ObservableObject {
         }
     }
     
+    func deleteAccount() async throws {
+        if isDemoMode {
+            // In demo mode, just logout
+            logout()
+            return
+        }
+        
+        // Call API
+        try await repository.deleteAccount()
+        
+        // Clear local data
+        logout()
+    }
+    
     // MARK: - Apple Sign In
     
     func handleAppleSignIn(result: Result<ASAuthorization, Error>) {

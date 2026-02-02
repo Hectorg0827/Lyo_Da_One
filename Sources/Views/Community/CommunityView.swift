@@ -5,6 +5,7 @@ struct CommunityView: View {
     @StateObject private var viewModel = CommunityViewModel()
     @State private var showCreateSheet = false
     @State private var showingActivities = false
+    @State private var showingLeaderboard = false // NEW
     
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -21,34 +22,44 @@ struct CommunityView: View {
             
             // TOP BAR OVERLAY
             VStack(spacing: 0) {
-                CommunityTopBar(viewModel: viewModel) {
+                CommunityTopBar(viewModel: viewModel, onShowActivities: {
                     showingActivities = true
-                }
+                }, onShowLeaderboard: {
+                    showingLeaderboard = true
+                })
                     .background(.ultraThinMaterial)
                     .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 5)
+                    .padding(.trailing, 60) // Add padding to avoid overlap with AppDrawerButton at top right
+                
                 Spacer()
+                
+                // CURRENT LOCATION BUTTON
+                if viewModel.viewMode == .map {
+                    HStack {
+                        Spacer()
+                        Button(action: { viewModel.centerOnUserLocation() }) {
+                            Image(systemName: "location.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                                .frame(width: 44, height: 44)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.1), radius: 4)
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
+                    }
+                }
             }
-            
-            // FAB (FLOATING ACTION BUTTON)
-            Button(action: { showCreateSheet = true }) {
-                Image(systemName: "plus")
-                    .font(.title2.weight(.bold))
-                    .foregroundColor(.white)
-                    .frame(width: 56, height: 56)
-                    .background(
-                        Circle()
-                            .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    )
-                    .shadow(color: .black.opacity(0.3), radius: 4, y: 4)
-            }
-            .padding(.trailing, 20)
-            .padding(.bottom, 30) // Lift above tab bar slightly if needed
         }
         .sheet(isPresented: $showCreateSheet) {
             CreateCommunityItemSheet(viewModel: viewModel)
         }
         .sheet(isPresented: $showingActivities) {
             MyActivitiesView()
+        }
+        .sheet(isPresented: $showingLeaderboard) {
+            GlobalLeaderboardView()
         }
         .onAppear {
             viewModel.loadData()
@@ -61,6 +72,7 @@ struct CommunityView: View {
 struct CommunityTopBar: View {
     @ObservedObject var viewModel: CommunityViewModel
     var onShowActivities: () -> Void
+    var onShowLeaderboard: () -> Void // NEW
     @FocusState private var isSearchFocused: Bool
     
     var body: some View {
@@ -93,6 +105,30 @@ struct CommunityTopBar: View {
                     Image(systemName: "calendar.badge.clock")
                         .font(.title3)
                         .foregroundColor(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color(.systemGray6))
+                        .clipShape(Circle())
+                }
+                
+                // NEW: Leaderboard Button
+                Button(action: onShowLeaderboard) {
+                    Image(systemName: "crown.fill")
+                        .font(.title3)
+                        .foregroundColor(.orange)
+                        .frame(width: 36, height: 36)
+                        .background(Color(.systemGray6))
+                        .clipShape(Circle())
+                }
+                
+                // NEW: Toggle for real-world discovery (nearby places)
+                Button(action: { 
+                    withAnimation {
+                        viewModel.showNearbyPlaces.toggle()
+                    }
+                }) {
+                    Image(systemName: viewModel.showNearbyPlaces ? "mappin.circle.fill" : "mappin.circle")
+                        .font(.title3)
+                        .foregroundColor(viewModel.showNearbyPlaces ? .blue : .primary)
                         .frame(width: 36, height: 36)
                         .background(Color(.systemGray6))
                         .clipShape(Circle())
@@ -185,6 +221,9 @@ struct CommunityGoogleStyleMap: View {
             }
         }
         .ignoresSafeArea(edges: [.top, .horizontal]) // Underlay the top bar
+        .onMapCameraChange { context in
+             viewModel.handleMapRegionChange(context.region)
+        }
         // .padding(.bottom) if you want to respect tab bar
     }
 }
@@ -212,12 +251,26 @@ struct CommunityListView: View {
                     .padding(.top, 50)
                 } else {
                     ForEach(viewModel.filteredItems) { item in
-                        NavigationLink {
-                            destinationView(for: item)
-                        } label: {
-                            CommunityItemCard(item: item)
+                        if item.type == .course {
+                            if let course = item.courseData {
+                                SharedCourseCard(course: course) {
+                                  // Action handled by NavigationLink usually, but we can wrap it
+                                }
+                                .overlay(
+                                    NavigationLink(destination: destinationView(for: item)) {
+                                        EmptyView()
+                                    }
+                                    .opacity(0)
+                                )
+                            }
+                        } else {
+                            NavigationLink {
+                                destinationView(for: item)
+                            } label: {
+                                CommunityItemCard(item: item)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -262,14 +315,48 @@ struct CommunityListView: View {
                     description: item.subtitle ?? "",
                     lat: item.coordinate.latitude,
                     lng: item.coordinate.longitude,
-                    imageURL: item.imageURL,
                     address: nil,
+                    imageURL: item.imageURL,
                     openingHours: nil
                 ))
             }
             
+        case .group:
+            if let groupData = item.groupData {
+                StudyGroupDetailView(group: groupData, viewModel: viewModel)
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        case .event:
+            if let eventData = item.eventData {
+                EducationalEventDetailView(event: eventData, viewModel: viewModel)
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        case .marketplace:
+            if let listingData = item.listingData {
+                MarketplaceListingDetailView(listing: listingData)
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        case .course:
+            if let courseData = item.courseData {
+                // Navigate to classroom directly or a detail view if we have one
+                LiveClassroomView(
+                    courseId: courseData.id,
+                    lessonId: "lesson-1", // Start at beginning
+                    courseTitle: courseData.title,
+                    lessonTitle: "Lesson 1"
+                )
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
         default:
-            // Generic detail view for other types (events, groups, etc.)
+            // Generic detail view for other types (questions, spots, etc.)
             CommunityItemDetailPlaceholder(item: item)
         }
     }

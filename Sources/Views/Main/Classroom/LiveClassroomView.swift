@@ -18,15 +18,22 @@ struct LiveClassroomView: View {
     
     var body: some View {
         ZStack {
-            // Immersive Background
-            AnimatedGradient(
-                colors: [
-                    Color(hex: "1E1B4B"), // Deep Indigo
-                    Color(hex: "312E81"), // Indigo
-                    Color.black
-                ]
-            )
-            .ignoresSafeArea()
+            // Immersive Magical Background
+            MagicalBackgroundView(baseColor: viewModel.currentThemeColor)
+                .ignoresSafeArea()
+            
+            // Celebration Layer
+            if viewModel.lioState == .celebrating {
+                Group {
+                    Circle()
+                        .fill(RadialGradient(colors: [.white.opacity(0.3), .clear], center: .center, startRadius: 0, endRadius: 400))
+                        .blur(radius: 40)
+                    
+                    MagicEffectView(type: .confetti)
+                }
+                .transition(.opacity)
+                .ignoresSafeArea()
+            }
             
             VStack(spacing: 0) {
                 // Top Floating Header
@@ -47,6 +54,8 @@ struct LiveClassroomView: View {
         .statusBar(hidden: true)
         .task {
             await viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
+            // Attempt to upgrade to A2UI experience
+            await viewModel.loadLessonUI(lessonId)
         }
         .sheet(isPresented: $viewModel.showTranscriptSheet) {
             TranscriptSheet(transcript: viewModel.transcript)
@@ -121,6 +130,7 @@ struct LiveClassroomView: View {
                                 Capsule()
                                     .fill(DesignSystem.Colors.fallbackPrimary)
                                     .frame(width: geo.size.width * viewModel.progressPercentage, height: 4)
+                                    .animation(.spring(), value: viewModel.progressPercentage)
                             }
                         }
                         .frame(width: 60, height: 4)
@@ -167,9 +177,24 @@ struct LiveClassroomView: View {
         ZStack {
             if viewModel.isLoading {
                 loadingView
+            } else if let a2ui = viewModel.a2uiComponent {
+                // A2UI Rendering
+                ScrollView {
+                    A2UIRecursiveRenderer(component: a2ui, onAction: { actionId in
+                        Task { await viewModel.handleA2UIAction(actionId) }
+                    })
+                    .padding(.horizontal)
+                    .padding(.top, 20)
+                    .padding(.bottom, 120) // Space for bottom bar
+                }
+                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
             } else if let block = viewModel.currentBlock {
                 blockContentView(block: block)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    .id(block.id) // Ensure unique ID for transitions
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                        removal: .opacity.combined(with: .scale(scale: 1.1))
+                    ))
             }
             
             // Navigation arrows (Floating)
@@ -218,32 +243,39 @@ struct LiveClassroomView: View {
                 // Glass Card Container
                 GlassCard {
                     VStack(spacing: 24) {
-                        // Block type badge
-                        HStack {
-                            Image(systemName: block.type.icon)
-                            Text(block.type.displayName)
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(DesignSystem.Colors.fallbackPrimary.opacity(0.3))
-                        .clipShape(Capsule())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // Dynamic Block Renderer
+                        BlockRendererView(block: block, onQuizAnswer: { index in
+                            viewModel.submitQuizAnswer(index)
+                        }, onAction: { actionId in
+                            // Handle custom actions if needed
+                        })
+                        .padding(.vertical, 8)
                         
-                        // Content based on type
-                        switch block.type {
-                        case .explain, .summary:
-                            explainBlockView(block: block)
-                        case .image:
-                            imageBlockView(block: block)
-                        case .example:
-                            exampleBlockView(block: block)
-                        case .quizMcq:
-                            quizBlockView(block: block)
+                        // Legacy feedback & continue buttons (kept for UI consistency)
+                        if viewModel.quizSubmitted && viewModel.isQuizCorrect && !viewModel.isLastBlock {
+                            Button(action: { withAnimation { viewModel.advanceToNextBlock() } }) {
+                                HStack {
+                                    Text("Continue")
+                                    Image(systemName: "arrow.right")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.green, .green.opacity(0.7)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .shadow(color: .green.opacity(0.3), radius: 10, x: 0, y: 5)
+                            }
+                            .padding(.top, 8)
                         }
                     }
-                    .padding(24)
+                    .padding(16)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 20)
@@ -251,198 +283,8 @@ struct LiveClassroomView: View {
         }
     }
     
-    // MARK: - Block Type Views
-    
-    private func explainBlockView(block: LessonBlock) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let title = block.title {
-                Text(title)
-                    .font(.title2.bold())
-                    .foregroundColor(.white)
-            }
-            
-            if let body = block.body {
-                Text(body)
-                    .font(.body)
-                    .foregroundColor(.white.opacity(0.9))
-                    .lineSpacing(6)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    
-    private func imageBlockView(block: LessonBlock) -> some View {
-        VStack(spacing: 16) {
-            // Image Content
-            if let assetURL = block.assetURL {
-                Group {
-                    if assetURL.scheme == "http" || assetURL.scheme == "https" {
-                        AsyncImage(url: assetURL) { params in
-                            if let image = params.image {
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } else if params.error != nil {
-                                placeholderImage
-                            } else {
-                                ProgressView()
-                            }
-                        }
-                    } else {
-                        // Assume local asset name provided in URL path or just use the absolute string as name
-                        Image(assetURL.absoluteString)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    }
-                }
-                .frame(height: 220)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-            } else {
-                placeholderImage
-            }
-            
-            if let title = block.title {
-                Text(title)
-                    .font(.callout)
-                    .foregroundColor(.white.opacity(0.8))
-                    .italic()
-            }
-        }
-    }
-    
-    private var placeholderImage: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(
-                LinearGradient(
-                    colors: [.purple.opacity(0.3), .blue.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(height: 220)
-            .overlay(
-                Image(systemName: "photo")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white.opacity(0.5))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
-    }
-    
-    private func exampleBlockView(block: LessonBlock) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.yellow)
-                Text("Example")
-                    .font(.headline)
-                    .foregroundColor(.white)
-            }
-            
-            if let body = block.body {
-                Text(body)
-                    .font(.body)
-                    .foregroundColor(.white.opacity(0.9))
-                    .lineSpacing(6)
-                    .padding(16)
-                    .background(Color.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    
-    private func quizBlockView(block: LessonBlock) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Question
-            if let title = block.title {
-                Text(title)
-                    .font(.title3.bold())
-                    .foregroundColor(.white)
-            }
-            
-            // Options
-            if let options = block.options {
-                VStack(spacing: 12) {
-                    ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                        quizOptionButton(
-                            option: option,
-                            index: index,
-                            isCorrect: index == block.correctIndex,
-                            isSelected: viewModel.selectedQuizOption == index,
-                            isSubmitted: viewModel.quizSubmitted
-                        )
-                    }
-                }
-            }
-            
-            // Explanation (shown on wrong answer)
-            if viewModel.showingExplanation, let explanation = block.explanation {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "lightbulb.max.fill")
-                            .foregroundColor(.yellow)
-                        Text("Explanation")
-                            .font(.headline)
-                            .foregroundColor(.yellow)
-                    }
-                    
-                    Text(explanation)
-                        .font(.body)
-                        .foregroundColor(.white.opacity(0.9))
-                        .lineSpacing(4)
-                    
-                    Button(action: { viewModel.retryQuiz() }) {
-                        Text("Try Again")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(DesignSystem.Colors.fallbackPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                }
-                .padding(16)
-                .background(Color.black.opacity(0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            }
-            
-            // Continue button (shown on correct answer)
-            if viewModel.quizSubmitted && viewModel.isQuizCorrect && !viewModel.isLastBlock {
-                Button(action: { withAnimation { viewModel.advanceToNextBlock() } }) {
-                    HStack {
-                        Text("Continue")
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        LinearGradient(
-                            colors: [.green, .green.opacity(0.7)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .green.opacity(0.3), radius: 10, x: 0, y: 5)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
+    // MARK: - Legacy Block Views (REMOVED - replaced by BlockRendererView)
+
     
     private func quizOptionButton(
         option: String,
@@ -575,6 +417,7 @@ struct LiveClassroomView: View {
     
     private var lioAvatar: some View {
         ZStack {
+            // Background Glow
             Circle()
                 .fill(
                     LinearGradient(
@@ -584,10 +427,15 @@ struct LiveClassroomView: View {
                     )
                 )
                 .frame(width: 44, height: 44)
+                .shadow(color: DesignSystem.Colors.fallbackPrimary.opacity(0.5), radius: viewModel.lioState == .celebrating ? 15 : 0)
             
-            Image(systemName: "sparkles")
+            // State-specific Icon
+            Image(systemName: viewModel.lioState.icon)
                 .font(.system(size: 20))
                 .foregroundColor(.white)
+                .id(viewModel.lioState.rawValue)
+                .transition(.scale.combined(with: .opacity))
+                .animation(.spring(), value: viewModel.lioState)
             
             // Speaking indicator
             if viewModel.isLioSpeaking {

@@ -61,6 +61,12 @@ struct A2UIContent: Codable {
     // Suggestions Widget (fallback for engagement)
     let suggestions: [String]?
     
+    // Cinematic Widget (Immersive)
+    let cinematic: A2UICinematic?
+    
+    // Generative UI Layout Hint (New)
+    let layout: A2UILayout?
+    
     enum CodingKeys: String, CodingKey {
         case type
         case courseRoadmap = "course_roadmap"
@@ -72,7 +78,13 @@ struct A2UIContent: Codable {
         case totalModules
         case completedModules
         case suggestions
+        case cinematic
+        case layout
     }
+}
+
+enum A2UILayout: String, Codable {
+    case standard, split, overlay, grid, hero
 }
 
 enum A2UIContentType: String, Codable {
@@ -83,6 +95,7 @@ enum A2UIContentType: String, Codable {
     case flashcards
     case quiz
     case suggestions
+    case cinematic
     case unknown
     
     init(from decoder: Decoder) throws {
@@ -90,6 +103,17 @@ enum A2UIContentType: String, Codable {
         let value = try container.decode(String.self)
         self = A2UIContentType(rawValue: value) ?? .unknown
     }
+}
+
+// MARK: - Cinematic Models
+struct A2UICinematic: Codable, Identifiable {
+    var id: String { title }
+    let title: String
+    let subtitle: String?
+    let mood: String
+    let videoUrl: String?
+    let audioTrack: String?
+    let hapticPattern: String?
 }
 
 // MARK: - Course Roadmap Models
@@ -203,9 +227,12 @@ struct BackendAIChatResponse: Codable {
     let quickExplainer: QuickExplainerData?
     let courseProposal: CourseProposalData?
     
+    // Lyo Protocol Fields
+    let lyoBlocks: [LyoBlock]?
+    
     enum CodingKeys: String, CodingKey {
         case response
-        case conversationHistory = "conversationHistory" // Backend uses CamelCase alias
+        case conversationHistory = "conversationHistory"
         case type
         case payload
         case content
@@ -220,11 +247,12 @@ struct BackendAIChatResponse: Codable {
         case confidenceScore = "confidence_score"
         case modelVersions = "model_versions"
         case userId = "user_id"
-        case responseMode = "responseMode" // Backend uses CamelCase alias
-        case quickExplainer = "quickExplainer" // Backend uses CamelCase alias
-        case courseProposal = "courseProposal" // Backend uses CamelCase alias
-        case contentTypes = "contentTypes" // Backend sends dictionary list as contentTypes
-        case uiComponent = "uiComponent" // Backend sends standard A2UI as uiComponent
+        case responseMode = "responseMode"
+        case quickExplainer = "quickExplainer"
+        case courseProposal = "courseProposal"
+        case contentTypes = "contentTypes"
+        case uiComponent = "uiComponent"
+        case lyoBlocks = "lyoBlocks"
     }
     
     // Computed property for easy access to the AI response text
@@ -329,7 +357,7 @@ struct CourseGenerationJobResponse: Codable {
     let jobId: String
     let status: String
     let qualityTier: String
-    let estimatedCostUSD: Double
+    let estimatedCostUsd: Double
     let message: String
     let pollUrl: String
     
@@ -337,7 +365,7 @@ struct CourseGenerationJobResponse: Codable {
         case jobId
         case status
         case qualityTier
-        case estimatedCostUSD
+        case estimatedCostUsd
         case message
         case pollUrl
     }
@@ -346,12 +374,13 @@ struct CourseGenerationJobResponse: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         // Debugging: Check for keys
+        // Verify we are running the V2 (estimatedCostUsd) fix
+        print("🔍 BackendAIService: Decoding response using V2 Struct (estimatedCostUsd)")
+        
+        // Debug keys if failure happens
         if !container.contains(.jobId) {
              let keys = container.allKeys.map { $0.stringValue }.joined(separator: ", ")
              print("❌ DEBUG DECODING ERROR: Missing job_id. Available keys: [\(keys)]")
-             
-             // Check if we received a primitive container (Raw JSON string check hack)
-             // ...
              
              throw DecodingError.keyNotFound(CodingKeys.jobId, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing job_id. Keys found: [\(keys)]"))
         }
@@ -359,7 +388,7 @@ struct CourseGenerationJobResponse: Codable {
         self.jobId = try container.decode(String.self, forKey: .jobId)
         self.status = try container.decode(String.self, forKey: .status)
         self.qualityTier = try container.decode(String.self, forKey: .qualityTier)
-        self.estimatedCostUSD = try container.decode(Double.self, forKey: .estimatedCostUSD)
+        self.estimatedCostUsd = try container.decode(Double.self, forKey: .estimatedCostUsd)
         self.message = try container.decode(String.self, forKey: .message)
         self.pollUrl = try container.decode(String.self, forKey: .pollUrl)
     }
@@ -589,7 +618,17 @@ final class BackendAIService {
             // Check if this is an OPEN_CLASSROOM command
             let isCommand = response.type == "OPEN_CLASSROOM"
             
-            return (response: rawResponse, source: response.aiSource, uiContent: response.contentTypes, uiComponent: response.uiComponent, wasCommand: isCommand, openClassroomPayload: response.payload)
+            // Mix in Lyo Blocks (The Adapter Pattern)
+            var finalUIContent = response.contentTypes ?? []
+            if let lyoBlocks = response.lyoBlocks {
+                let adaptedContent = lyoBlocks.map { LyoAdapter.render($0) }
+                finalUIContent.append(contentsOf: adaptedContent)
+            }
+            // If empty, pass nil to match original signature if preferred, 
+            // or keep empty array. Original was optional [A2UIContent]?
+            let uiContentToReturn = finalUIContent.isEmpty ? nil : finalUIContent
+            
+            return (response: rawResponse, source: response.aiSource, uiContent: uiContentToReturn, uiComponent: response.uiComponent, wasCommand: isCommand, openClassroomPayload: response.payload ?? response.extractedUI)
             
         } catch {
             print("⚠️ Backend AI failed: \(error). Will fallback to local.")
@@ -821,6 +860,19 @@ final class BackendAIService {
         * Use `stack_item` to create a card in “Today’s Stack”.
         * Use `course` to configure the AI Classroom for that topic.
 
+        ---
+
+        ---
+        
+        CRITICAL RULE FOR COURSE CREATION:
+        Even if you have already provided an outline or discussed the topic, if the user says "Start", "Begin", "Create", "Yes", or "Let's go" to confirm they want the course, you **MUST** output the `OPEN_CLASSROOM` JSON object immediately.
+        
+        *   **Do NOT** start teaching the first lesson textually.
+        *   **Do NOT** continue the conversation.
+        *   **ONLY** output the JSON.
+        
+        The JSON object is the ONLY way to launch the interactive classroom. If you just reply with text, the user stays stuck in chat.
+        
         ---
 
         ## 3. Normal chat behavior (no classroom)

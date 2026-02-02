@@ -206,6 +206,7 @@ struct Achievement: Identifiable, Codable {
     let description: String
     let icon: String
     let category: AchievementCategory
+    let rarity: AchievementRarity
     let xpReward: Int
     let target: Int
     var isUnlocked: Bool
@@ -213,19 +214,27 @@ struct Achievement: Identifiable, Codable {
     let requirement: Int
     var progress: Int
     
-    init(id: String, name: String, title: String? = nil, description: String, icon: String = "star.fill", category: AchievementCategory = .learning, xpReward: Int = 100, target: Int = 1, isUnlocked: Bool = false, unlockedAt: Date? = nil, requirement: Int = 1, progress: Int = 0) {
+    init(id: String, name: String, title: String? = nil, description: String, icon: String = "star.fill", category: AchievementCategory = .learning, rarity: AchievementRarity = .common, xpReward: Int = 100, target: Int = 1, isUnlocked: Bool = false, unlockedAt: Date? = nil, requirement: Int = 1, progress: Int = 0) {
         self.id = id
         self.name = name
         self.title = title ?? name
         self.description = description
         self.icon = icon
         self.category = category
+        self.rarity = rarity
         self.xpReward = xpReward
         self.target = target
         self.isUnlocked = isUnlocked
         self.unlockedAt = unlockedAt
         self.requirement = requirement
         self.progress = progress
+    }
+    
+    enum AchievementRarity: String, Codable {
+        case common
+        case rare
+        case epic
+        case legendary
     }
     
     enum AchievementCategory: String, Codable {
@@ -243,6 +252,7 @@ struct Achievement: Identifiable, Codable {
         case description
         case icon
         case category
+        case rarity
         case xpReward = "xp_reward"
         case target
         case isUnlocked = "is_unlocked"
@@ -433,5 +443,12 @@ struct GamificationOverview: Codable {
         case streaks
         case recentAchievements = "recent_achievements"
         case leaderboardRank = "leaderboard_rank"
+    }
+}
+
+extension Challenge {
+    var progressPercentage: Double {
+        guard target > 0 else { return 0 }
+        return progress / Double(target)
     }
 }

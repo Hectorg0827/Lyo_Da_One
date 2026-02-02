@@ -61,4 +61,8 @@ public struct AnyCodable: Codable {
             throw EncodingError.invalidValue(value, context)
         }
     }
+    public func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        let data = try JSONSerialization.data(withJSONObject: value, options: [])
+        return try JSONDecoder().decode(T.self, from: data)
+    }
 }

@@ -49,8 +49,8 @@ class StoryService: ObservableObject {
         } catch {
             print("❌ Failed to load stories: \(error.localizedDescription)")
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockStories()
+            // Production: Do not fallback to mocks automatically to ensure we see backend issues
+            // loadMockStories() 
         }
         
         isLoading = false

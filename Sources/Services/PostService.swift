@@ -49,9 +49,13 @@ class PostService: ObservableObject {
             print("❌ Failed to load posts: \(error.localizedDescription)")
             self.error = error.localizedDescription
             
-            // Fallback to mock data only on first load
-            if postsFeed.isEmpty {
+            // Fallback to mock data only if explicitly allowed and on first load
+            if postsFeed.isEmpty && AppConfig.allowMockFallbacks {
+                print("⚠️ Using mock posts as fallback (AppConfig.allowMockFallbacks = true)")
                 loadMockPosts()
+            } else if postsFeed.isEmpty {
+                // Propagate error if mocks are not allowed
+                self.error = error.localizedDescription
             }
         }
         

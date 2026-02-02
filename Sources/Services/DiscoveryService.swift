@@ -33,8 +33,13 @@ class DiscoveryService: ObservableObject {
         } catch {
             print("❌ Failed to load my discoveries: \(error.localizedDescription)")
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockDiscoveries()
+            // Fallback to mock data only if explicitly allowed
+            if AppConfig.allowMockFallbacks {
+                print("⚠️ Using mock discoveries as fallback (AppConfig.allowMockFallbacks = true)")
+                loadMockDiscoveries()
+            } else {
+                 self.error = error.localizedDescription
+            }
         }
         
         isLoading = false

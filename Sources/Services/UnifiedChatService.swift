@@ -98,29 +98,24 @@ final class UnifiedChatService: ObservableObject {
     ///   - attachments: Optional file attachments
     ///   - context: Optional context (course ID, lesson ID, etc.)
     ///   - mode: Chat mode (study, quiz, etc.)
+    /// Send a message and get AI response using the unified LioChatService flow
     func sendMessage(
         _ text: String,
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
-        mode: String = "study"
+        mode: String = "chat"
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
         
-        // 1. Create and add user message
+        // 1. Add user message to UI state
         let userMessage = LyoMessage(
             id: UUID().uuidString,
             sessionId: currentConversationId,
             content: trimmedText,
             isFromUser: true,
             timestamp: Date(),
-            attachments: attachments.isEmpty ? nil : attachments,
-            actions: nil,
-            status: .sent,
-            contentTypes: nil,
-            responseMode: nil,
-            quickExplainer: nil,
-            courseProposal: nil
+            attachments: attachments.isEmpty ? nil : attachments
         )
         messages.append(userMessage)
         
@@ -130,7 +125,7 @@ final class UnifiedChatService: ObservableObject {
         // 3. Save to persistence
         await saveConversation()
         
-        // 4. Add to stack as active chat
+        // 4. Update stack
         stackStore.upsertChat(
             key: currentConversationId,
             title: extractTitle(from: trimmedText),
@@ -138,311 +133,244 @@ final class UnifiedChatService: ObservableObject {
             lastMessage: trimmedText
         )
         
-        // 5. Get AI response
+        // 5. Get AI response via the Bulletproof Flow in LioChatService
         isLoading = true
         error = nil
         
-        var responseText: String?
-        
         do {
-            let result = try await backendAI.studySession(
-                message: trimmedText,
-                resourceId: context?.courseId,
+            let response = try await lioChatService.sendMessage(
+                text: trimmedText,
+                sessionId: currentConversationId,
                 mode: mode,
-                history: conversationHistory
+                contextHint: context?.courseId,
+                attachments: attachments
             )
             
-            // 6. Parse response for commands and A2UI content
-            // We use the raw text and direct A2UI content from the backend
-            let (parsedContent, a2uiElements, courseData) = parseResponse(
-                text: result.response,
-                a2uiContent: result.uiContent,
-                recursiveUI: result.uiComponent
-            )
+            // 6. Process response through AICommandHandler (for navigation triggers)
+            // Note: Even if LioChatService returns an action, we still process the text here
+            // to catch any embedded JSON triggers that might have slipped through.
+            let (displayText, _) = AICommandHandler.shared.processResponse(response.text)
             
-            // 6a. Handle OPEN_CLASSROOM payload directly from backend
-            if result.wasCommand, let openClassroomPayload = result.openClassroomPayload {
-                print("🎓 UnifiedChatService: Received OPEN_CLASSROOM from backend!")
-                let commandPayload = AICommandPayload(
-                    stackItem: nil,
-                    course: CoursePayload(
-                        id: openClassroomPayload.course.id,
-                        title: openClassroomPayload.course.title,
-                        topic: openClassroomPayload.course.topic,
-                        level: openClassroomPayload.course.level,
-                        language: "English",
-                        duration: openClassroomPayload.course.duration ?? "~45 min",
-                        objectives: openClassroomPayload.course.objectives
-                    )
-                )
-                let _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
-            } else {
-                // 6b. Trigger side effects for commands (Stack items, orchestrator)
-                // We call this on every response to ensure structured commands are handled
-                let _ = AICommandHandler.shared.processResponse(result.response)
-            }
-            
-            responseText = parsedContent
-            
-            // 7. Create AI message using LyoMessage
+            // 7. Create and add AI message
             let aiMessage = LyoMessage(
                 id: UUID().uuidString,
                 sessionId: currentConversationId,
-                content: parsedContent,
+                content: displayText,
                 isFromUser: false,
                 timestamp: Date(),
-                attachments: nil,
-                actions: nil,
-                status: .sent,
-                contentTypes: a2uiElements.isEmpty ? nil : a2uiElements,
-                responseMode: nil,
-                quickExplainer: nil,
-                courseProposal: nil
+                contentTypes: response.contentTypes
             )
             
-            // 8. If course was created, add to Stack
-            if let course = courseData {
-                pendingCourse = course
-                
-                // Add to Local Stack (Immediate UI update)
-                stackStore.upsertCourse(
-                    courseId: course.id,
-                    title: course.title,
-                    subtitle: "\(course.level.capitalized) • \(course.modules.count) modules",
-                    progress: 0,
-                    lessonCount: course.modules.reduce(0) { $0 + $1.lessons.count },
-                    completedLessons: 0
-                )
-                
-                // Add to Backend Stack (Persistence)
-                Task {
-                    let request = CreateStackItemRequest(
-                        type: .course,
-                        refId: course.id,
-                        tags: [course.topic],
-                        contextData: ["course_id": course.id]
-                    )
-                    _ = try? await repository.createStackItem(request: request)
-                }
+            messages.append(aiMessage)
+            suggestions = response.suggestions?.map { SuggestionChip(id: UUID().uuidString, text: $0) } ?? []
+            
+            // 8. Handle any structured actions from LioChatService
+            if let action = response.action {
+                handleLioChatAction(action)
             }
             
-            messages.append(aiMessage)
-            
-            // 9. Update conversation history
-            conversationHistory.append(ConversationMessage(role: "assistant", content: parsedContent))
-            
-            // 10. Save conversation
+            // 9. Update history and persistence
+            conversationHistory.append(ConversationMessage(role: "assistant", content: response.text))
             await saveConversation()
             
+            isLoading = false
+            return displayText
+            
         } catch {
+            print("❌ UnifiedChatService: Error sending message: \(error)")
             self.error = error.localizedDescription
             
-            // Add error message using LyoMessage
             let errorMessage = LyoMessage(
                 id: UUID().uuidString,
                 sessionId: currentConversationId,
-                content: "Sorry, I encountered an error. Please try again.",
+                content: "I encountered an error. Please try again.",
                 isFromUser: false,
                 timestamp: Date(),
-                attachments: nil,
-                actions: nil,
-                status: .failed,
-                contentTypes: nil,
-                responseMode: nil,
-                quickExplainer: nil,
-                courseProposal: nil
+                status: .failed
             )
             messages.append(errorMessage)
+            
+            isLoading = false
+            return nil
         }
-        
-        isLoading = false
-        return responseText
     }
 
-    /// Enhanced sendMessage method that uses the new recursive A2UI backend endpoint
-    func sendMessageV2(
+    private func handleLioChatAction(_ action: LioChatAction) {
+        print("⚡ UnifiedChatService: Handling action \(action.type)")
+        
+        switch action.type {
+        case "open_classroom":
+            // Construct a payload from parameters to trigger the AICommandHandler
+            if let params = action.parameters {
+                let course = CoursePayload(
+                    id: params["courseId"],
+                    title: params["courseTitle"] ?? "New Course",
+                    topic: params["topic"] ?? "Learning",
+                    level: params["level"] ?? "Beginner",
+                    language: "English",
+                    duration: nil,
+                    objectives: []
+                )
+                let commandPayload = AICommandPayload(stackItem: nil, course: course)
+                _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
+            }
+            
+        default:
+            print("⚠️ UnifiedChatService: Received unhandled action type: \(action.type)")
+        }
+    }
+
+    // MARK: - Streaming Support (Live AI)
+    
+    func sendMessageStreaming(
         _ text: String,
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
-        mode: String = "study"
-    ) async -> String? {
+        mode: String = "chat",
+        speakResponse: Bool = false
+    ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return nil }
-
-        // 1. Create and add user message
+        guard !trimmedText.isEmpty else { return }
+        
+        // 1. Add user message
         let userMessage = LyoMessage(
             id: UUID().uuidString,
             sessionId: currentConversationId,
             content: trimmedText,
             isFromUser: true,
             timestamp: Date(),
-            attachments: attachments.isEmpty ? nil : attachments,
-            actions: nil,
-            status: .sent,
-            contentTypes: nil,
-            responseMode: nil,
-            quickExplainer: nil,
-            courseProposal: nil
+            attachments: attachments.isEmpty ? nil : attachments
         )
         messages.append(userMessage)
-
-        // 2. Update conversation history
         conversationHistory.append(ConversationMessage(role: "user", content: trimmedText))
-
-        // 3. Save to persistence
         await saveConversation()
-
-        // 4. Add to stack as active chat
-        stackStore.upsertChat(
-            key: currentConversationId,
-            title: extractTitle(from: trimmedText),
-            subtitle: "Just now",
-            lastMessage: trimmedText
+        
+        // 2. Create Placeholder AI Message
+        let aiMessageId = UUID().uuidString
+        let aiMessage = LyoMessage(
+            id: aiMessageId,
+            sessionId: currentConversationId,
+            content: "",
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.processing(step: "Thinking...", progress: nil)]
         )
-
-        // 5. Get AI response from NEW V2 endpoint
+        messages.append(aiMessage)
+        
         isLoading = true
-        error = nil
-
-        var responseText: String?
-
-        do {
-            // Call the new recursive A2UI endpoint
-            let result = try await callRecursiveA2UIEndpoint(
-                message: trimmedText,
-                resourceId: context?.courseId,
-                mode: mode,
-                history: conversationHistory
-            )
-
-            lastAISource = "Backend V2 (Recursive A2UI)"
-
-            // 6. Parse response using new V2 parser
-            let (parsedContent, a2uiElements, courseData) = parseResponseV2(
-                text: result.response,
-                recursiveUI: result.uiLayout
-            )
-
-            // 6b. Trigger side effects for commands
-            let _ = AICommandHandler.shared.processResponse(result.response)
-
-            responseText = parsedContent
-
-            // 7. Create AI message using LyoMessage
-            let aiMessage = LyoMessage(
-                id: UUID().uuidString,
-                sessionId: currentConversationId,
-                content: parsedContent,
-                isFromUser: false,
-                timestamp: Date(),
-                attachments: nil,
-                actions: nil,
-                status: .sent,
-                contentTypes: a2uiElements.isEmpty ? nil : a2uiElements,
-                responseMode: nil,
-                quickExplainer: nil,
-                courseProposal: nil
-            )
-
-            // 8. Handle course creation
-            if let course = courseData {
-                pendingCourse = course
-
-                // Add to Local Stack (Immediate UI update)
-                stackStore.upsertCourse(
-                    courseId: course.id,
-                    title: course.title,
-                    subtitle: "\(course.level.capitalized) • \(course.modules.count) modules",
-                    progress: 0,
-                    lessonCount: course.modules.reduce(0) { $0 + $1.lessons.count },
-                    completedLessons: 0
-                )
-                
-                // Add to Backend Stack (Persistence)
-                Task {
-                    let request = CreateStackItemRequest(
-                        type: .course,
-                        refId: course.id,
-                        tags: [course.topic],
-                        contextData: ["course_id": course.id]
-                    )
-                    _ = try? await repository.createStackItem(request: request)
+        
+        // 3. Start Stream via LioChatService
+        lioChatService.sendMessageStreaming(
+            text: trimmedText,
+            sessionId: currentConversationId,
+            contextHint: context?.courseId,
+            speakResponse: speakResponse,
+            onToken: { [weak self] token in
+                Task { @MainActor [weak self] in
+                    self?.appendToken(to: aiMessageId, token: token)
+                }
+            },
+            onComplete: { [weak self] response in
+                Task { @MainActor [weak self] in
+                    self?.finalizeStreaming(id: aiMessageId, response: response)
+                }
+            },
+            onError: { [weak self] error in
+                Task { @MainActor [weak self] in
+                    self?.handleStreamingError(error)
                 }
             }
-
-            messages.append(aiMessage)
-
-            // 9. Update conversation history
-            conversationHistory.append(ConversationMessage(role: "assistant", content: parsedContent))
-
-            // 10. Save conversation
-            await saveConversation()
-
-        } catch {
-            self.error = error.localizedDescription
-
-            // Add error message using LyoMessage
-            let errorMessage = LyoMessage(
-                id: UUID().uuidString,
-                sessionId: currentConversationId,
-                content: "Sorry, I encountered an error. Please try again.",
-                isFromUser: false,
-                timestamp: Date(),
-                attachments: nil,
-                actions: nil,
-                status: .failed,
-                contentTypes: nil,
-                responseMode: nil,
-                quickExplainer: nil,
-                courseProposal: nil
-            )
-            messages.append(errorMessage)
-        }
-
-        isLoading = false
-        return responseText
-    }
-
-    /// Call the new recursive A2UI backend endpoint
-    private func callRecursiveA2UIEndpoint(
-        message: String,
-        resourceId: String?,
-        mode: String,
-        history: [ConversationMessage]
-    ) async throws -> RecursiveChatResponse {
-        // Construct request
-        let requestBody: [String: Any] = [
-            "message": message,
-            "conversation_history": history.map { [
-                "role": $0.role,
-                "content": $0.content
-            ]},
-            "context": resourceId ?? "",
-            "include_chips": 0,
-            "include_ctas": 0
-        ]
-
-        let requestData = try JSONSerialization.data(withJSONObject: requestBody)
-
-        // Make request to v2 endpoint
-        let token = await TokenManager.shared.getToken()
-        let request = URLRequest.authenticatedRequest(
-            url: URL(string: "\(NetworkClient.baseURL)/api/v1/chat/v2")!,
-            method: "POST",
-            body: requestData,
-            token: token
         )
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              200...299 ~= httpResponse.statusCode else {
-            throw NetworkError.networkError("Failed to get response from backend")
-        }
-
-        let chatResponse = try JSONDecoder().decode(RecursiveChatResponse.self, from: data)
-        return chatResponse
     }
+    
+    private func appendToken(to messageId: String, token: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        
+        var message = messages[index]
+        
+        // Remove processing state if it exists
+        if message.contentTypes?.contains(where: { 
+            if case .processing = $0 { return true } else { return false }
+        }) == true {
+            message.contentTypes = nil
+        }
+        
+        // Append text by creating a NEW message (since content is immutable)
+        let updatedContent = message.content + token
+        let newMessage = LyoMessage(
+            id: message.id,
+            sessionId: message.sessionId,
+            content: updatedContent,
+            isFromUser: message.isFromUser,
+            timestamp: message.timestamp,
+            attachments: message.attachments,
+            actions: message.actions,
+            status: message.status,
+            contentTypes: message.contentTypes,
+            responseMode: message.responseMode,
+            quickExplainer: message.quickExplainer,
+            courseProposal: message.courseProposal
+        )
+        
+        messages[index] = newMessage
+    }
+    
+    private func finalizeStreaming(id: String, response: LioChatResponse) {
+        isLoading = false
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        
+        let oldMessage = messages[index] // get current state
+        let fullText = oldMessage.content // current accumulated text
+        
+        // Process for triggers (Course creation, etc.)
+        let (displayText, _) = AICommandHandler.shared.processResponse(fullText)
+        
+        // Create FINAL message
+        let finalMessage = LyoMessage(
+            id: oldMessage.id,
+            sessionId: oldMessage.sessionId,
+            content: displayText,
+            isFromUser: oldMessage.isFromUser,
+            timestamp: oldMessage.timestamp,
+            attachments: oldMessage.attachments,
+            actions: oldMessage.actions,
+            status: oldMessage.status,
+            contentTypes: oldMessage.contentTypes,
+            responseMode: oldMessage.responseMode, // Maintain mentor mode data
+            quickExplainer: oldMessage.quickExplainer,
+            courseProposal: oldMessage.courseProposal
+        )
+        
+        messages[index] = finalMessage
+        
+        // Add suggestions
+        suggestions = response.suggestions?.map { SuggestionChip(id: UUID().uuidString, text: $0) } ?? []
+        
+        // Handle actions
+        if let action = response.action {
+            handleLioChatAction(action)
+        }
+        
+        // Save to history
+        conversationHistory.append(ConversationMessage(role: "assistant", content: fullText))
+        Task { await saveConversation() }
+    }
+    
+    private func handleStreamingError(_ error: Error) {
+        isLoading = false
+        self.error = error.localizedDescription
+        
+        let errorMessage = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: "I encountered an error. Please try again.",
+            isFromUser: false,
+            timestamp: Date(),
+            status: .failed
+        )
+        messages.append(errorMessage)
+    }
+
     
     /// Start a new conversation
     func startNewConversation() {
@@ -558,274 +486,6 @@ final class UnifiedChatService: ObservableObject {
     
     // MARK: - Response Parsing
 
-    /// Enhanced method that supports both legacy A2UI and new recursive A2UI
-    private func parseResponseV2(
-        text: String,
-        recursiveUI: DynamicComponent?
-    ) -> (String, [MessageContentType], CourseCreationData?) {
-        var cleanedText = text
-        var elements: [MessageContentType] = []
-        var courseData: CourseCreationData?
-
-        // Handle recursive A2UI if present
-        if let recursiveComponent = recursiveUI {
-            elements.append(.recursiveUI(component: recursiveComponent))
-        }
-
-        // Handle AI commands in text
-        let commandParsed = AICommandParser.parse(text)
-
-        switch commandParsed {
-        case .command(let command):
-            if command.type == .openClassroom, let payload = command.payload?.course {
-                // Convert to CourseCreationData (same logic as before)
-                let modules = payload.objectives.enumerated().map { index, objective in
-                    CourseModuleData(
-                        id: "mod_\(index + 1)",
-                        title: "Module \(index + 1)",
-                        description: objective,
-                        lessons: [
-                            CourseLessonData(id: "les_\(index + 1)_1", title: "Introduction", duration: "10 min"),
-                            CourseLessonData(id: "les_\(index + 1)_2", title: "Deep Dive", duration: "15 min"),
-                            CourseLessonData(id: "les_\(index + 1)_3", title: "Practice", duration: "10 min")
-                        ]
-                    )
-                }
-
-                courseData = CourseCreationData(
-                    id: "course_\(UUID().uuidString.prefix(8))",
-                    title: payload.title,
-                    topic: payload.topic,
-                    level: payload.level,
-                    modules: modules
-                )
-
-                cleanedText = "I've created a learning path for **\(payload.title)**! 🎓"
-            }
-        case .chat(let originalText):
-            cleanedText = originalText
-        }
-
-        return (cleanedText, elements, courseData)
-    }
-
-    private func parseResponse(
-        text: String,
-        a2uiContent: [A2UIContent]?,
-        recursiveUI: DynamicComponent? = nil
-    ) -> (String, [MessageContentType], CourseCreationData?) {
-        var cleanedText = text
-        var elements: [MessageContentType] = []
-        
-        // 0. Handle Recursive A2UI (Standard)
-        if let component = recursiveUI {
-            elements.append(.recursiveUI(component: component))
-        }
-        
-        var courseData: CourseCreationData?
-        
-        // 1. Check for JSON commands (OPEN_CLASSROOM, ADD_TO_STACK, etc.)
-        // Use the centralized AICommandParser for robust extraction
-        let commandParsed = AICommandParser.parse(text)
-        
-        switch commandParsed {
-        case .command(let command):
-            if command.type == .openClassroom, let payload = command.payload?.course {
-                // Map CoursePayload to CourseCreationData
-                let modules = payload.objectives.enumerated().map { index, objective in
-                    CourseModuleData(
-                        id: "mod_\(index + 1)",
-                        title: "Module \(index + 1)",
-                        description: objective,
-                        lessons: [
-                            CourseLessonData(id: "les_\(index + 1)_1", title: "Introduction", duration: "10 min"),
-                            CourseLessonData(id: "les_\(index + 1)_2", title: "Deep Dive", duration: "15 min"),
-                            CourseLessonData(id: "les_\(index + 1)_1", title: "Practice", duration: "10 min")
-                        ]
-                    )
-                }
-                
-                courseData = CourseCreationData(
-                    id: "course_\(UUID().uuidString.prefix(8))",
-                    title: payload.title,
-                    topic: payload.topic,
-                    level: payload.level,
-                    modules: modules
-                )
-                
-                // Add courseRoadmap to elements for UI rendering
-                let uiModules = modules.map { mod in
-                    CourseModule(
-                        id: mod.id,
-                        title: mod.title,
-                        duration: mod.lessons.first?.duration,
-                        isCompleted: false,
-                        isLocked: false
-                    )
-                }
-                elements.append(.courseRoadmap(
-                    title: payload.title,
-                    modules: uiModules,
-                    totalModules: uiModules.count,
-                    completedModules: 0
-                ))
-                
-                // Set cleaned text to a friendly message
-                cleanedText = "I've created a learning path for **\(payload.title)**! 🎓\n\nTap 'Start Learning' below to begin."
-            }
-        case .chat(let originalText):
-            cleanedText = originalText
-        }
-        
-        // 2. Convert backend A2UI content to MessageContentType
-        if let content = a2uiContent {
-            for item in content {
-                switch item.type {
-                case .text:
-                    // Text type is just the main response - no special handling needed
-                    break
-                    
-                case .processing:
-                    // Processing indicator - could show loading state
-                    break
-                    
-                case .topicSelection:
-                    if let topics = item.topics {
-                        let topicOptions = topics.map { topic in
-                            TopicOption(
-                                title: topic.title,
-                                icon: topic.icon ?? "book.fill",
-                                gradientColors: topic.gradientColors
-                            )
-                        }
-                        elements.append(.topicSelection(
-                            title: item.title ?? "Choose a Topic",
-                            topics: topicOptions
-                        ))
-                    }
-                    
-                case .courseRoadmap:
-                    if let roadmap = item.courseRoadmap {
-                        // Use nested structure from backend
-                        let modules = roadmap.modules.map { mod in
-                            CourseModuleData(
-                                id: UUID().uuidString,
-                                title: mod.title,
-                                description: mod.description ?? "",
-                                lessons: (mod.lessons ?? []).map { les in
-                                    CourseLessonData(id: UUID().uuidString, title: les.title, duration: les.duration ?? "10 min")
-                                }
-                            )
-                        }
-                        courseData = CourseCreationData(
-                            id: "course_\(UUID().uuidString.prefix(8))",
-                            title: roadmap.title,
-                            topic: roadmap.topic,
-                            level: roadmap.level,
-                            modules: modules
-                        )
-                        // Convert CourseModuleData to CourseModule for UI display
-                        let uiModules = modules.map { mod in
-                            CourseModule(
-                                id: mod.id,
-                                title: mod.title,
-                                duration: mod.lessons.first?.duration,
-                                isCompleted: false,
-                                isLocked: false
-                            )
-                        }
-                        elements.append(.courseRoadmap(
-                            title: roadmap.title,
-                            modules: uiModules,
-                            totalModules: uiModules.count,
-                            completedModules: 0
-                        ))
-                    } else if let flatModules = item.modules {
-                        // Fallback: use flat module format (backwards compatibility)
-                        let uiModules = flatModules.map { mod in
-                            CourseModule(
-                                id: mod.id ?? UUID().uuidString,
-                                title: mod.title,
-                                duration: mod.duration,
-                                isCompleted: mod.isCompleted ?? false,
-                                isLocked: mod.isLocked ?? false
-                            )
-                        }
-                        elements.append(.courseRoadmap(
-                            title: item.title ?? "Course Roadmap",
-                            modules: uiModules,
-                            totalModules: item.totalModules ?? uiModules.count,
-                            completedModules: item.completedModules ?? 0
-                        ))
-                    }
-                    
-                case .flashcards:
-                    if let cards = item.cards {
-                        // Convert A2UI flashcards to MessageContentType flashcards
-                        let flashcardModels = cards.map { card in
-                            Flashcard(
-                                front: card.front,
-                                back: card.back,
-                                isMastered: false
-                            )
-                        }
-                        elements.append(.flashcards(
-                            title: item.title ?? "Study Flashcards",
-                            cards: flashcardModels
-                        ))
-                    }
-                    
-                case .quiz:
-                    if let quiz = item.quiz {
-                        // Add each question as a quiz content type
-                        for question in quiz.questions {
-                            let correctIndex = question.options.firstIndex(of: question.correctAnswer) ?? 0
-                            elements.append(.quiz(
-                                question: question.question,
-                                options: question.options,
-                                correctIndex: correctIndex,
-                                explanation: nil
-                            ))
-                        }
-                    }
-                    
-                case .suggestions:
-                    // Smart follow-up suggestions for engagement
-                    if let suggestions = item.suggestions, !suggestions.isEmpty {
-                        elements.append(.suggestions(
-                            title: item.title ?? "What's next?",
-                            options: suggestions
-                        ))
-                    }
-                    
-                case .unknown:
-                    print("⚠️ Unknown A2UI content type received")
-                    break
-                }
-            }
-        }
-        
-        return (cleanedText, elements, courseData)
-    }
-    
-    private func extractOpenClassroomCommand(from text: String) -> OpenClassroomCommand? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Try to extract JSON from the response
-        guard let jsonStart = trimmed.firstIndex(of: "{"),
-              let jsonEnd = trimmed.lastIndex(of: "}") else {
-            return nil
-        }
-        
-        let jsonString = String(trimmed[jsonStart...jsonEnd])
-        guard let data = jsonString.data(using: .utf8),
-              let command = try? JSONDecoder().decode(OpenClassroomCommand.self, from: data),
-              command.type == "OPEN_CLASSROOM" else {
-            return nil
-        }
-        
-        return command
-    }
     
     // MARK: - Persistence (Simplified - uses UserDefaults for now)
     

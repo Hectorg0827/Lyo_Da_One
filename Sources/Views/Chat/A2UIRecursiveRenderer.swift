@@ -126,8 +126,31 @@ struct A2UIRecursiveRenderer: View {
         case .courseCard(let data):
             A2UICourseCardRenderer(data: data, onAction: onAction)
             
+        case .grid(let data):
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: data.columns), spacing: data.spacing ?? 12) {
+                ForEach(data.children) { child in
+                    A2UIRecursiveRenderer(component: child, onAction: onAction)
+                }
+            }
+            .padding(data.padding ?? 0)
+
         case .progressBar(let data):
             ProgressBarRenderer(data: data)
+
+        case .placeholder(let data):
+            VStack {
+                Text("Unimplemented component: \\(component.type.rawValue)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                if let children = data.children {
+                    ForEach(children) { child in
+                        A2UIRecursiveRenderer(component: child, onAction: onAction)
+                    }
+                }
+            }
+            .padding()
+            .background(Color.yellow.opacity(0.1))
+            .cornerRadius(8)
         }
     }
 
@@ -238,7 +261,7 @@ struct A2UIRecursiveRenderer: View {
 
 // MARK: - Legacy Component Renderers
 struct LegacyQuizRenderer: View {
-    let data: QuizPayload
+    let data: RecursiveQuizPayload
     let onAction: ((String) -> Void)?
 
     @State private var selectedAnswer: Int? = nil
@@ -395,6 +418,23 @@ struct LegacyCourseRoadmapRenderer: View {
                     )
                 }
             }
+            
+            // Start Learning Button
+            Button(action: {
+                onAction?("OPEN_CLASSROOM")
+            }) {
+                HStack {
+                    Text("Start Learning")
+                        .fontWeight(.bold)
+                    Image(systemName: "arrow.right.circle.fill")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .padding(.top, 10)
         }
         .padding()
         .background(Color(.secondarySystemBackground))
@@ -524,33 +564,6 @@ struct ModuleRowView: View {
     }
 }
 
-// MARK: - Color Extension
-extension Color {
-    init?(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            return nil
-        }
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: Double(a) / 255
-        )
-    }
-}
-
 // MARK: - AI Classroom Integration Renderers
 struct CoursePreviewRenderer: View {
     let data: CoursePreviewPayload
@@ -651,64 +664,64 @@ struct LearningNodeRenderer: View {
     let data: LearningNodePayload
     let onAction: ((String) -> Void)?
 
+    private var statusColor: Color {
+        if data.isCompleted ?? false { return .green }
+        if data.isCurrent ?? false { return .blue }
+        return Color.gray.opacity(0.3)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                // Node Status Indicator
-                Circle()
-                    .fill(data.isCompleted ? Color.green : (data.isCurrent ? Color.blue : Color.gray.opacity(0.3)))
-                    .frame(width: 12, height: 12)
+            headerSection
+            
+            contentSection
 
-                Text(data.title)
-                    .font(.headline)
-                    .fontWeight(data.isCurrent ? .semibold : .medium)
-                    .foregroundColor(data.isCurrent ? .primary : .secondary)
-
-                Spacer()
-
-                if let estimatedMinutes = data.estimatedMinutes {
-                    Text("\(estimatedMinutes) min")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Text(data.content)
-                .font(.body)
-                .foregroundColor(.primary)
-                .lineLimit(data.isCurrent ? nil : 2)
-
-            HStack {
-                Text(data.nodeType.capitalized)
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(nodeTypeColor(data.nodeType).opacity(0.1))
-                    .foregroundColor(nodeTypeColor(data.nodeType))
-                    .cornerRadius(6)
-
-                Spacer()
-
-                if data.isCurrent {
-                    Button(action: { onAction?(data.continueActionId) }) {
-                        Text("Continue")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.blue)
-                            .cornerRadius(8)
-                    }
-                }
-            }
+            footerSection
         }
         .padding()
-        .background(data.isCurrent ? Color.blue.opacity(0.05) : Color.clear)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+
+    private var headerSection: some View {
+        HStack {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 12, height: 12)
+
+            Text(data.title ?? "Lesson Node")
+                .font(.headline)
+                .fontWeight((data.isCurrent ?? false) ? .semibold : .medium)
+                .foregroundColor((data.isCurrent ?? false) ? .primary : .secondary)
+
+            Spacer()
+
+            if let estimatedMinutes = data.estimatedMinutes {
+                Text("\(estimatedMinutes) min")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var contentSection: some View {
+        Text(data.content ?? "")
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .lineLimit((data.isCurrent ?? false) ? nil : 2)
+    }
+
+    private var footerSection: some View {
+        HStack {
+            Text(data.type?.capitalized ?? "Lesson")
+                .font(.caption)
+        }
+        .padding()
+        .background((data.isCurrent ?? false) ? Color.blue.opacity(0.05) : Color.clear)
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(data.isCurrent ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke((data.isCurrent ?? false) ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
         )
     }
 
@@ -729,7 +742,7 @@ struct ProgressTrackerRenderer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(data.courseTitle)
+            Text(data.courseTitle ?? "Course")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
@@ -951,7 +964,7 @@ struct LessonCardRenderer: View {
                         .foregroundColor(.primary)
                         .lineLimit(1)
                     
-                    Text(data.description)
+                    Text(data.description ?? "")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
@@ -959,7 +972,7 @@ struct LessonCardRenderer: View {
                     HStack {
                         Image(systemName: "clock")
                             .font(.caption2)
-                        Text(data.duration)
+                        Text(data.duration ?? "")
                             .font(.caption2)
                     }
                     .foregroundColor(.secondary)

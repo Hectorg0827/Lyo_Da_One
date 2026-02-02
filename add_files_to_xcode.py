@@ -20,6 +20,10 @@ MISSING_FILES = [
     "Sources/Views/Profile/HolisticProfileView.swift",
     "Sources/Views/Main/Creation/CreateHubView.swift",
     "Sources/Views/Main/Creation/MultiModeCreationView.swift",
+    "Sources/Views/Generative/A2AProgressView.swift",
+    "Sources/Views/Main/Hybrid/LiveStageWidgetView.swift",
+    "Sources/Services/Audio/AudioStreamManager.swift",
+    "Sources/Views/Social/MasteryCardView.swift",
 ]
 
 def generate_uuid():

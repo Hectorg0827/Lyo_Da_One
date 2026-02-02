@@ -195,7 +195,7 @@ struct StorageUsage: Codable {
 }
 
 // MARK: - Notification Models
-struct AppNotification: Codable, Identifiable {
+struct APIAppNotification: Codable, Identifiable {
     let id: Int
     let title: String
     let body: String
@@ -205,7 +205,7 @@ struct AppNotification: Codable, Identifiable {
     let priority: String
     let actionType: String?
     let actionData: [String: String]?
-    let isRead: Bool
+    var isRead: Bool
     let createdAt: Date
     let readAt: Date?
     
@@ -220,8 +220,9 @@ struct AppNotification: Codable, Identifiable {
     }
 }
 
+
 struct NotificationListResponse: Codable {
-    let notifications: [AppNotification]
+    let notifications: [APIAppNotification]
     let unreadCount: Int
     let total: Int
     
@@ -230,6 +231,7 @@ struct NotificationListResponse: Codable {
         case unreadCount = "unread_count"
     }
 }
+
 
 struct UnreadCountResponse: Codable {
     let unreadCount: Int

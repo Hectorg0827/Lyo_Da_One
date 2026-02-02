@@ -201,7 +201,7 @@ struct A2AEventData: Codable {
 
 /// Request for A2A course generation
 struct A2AGenerateRequest: Encodable {
-    let topic: String
+    let request: String
     let qualityTier: String
     let userContext: [String: String]?
     let enableQualityGates: Bool
@@ -210,7 +210,7 @@ struct A2AGenerateRequest: Encodable {
     let enableParallel: Bool
     
     enum CodingKeys: String, CodingKey {
-        case topic
+        case request
         case qualityTier = "quality_tier"
         case userContext = "user_context"
         case enableQualityGates = "enable_quality_gates"
@@ -228,7 +228,7 @@ struct A2AGenerateRequest: Encodable {
         enableVoice: Bool = true,
         enableParallel: Bool = true
     ) {
-        self.topic = topic
+        self.request = topic
         self.qualityTier = qualityTier.rawValue
         self.userContext = userContext
         self.enableQualityGates = enableQualityGates
@@ -238,7 +238,43 @@ struct A2AGenerateRequest: Encodable {
     }
 }
 
-/// Response from A2A course generation
+struct A2ACourseJobResponse: Codable {
+    let jobId: String
+    let status: String
+    let qualityTier: String
+    let estimatedCostUsd: Double
+    let message: String
+    let pollUrl: String
+    
+    enum CodingKeys: String, CodingKey {
+        case jobId = "job_id"
+        case status
+        case qualityTier = "quality_tier"
+        case estimatedCostUsd = "estimated_cost_usd"
+        case message
+        case pollUrl = "poll_url"
+    }
+}
+
+struct CourseGenerationStatus: Codable {
+    let jobId: String
+    let status: String
+    let progressPercent: Int
+    let currentStep: String?
+    let stepsCompleted: [String]
+    let error: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case jobId = "job_id"
+        case status
+        case progressPercent = "progress_percent"
+        case currentStep = "current_step"
+        case stepsCompleted = "steps_completed"
+        case error
+    }
+}
+
+/// Response from A2A course generation (Final result)
 struct A2ACourseResponse: Codable {
     let pipelineId: String
     let status: String
@@ -494,6 +530,43 @@ enum CourseQualityTier: String, Codable, CaseIterable {
         case .standard: return "~2 minutes"
         case .premium: return "~5 minutes"
         }
+    }
+}
+
+// MARK: - V2 API Specific Response Models (Intermediate)
+
+struct APICourseResult: Codable {
+    let courseId: String
+    let title: String
+    let description: String
+    let modules: [APICourseModule]
+    let estimatedDuration: Int
+    let difficulty: String
+    
+    enum CodingKeys: String, CodingKey {
+        case courseId = "course_id"
+        case title, description, modules
+        case estimatedDuration = "estimated_duration"
+        case difficulty
+    }
+}
+
+struct APICourseModule: Codable {
+    let id: String
+    let title: String
+    let description: String
+    let lessons: [APICourseLesson]
+}
+
+struct APICourseLesson: Codable {
+    let id: String
+    let title: String
+    let content: String
+    let durationMinutes: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, content
+        case durationMinutes = "duration_minutes"
     }
 }
 

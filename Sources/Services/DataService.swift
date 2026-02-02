@@ -46,8 +46,33 @@ final class DataService: ObservableObject {
         }
         
         do {
-            let items = try await apiClient.fetchDiscoverFeed()
-            print("✅ Fetched \(items.count) discover items from backend")
+            async let discoverTask = apiClient.fetchDiscoverFeed()
+            async let communityCoursesTask = apiClient.discoverCommunityCourses()
+            
+            let (rawItems, communityCourses) = try await (discoverTask, try? communityCoursesTask)
+            
+            var items = rawItems
+            
+            // Map community courses to discover items and append
+            if let communityCourses = communityCourses {
+                let mappedCourses = communityCourses.map { course in
+                    DiscoverItem(
+                        id: "community_course_\(course.id)",
+                        type: .courseSuggestion,
+                        title: course.title,
+                        subtitle: course.description,
+                        tag: course.tags.first ?? "Community",
+                        estimatedMinutes: course.lessonCount * 10, // heuristic
+                        courseId: course.id,
+                        thumbnailURL: course.thumbnailURL != nil ? URL(string: course.thumbnailURL!) : nil,
+                        authorName: course.creator.name,
+                        authorAvatarURL: course.creator.avatar != nil ? URL(string: course.creator.avatar!) : nil
+                    )
+                }
+                items.append(contentsOf: mappedCourses)
+            }
+            
+            print("✅ Fetched \(items.count) total discover items (including \(communityCourses?.count ?? 0) from community)")
             return items
         } catch {
             print("❌ Failed to fetch discover feed: \(error.localizedDescription)")

@@ -229,7 +229,7 @@ class StorageService: ObservableObject {
 class NotificationsService: ObservableObject {
     private let client: NetworkClient
     
-    @Published var notifications: [AppNotification] = []
+    @Published var notifications: [APIAppNotification] = []
     @Published var unreadCount: Int = 0
     @Published var isLoading = false
     
@@ -242,7 +242,7 @@ class NotificationsService: ObservableObject {
         category: String? = nil,
         limit: Int = 20,
         offset: Int = 0
-    ) async throws -> [AppNotification] {
+    ) async throws -> [APIAppNotification] {
         isLoading = true
         defer { isLoading = false }
         
@@ -377,6 +377,8 @@ class SearchService: ObservableObject {
 // MARK: - Messaging Service
 @MainActor
 class MessagingService: ObservableObject {
+    static let shared = MessagingService()
+    
     private let client: NetworkClient
     
     @Published var conversations: [Conversation] = []

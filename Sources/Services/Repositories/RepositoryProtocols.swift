@@ -430,6 +430,7 @@ struct RepoPost: Codable, Identifiable {
     var comments: Int
     var isLiked: Bool
     let createdAt: Date
+    let postType: String?
 }
 
 struct UserDTO: Codable {

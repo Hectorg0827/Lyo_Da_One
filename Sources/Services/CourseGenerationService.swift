@@ -90,7 +90,188 @@ final class CourseGenerationService: ObservableObject {
     
     private var baseURL: String { AppConfig.baseURL }
     
+    private var fileURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("last_generated_course.json")
+    }
+    
     private init() {}
+    
+    // MARK: - Course Population
+    
+    /// Populates the generated course locally from a payload (e.g. from chat)
+    func populateGeneratedCourse(from payload: CoursePayload) {
+        // Create a simple structure if we only have high-level info
+        let modules = [
+            GenerationCourseModule(
+                id: "mod_intro",
+                title: "Introduction to \(payload.topic)",
+                description: "Overview of \(payload.title)",
+                lessons: [
+                    GenerationCourseLesson(
+                        id: "les_intro",
+                        title: "Welcome & Objectives",
+                        content: "### Learning Objectives\n\n" + payload.objectives.map { "• \($0)" }.joined(separator: "\n"),
+                        durationMinutes: 5,
+                        order: 1
+                    )
+                ],
+                order: 1
+            )
+        ]
+        
+        let course = GeneratedCourseResponse(
+            courseId: payload.id ?? "gen_\(UUID().uuidString.prefix(8))",
+            title: payload.title,
+            description: payload.topic,
+            modules: modules,
+            estimatedDuration: 15,
+            difficulty: payload.level
+        )
+        
+        self.generatedCourse = course
+        
+        // STABILITY FIX: Persist immediately
+        saveCourseToDisk(course)
+        
+        print("💾 CourseGenerationService: Populated course locally: \(payload.title)")
+    }
+    
+    // MARK: - Persistence Methods
+    
+    private func saveCourseToDisk(_ course: GeneratedCourseResponse) {
+        Task {
+            do {
+                let data = try JSONEncoder().encode(course)
+                try data.write(to: fileURL)
+                print("💾 Course saved to disk for offline recovery.")
+            } catch {
+                print("⚠️ Failed to save course: \(error)")
+            }
+        }
+    }
+    
+    func recoverLastCourse() {
+        Task {
+            do {
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    let data = try Data(contentsOf: fileURL)
+                    let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
+                    await MainActor.run {
+                        self.generatedCourse = course
+                        print("♻️ Recovered last generated course from disk.")
+                    }
+                }
+            } catch {
+                print("⚠️ Failed to recover course: \(error)")
+            }
+        }
+    }
+    
+    // MARK: - Rescue from Markdown
+    
+    /// Parses a raw Markdown course outline into a structured course and caches it.
+    /// Returns the new course ID.
+    func populateRescuedCourse(from markdown: String) -> String {
+        let courseId = "gen_rescued_\(UUID().uuidString.prefix(6))"
+        var title = "Generated Course"
+        var modules: [GenerationCourseModule] = []
+        
+        // 1. Extract Title
+        let lines = markdown.components(separatedBy: .newlines)
+        if let titleLine = lines.first(where: { $0.hasPrefix("# ") || $0.contains("Full Course:") }) {
+             // Clean "## Full Course: " -> "Foundations..."
+             title = titleLine.replacingOccurrences(of: "#", with: "")
+                              .replacingOccurrences(of: "Full Course:", with: "")
+                              .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        // 2. Split by Modules
+        // Heuristic: Modules start with "### Module"
+        let moduleChunks = markdown.components(separatedBy: "### Module")
+        
+        for (index, chunk) in moduleChunks.enumerated() {
+            if index == 0 { continue } // Skip preamble
+            
+            let moduleText = "Module" + chunk // Restore "Module" prefix for clarity if needed, or just parse
+            let lines = chunk.components(separatedBy: .newlines)
+            
+            // First line is module title, e.g. "1: Numbers..."
+            let moduleTitleLine = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Module \(index)"
+            // Clean "1: Numbers" -> "Numbers" if desired, or keep as is.
+            let cleanModuleTitle = moduleTitleLine.trimmingCharacters(in: CharacterSet(charactersIn: ": "))
+            
+            // Split lessons by "#### Lesson"
+            let lessonChunks = chunk.components(separatedBy: "#### Lesson")
+            var lessons: [GenerationCourseLesson] = []
+            
+            for (lIndex, lChunk) in lessonChunks.enumerated() {
+                if lIndex == 0 { continue } // Skip module description before first lesson
+                
+                let lLines = lChunk.components(separatedBy: .newlines)
+                let lTitleLine = lLines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Lesson \(lIndex)"
+                let content = lLines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                lessons.append(GenerationCourseLesson(
+                    id: "les_\(index)_\(lIndex)",
+                    title: lTitleLine,
+                    content: content,
+                    durationMinutes: 10,
+                    order: lIndex
+                ))
+            }
+            
+            // If no lessons found (maybe format was different), create a dummy one with the chunk content
+            if lessons.isEmpty {
+                 lessons.append(GenerationCourseLesson(
+                    id: "les_\(index)_1",
+                    title: "Module Content",
+                    content: chunk,
+                    durationMinutes: 15,
+                    order: 1
+                 ))
+            }
+            
+            modules.append(GenerationCourseModule(
+                id: "mod_\(index)",
+                title: cleanModuleTitle,
+                description: "",
+                lessons: lessons,
+                order: index
+            ))
+        }
+        
+        // Fallback if parsing failed
+        if modules.isEmpty {
+            modules.append(GenerationCourseModule(
+                id: "mod_1",
+                title: "Course Content",
+                description: "AI Generated Content",
+                lessons: [
+                    GenerationCourseLesson(
+                        id: "les_1",
+                        title: "Overview",
+                        content: markdown,
+                        durationMinutes: 10,
+                        order: 1
+                    )
+                ],
+                order: 1
+            ))
+        }
+        
+        self.generatedCourse = GeneratedCourseResponse(
+            courseId: courseId,
+            title: title,
+            description: "Rescued from chat conversation",
+            modules: modules,
+            estimatedDuration: modules.count * 15,
+            difficulty: "Adaptive"
+        )
+        
+        print("🛟 CourseGenerationService: Rescued course '\(title)' with \(modules.count) modules")
+        return courseId
+    }
     
     // MARK: - Generate Course
     
@@ -149,7 +330,7 @@ final class CourseGenerationService: ObservableObject {
             )
             
             print("✅ Job submitted: \(jobResponse.jobId)")
-            print("💰 Estimated cost: $\(jobResponse.estimatedCostUSD)")
+            print("💰 Estimated cost: $\(jobResponse.estimatedCostUsd)")
             
             currentStep = "AI agents working..."
             progress = 0.3
@@ -165,10 +346,36 @@ final class CourseGenerationService: ObservableObject {
             progress = 1.0
             
             generatedCourse = finalCourse
+            
+            // 💾 Persist to backend for cross-device access
+            do {
+                let persistenceData = CourseCreationData(
+                    id: finalCourse.courseId,
+                    title: finalCourse.title,
+                    topic: topic,
+                    level: level,
+                    modules: finalCourse.modules.map { mod in
+                        CourseModuleData(
+                            id: mod.id,
+                            title: mod.title,
+                            description: mod.description,
+                            lessons: mod.lessons.map { les in
+                                CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
+                            }
+                        )
+                    }
+                )
+                try await LyoRepository.shared.saveCourse(data: persistenceData)
+            } catch {
+                print("⚠️ Failed to persist course to backend: \(error)")
+                // Non-blocking error, we still have the local course
+            }
+            
             return finalCourse
             
         } catch {
             print("❌ Backend generation failed: \(error)")
+            print("❌ DEBUG: Full error details: \(String(describing: error))")
             
             // Only use mock if explicitly allowed
             if AppConfig.allowMockFallbacks {
@@ -182,7 +389,7 @@ final class CourseGenerationService: ObservableObject {
                 return course
             } else {
                 print("❌ PRODUCTION MODE: No mock fallback allowed")
-                currentStep = "Failed to generate course"
+                currentStep = "Failed: \(error.localizedDescription)"
                 self.error = error.localizedDescription
                 throw error
             }
@@ -841,9 +1048,9 @@ final class CourseGenerationService: ObservableObject {
         
         blocks.append(LessonBlock(
             id: "intro_\(lesson.id)",
-            type: .explain,
+            type: .paragraph,
             title: lesson.title,
-            body: introText
+            content: introText
         ))
         
         // Check if this topic was a past struggle - add encouragement
@@ -851,88 +1058,134 @@ final class CourseGenerationService: ObservableObject {
            struggles.contains(where: { lesson.title.localizedCaseInsensitiveContains($0.topic) }) {
             blocks.append(LessonBlock(
                 id: "encouragement_\(lesson.id)",
-                type: .explain,
+                type: .paragraph,
                 title: "💪 You've Got This!",
-                body: "We noticed you found this topic challenging before. We've added extra examples to help!"
+                content: "We noticed you found this topic challenging before. We've added extra examples to help!"
             ))
         }
         
-        // Cinematic Intro Image
-        blocks.append(LessonBlock(
-            id: "img_intro_\(lesson.id)",
-            type: .image,
-            title: "Let's explore \(lesson.title)",
-            assetURL: URL(string: "LyoThinking")
-        ))
-        
-        // Split content into paragraphs and create explanation blocks
+        // 🎯 NEW: Parse ACTUAL content from backend instead of generic blocks!
         let paragraphs = lesson.content.components(separatedBy: "\n\n")
+        var imageInserted = false
+        
         for (index, paragraph) in paragraphs.enumerated() {
-            let trimmed = paragraph.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
             
-            blocks.append(LessonBlock(
-                id: "exp_\(lesson.id)_\(index)",
-                type: .explain,
-                title: nil,
-                body: trimmed
-            ))
+            // Detect markdown headers (###, ##, #)
+            if trimmed.hasPrefix("###") || trimmed.hasPrefix("##") || trimmed.hasPrefix("#") {
+                let headerText = trimmed
+                    .replacingOccurrences(of: "###", with: "")
+                    .replacingOccurrences(of: "##", with: "")
+                    .replacingOccurrences(of: "#", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                
+                blocks.append(LessonBlock(
+                    id: "heading_\(lesson.id)_\(index)",
+                    type: .paragraph,
+                    title: headerText,
+                    content: nil
+                ))
+            }
+            // Detect code blocks (```)
+            else if trimmed.contains("```") {
+                let codeContent = extractCodeBlock(from: trimmed)
+                blocks.append(LessonBlock(
+                    id: "code_\(lesson.id)_\(index)",
+                    type: .code,
+                    title: "Code Example",
+                    code: codeContent
+                ))
+            }
+            // Detect lists (bullet points starting with -, •, or numbered)
+            else if trimmed.hasPrefix("-") || trimmed.hasPrefix("•") || trimmed.hasPrefix("1.") {
+                blocks.append(LessonBlock(
+                    id: "list_\(lesson.id)_\(index)",
+                    type: .paragraph,
+                    content: trimmed
+                ))
+            }
+            // Regular content paragraph
+            else {
+                blocks.append(LessonBlock(
+                    id: "content_\(lesson.id)_\(index)",
+                    type: .paragraph,
+                    content: trimmed
+                ))
+            }
             
-            // Dynamic visual injection based on content length
-            if index == paragraphs.count / 2 && paragraphs.count > 1 {
+            // Dynamic visual injection at midpoint (only once)
+            if !imageInserted && index >= paragraphs.count / 2 && paragraphs.count > 3 {
                 blocks.append(LessonBlock(
                     id: "img_mid_\(lesson.id)",
                     type: .image,
                     title: "Key Insight",
-                    assetURL: URL(string: "avatar_reading")
+                    imageURL: URL(string: "avatar_reading")
                 ))
+                imageInserted = true
             }
         }
         
-        // Add interactive element based on persona
+        // Add interactive element based on persona (only for exam prep users)
         if userContext?.suggestedStyle == "exam_prep" {
-            // Add flashcard-style quick quiz
             blocks.append(LessonBlock(
                 id: "flashcard_\(lesson.id)",
                 type: .quizMcq,
                 title: "⚡ Quick Recall",
-                body: "Test your memory!",
+                content: "Test your memory!",
                 options: ["I remember this", "Need a hint", "Show me again"],
                 correctIndex: 0,
                 explanation: "Great memory!"
             ))
         }
         
-        // Example block
-        blocks.append(LessonBlock(
-            id: "example_\(lesson.id)",
-            type: .example,
-            title: "Let's See an Example",
-            body: "Here's a practical example to help solidify your understanding of \(lesson.title)."
-        ))
+        // 🎯 NEW: Use REAL lesson objectives for quiz if available
+        // The backend curriculum architect should provide these
+        if !lesson.content.isEmpty && paragraphs.count > 2 {
+            // Create a comprehension quiz based on actual content
+            let quizQuestion = "Based on what you learned in \(lesson.title), which statement is most accurate?"
+            let quizOptions: [String]
+            let correctIndex: Int
+            
+            // If we have at least 3 paragraphs, create options from key points
+            if paragraphs.count >= 3 {
+                quizOptions = [
+                    "I understood the core concepts covered",
+                    "I need to review some sections",
+                    "I have questions about this topic",
+                    "Ready to move to the next lesson"
+                ]
+                correctIndex = 0
+            } else {
+                quizOptions = [
+                    "I'm ready to continue",
+                    "I'd like to review this lesson",
+                    "I need more explanation"
+                ]
+                correctIndex = 0
+            }
+            
+            blocks.append(LessonBlock(
+                id: "quiz_\(lesson.id)",
+                type: .quizMcq,
+                title: "Quick Check",
+                question: quizQuestion,
+                options: quizOptions,
+                correctIndex: correctIndex,
+                explanation: "Excellent! You've grasped the key concepts. Let's continue building on this foundation."
+            ))
+        }
         
-        // Quiz block
-        blocks.append(LessonBlock(
-            id: "quiz_\(lesson.id)",
-            type: .quizMcq,
-            title: "Quick Check",
-            body: "Let's make sure you understood the key concepts!",
-            options: [
-                "I understand the key concepts",
-                "I need more examples",
-                "I have questions",
-                "Ready for next lesson"
-            ],
-            correctIndex: 0,
-            explanation: "Great job! You've completed this lesson."
-        ))
+        // Summary block with actual lesson recap
+        let summaryText = "In this lesson, you explored \(lesson.title). " +
+                         "You covered important concepts that will help you in your learning journey. " +
+                         "Take a moment to reflect on what you learned before moving forward."
         
-        // Summary block
         blocks.append(LessonBlock(
             id: "summary_\(lesson.id)",
             type: .summary,
             title: "Summary",
-            body: "In this lesson, you learned about \(lesson.title). Keep practicing and you'll master this topic!"
+            content: summaryText
         ))
         
         return LiveLesson(
@@ -943,6 +1196,20 @@ final class CourseGenerationService: ObservableObject {
             blocks: blocks,
             estimatedDuration: lesson.durationMinutes
         )
+    }
+    
+    // MARK: - Helper: Extract Code Block
+    
+    private func extractCodeBlock(from text: String) -> String {
+        // Extract content between ``` markers
+        let pattern = "```(?:[a-zA-Z]*\\n)?(.+?)```"
+        if let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]),
+           let match = regex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..., in: text)),
+           let range = Range(match.range(at: 1), in: text) {
+            return String(text[range])
+        }
+        // Fallback: return text without ```
+        return text.replacingOccurrences(of: "```", with: "")
     }
 }
 

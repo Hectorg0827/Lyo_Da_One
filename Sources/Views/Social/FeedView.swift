@@ -27,17 +27,15 @@ struct FeedView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(viewModel.posts) { post in
-                                PostCardView(post: post) { action in
-                                    handlePostAction(post: post, action: action)
-                                }
-                                .onAppear {
-                                    // Load more when reaching last post
-                                    if post.id == viewModel.posts.last?.id {
-                                        Task {
-                                            await viewModel.loadMore()
+                                postRow(for: post)
+                                    .onAppear {
+                                        // Load more when reaching last post
+                                        if post.id == viewModel.posts.last?.id {
+                                            Task {
+                                                await viewModel.loadMore()
+                                            }
                                         }
                                     }
-                                }
 
                                 Divider()
                             }
@@ -112,6 +110,19 @@ struct FeedView: View {
         case .delete:
             Task {
                 await viewModel.deletePost(post)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func postRow(for post: RepoPost) -> some View {
+        if post.postType == "course_progress" {
+            MasteryCardView(post: post) { action in
+                handlePostAction(post: post, action: action)
+            }
+        } else {
+            PostCardView(post: post) { action in
+                handlePostAction(post: post, action: action)
             }
         }
     }

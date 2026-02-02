@@ -229,14 +229,34 @@ struct LyoOverlayView: View {
                             )
                             .frame(width: 280, height: 280)
                             .blur(radius: 25)
+                        
+                        // Live Transcript Overlay
+                        if viewModel.isLiveMode && !viewModel.lastLiveTranscript.isEmpty {
+                            VStack {
+                                Spacer().frame(height: 320)
+                                Text(viewModel.lastLiveTranscript)
+                                    .font(.system(size: 18, weight: .medium, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 12)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(20)
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                    .id(viewModel.lastLiveTranscript)
+                            }
+                        }
                     }
                     
                     // Avatar with thinking indicator
                     ZStack {
                         LyoAvatarView(
                             size: animationState == .active ? 200 : (animationState == .chatting ? 44 : 60),
-                            isListening: viewModel.isVoiceActive,
-                            isThinking: isThinking && animationState == .chatting
+                            isListening: viewModel.isVoiceActive || viewModel.isLiveMode,
+                            isThinking: (viewModel.isAIThinking && animationState == .chatting) || viewModel.isLiveMode,
+                            isLiveMode: viewModel.isLiveMode,
+                            isSpeaking: viewModel.isAISpeaking,
+                            userLevel: viewModel.userLiveAudioLevel,
+                            aiLevel: viewModel.aiLiveAudioLevel
                         ) {
                             // On Tap Avatar
                         }
@@ -263,6 +283,34 @@ struct LyoOverlayView: View {
                 )
                 .animation(.spring(response: 0.5, dampingFraction: 0.8), value: animationState)
                 .zIndex(animationState == .chatting ? 100 : 10)
+                
+                // Live Stage Widget Area (Generative UI)
+                if let widget = viewModel.activeLiveWidget {
+                    LiveStageWidgetView(widget: widget)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .bottom).combined(with: .opacity)
+                        ))
+                        .offset(y: animationState == .active ? -220 : -120)
+                        .zIndex(150)
+                        .onTapGesture {
+                            withAnimation {
+                                viewModel.activeLiveWidget = nil
+                            }
+                        }
+                }
+                
+                // A2A Progress Overlay
+                if viewModel.showA2AProgressView {
+                    ZStack {
+                        Color.black.opacity(0.4).ignoresSafeArea()
+                        A2AProgressView()
+                            .padding(.horizontal, 24)
+                            .shadow(radius: 20)
+                    }
+                    .transition(.opacity)
+                    .zIndex(200)
+                }
                 
                 // Header Bar (Top)
                 if animationState != .initial {
@@ -586,10 +634,10 @@ struct HybridInputBar: View {
                             }
                             
                             // Live Mode
-                            Button(action: { /* Trigger Live Mode */ }) {
-                                Image(systemName: "video")
+                            Button(action: { viewModel.toggleLiveMode() }) {
+                                Image(systemName: viewModel.isLiveMode ? "waveform" : "video")
                                     .font(.system(size: 18))
-                                    .foregroundColor(.white.opacity(0.9))
+                                    .foregroundColor(viewModel.isLiveMode ? Color(hex: "FF8C00") : .white.opacity(0.9))
                                     .frame(width: 32, height: 32)
                             }
                         }
@@ -604,14 +652,14 @@ struct HybridInputBar: View {
                 RoundedRectangle(cornerRadius: 24)
                     .stroke(
                         AngularGradient(
-                            colors: isThinking ? thinkingColors : (isSpeaking ? respondingColors : idleColors),
+                            colors: viewModel.isAIThinking ? thinkingColors : (viewModel.isAISpeaking ? respondingColors : idleColors),
                             center: .center,
                             angle: .degrees(gradientRotation)
                         ),
                         lineWidth: 1.5
                     )
             )
-            .shadow(color: isThinking ? thinkingColors[0].opacity(0.4) : Color.black.opacity(0.3), radius: isThinking ? 15 : 10)
+            .shadow(color: viewModel.isAIThinking ? thinkingColors[0].opacity(0.4) : (viewModel.isAISpeaking ? respondingColors[0].opacity(0.4) : Color.black.opacity(0.3)), radius: (viewModel.isAIThinking || viewModel.isAISpeaking) ? 15 : 10)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 10) // Lift slightly
