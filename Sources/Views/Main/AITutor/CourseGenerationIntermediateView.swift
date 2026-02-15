@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct CourseGenerationIntermediateView: View {
     let topic: String
@@ -121,7 +122,7 @@ struct CourseGenerationIntermediateView: View {
     private func generateCourse() {
         Task {
             do {
-                print("🎓 Generating course: \(topic) at \(level) level")
+                Log.course.info("Generating course: \(topic) at \(level) level")
                 let course = try await courseService.generateCourse(
                     topic: topic,
                     level: level,
@@ -129,7 +130,7 @@ struct CourseGenerationIntermediateView: View {
                     teachingStyle: "interactive"
                 )
                 
-                print("✅ Course generated: \(course.title)")
+                Log.course.info("Course generated: \(course.title)")
                 generatedCourse = course
                 
                 // Small delay for smooth transition
@@ -137,7 +138,7 @@ struct CourseGenerationIntermediateView: View {
                 showClassroom = true
                 
             } catch {
-                print("❌ Course generation error: \(error)")
+                Log.course.error("Course generation error: \(error)")
                 self.error = error.localizedDescription
             }
         }

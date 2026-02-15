@@ -25,16 +25,16 @@ struct AppConfig {
     static var baseURL: String {
         switch Environment.current {
         case .development:
-            // Use Cloud Run backend by default for stability
-            // Set LYO_USE_LOCALHOST=1 env var to use local backend when debugging
+            // Default: Cloud Run backend (stable, always reachable)
+            // Set LYO_USE_LOCALHOST=1 in Xcode scheme env vars to use local backend
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "http://localhost:8000"
             }
-            return "https://lyo-backend-5oq7jszolq-uc.a.run.app"
+            return "https://lyo-backend-830162750094.us-central1.run.app"
         case .staging:
-            return "https://lyo-backend-5oq7jszolq-uc.a.run.app"
+            return "https://lyo-backend-830162750094.us-central1.run.app"
         case .production:
-            return "https://lyo-backend-5oq7jszolq-uc.a.run.app"
+            return "https://lyo-backend-830162750094.us-central1.run.app"
         }
     }
     
@@ -79,13 +79,13 @@ struct AppConfig {
         switch Environment.current {
         case .development:
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
-                return "ws://192.168.1.167:8000/ws"
+                return "ws://localhost:8000/ws"
             }
-            return "wss://lyo-backend-5oq7jszolq-uc.a.run.app/ws"
+            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
         case .staging:
-            return "wss://lyo-backend-5oq7jszolq-uc.a.run.app/ws"
+            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
         case .production:
-            return "wss://lyo-backend-5oq7jszolq-uc.a.run.app/ws"
+            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
         }
     }
 

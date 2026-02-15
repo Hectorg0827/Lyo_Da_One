@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 // MARK: - Settings View
 struct SettingsView: View {
@@ -199,7 +200,7 @@ struct SettingsView: View {
         URLCache.shared.removeAllCachedResponses()
         // Clear custom image cache if any
         // ImageCache.shared.clear() // Example if using custom cache
-        print("✅ Cache cleared")
+        Log.ui.info("Cache cleared")
     }
     
     private func deleteAccount() {
@@ -208,7 +209,7 @@ struct SettingsView: View {
                 try await AuthService.shared.deleteAccount()
                 // dismiss() // Usually Logout triggers root view change, so dismiss might be redundant or fail
             } catch {
-                print("❌ Failed to delete account: \(error.localizedDescription)")
+                Log.ui.error("Failed to delete account: \(error.localizedDescription)")
             }
         }
     }

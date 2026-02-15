@@ -322,55 +322,20 @@ struct QuizCardView: View {
                 .padding(.vertical, 20)
             } else if let question = currentQuestion {
                 // Question
-                Text(question.question)
-                    .font(.body)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 8)
-                
-                // Options
-                VStack(spacing: 10) {
-                    ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
-                        Button {
-                            withAnimation(.spring(response: 0.3)) {
-                                selectedAnswer = index
-                                showResult = true
-                                
-                                if option == question.correctAnswer {
-                                    correctCount += 1
-                                    HapticManager.shared.playSuccess()
-                                } else {
-                                    HapticManager.shared.playError()
-                                }
-                                
-                                onAnswer?(question.question, index)
-                            }
-                        } label: {
-                            HStack {
-                                Text(option)
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.leading)
-                                
-                                Spacer()
-                                
-                                if showResult && selectedAnswer == index {
-                                    Image(systemName: option == question.correctAnswer ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                        .foregroundColor(option == question.correctAnswer ? .green : .red)
-                                }
-                            }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(backgroundColor(for: index, option: option, correctAnswer: question.correctAnswer))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(borderColor(for: index, option: option, correctAnswer: question.correctAnswer), lineWidth: 1)
-                            )
+                PremiumQuizView(
+                    question: question.question,
+                    options: question.options,
+                    correctIndex: question.options.firstIndex(of: question.correctAnswer) ?? 0,
+                    explanation: nil, // Add explanation if available in data
+                    onAnswerSubmitted: { index, isCorrect in
+                        if isCorrect {
+                            correctCount += 1
                         }
-                        .disabled(showResult)
+                        showResult = true
+                        selectedAnswer = index
+                        onAnswer?(question.question, index)
                     }
-                }
+                )
                 
                 // Next Button
                 if showResult {
@@ -387,53 +352,26 @@ struct QuizCardView: View {
                         }
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color(hex: "F59E0B").opacity(0.3))
-                        .foregroundColor(Color(hex: "F59E0B"))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(colors: [Color(hex: "F59E0B"), Color(hex: "EF4444")], startPoint: .leading, endPoint: .trailing)
+                        )
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 12)
                 }
             }
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(white: 0.1))
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(white: 0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color(hex: "F59E0B").opacity(0.5), Color(hex: "EF4444").opacity(0.5)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
-    }
-    
-    private func backgroundColor(for index: Int, option: String, correctAnswer: String) -> Color {
-        guard showResult else { return Color(white: 0.15) }
-        
-        if option == correctAnswer {
-            return Color.green.opacity(0.2)
-        } else if selectedAnswer == index {
-            return Color.red.opacity(0.2)
-        }
-        return Color(white: 0.15)
-    }
-    
-    private func borderColor(for index: Int, option: String, correctAnswer: String) -> Color {
-        guard showResult else { return Color.white.opacity(0.1) }
-        
-        if option == correctAnswer {
-            return Color.green.opacity(0.5)
-        } else if selectedAnswer == index {
-            return Color.red.opacity(0.5)
-        }
-        return Color.white.opacity(0.1)
     }
 }
 
@@ -441,9 +379,7 @@ struct QuizCardView: View {
 
 struct FlashcardsCardView: View {
     let flashcards: FlashcardData
-    
     @State private var currentIndex = 0
-    @State private var isFlipped = false
     
     private var currentCard: FlashcardItem? {
         guard currentIndex < flashcards.cards.count else { return nil }
@@ -484,90 +420,63 @@ struct FlashcardsCardView: View {
             }
             
             if let card = currentCard {
-                // Card
-                Button {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                        isFlipped.toggle()
-                    }
-                } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(white: 0.15))
-                            .frame(height: 150)
-                        
-                        VStack(spacing: 8) {
-                            Text(isFlipped ? "Answer" : "Question")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                            
-                            Text(isFlipped ? card.back : card.front)
-                                .font(.body)
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-                    }
-                }
-                .rotation3DEffect(
-                    .degrees(isFlipped ? 180 : 0),
-                    axis: (x: 0, y: 1, z: 0)
+                PremiumFlashcardView(
+                    front: card.front,
+                    back: card.back,
+                    hint: nil,
+                    isMastered: false,
+                    showMasteryButton: false
                 )
+                .frame(height: 250)
                 
                 // Navigation
-                HStack(spacing: 16) {
+                HStack {
                     Button {
                         withAnimation {
-                            if currentIndex > 0 {
-                                currentIndex -= 1
-                                isFlipped = false
-                            }
+                            currentIndex = max(0, currentIndex - 1)
                         }
                     } label: {
-                        Image(systemName: "arrow.left")
-                            .font(.title3)
-                            .foregroundColor(currentIndex > 0 ? .white : .white.opacity(0.3))
+                        Image(systemName: "chevron.left")
+                            .font(.headline)
+                            .padding(12)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
                     }
                     .disabled(currentIndex == 0)
+                    .opacity(currentIndex == 0 ? 0.3 : 1)
                     
                     Spacer()
                     
-                    Text("Tap card to flip")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.5))
+                    Text("\(currentIndex + 1) / \(flashcards.cards.count)")
+                        .font(.caption.bold())
+                        .foregroundColor(.white.opacity(0.6))
                     
                     Spacer()
                     
                     Button {
                         withAnimation {
-                            if currentIndex < flashcards.cards.count - 1 {
-                                currentIndex += 1
-                                isFlipped = false
-                            }
+                            currentIndex = min(flashcards.cards.count - 1, currentIndex + 1)
                         }
                     } label: {
-                        Image(systemName: "arrow.right")
-                            .font(.title3)
-                            .foregroundColor(currentIndex < flashcards.cards.count - 1 ? .white : .white.opacity(0.3))
+                        Image(systemName: "chevron.right")
+                            .font(.headline)
+                            .padding(12)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
                     }
-                    .disabled(currentIndex >= flashcards.cards.count - 1)
+                    .disabled(currentIndex == flashcards.cards.count - 1)
+                    .opacity(currentIndex == flashcards.cards.count - 1 ? 0.3 : 1)
                 }
             }
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(white: 0.1))
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(white: 0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color(hex: "10B981").opacity(0.5), Color(hex: "06B6D4").opacity(0.5)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(Color.white.opacity(0.15), lineWidth: 1)
         )
     }
 }
@@ -668,56 +577,70 @@ struct ProcessingIndicatorView: View {
     let step: String
     let progress: Double?
     
-    @State private var isAnimating = false
+    @State private var frameIndex = 0
+    private let frames = ["Mascot_Reading_1", "Mascot_Reading_2", "Mascot_Reading_3", "Mascot_Reading_4"]
+    private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
     
     var body: some View {
         HStack(spacing: 12) {
-            // Animated indicator
+            // Mascot Animation
             ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 3)
-                    .frame(width: 24, height: 24)
-                
                 if let progress = progress {
+                    // Show progress circular ring around mascot if progress exists
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 2)
+                        .frame(width: 32, height: 32)
+                    
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(Color.blue, lineWidth: 3)
-                        .frame(width: 24, height: 24)
-                        .rotationEffect(.degrees(-90))
-                } else {
-                    Circle()
-                        .trim(from: 0, to: 0.7)
                         .stroke(
                             LinearGradient(
-                                colors: [Color.blue, Color.purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                                colors: [Color(hex: "8B5CF6"), Color(hex: "3B83F6")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             ),
-                            lineWidth: 3
+                            lineWidth: 2
                         )
-                        .frame(width: 24, height: 24)
-                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                        .frame(width: 32, height: 32)
+                        .rotationEffect(.degrees(-90))
                 }
+                
+                Image(frames[frameIndex])
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 24, height: 24)
+                    .clipShape(Circle())
+            }
+            .onReceive(timer) { _ in
+                frameIndex = (frameIndex + 1) % frames.count
             }
             
             Text(step)
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.8))
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white.opacity(0.9))
+            
+            if progress == nil {
+                // Subtle moving dots
+                HStack(spacing: 2) {
+                    ForEach(0..<3) { i in
+                        Circle()
+                            .fill(Color.white.opacity(0.6))
+                            .frame(width: 3, height: 3)
+                    }
+                }
+            }
             
             Spacer()
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.black.opacity(0.3))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
         )
-        .onAppear {
-            if progress == nil {
-                withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
-                    isAnimating = true
-                }
-            }
-        }
     }
 }
 

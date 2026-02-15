@@ -16,6 +16,8 @@ struct ReviewInputView: View {
     @State private var rating = 0
     @State private var text = ""
     @State private var isSubmitting = false
+    @State private var showSubmitError = false
+    @State private var submitError: String = ""
     
     var body: some View {
         NavigationStack {
@@ -73,6 +75,12 @@ struct ReviewInputView: View {
                     .disabled(rating == 0 || isSubmitting)
                 }
             }
+            .alert("Submission Failed", isPresented: $showSubmitError) {
+                Button("OK", role: .cancel) { }
+                Button("Retry") { submitReview() }
+            } message: {
+                Text(submitError)
+            }
         }
     }
     
@@ -96,7 +104,8 @@ struct ReviewInputView: View {
             } catch {
                 await MainActor.run {
                     isSubmitting = false
-                    // TODO: Show error alert
+                    submitError = error.localizedDescription
+                    showSubmitError = true
                 }
             }
         }

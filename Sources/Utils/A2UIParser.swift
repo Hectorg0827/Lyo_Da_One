@@ -25,7 +25,7 @@ struct A2UIParser {
         // 1. Regex to find JSON blocks
         // Matches: ```json { ... } ``` OR just { ... } if it looks like our payload
         let jsonBlockPattern = #"```json\s*(\{[\s\S]*?\})\s*```"#
-        let looseJsonPattern = #"(\{[\s\S]*?"type"\s*:\s*"(?:topic_selection|course_roadmap|flashcards|quiz|suggestions)"[\s\S]*?\})"#
+        let looseJsonPattern = #"(\{[\s\S]*?"type"\s*:\s*"(?:topic_selection|course_roadmap|flashcards|quiz|suggestions|a2ui|a2ui_component)"[\s\S]*?\})"#
         
         // We look for code blocks first as they are most reliable
         contentTypes.append(contentsOf: extractWidgets(from: text, pattern: jsonBlockPattern, isCodeBlock: true, cleanText: &cleanText))
@@ -151,6 +151,23 @@ struct A2UIParser {
             case "suggestions":
                 let payload = try decoder.decode(SuggestionsPayload.self, from: data)
                 return .suggestions(title: payload.title ?? "Suggestions", options: payload.items)
+                
+            case "a2ui", "a2ui_component":
+                // If the backend sends a full A2UI component, it might not have an ID.
+                // We create a stable ID based on the content hash to avoid duplicates.
+                if let component = try? decoder.decode(A2UIComponent.self, from: data) {
+                    return .a2ui(component: component)
+                } else if var dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    // Inject a stable ID if missing so it can be decoded
+                    if dict["id"] == nil {
+                        dict["id"] = "a2ui_stable_\(abs(jsonString.hashValue))"
+                    }
+                    if let injectedData = try? JSONSerialization.data(withJSONObject: dict),
+                       let component = try? decoder.decode(A2UIComponent.self, from: injectedData) {
+                        return .a2ui(component: component)
+                    }
+                }
+                return nil
                 
             default:
                 return nil

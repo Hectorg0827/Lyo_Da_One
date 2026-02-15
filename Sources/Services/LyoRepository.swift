@@ -1,11 +1,9 @@
 import Foundation
 import CoreLocation
+import os
 
 class LyoRepository: ObservableObject {
     static let shared = LyoRepository()
-    
-    // Use centralized configuration
-    private var baseURL: String { AppConfig.baseURL }
     
     private var authToken: String?
     private let tokenManager = TokenManager.shared
@@ -108,25 +106,25 @@ class LyoRepository: ObservableObject {
     
     // MARK: - Generic Helpers
     
-    private func get<T: Codable>(endpoint: String) async throws -> T {
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .get)
+    private func get<T: Codable>(endpoint: String, requiresAuth: Bool = true) async throws -> T {
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .get, requiresAuth: requiresAuth)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func post<T: Codable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
+    private func post<T: Codable>(endpoint: String, body: [String: Any]? = nil, requiresAuth: Bool = true) async throws -> T {
         let encodableBody = body.map { AnyEncodable(value: $0) }
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .post, body: encodableBody)
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .post, body: encodableBody, requiresAuth: requiresAuth)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func put<T: Codable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
+    private func put<T: Codable>(endpoint: String, body: [String: Any]? = nil, requiresAuth: Bool = true) async throws -> T {
         let encodableBody = body.map { AnyEncodable(value: $0) }
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .put, body: encodableBody)
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .put, body: encodableBody, requiresAuth: requiresAuth)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func delete<T: Codable>(endpoint: String) async throws -> T {
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .delete)
+    private func delete<T: Codable>(endpoint: String, requiresAuth: Bool = true) async throws -> T {
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .delete, requiresAuth: requiresAuth)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
@@ -342,7 +340,7 @@ class LyoRepository: ObservableObject {
     
     func saveCourse(data: CourseCreationData) async throws {
         let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Learning.createCourse(data: data))
-        print("✅ Course saved to backend: \(data.title)")
+        Log.data.info("Course saved to backend: \(data.title)")
     }
 
 

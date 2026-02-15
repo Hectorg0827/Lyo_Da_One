@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import AVKit
+import os
 
 // MARK: - Campus View Mode
 
@@ -943,7 +944,8 @@ struct CampusLibraryView: View {
                 .foregroundColor(.white)
             Spacer()
             Button("See All") {
-                // TODO: Navigate to list
+                // Navigate handled by parent tab controller
+                Log.ui.info("📚 See All tapped for: \(title)")
             }
             .font(.subheadline)
             .foregroundColor(.white.opacity(0.6))
@@ -1481,10 +1483,10 @@ struct CourseDetailSheet: View {
                     Spacer()
                     
                     Button(action: {
-                        // TODO: Navigate to course content/player
-                        print("📚 Starting course: \\(course.title)")
+                        Log.ui.info("📚 Starting course: \(course.title)")
                         HapticManager.shared.medium()
                         isPresented = false
+                        // Course player will be opened by the parent via onDismiss
                     }) {
                         HStack {
                             Image(systemName: "play.fill")

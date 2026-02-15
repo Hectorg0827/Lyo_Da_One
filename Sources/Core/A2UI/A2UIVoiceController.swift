@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import os
 
 /// Bridge between Voice Input and A2UI Actions
 @MainActor
@@ -44,11 +45,11 @@ class A2UIVoiceController: ObservableObject {
         guard let root = currentRootComponent else { return }
         
         let command = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        print("🗣️ A2UI Processing Command: '\(command)'")
+        Log.audio.info("🗣️ A2UI Processing Command: '\(command)'")
         
         // Find matching action in the UI tree
         if let match = findActionForCommand(command, in: root) {
-            print("✅ Executing Voice Action: \(match.action.id)")
+            Log.audio.info("Executing Voice Action: \(match.action.id)")
             
             // Execute the action
             // Trigger haptic feedback

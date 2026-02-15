@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 class StackService: ObservableObject {
     @Published var items: [StackItem] = []
     @Published var isLoading = false
@@ -9,18 +10,14 @@ class StackService: ObservableObject {
     private let repository = LyoRepository.shared
     
     func fetchStackItems(status: StackItemStatus? = .active) async {
-        await MainActor.run { isLoading = true }
+        isLoading = true
         do {
             let fetchedItems = try await repository.getStackItems(status: status)
-            await MainActor.run {
-                self.items = fetchedItems
-                self.isLoading = false
-            }
+            self.items = fetchedItems
+            self.isLoading = false
         } catch {
-            await MainActor.run {
-                self.error = error.localizedDescription
-                self.isLoading = false
-            }
+            self.error = error.localizedDescription
+            self.isLoading = false
         }
     }
     
@@ -28,13 +25,9 @@ class StackService: ObservableObject {
         let request = CreateStackItemRequest(type: type, refId: refId, tags: tags, contextData: contextData)
         do {
             let newItem = try await repository.createStackItem(request: request)
-            await MainActor.run {
-                self.items.insert(newItem, at: 0)
-            }
+            self.items.insert(newItem, at: 0)
         } catch {
-            await MainActor.run {
-                self.error = error.localizedDescription
-            }
+            self.error = error.localizedDescription
         }
     }
     
@@ -42,19 +35,15 @@ class StackService: ObservableObject {
         let request = UpdateStackItemRequest(pinned: pinned, status: status)
         do {
             let updatedItem = try await repository.updateStackItem(id: id, request: request)
-            await MainActor.run {
-                if let index = self.items.firstIndex(where: { $0.id == id }) {
-                    self.items[index] = updatedItem
-                    // Remove if status changed to something other than active (assuming we only show active)
-                    if let status = status, status != .active {
-                        self.items.remove(at: index)
-                    }
+            if let index = self.items.firstIndex(where: { $0.id == id }) {
+                self.items[index] = updatedItem
+                // Remove if status changed to something other than active (assuming we only show active)
+                if let status = status, status != .active {
+                    self.items.remove(at: index)
                 }
             }
         } catch {
-            await MainActor.run {
-                self.error = error.localizedDescription
-            }
+            self.error = error.localizedDescription
         }
     }
 }

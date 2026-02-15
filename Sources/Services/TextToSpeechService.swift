@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os
 
 class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     static let shared = TextToSpeechService()
@@ -18,7 +19,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [.duckOthers, .allowBluetoothHFP, .defaultToSpeaker])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to configure audio session: \(error)")
+            Log.audio.error("Failed to configure audio session: \(error)")
         }
     }
     

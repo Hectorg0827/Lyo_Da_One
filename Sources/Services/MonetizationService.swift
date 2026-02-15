@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import os
 
 // MARK: - Monetization Service
 
@@ -56,7 +57,7 @@ final class MonetizationService: ObservableObject {
         
         do {
             products = try await Product.products(for: productIDs)
-            print("✅ Loaded \(products.count) products from App Store")
+            Log.monetization.info("Loaded \(self.products.count) products from App Store")
             
             // Also populate availableProducts for views that use SubscriptionProduct
             availableProducts = products.map { product in
@@ -69,7 +70,7 @@ final class MonetizationService: ObservableObject {
                 )
             }
         } catch {
-            print("❌ Failed to load products: \(error)")
+            Log.monetization.error("Failed to load products: \(error)")
             errorMessage = "Failed to load products"
             
             // Provide fallback products for UI
@@ -116,7 +117,7 @@ final class MonetizationService: ObservableObject {
     func purchase(_ subscriptionProduct: SubscriptionProduct) async -> Bool {
         // Find the actual StoreKit Product
         guard let product = products.first(where: { $0.id == subscriptionProduct.id }) else {
-            print("❌ Product not found: \(subscriptionProduct.id)")
+            Log.monetization.error("Product not found: \(subscriptionProduct.id)")
             errorMessage = "Product not available"
             return false
         }
@@ -125,7 +126,7 @@ final class MonetizationService: ObservableObject {
             let transaction = try await purchase(product)
             return transaction != nil
         } catch {
-            print("❌ Purchase failed: \(error)")
+            Log.monetization.error("Purchase failed: \(error)")
             errorMessage = error.localizedDescription
             return false
         }
@@ -153,20 +154,20 @@ final class MonetizationService: ObservableObject {
             // Update local state
             await updatePurchasedProducts()
             
-            print("✅ Purchase successful: \(product.id)")
+            Log.monetization.info("Purchase successful: \(product.id)")
             return transaction
             
         case .userCancelled:
-            print("ℹ️ User cancelled purchase")
+            Log.monetization.info("ℹ️ User cancelled purchase")
             return nil
             
         case .pending:
-            print("ℹ️ Purchase pending approval")
+            Log.monetization.info("ℹ️ Purchase pending approval")
             errorMessage = "Purchase pending approval"
             return nil
             
         @unknown default:
-            print("❌ Unknown purchase result")
+            Log.monetization.error("Unknown purchase result")
             return nil
         }
     }
@@ -182,9 +183,9 @@ final class MonetizationService: ObservableObject {
         do {
             try await AppStore.sync()
             await updatePurchasedProducts()
-            print("✅ Purchases restored")
+            Log.monetization.info("Purchases restored")
         } catch {
-            print("❌ Failed to restore purchases: \(error)")
+            Log.monetization.error("Failed to restore purchases: \(error)")
             errorMessage = "Failed to restore purchases"
         }
     }
@@ -204,7 +205,7 @@ final class MonetizationService: ObservableObject {
                     
                     await self.updatePurchasedProducts()
                 } catch {
-                    print("❌ Transaction verification failed: \(error)")
+                    Log.monetization.error("Transaction verification failed: \(error)")
                 }
             }
         }
@@ -239,10 +240,10 @@ final class MonetizationService: ObservableObject {
             )
             
             _ = try await sendPurchaseValidation(request)
-            print("✅ Purchase validated with backend")
+            Log.monetization.info("Purchase validated with backend")
             
         } catch {
-            print("⚠️ Backend validation failed: \(error)")
+            Log.monetization.warning("Backend validation failed: \(error)")
             // Continue anyway - StoreKit is the source of truth
         }
     }
@@ -282,10 +283,10 @@ final class MonetizationService: ObservableObject {
             // Update local state from backend response
             energyCredits = response.energyCredits
             
-            print("✅ Subscription synced with backend. Energy: \(energyCredits)")
+            Log.monetization.info("Subscription synced with backend. Energy: \(self.energyCredits)")
             
         } catch {
-            print("⚠️ Subscription sync failed: \(error)")
+            Log.monetization.warning("Subscription sync failed: \(error)")
         }
     }
     
@@ -295,11 +296,7 @@ final class MonetizationService: ObservableObject {
             throw MonetizationError.notAuthenticated
         }
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/users/me/subscription",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Subscription.getStatus
         
         return try await NetworkClient.shared.request(endpoint)
     }
@@ -334,7 +331,7 @@ final class MonetizationService: ObservableObject {
             let response = try await getSubscriptionStatus()
             energyCredits = response.energyCredits
         } catch {
-            print("⚠️ Energy refill check failed: \(error)")
+            Log.monetization.warning("Energy refill check failed: \(error)")
         }
     }
     
@@ -351,59 +348,17 @@ final class MonetizationService: ObservableObject {
     }
     
     private func sendPurchaseValidation(_ request: PurchaseValidationRequest) async throws -> PurchaseValidationResponse {
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let bodyData = try encoder.encode(request)
-        let bodyDict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
-        
-        // Use AnyEncodable wrapper for the body
-        let encodableBody = bodyDict?.mapValues { AnyEncodable(value: $0) }
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/purchases/validate",
-            method: .post,
-            body: encodableBody,
-            requiresAuth: true
-        )
-        
+        let endpoint = Endpoints.Subscription.validatePurchase(body: request)
         return try await NetworkClient.shared.request(endpoint)
     }
     
     private func sendSubscriptionSync(_ request: SubscriptionSyncRequest) async throws -> SubscriptionSyncResponse {
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let bodyData = try encoder.encode(request)
-        let bodyDict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
-        
-        // Use AnyEncodable wrapper for the body
-        let encodableBody = bodyDict?.mapValues { AnyEncodable(value: $0) }
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/users/me/subscription/sync",
-            method: .post,
-            body: encodableBody,
-            requiresAuth: true
-        )
-        
+        let endpoint = Endpoints.Subscription.sync(body: request)
         return try await NetworkClient.shared.request(endpoint)
     }
     
     private func sendUseEnergy(_ request: UseEnergyRequest) async throws -> UseEnergyResponse {
-        let encoder = JSONEncoder()
-        // Note: UseEnergyRequest doesn't need snake_case conversion for 'amount'
-        let bodyData = try encoder.encode(request)
-        let bodyDict = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
-        
-        // Use AnyEncodable wrapper for the body
-        let encodableBody = bodyDict?.mapValues { AnyEncodable(value: $0) }
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/users/me/energy/use",
-            method: .post,
-            body: encodableBody,
-            requiresAuth: true
-        )
-        
+        let endpoint = Endpoints.Subscription.useEnergy(body: request)
         return try await NetworkClient.shared.request(endpoint)
     }
     

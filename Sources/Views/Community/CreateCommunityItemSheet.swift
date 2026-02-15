@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import PhotosUI
+import os
 
 struct CreateCommunityItemSheet: View {
     @ObservedObject var viewModel: CommunityViewModel
@@ -62,7 +63,7 @@ struct CreateCommunityItemSheet: View {
                         ) {
                             Label("Pick from Library", systemImage: "photo.on.rectangle")
                         }
-                        .onChange(of: selectedItems) { _ in
+                        .onChange(of: selectedItems) { _, _ in
                             loadSelectedImages()
                         }
                         
@@ -185,7 +186,7 @@ struct CreateCommunityItemSheet: View {
             .sheet(isPresented: $showingImagePicker) {
                 ImagePicker(sourceType: pickerSourceType, selectedImage: $capturedImage)
             }
-            .onChange(of: capturedImage) { newImage in
+            .onChange(of: capturedImage) { _, newImage in
                 if let image = newImage, let data = image.jpegData(compressionQuality: 0.8) {
                     selectedImagesData.append(data)
                     capturedImage = nil // Reset
@@ -332,7 +333,7 @@ struct CreateCommunityItemSheet: View {
                 }
                 
             } catch {
-                print("❌ Creation failed: \(error)")
+                Log.social.error("Creation failed: \(error)")
                 await MainActor.run {
                     isSubmitting = false
                     // Real app should show alert here
@@ -353,7 +354,7 @@ struct CreateCommunityItemSheet: View {
                         }
                     }
                 case .failure(let error):
-                    print("Error loading image: \(error.localizedDescription)")
+                    Log.social.error("Error loading image: \(error.localizedDescription)")
                 }
             }
         }

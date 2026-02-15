@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // Note: A2AAgentCard, A2ACapabilities, A2AAuthentication, A2ASkill, A2AExample
 // are defined in A2AModels.swift
@@ -57,7 +58,7 @@ final class AgentCardService {
         // Cache it
         cachedAgentCards[url] = agentCard
         
-        print("🤖 Discovered A2A agent: \(agentCard.name) with \(agentCard.skills.count) skills")
+        Log.ai.info("Discovered A2A agent: \(agentCard.name) with \(agentCard.skills.count) skills")
         
         return agentCard
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct A2UITestView: View {
     @State private var selectedAction: String = ""
@@ -64,7 +65,7 @@ struct A2UITestView: View {
     private func handleAction(_ actionId: String) {
         selectedAction = actionId
         HapticManager.shared.light()
-        print("🎯 Test Action: \(actionId)")
+        Log.a2ui.info("Test Action: \(actionId)")
 
         // Auto-clear after 3 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

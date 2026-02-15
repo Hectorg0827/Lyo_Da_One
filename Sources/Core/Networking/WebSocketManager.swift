@@ -60,7 +60,7 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 
     // MARK: - Properties
     private var webSocket: URLSessionWebSocketTask?
-    private var session: URLSession!
+    private var session: URLSession?
     private var isConnected = false
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 5
@@ -74,10 +74,16 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
     // MARK: - Initialization
     private override init() {
         super.init()
+    }
+
+    /// Create a fresh URLSession for each connection.
+    /// Reusing a session after a failure causes
+    /// "invalid reuse after initialization failure" crashes.
+    private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 30
-        self.session = URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue())
+        return URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue())
     }
 
     // MARK: - Connection Management
@@ -108,7 +114,11 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 
         logger.log("🔌 Connecting to WebSocket: \(endpoint.path)")
 
-        webSocket = session.webSocketTask(with: request)
+        // Create fresh session (avoids "invalid reuse after initialization failure")
+        session?.invalidateAndCancel()
+        let newSession = makeSession()
+        session = newSession
+        webSocket = newSession.webSocketTask(with: request)
         webSocket?.resume()
 
         // Start receiving messages
@@ -128,6 +138,8 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
+        session?.invalidateAndCancel()
+        session = nil
         isConnected = false
 
         notifyEvent(.disconnected(nil))

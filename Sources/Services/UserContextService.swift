@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 struct UserContext: Codable {
     let persona: String          // "student", "professional", "hobbyist"
@@ -15,24 +16,18 @@ final class UserContextService: ObservableObject {
     @Published var currentContext: UserContext?
     @Published var isLoading: Bool = false
     
-    private var baseURL: String { AppConfig.baseURL }
-    
     /// Fetch user context from backend Context Engine
     func fetchContext() async {
         isLoading = true
         defer { isLoading = false }
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/context/current",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.UserContext.current
         
         do {
             currentContext = try await NetworkClient.shared.request(endpoint)
-            print("🎭 User context loaded: \(currentContext?.persona ?? "unknown")")
+            Log.net.info("🎭 User context loaded: \(self.currentContext?.persona ?? "unknown")")
         } catch {
-            print("⚠️ Failed to fetch context: \(error)")
+            Log.net.warning("Failed to fetch context: \(error)")
         }
     }
     

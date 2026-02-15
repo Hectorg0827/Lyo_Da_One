@@ -1,6 +1,7 @@
 import SwiftUI
 import Speech
 import AVFoundation
+import os
 
 // MARK: - Enhanced Lyo Avatar with Accessibility
 
@@ -629,7 +630,7 @@ class SpeechRecognizer: ObservableObject {
             transcript = ""
 
         } catch {
-            print("Speech recognition error: \(error)")
+            Log.general.error("Speech recognition error: \(error)")
         }
     }
 

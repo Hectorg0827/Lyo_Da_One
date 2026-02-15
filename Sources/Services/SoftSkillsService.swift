@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 struct SoftSkillsProfile: Codable {
     let criticalThinking: SkillScore
@@ -22,22 +23,16 @@ final class SoftSkillsService: ObservableObject {
     @Published var profile: SoftSkillsProfile?
     @Published var isLoading = false
     
-    private var baseURL: String { AppConfig.baseURL }
-    
     func fetchProfile() async {
         isLoading = true
         defer { isLoading = false }
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/skills/soft-skills",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Skills.softSkills
         
         do {
             profile = try await NetworkClient.shared.request(endpoint)
         } catch {
-            print("⚠️ Failed to fetch soft skills: \(error)")
+            Log.net.warning("Failed to fetch soft skills: \(error)")
         }
     }
 }

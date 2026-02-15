@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import os
 
 /// Orchestrates the "Cinematic View" creation from A2UI triggers.
 /// Ensures 0% failure rate by using caching and template fallbacks.
@@ -28,7 +29,7 @@ final class CourseOrchestrator: ObservableObject {
         isProcessing = true
         
         // 1. Immediate UI Feedback
-        print("🎬 Orchestrator: Starting cinematic sequence for '\(proposal.title)'")
+        Log.a2ui.info("🎬 Orchestrator: Starting cinematic sequence for '\(proposal.title)'")
         
         // 2. Optimistic Generation (Fail-Proof Strategy)
         // We start by creating a valid local "shell" course immediately so navigation works 100% of the time.
@@ -70,10 +71,10 @@ final class CourseOrchestrator: ObservableObject {
                 // For now, post update
                 NotificationCenter.default.post(name: .courseDataUpdated, object: nil, userInfo: ["id": realCourse.id])
                 
-                print("✅ Orchestrator: Real content ready for \(realCourse.title)")
+                Log.a2ui.info("Orchestrator: Real content ready for \(realCourse.title)")
                 
             } catch {
-                print("⚠️ Orchestrator: Live generation failed, falling back to template content.")
+                Log.a2ui.warning("Orchestrator: Live generation failed, falling back to template content.")
                 // We stay on the 'shell' course which is populated with template data
             }
             self.isProcessing = false

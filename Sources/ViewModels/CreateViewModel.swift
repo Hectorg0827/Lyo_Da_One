@@ -10,6 +10,7 @@ import AVFoundation
 import Photos
 import MapKit
 import PhotosUI
+import os
 
 // MARK: - Creation Modes
 
@@ -339,7 +340,7 @@ class CreateViewModel: ObservableObject {
             }
         }
         
-        print("✅ Clip published: \(clip.title)")
+        Log.ui.info("Clip published: \(clip.title)")
         
         // Add to Stack
         await addToStack(
@@ -598,7 +599,7 @@ class CreateViewModel: ObservableObject {
             let _ = try await repository.createStackItem(request: request)
             
         } catch {
-            print("⚠️ Failed to add to Stack: \(error)")
+            Log.ui.warning("Failed to add to Stack: \(error)")
         }
     }
 }

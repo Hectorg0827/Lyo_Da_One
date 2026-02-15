@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Backend AI Request/Response Models
 
@@ -201,7 +202,10 @@ struct BackendAIChatResponse: Codable {
     let response: String?  // Backend's main response field
     let conversationHistory: [ConversationMessage]?
     let contentTypes: [A2UIContent]?
-    let uiComponent: DynamicComponent?  // Standard A2UI Component Tree
+    
+    /// Flexible A2UI Component container. Supports both single DynamicComponent 
+    /// and arrays of legacy/hybrid components to prevent decoding failures.
+    let uiComponent: AnyCodable? 
 
     
     // A2UI Command fields (OPEN_CLASSROOM, etc.)
@@ -267,17 +271,19 @@ struct BackendAIChatResponse: Codable {
     
     // MARK: - A2UI Extractor (The Markdown Trap Fix)
     /// Robustly extracts A2UI JSON payloads even if wrapped in Markdown code blocks
+    /// Pre-compiled regex for extracting OPEN_CLASSROOM JSON from response text (compiled once)
+    private static let openClassroomRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: #"(?s)\{.*"type"\s*:\s*"OPEN_CLASSROOM".*\}"#, options: [])
+    }()
+    
     var extractedUI: OpenClassroomPayload? {
         let text = responseText
         
         // 1. Fast check: text must contain the type identifier
         guard text.contains("OPEN_CLASSROOM") else { return nil }
         
-        // 2. Try to find JSON block pattern
-        // Regex looks for ```json ... ``` or just { ... "type": "OPEN_CLASSROOM" ... }
-        let pattern = #"(?s)\{.*"type"\s*:\s*"OPEN_CLASSROOM".*\}"#
-        
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+        // 2. Try to find JSON block pattern using cached regex
+        guard let regex = BackendAIChatResponse.openClassroomRegex else { return nil }
         let nsString = text as NSString
         let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
         
@@ -354,68 +360,51 @@ struct BackendAnswerAnalysisResponse: Codable {
 // MARK: - Course Generation Models
 
 struct CourseGenerationJobResponse: Codable {
+    // Note: Property names use camelCase, JSON uses snake_case
+    // lyoDecoder's .convertFromSnakeCase handles this automatically
     let jobId: String
     let status: String
     let qualityTier: String
     let estimatedCostUsd: Double
     let message: String
     let pollUrl: String
-    
-    enum CodingKeys: String, CodingKey {
-        case jobId
-        case status
-        case qualityTier
-        case estimatedCostUsd
-        case message
-        case pollUrl
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        // Debugging: Check for keys
-        // Verify we are running the V2 (estimatedCostUsd) fix
-        print("🔍 BackendAIService: Decoding response using V2 Struct (estimatedCostUsd)")
-        
-        // Debug keys if failure happens
-        if !container.contains(.jobId) {
-             let keys = container.allKeys.map { $0.stringValue }.joined(separator: ", ")
-             print("❌ DEBUG DECODING ERROR: Missing job_id. Available keys: [\(keys)]")
-             
-             throw DecodingError.keyNotFound(CodingKeys.jobId, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing job_id. Keys found: [\(keys)]"))
-        }
-
-        self.jobId = try container.decode(String.self, forKey: .jobId)
-        self.status = try container.decode(String.self, forKey: .status)
-        self.qualityTier = try container.decode(String.self, forKey: .qualityTier)
-        self.estimatedCostUsd = try container.decode(Double.self, forKey: .estimatedCostUsd)
-        self.message = try container.decode(String.self, forKey: .message)
-        self.pollUrl = try container.decode(String.self, forKey: .pollUrl)
-    }
 }
 
 struct CourseGenerationStatusResponse: Codable {
+    // Note: Property names use camelCase, JSON uses snake_case
+    // lyoDecoder's .convertFromSnakeCase handles this automatically
     let jobId: String
     let status: String
     let progressPercent: Int
     let currentStep: String?
     let stepsCompleted: [String]
-    let estimatedTimeRemainingSec: Int?
+    let estimatedTimeRemainingSeconds: Int?
     let createdAt: String
     let updatedAt: String?
     let error: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case jobId
-        case status
-        case progressPercent
-        case currentStep
-        case stepsCompleted
-        case estimatedTimeRemainingSec
-        case createdAt
-        case updatedAt
-        case error
-    }
+}
+
+struct CourseOutlineModule: Codable {
+    let id: String
+    let title: String
+    let description: String
+}
+
+struct CourseOutlineResponse: Codable {
+    let courseId: String
+    let title: String
+    let description: String
+    let modules: [CourseOutlineModule]
+    let estimatedDuration: Int
+    let difficulty: String
+    let outlineHash: String
+    let status: String
+}
+
+struct CourseModuleResponse: Codable {
+    let courseId: String
+    let module: CourseGenerationService.BackendCourseResult.BackendModule
+    let status: String
 }
 
 // MARK: - Backend AI Service
@@ -432,7 +421,7 @@ final class BackendAIService {
     private var currentResourceId: String = "general_learning"
     
     private init() {
-        print("🧠 BackendAIService initialized - using hybrid AI (Gemini + OpenAI)")
+        Log.ai.info("BackendAIService initialized - using hybrid AI (Gemini + OpenAI)")
     }
     
     // MARK: - JSON Coders
@@ -453,13 +442,18 @@ final class BackendAIService {
     
     /// Stream AI response in real-time using Server-Sent Events
     /// Much better UX - shows text as it's generated instead of waiting
+    ///
+    /// Includes:
+    /// - 60-second timeout watchdog (resets on each chunk)
+    /// - Automatic retry (up to 2 attempts on transient failures)
+    /// - Safe MainActor dispatch for all callbacks
     func streamStudySession(
         message: String,
         resourceId: String? = nil,
         mode: String = "focus",
-        onChunk: @escaping (String) -> Void,
-        onComplete: @escaping (String, Double) -> Void,
-        onError: @escaping (Error) -> Void
+        onChunk: @escaping @Sendable (String) -> Void,
+        onComplete: @escaping @Sendable (String, Double) -> Void,
+        onError: @escaping @Sendable (Error) -> Void
     ) {
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -480,68 +474,132 @@ final class BackendAIService {
             contextDict["conversation_history"] = historyContext
         }
         
-        // Build request
-        // Note: Request body is constructed in Endpoint.swift for chatStream
-        
         Task {
-            do {
-                let (bytes, response) = try await NetworkClient.shared.stream(Endpoints.AI.chatStream(message: message, context: contextDict))
-                
-                guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                    onError(BackendAIError.invalidResponse)
-                    return
+            let maxRetries = 2
+            var lastError: Error?
+            
+            for attempt in 0...maxRetries {
+                if attempt > 0 {
+                    let backoff = UInt64(pow(2.0, Double(attempt - 1))) * 1_000_000_000
+                    Log.ai.info("SSE retry attempt \(attempt)/\(maxRetries) after \(attempt)s backoff")
+                    try? await Task.sleep(nanoseconds: backoff)
                 }
                 
-                var fullContent = ""
-                var responseTime: Double = 0
-                
-                for try await line in bytes.lines {
-                    if line.hasPrefix("data: ") {
-                        let jsonStr = String(line.dropFirst(6))
-                        if let jsonData = jsonStr.data(using: .utf8),
-                           let event = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                            
-                            let eventType = event["type"] as? String ?? ""
-                            
-                            switch eventType {
-                            case "start":
-                                let primaryAI = event["primary_ai"] as? String ?? "unknown"
-                                print("🚀 Stream started with \(primaryAI)")
-                                
-                            case "chunk":
-                                if let content = event["content"] as? String {
-                                    fullContent += content
-                                    onChunk(content)
-                                }
-                                
-                            case "done":
-                                responseTime = event["response_time_ms"] as? Double ?? 0
-                                print("✅ Stream completed in \(responseTime)ms")
-                                
-                                // Update conversation history
-                                self.conversationHistory.append(ConversationMessage(role: "user", content: message))
-                                self.conversationHistory.append(ConversationMessage(role: "assistant", content: fullContent))
-                                
-                                if self.conversationHistory.count > 10 {
-                                    self.conversationHistory = Array(self.conversationHistory.suffix(10))
-                                }
-                                
-                                onComplete(fullContent, responseTime)
-                                
-                            case "error":
-                                let errorMsg = event["message"] as? String ?? "Unknown error"
-                                print("❌ Stream error: \(errorMsg)")
-                                onError(BackendAIError.serverError(errorMsg))
-                                
-                            default:
-                                break
-                            }
-                        }
+                do {
+                    try await performStream(
+                        message: message,
+                        contextDict: contextDict,
+                        onChunk: onChunk,
+                        onComplete: onComplete
+                    )
+                    return // Success — exit retry loop
+                } catch is CancellationError {
+                    onError(CancellationError())
+                    return
+                } catch {
+                    lastError = error
+                    let isTransient = (error as NSError).code == NSURLErrorTimedOut
+                        || (error as NSError).code == NSURLErrorNetworkConnectionLost
+                    if !isTransient || attempt == maxRetries {
+                        Log.ai.error("SSE stream failed (attempt \(attempt + 1)): \(error.localizedDescription)")
+                        onError(error)
+                        return
                     }
                 }
-            } catch {
-                onError(error)
             }
+            onError(lastError ?? BackendAIError.networkError("Stream failed after retries"))
+        }
+    }
+    
+    /// Internal stream execution with a 60-second stall timeout
+    private func performStream(
+        message: String,
+        contextDict: [String: String],
+        onChunk: @escaping @Sendable (String) -> Void,
+        onComplete: @escaping @Sendable (String, Double) -> Void
+    ) async throws {
+        let streamTimeout: UInt64 = 60_000_000_000 // 60 seconds
+        
+        let (bytes, response) = try await NetworkClient.shared.stream(Endpoints.AI.chatStream(message: message, context: contextDict))
+        
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+            throw BackendAIError.invalidResponse
+        }
+        
+        var fullContent = ""
+        var responseTime: Double = 0
+        
+        // Wrap the stream iteration with a timeout watchdog
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Shared state for timeout coordination
+            let lastActivity = UnsafeMutablePointer<UInt64>.allocate(capacity: 1)
+            lastActivity.pointee = DispatchTime.now().uptimeNanoseconds
+            defer { lastActivity.deallocate() }
+            
+            // Watchdog: fires if no chunks arrive for 60s
+            group.addTask {
+                while !Task.isCancelled {
+                    try await Task.sleep(nanoseconds: 5_000_000_000) // Check every 5s
+                    let elapsed = DispatchTime.now().uptimeNanoseconds - lastActivity.pointee
+                    if elapsed > streamTimeout {
+                        throw BackendAIError.networkError("Stream stalled — no data for 60 seconds")
+                    }
+                }
+            }
+            
+            // Main stream consumer
+            group.addTask { [self] in
+                for try await line in bytes.lines {
+                    lastActivity.pointee = DispatchTime.now().uptimeNanoseconds
+                    
+                    guard line.hasPrefix("data: ") else { continue }
+                    let jsonStr = String(line.dropFirst(6))
+                    guard let jsonData = jsonStr.data(using: .utf8),
+                          let event = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { continue }
+                    
+                    let eventType = event["type"] as? String ?? ""
+                    
+                    switch eventType {
+                    case "start":
+                        let primaryAI = event["primary_ai"] as? String ?? "unknown"
+                        Log.ai.info("Stream started with \(primaryAI)")
+                        
+                    case "chunk":
+                        if let content = event["content"] as? String {
+                            fullContent += content
+                            onChunk(content)
+                        }
+                        
+                    case "done":
+                        responseTime = event["response_time_ms"] as? Double ?? 0
+                        Log.ai.info("Stream completed in \(responseTime)ms")
+                        
+                        // Update conversation history on MainActor
+                        await MainActor.run {
+                            self.conversationHistory.append(ConversationMessage(role: "user", content: message))
+                            self.conversationHistory.append(ConversationMessage(role: "assistant", content: fullContent))
+                            if self.conversationHistory.count > 10 {
+                                self.conversationHistory = Array(self.conversationHistory.suffix(10))
+                            }
+                        }
+                        
+                        onComplete(fullContent, responseTime)
+                        return // Stream finished normally
+                        
+                    case "error":
+                        let errorMsg = event["message"] as? String ?? "Unknown error"
+                        Log.ai.error("Stream error: \(errorMsg)")
+                        throw BackendAIError.serverError(errorMsg)
+                        
+                    default:
+                        break
+                    }
+                }
+            }
+            
+            // Wait for either the stream to finish or the watchdog to fire
+            try await group.next()
+            group.cancelAll()
         }
     }
     
@@ -554,7 +612,7 @@ final class BackendAIService {
         resourceId: String? = nil,
         mode: String = "focus",
         history: [ConversationMessage]? = nil
-    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: DynamicComponent?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?) {
+    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: AnyCodable?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -631,7 +689,7 @@ final class BackendAIService {
             return (response: rawResponse, source: response.aiSource, uiContent: uiContentToReturn, uiComponent: response.uiComponent, wasCommand: isCommand, openClassroomPayload: response.payload ?? response.extractedUI)
             
         } catch {
-            print("⚠️ Backend AI failed: \(error). Will fallback to local.")
+            Log.ai.warning("Backend AI failed: \(error). Will fallback to local.")
             throw error
         }
     }
@@ -705,9 +763,9 @@ final class BackendAIService {
             options: options
         )
         
-        let endpoint = "\(baseURL)/api/v2/courses/estimate-cost"
+        let endpoint = Endpoints.CourseGenerationV2.estimateCost(body: request)
         
-        return try await postPublic(endpoint: endpoint, body: request)
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     /// Generate a course with enhanced quality and feature controls
@@ -735,18 +793,86 @@ final class BackendAIService {
             requestDict["user_context"] = context
         }
         
-        let endpoint = "\(baseURL)/api/v2/courses/generate"
+        let endpoint = Endpoints.CourseGenerationV2.generate(body: DataWrapper(data: try JSONSerialization.data(withJSONObject: requestDict)))
         
-        return try await postJSONDict(endpoint: endpoint, body: requestDict)
+        return try await NetworkClient.shared.request(endpoint)
+    }
+
+    /// Generate course outline immediately and continue full generation in background
+    func generateCourseOutline(
+        topic: String,
+        options: CourseGenerationOptions = .recommended,
+        userContext: [String: String]? = nil
+    ) async throws -> CourseOutlineResponse {
+        var requestDict: [String: Any] = [
+            "request": topic,
+            "quality_tier": options.qualityTier.rawValue,
+            "enable_code_examples": options.includeCodeExamples,
+            "enable_practice_exercises": options.includePracticeExercises,
+            "enable_final_quiz": options.includeFinalQuiz,
+            "enable_multimedia_suggestions": options.includeMultimediaSuggestions,
+            "qa_strictness": options.qaStrictness,
+            "target_language": options.targetLanguage
+        ]
+
+        if let budget = options.maxBudgetUSD {
+            requestDict["max_budget_usd"] = budget
+        }
+
+        if let context = userContext {
+            requestDict["user_context"] = context
+        }
+
+        let endpoint = Endpoints.CourseGenerationV2.outline(body: DataWrapper(data: try JSONSerialization.data(withJSONObject: requestDict)))
+        return try await NetworkClient.shared.request(endpoint)
+    }
+
+    func getCourseModule(courseId: String, moduleId: String) async throws -> CourseModuleResponse {
+        let endpoint = Endpoints.CourseGenerationV2.getModule(courseId: courseId, moduleId: moduleId)
+        return try await NetworkClient.shared.request(endpoint)
+    }
+
+    func generateCourseModule(courseId: String, moduleId: String) async throws -> CourseModuleResponse {
+        let endpoint = Endpoints.CourseGenerationV2.generateModule(courseId: courseId, moduleId: moduleId, body: nil)
+        return try await NetworkClient.shared.request(endpoint)
+    }
+    
+    // MARK: - V2 Generator Endpoints (Strict LyoSchema)
+
+    private struct GenerateCourseV2Request: Encodable {
+        let topic: String
+        let targetAudience: String
+        let learningObjectives: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case topic
+            case targetAudience = "target_audience"
+            case learningObjectives = "learning_objectives"
+        }
+    }
+    
+    /// Fetches the static 'Spanish 101' demo course to verify V2 schema parsing.
+    func fetchSpanish101Demo() async throws -> LyoCourse {
+        let endpoint = Endpoints.CourseGenerationV2.generatorDemo
+        return try await NetworkClient.shared.request(endpoint)
+    }
+    
+    /// Generates a full V2 course (blocking call for MVP)
+    func generateCourseV2(topic: String, audience: String, objectives: [String]) async throws -> LyoCourse {
+        let body = GenerateCourseV2Request(
+            topic: topic,
+            targetAudience: audience,
+            learningObjectives: objectives
+        )
+        
+        let endpoint = Endpoints.CourseGenerationV2.generatorGenerate(body: body)
+        
+        return try await NetworkClient.shared.request(endpoint)
     }
     
     /// Poll for course generation status
     func getCourseGenerationStatus(jobId: String) async throws -> CourseGenerationStatusResponse {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/courses/status/\(jobId)",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.CourseGenerationV2.status(jobId: jobId)
         
         return try await NetworkClient.shared.request(endpoint)
     }

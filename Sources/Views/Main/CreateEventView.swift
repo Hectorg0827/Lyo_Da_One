@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import os
 
 struct CreateEventView: View {
     @Binding var isPresented: Bool
@@ -372,7 +373,7 @@ struct CreateEventView: View {
         
         Task {
             do {
-                print("🚀 Creating Event: \(reqTitle) at \(reqLoc)")
+                Log.ui.info("Creating Event: \(reqTitle) at \(reqLoc)")
                 
                 let request = CreateEventRequest(
                     title: reqTitle,
@@ -385,7 +386,7 @@ struct CreateEventView: View {
                 )
                 
                 let event = try await apiClient.createCommunityEvent(request)
-                print("✅ Event Created Successfully: \(event.title) (ID: \(event.id))")
+                Log.ui.info("Event Created Successfully: \(event.title) (ID: \(event.id))")
                 
                 await MainActor.run {
                     notificationFeedback.notificationOccurred(.success)
@@ -393,7 +394,7 @@ struct CreateEventView: View {
                     dismiss()
                 }
             } catch {
-                print("❌ Failed to create event: \(error)")
+                Log.ui.error("Failed to create event: \(error)")
                 await MainActor.run {
                     notificationFeedback.notificationOccurred(.error)
                     isLoading = false

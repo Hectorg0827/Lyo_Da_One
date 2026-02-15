@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 extension Notification.Name {
     static let showNotifications = Notification.Name("showNotifications")
@@ -171,7 +172,7 @@ struct DailyChallengeCard: View {
 
                 Spacer()
 
-                Text("\(challenge?.progress ?? 0)/\(challenge?.target ?? 3)")
+                Text(progressText)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -191,7 +192,7 @@ struct DailyChallengeCard: View {
 
                 Spacer()
 
-                Text("\(Int(Double(challenge?.target ?? 3) - (challenge?.progress ?? 0))) left")
+                Text("\(remainingCount) left")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -205,6 +206,18 @@ struct DailyChallengeCard: View {
             )
         )
         .cornerRadius(16)
+    }
+
+    private var progressText: String {
+        let current = Int(challenge?.progress ?? 0)
+        let total = challenge?.target ?? 3
+        return "\(current)/\(total)"
+    }
+
+    private var remainingCount: Int {
+        let target = Double(challenge?.target ?? 3)
+        let progress = challenge?.progress ?? 0
+        return Int(max(0, target - progress))
     }
 }
 
@@ -417,19 +430,20 @@ class HomeViewModel: ObservableObject {
     }
 
     private func loadDashboardData() async {
-        async let challengeTask = loadDailyChallenge()
-        async let continueLearningTask = loadContinueLearning()
-        async let recommendedTask = loadRecommendedContent()
-        async let streakTask = loadCurrentStreak()
-
-        _ = await (challengeTask, continueLearningTask, recommendedTask, streakTask)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadDailyChallenge() }
+            group.addTask { await self.loadContinueLearning() }
+            group.addTask { await self.loadRecommendedContent() }
+            group.addTask { await self.loadCurrentStreak() }
+            await group.waitForAll()
+        }
     }
 
     private func loadDailyChallenge() async {
         do {
             dailyChallenge = try await LyoRepository.shared.getDailyChallenge()
         } catch {
-            print("❌ Failed to load daily challenge: \(error.localizedDescription)")
+            Log.ui.error("Failed to load daily challenge: \(error.localizedDescription)")
         }
     }
 
@@ -438,7 +452,7 @@ class HomeViewModel: ObservableObject {
             let courses = try await LyoRepository.shared.getActiveCourses()
             continueLearning = Array(courses.prefix(3))
         } catch {
-            print("❌ Failed to load continue learning: \(error.localizedDescription)")
+            Log.ui.error("Failed to load continue learning: \(error.localizedDescription)")
         }
     }
 
@@ -447,7 +461,7 @@ class HomeViewModel: ObservableObject {
             let recommendations = try await LyoRepository.shared.getRecommendations()
             recommended = recommendations
         } catch {
-            print("❌ Failed to load recommended content: \(error.localizedDescription)")
+            Log.ui.error("Failed to load recommended content: \(error.localizedDescription)")
         }
     }
 
@@ -456,7 +470,7 @@ class HomeViewModel: ObservableObject {
             let stats = try await LyoRepository.shared.getGamificationStats()
             currentStreak = stats.currentStreak
         } catch {
-            print("❌ Failed to load streak: \(error.localizedDescription)")
+            Log.ui.error("Failed to load streak: \(error.localizedDescription)")
         }
     }
 

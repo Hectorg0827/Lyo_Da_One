@@ -27,6 +27,7 @@ class ChatViewModel: ObservableObject {
     private let webSocketManager = WebSocketManager.shared
     private var cancellables = Set<AnyCancellable>()
     private var typingTimer: Timer?
+    private var webSocketTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -105,7 +106,7 @@ class ChatViewModel: ObservableObject {
             sender: mapParticipant(api.sender),
             content: api.content,
             type: mapMessageType(api.mediaType),
-            attachments: nil, // TODO: map attachments if needed
+            attachments: mapAttachments(mediaUrl: api.mediaUrl, mediaType: api.mediaType),
             createdAt: api.createdAt,
             readBy: api.status == "read" ? ["someone"] : [], // API status is a string
             reactions: api.reactions.map { MessageReaction(emoji: $0.emoji, userId: $0.userId, userName: "") },
@@ -129,6 +130,27 @@ class ChatViewModel: ObservableObject {
         )
     }
 
+    private func mapAttachments(mediaUrl: String?, mediaType: String?) -> [SocialMessageAttachment]? {
+        guard let url = mediaUrl, !url.isEmpty else { return nil }
+        let type: SocialMessageAttachment.AttachmentType = {
+            switch mediaType {
+            case "image": return .image
+            case "video": return .video
+            case "voice", "audio": return .voice
+            default: return .document
+            }
+        }()
+        return [SocialMessageAttachment(
+            id: UUID().uuidString,
+            type: type,
+            url: url,
+            thumbnailURL: nil,
+            fileName: nil,
+            fileSize: nil,
+            duration: nil
+        )]
+    }
+
     private func mapMessageType(_ type: String?) -> ChatMessage.MessageType {
         switch type {
         case "image": return .image
@@ -150,14 +172,18 @@ class ChatViewModel: ObservableObject {
     // MARK: - WebSocket Setup
 
     private func setupWebSocket() {
-        Task {
+        webSocketTask = Task { [weak self] in
             do {
                 // Get current user ID from token manager or auth service
                 let userId = await TokenManager.shared.getUserId() ?? "guest"
-                try await webSocketManager.connectToChat(userId: userId)
-                isConnected = true
+                try await self?.webSocketManager.connectToChat(userId: userId)
+                await MainActor.run {
+                    self?.isConnected = true
+                }
             } catch {
-                handleError(error)
+                await MainActor.run {
+                    self?.handleError(error)
+                }
             }
         }
     }
@@ -241,6 +267,8 @@ class ChatViewModel: ObservableObject {
         do {
             _ = try await messagingService.sendMessage(conversationId: conversation.id, content: messageContent)
         } catch {
+            // Restore the message text so user doesn't lose what they typed
+            newMessageText = messageContent
             handleError(error)
         }
     }
@@ -277,12 +305,12 @@ class ChatViewModel: ObservableObject {
                 currentGroup.append(message)
             } else {
                 // Different sender, start new group
-                if !currentGroup.isEmpty, let sender = currentSender {
+                if let first = currentGroup.first, let last = currentGroup.last, let sender = currentSender {
                     groups.append(MessageGroup(
-                        id: currentGroup.first!.id,
+                        id: first.id,
                         sender: sender,
                         messages: currentGroup,
-                        timestamp: currentGroup.last!.createdAt
+                        timestamp: last.createdAt
                     ))
                 }
                 currentGroup = [message]
@@ -291,12 +319,12 @@ class ChatViewModel: ObservableObject {
         }
 
         // Add last group
-        if !currentGroup.isEmpty, let sender = currentSender {
+        if let first = currentGroup.first, let last = currentGroup.last, let sender = currentSender {
             groups.append(MessageGroup(
-                id: currentGroup.first!.id,
+                id: first.id,
                 sender: sender,
                 messages: currentGroup,
-                timestamp: currentGroup.last!.createdAt
+                timestamp: last.createdAt
             ))
         }
 
@@ -337,6 +365,8 @@ class ChatViewModel: ObservableObject {
     // MARK: - Cleanup
 
     func disconnect() {
+        webSocketTask?.cancel()
+        webSocketTask = nil
         webSocketManager.disconnect()
         isConnected = false
     }

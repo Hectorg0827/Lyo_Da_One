@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct ClassroomView: View {
     @StateObject private var viewModel = ClassroomViewModel()
@@ -38,7 +39,7 @@ struct ClassroomView: View {
                         component: component,
                         onAction: { action, _ in
                              // Handle classroom-specific actions from A2UI
-                             print("A2UI Action Triggered: \(action.id)")
+                             Log.classroom.info("A2UI Action Triggered: \(action.id)")
                              
                              switch action.id {
                              case "next_slide", "next":
@@ -53,7 +54,7 @@ struct ClassroomView: View {
                                  withAnimation { viewModel.showModuleGrid = true }
                              default:
                                  // Forward other actions to generic handler or log
-                                 print("Unhandled A2UI Action: \(action.id)")
+                                 Log.classroom.info("Unhandled A2UI Action: \(action.id)")
                              }
                         }
                      )

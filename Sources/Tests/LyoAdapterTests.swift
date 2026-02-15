@@ -11,8 +11,10 @@ class LyoAdapterTests: XCTestCase {
             id: "test1",
             type: .concept,
             role: .hook, // Triggers cinematic
+            content: AnyCodable(ConceptPayload(kind: "concept", markdown: "Content", keyTakeaway: "Title")),
             presentationHint: .cinematic,
-            content: AnyCodable(ConceptPayload(markdown: "Content", keyTakeaway: "Title")),
+            requiresInteraction: nil,
+            interactionId: nil,
             mood: "suspense"
         )
         
@@ -20,10 +22,11 @@ class LyoAdapterTests: XCTestCase {
         let content = LyoAdapter.render(block)
         
         // Then it should have correct audio and haptics
-        XCTAssertEqual(content.type, .cinematic)
+        XCTAssertEqual(content.type, A2UIContentType.cinematic)
         XCTAssertEqual(content.cinematic?.mood, "suspense")
         XCTAssertEqual(content.cinematic?.audioTrack, "ambient_suspense")
         XCTAssertEqual(content.cinematic?.hapticPattern, "medium")
+        XCTAssertEqual(content.layout, A2UILayout.overlay)
     }
     
     // MARK: - Generative UI Tests
@@ -34,35 +37,35 @@ class LyoAdapterTests: XCTestCase {
             id: "test2",
             type: .concept,
             role: .normal,
+            content: AnyCodable(ConceptPayload(kind: "concept", markdown: "Text", keyTakeaway: nil)),
             presentationHint: .inline,
-            content: AnyCodable(ConceptPayload(markdown: "Text", keyTakeaway: nil)),
+            requiresInteraction: nil,
+            interactionId: nil,
             mood: "neutral"
         )
         
         let content = LyoAdapter.render(block)
         
-        // Then layout should be standard
-        XCTAssertEqual(content.layout, .standard)
+        // Then type should be text and layout should be standard
+        XCTAssertEqual(content.type, A2UIContentType.text)
+        XCTAssertEqual(content.layout, A2UILayout.standard)
         
         // Given a hero block NO takeaway (which normally renders as text but with hero layout)
-        // Wait, LyoAdapter logic: if .hero AND takeaway -> Flashcard.
-        // If .hero but NO takeaway -> Standard Text but with layout? 
-        // Let's check logic:
-        // default case in render sets layout: layout.
-        // And `case .inline: layout = .standard`.
-        // Let's test .hero presentation
         
         let heroBlock = LyoBlock(
             id: "test3",
             type: .concept,
             role: .normal,
+            content: AnyCodable(ConceptPayload(kind: "concept", markdown: "Text", keyTakeaway: nil)),
             presentationHint: .hero,
-            content: AnyCodable(ConceptPayload(markdown: "Text", keyTakeaway: nil)),
+            requiresInteraction: nil,
+            interactionId: nil,
             mood: "neutral"
         )
         
         let heroContent = LyoAdapter.render(heroBlock)
-        XCTAssertEqual(heroContent.layout, .hero)
+        XCTAssertEqual(heroContent.type, A2UIContentType.text)
+        XCTAssertEqual(heroContent.layout, A2UILayout.hero)
     }
     
     // MARK: - Stream Processor Tests
@@ -89,11 +92,11 @@ class LyoAdapterTests: XCTestCase {
         // 3. Complete first object
         let result3 = processor.append(chunk3)
         XCTAssertEqual(result3.count, 1)
-        XCTAssertEqual(result3.first?.type, .text) // Concept -> Text
+        XCTAssertEqual(result3.first?.type, A2UIContentType.text) // Concept -> Text
         
         // 4. Complete second object immediately
         let result4 = processor.append(chunk4)
         XCTAssertEqual(result4.count, 1)
-        XCTAssertEqual(result4.first?.type, .quiz)
+        XCTAssertEqual(result4.first?.type, A2UIContentType.quiz)
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 struct LearningMemory: Codable {
     let struggles: [StruggleItem]
@@ -37,7 +38,7 @@ final class SmartMemoryService: ObservableObject {
             memory = try await NetworkClient.shared.request(Endpoints.Memory.getSummary)
             generateProactiveHint()
         } catch {
-            print("⚠️ Failed to fetch memory: \(error)")
+            Log.net.warning("Failed to fetch memory: \(error)")
         }
     }
     

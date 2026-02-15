@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Parses JSON or Markdown into LessonBlock - NEVER throws, always returns something usable
 struct LessonBlockParser {
@@ -9,13 +10,13 @@ struct LessonBlockParser {
     static func parse(from jsonData: Data) -> [LessonBlock] {
         // Try array first (most common)
         if let blocks = try? JSONDecoder().decode([LessonBlock].self, from: jsonData) {
-            print("✅ LessonBlockParser: Decoded \(blocks.count) blocks from array")
+            Log.classroom.info("LessonBlockParser: Decoded \(blocks.count) blocks from array")
             return blocks.isEmpty ? [errorBlock("Empty blocks array")] : blocks
         }
         
         // Try single block
         if let block = try? JSONDecoder().decode(LessonBlock.self, from: jsonData) {
-            print("✅ LessonBlockParser: Decoded single block")
+            Log.classroom.info("LessonBlockParser: Decoded single block")
             return [block]
         }
         
@@ -25,7 +26,7 @@ struct LessonBlockParser {
             
             if let array = json as? [[String: Any]] {
                 let blocks = array.enumerated().map { parseFromDictionary($1, index: $0) }
-                print("✅ LessonBlockParser: Parsed \(blocks.count) blocks from JSON array")
+                Log.classroom.info("LessonBlockParser: Parsed \(blocks.count) blocks from JSON array")
                 return blocks
             }
             
@@ -33,7 +34,7 @@ struct LessonBlockParser {
                 // Check if this is a wrapper with "blocks" key
                 if let blocksArray = dict["blocks"] as? [[String: Any]] {
                     let blocks = blocksArray.enumerated().map { parseFromDictionary($1, index: $0) }
-                    print("✅ LessonBlockParser: Parsed \(blocks.count) blocks from 'blocks' key")
+                    Log.classroom.info("LessonBlockParser: Parsed \(blocks.count) blocks from 'blocks' key")
                     return blocks
                 }
                 
@@ -41,11 +42,11 @@ struct LessonBlockParser {
                 return [parseFromDictionary(dict, index: 0)]
             }
         } catch {
-            print("⚠️ LessonBlockParser: JSON serialization failed: \(error)")
+            Log.classroom.warning("LessonBlockParser: JSON serialization failed: \(error)")
         }
         
         // Ultimate fallback
-        print("❌ LessonBlockParser: All parsing attempts failed")
+        Log.classroom.error("LessonBlockParser: All parsing attempts failed")
         return [errorBlock("Failed to parse lesson content")]
     }
     
@@ -174,7 +175,7 @@ struct LessonBlockParser {
     
     private static func parseFromDictionary(_ dict: [String: Any], index: Int) -> LessonBlock {
         let id = dict["id"] as? String ?? "block_\(index)"
-        let typeString = dict["type"] as? String ?? "text"
+        _ = dict["type"] as? String ?? "text"
         
         // Use memberwise init fallback or a proxy if Codable init is hard from dict
         // For simplicity, let's just use JSONSerialization to go back to Data then decode
@@ -206,73 +207,4 @@ struct LessonBlockParser {
     }
 }
 
-// Helper extension for memberwise init during manual construction
-extension LessonBlock {
-    init(
-        id: String = UUID().uuidString,
-        type: LessonBlockType,
-        title: String? = nil,
-        content: String? = nil,
-        subtitle: String? = nil,
-        imageURL: URL? = nil,
-        videoURL: URL? = nil,
-        audioURL: URL? = nil,
-        altText: String? = nil,
-        caption: String? = nil,
-        code: String? = nil,
-        language: String? = nil,
-        isRunnable: Bool? = nil,
-        question: String? = nil,
-        options: [String]? = nil,
-        correctIndex: Int? = nil,
-        correctAnswer: String? = nil,
-        explanation: String? = nil,
-        hint: String? = nil,
-        chartType: String? = nil,
-        chartData: ChartDataPayload? = nil,
-        latex: String? = nil,
-        mermaid: String? = nil,
-        front: String? = nil,
-        back: String? = nil,
-        cards: [FlashcardPayload]? = nil,
-        headers: [String]? = nil,
-        rows: [[String]]? = nil,
-        style: BlockStylePayload? = nil,
-        duration: Int? = nil,
-        difficulty: String? = nil,
-        tags: [String]? = nil
-    ) {
-        self.id = id
-        self.type = type
-        self.title = title
-        self.content = content
-        self.subtitle = subtitle
-        self.imageURL = imageURL
-        self.videoURL = videoURL
-        self.audioURL = audioURL
-        self.altText = altText
-        self.caption = caption
-        self.code = code
-        self.language = language
-        self.isRunnable = isRunnable
-        self.question = question
-        self.options = options
-        self.correctIndex = correctIndex
-        self.correctAnswer = correctAnswer
-        self.explanation = explanation
-        self.hint = hint
-        self.chartType = chartType
-        self.chartData = chartData
-        self.latex = latex
-        self.mermaid = mermaid
-        self.front = front
-        self.back = back
-        self.cards = cards
-        self.headers = headers
-        self.rows = rows
-        self.style = style
-        self.duration = duration
-        self.difficulty = difficulty
-        self.tags = tags
-    }
-}
+// NOTE: LessonBlock memberwise init lives in LiveLessonModels.swift — do NOT duplicate here.

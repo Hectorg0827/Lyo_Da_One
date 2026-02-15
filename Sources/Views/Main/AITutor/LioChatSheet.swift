@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 // MARK: - Lio Chat Sheet
 /// The unified AI chat interface presented when tapping the Lio orb
@@ -77,7 +78,7 @@ struct LioChatSheet: View {
                                 
                                 // Typing indicator when sending
                                 if viewModel.isLoading {
-                                    LioChatTypingIndicator()
+                                    LyoUnifiedThinkingIndicator()
                                         .id("typing")
                                 }
                             }
@@ -129,7 +130,7 @@ struct LioChatSheet: View {
                 
                 // Check if we need to load a specific history session
                 if #available(iOS 17.0, *), let sessionToLoad = uiState.chatSessionToLoad as? ChatSession {
-                    print("Loading chat history: \(sessionToLoad.title)")
+                    Log.ai.info("Loading chat history: \(sessionToLoad.title)")
                     viewModel.loadHistory(from: sessionToLoad)
                     // Clear state so it doesn't reload on next appear if not intended
                     uiState.chatSessionToLoad = nil
@@ -264,79 +265,22 @@ struct LioChatSheet: View {
         VStack(spacing: 24) {
             Spacer()
                 .frame(height: 20)
-            
-            // Animated orb
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: contextColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                    .blur(radius: 10)
-                    .opacity(0.5)
-                
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: contextColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 60, height: 60)
-                    .shadow(color: contextColors.first!.opacity(0.3), radius: 10)
-                
-                Image(systemName: "sparkles")
-                    .font(.system(size: 24))
-                    .foregroundColor(.white)
-            }
-            
+
             VStack(spacing: 8) {
-                Text("Hello \(AuthService.shared.currentUserName.components(separatedBy: " ").first ?? "there"),")
-                    .font(.title2.bold())
-                
-                Text("What would you like to learn today?")
-                    .font(.body)
+                Text("How can I help?")
+                    .font(.title3.weight(.semibold))
+                Text("Ask a question or try a suggestion below.")
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
             }
-            
-            // Suggestion chips
-            suggestionChips
-            
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-    
-    private var suggestionChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(activeSuggestions, id: \.self) { suggestion in
-                    Button {
-                        viewModel.inputText = suggestion
-                        send()
-                    } label: {
-                        Text(suggestion)
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Material.ultraThinMaterial)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                            )
-                    }
+
+            if !viewModel.suggestions.isEmpty {
+                SuggestionChipsView(suggestions: viewModel.suggestions) { chip in
+                    viewModel.executeSuggestion(chip)
                 }
             }
-            .padding(.horizontal, 16)
+
+            Spacer()
         }
         .padding(.top, 10)
     }
@@ -358,7 +302,7 @@ struct LioChatSheet: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("NEXR SUGGESTION")
+                            Text("NEXT SUGGESTION")
                                 .font(.system(size: 10, weight: .black))
                                 .foregroundColor(.yellow)
                             Text(action.contentString)
@@ -823,129 +767,11 @@ struct LioChatSheet: View {
     }
 }
 
-// MARK: - Chat Message Row
-
-struct ChatMessageRow: View {
-    let message: LioChatMessage
-    
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if !message.isUser {
-                // AI Avatar
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [DesignSystem.Colors.fallbackPrimary, DesignSystem.Colors.fallbackSecondary],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 32, height: 32)
-                    
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-            }
-            
-            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.isUser ? "You" : "Lio")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                
-                Text(message.text)
-                    .font(.body)
-                    .padding(12)
-                    .background(
-                        message.isUser ?
-                        AnyShapeStyle(
-                            LinearGradient(
-                                colors: [DesignSystem.Colors.fallbackPrimary, DesignSystem.Colors.fallbackSecondary],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        ) :
-                        AnyShapeStyle(Material.thinMaterial)
-                    )
-                    .foregroundColor(message.isUser ? .white : .primary)
-                    .cornerRadius(16, corners: message.isUser ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight])
-                
-                // Source indicator for AI messages
-                if !message.isUser, let source = message.source, source != "system" {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(source == "ai" ? Color.green : Color.orange)
-                            .frame(width: 6, height: 6)
-                        Text(source == "ai" ? "AI" : "Local")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
-            
-            if message.isUser {
-                Spacer(minLength: 32)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
-    }
-}
-
 // MARK: - Helper Extension for Rounded Corners
 // RoundedCorner is now in Sources/Utils/ShapeExtensions.swift
 
 // MARK: - Typing Indicator
 
-struct LioChatTypingIndicator: View {
-    @State private var animationOffset: CGFloat = 0
-    
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // AI Avatar
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [DesignSystem.Colors.fallbackPrimary, DesignSystem.Colors.fallbackSecondary],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 32, height: 32)
-                
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-            }
-            
-            HStack(spacing: 4) {
-                ForEach(0..<3) { index in
-                    Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 6, height: 6)
-                        .offset(y: animationOffset(for: index))
-                }
-            }
-            .padding(12)
-            .background(Material.thinMaterial)
-            .cornerRadius(16, corners: [.topLeft, .topRight, .bottomRight])
-            
-            Spacer()
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.6).repeatForever()) {
-                animationOffset = -6
-            }
-        }
-    }
-    
-    private func animationOffset(for index: Int) -> CGFloat {
-        let delay = Double(index) * 0.15
-        return animationOffset * (1.0 - delay)
-    }
-}
 
 // MARK: - Preview
 

@@ -20,44 +20,6 @@ struct WizardResponse {
     let courseGenerationLevel: String?
 }
 
-extension WizardResponse {
-    func toLioChatResponse() -> LioChatResponse {
-        var contentTypes: [MessageContentType]? = nil
-        if showOutlineCard, let outline = outline {
-            let modules = outline.modules.map { moduleTitle in
-                CourseModule(title: moduleTitle, duration: nil, isCompleted: false, isLocked: false)
-            }
-            contentTypes = [
-                .courseRoadmap(
-                    title: outline.title,
-                    modules: modules,
-                    totalModules: modules.count,
-                    completedModules: 0
-                )
-            ]
-        }
-
-        var action: LioChatAction? = nil
-        if shouldStartCourseGeneration,
-           let topic = courseGenerationTopic,
-           let level = courseGenerationLevel {
-            action = LioChatAction(type: "generate_course", parameters: [
-                "topic": topic,
-                "level": level
-            ])
-        }
-
-        return LioChatResponse(
-            text: message,
-            source: "local",
-            action: action,
-            suggestions: chips,
-            meta: nil,
-            contentTypes: contentTypes
-        )
-    }
-}
-
 // MARK: - Course Wizard Handler
 
 @MainActor

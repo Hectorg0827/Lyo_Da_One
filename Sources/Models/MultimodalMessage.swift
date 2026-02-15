@@ -25,19 +25,23 @@ enum MessageContentType: Codable, Equatable {
     case topicSelection(title: String, topics: [TopicOption])
     case courseRoadmap(title: String, modules: [CourseModule], totalModules: Int, completedModules: Int)
     case flashcards(title: String, cards: [Flashcard])
+    case notes(title: String, sections: [NoteSection])
     case suggestions(title: String, options: [String])
+    case studyPlan(plan: StudyPlan)
     case recursiveUI(component: DynamicComponent)
     case a2ui(component: A2UIComponent)
     case cinematic(data: A2UICinematic)
+    case courseProposal(payload: CoursePayload)
     
     enum CodingKeys: String, CodingKey {
         case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
         case language, code, question, options, correctIndex, explanation
         case courseId, title, subtitle, body, imageURL, actions, votes
         case step, progress, topics
-        case modules, totalModules, completedModules
-        case cards, component
+        case modules, totalModules, completedModules, sections
+        case cards, component, studyPlan
         case cinematicData
+        case coursePayload
     }
     
     init(from decoder: Decoder) throws {
@@ -112,6 +116,10 @@ enum MessageContentType: Codable, Equatable {
             let title = try container.decode(String.self, forKey: .title)
             let cards = try container.decode([Flashcard].self, forKey: .cards)
             self = .flashcards(title: title, cards: cards)
+        case "notes":
+            let title = try container.decode(String.self, forKey: .title)
+            let sections = try container.decode([NoteSection].self, forKey: .sections)
+            self = .notes(title: title, sections: sections)
         case "suggestions":
             let title = try container.decode(String.self, forKey: .title)
             let options = try container.decode([String].self, forKey: .options)
@@ -122,9 +130,15 @@ enum MessageContentType: Codable, Equatable {
         case "a2ui":
             let component = try container.decode(A2UIComponent.self, forKey: .component)
             self = .a2ui(component: component)
+        case "study_plan":
+            let plan = try container.decode(StudyPlan.self, forKey: .studyPlan)
+            self = .studyPlan(plan: plan)
         case "cinematic":
             let data = try container.decode(A2UICinematic.self, forKey: .cinematicData)
             self = .cinematic(data: data)
+        case "course_proposal":
+            let payload = try container.decode(CoursePayload.self, forKey: .coursePayload)
+            self = .courseProposal(payload: payload)
         default:
             self = .text
         }
@@ -201,6 +215,10 @@ enum MessageContentType: Codable, Equatable {
             try container.encode("flashcards", forKey: .type)
             try container.encode(title, forKey: .title)
             try container.encode(cards, forKey: .cards)
+        case .notes(let title, let sections):
+            try container.encode("notes", forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encode(sections, forKey: .sections)
         case .suggestions(let title, let options):
             try container.encode("suggestions", forKey: .type)
             try container.encode(title, forKey: .title)
@@ -211,9 +229,15 @@ enum MessageContentType: Codable, Equatable {
         case .a2ui(let component):
             try container.encode("a2ui", forKey: .type)
             try container.encode(component, forKey: .component)
+        case .studyPlan(let plan):
+            try container.encode("study_plan", forKey: .type)
+            try container.encode(plan, forKey: .studyPlan)
         case .cinematic(let data):
             try container.encode("cinematic", forKey: .type)
             try container.encode(data, forKey: .cinematicData)
+        case .courseProposal(let payload):
+            try container.encode("course_proposal", forKey: .type)
+            try container.encode(payload, forKey: .coursePayload)
         }
     }
     
@@ -233,12 +257,60 @@ enum MessageContentType: Codable, Equatable {
         case (.topicSelection(let t1, let to1), .topicSelection(let t2, let to2)): return t1 == t2 && to1 == to2
         case (.courseRoadmap(let t1, let m1, let tm1, let cm1), .courseRoadmap(let t2, let m2, let tm2, let cm2)): return t1 == t2 && m1 == m2 && tm1 == tm2 && cm1 == cm2
         case (.flashcards(let t1, let c1), .flashcards(let t2, let c2)): return t1 == t2 && c1 == c2
+        case (.notes(let t1, let s1), .notes(let t2, let s2)): return t1 == t2 && s1.count == s2.count
         case (.suggestions(let t1, let o1), .suggestions(let t2, let o2)): return t1 == t2 && o1 == o2
+        case (.studyPlan(let p1), .studyPlan(let p2)): return p1 == p2
         case (.recursiveUI(let c1), .recursiveUI(let c2)): return c1.id == c2.id
-        case (.a2ui(let c1), .a2ui(let c2)): return c1.type == c2.type // Approximate equality
+        case (.a2ui(let c1), .a2ui(let c2)): return c1.type == c2.type 
         case (.cinematic(let d1), .cinematic(let d2)): return d1.title == d2.title && d1.mood == d2.mood
+        case (.courseProposal(let p1), .courseProposal(let p2)): return p1.title == p2.title && p1.topic == p2.topic
         default: return false
         }
+    }
+}
+
+// ... (Existing helper structs) ...
+
+/// Study Plan Models
+struct StudyPlan: Codable, Equatable {
+    let title: String
+    let description: String?
+    let schedule: [StudyDay]
+    
+    init(title: String, description: String?, schedule: [StudyDay]) {
+        self.title = title
+        self.description = description
+        self.schedule = schedule
+    }
+}
+
+struct StudyDay: Codable, Equatable, Identifiable {
+    let id: String
+    let dayNumber: Int
+    let topic: String
+    let tasks: [StudyTask]
+    
+    init(id: String = UUID().uuidString, dayNumber: Int, topic: String, tasks: [StudyTask]) {
+        self.id = id
+        self.dayNumber = dayNumber
+        self.topic = topic
+        self.tasks = tasks
+    }
+}
+
+struct StudyTask: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let durationMinutes: Int
+    let type: String // "read", "practice", "watch"
+    let isCompleted: Bool
+    
+    init(id: String = UUID().uuidString, title: String, durationMinutes: Int, type: String, isCompleted: Bool = false) {
+        self.id = id
+        self.title = title
+        self.durationMinutes = durationMinutes
+        self.type = type
+        self.isCompleted = isCompleted
     }
 }
 
@@ -355,7 +427,7 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
         self.id = legacyMessage.id
         self.role = legacyMessage.isFromUser ? .user : .assistant
         self.content = legacyMessage.content
-        self.contentTypes = [.text]
+        self.contentTypes = legacyMessage.contentTypes ?? [.text]
         self.attachments = legacyMessage.attachments?.compactMap { attachment in
             ChatAttachment(
                 id: attachment.id,

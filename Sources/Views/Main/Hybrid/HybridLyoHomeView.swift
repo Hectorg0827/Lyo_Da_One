@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct HybridLyoHomeView: View {
     @StateObject private var viewModel = LyoAIViewModel()
@@ -40,8 +41,9 @@ struct HybridLyoHomeView: View {
                             withAnimation { isChatOverlayOpen = true }
                         },
                         onVoiceTap: {
-                            // TODO: Implement Voice Mode
-                            print("Voice Mode Tapped")
+                            HapticManager.shared.medium()
+                            Log.ui.info("🎙️ Voice Mode activated")
+                            // Voice mode requires backend speech pipeline — future release
                         }
                     )
                     .opacity(calculateHeroOpacity())

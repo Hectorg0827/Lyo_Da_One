@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import os
 
 // MARK: - Cloud Storage Service
 
@@ -27,13 +28,8 @@ final class CloudStorageService {
             folder: folder
         )
         
-        // Use DynamicEndpoint to match the specific path used by this service
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/presigned-url",
-            method: .post,
-            body: body,
-            requiresAuth: true
-        )
+        // Use typed endpoint for presigned URL request
+        let endpoint = Endpoints.Uploads.presignedURL(body: body)
         
         do {
             return try await NetworkClient.shared.request(endpoint)
@@ -81,7 +77,7 @@ final class CloudStorageService {
                 headers: presigned.headers
             )
             
-            print("✅ File uploaded: \(presigned.publicUrl ?? "unknown")")
+            Log.net.info("File uploaded: \(presigned.publicUrl ?? "unknown")")
             
             return UploadResult(
                 success: true,
@@ -89,7 +85,7 @@ final class CloudStorageService {
                 blobName: presigned.blobName
             )
         } catch {
-            print("❌ Upload failed: \(error)")
+            Log.net.error("Upload failed: \(error)")
             throw CloudStorageError.uploadFailed
         }
     }
@@ -162,12 +158,8 @@ final class CloudStorageService {
             throw CloudStorageError.invalidFile
         }
         
-        // Use DynamicEndpoint to match existing path structure
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/avatar",
-            method: .post,
-            requiresAuth: true
-        )
+        // Use typed endpoint for avatar upload
+        let endpoint = Endpoints.Uploads.uploadAvatar
         
         return try await NetworkClient.shared.upload(
             endpoint,
@@ -179,14 +171,10 @@ final class CloudStorageService {
     
     /// Delete current user's avatar
     func deleteAvatar() async throws {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/avatar",
-            method: .delete,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Uploads.deleteAvatar
         
         let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
-        print("✅ Avatar deleted")
+        Log.net.info("Avatar deleted")
     }
     
     // MARK: - Upload Document
@@ -209,11 +197,7 @@ final class CloudStorageService {
     
     /// Get user's storage usage statistics
     func getStorageUsage() async throws -> StorageUsageResponse {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/usage",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Uploads.usage
         
         return try await NetworkClient.shared.request(endpoint)
     }
@@ -222,15 +206,10 @@ final class CloudStorageService {
     
     /// Delete a file from cloud storage
     func deleteFile(blobName: String) async throws {
-        let encodedBlobName = blobName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? blobName
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/file/\(encodedBlobName)",
-            method: .delete,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Uploads.deleteFile(blobName: blobName)
         
         let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
-        print("✅ File deleted: \(blobName)")
+        Log.net.info("File deleted: \(blobName)")
     }
     
     // MARK: - Validate File
@@ -243,12 +222,7 @@ final class CloudStorageService {
             fileType: fileType
         )
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/validate",
-            method: .post,
-            body: body,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Uploads.validate(body: body)
         
         return try await NetworkClient.shared.request(endpoint)
     }
@@ -257,11 +231,7 @@ final class CloudStorageService {
     
     /// Get information about supported file types and size limits
     func getSupportedFileTypes() async throws -> SupportedFileTypesResponse {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/uploads/supported-types",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Uploads.supportedTypes
         
         return try await NetworkClient.shared.request(endpoint)
     }

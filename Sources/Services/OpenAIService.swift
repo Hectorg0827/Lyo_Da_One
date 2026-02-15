@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // Note: This service uses models from Models/LyoChat.swift (LyoMessage, SuggestionChip)
 
@@ -20,9 +21,9 @@ class OpenAIService {
     
     private init() {
         if useMockMode {
-            print("⚠️ Leo AI: Running in MOCK mode (no backend URL)")
+            Log.ai.warning("Leo AI: Running in MOCK mode (no backend URL)")
         } else {
-            print("✅ Leo AI: Using Backend AI")
+            Log.ai.info("Leo AI: Using Backend AI")
         }
     }
     
@@ -49,7 +50,7 @@ class OpenAIService {
         } catch {
             // Backend unavailable or response unexpected.
             if AppConfig.allowMockFallbacks {
-                print("⚠️ Backend AI failed: \(error.localizedDescription). Falling back to mock because LYO_ALLOW_MOCKS=1")
+                Log.ai.warning("Backend AI failed: \(error.localizedDescription). Falling back to mock because LYO_ALLOW_MOCKS=1")
                 return try await getMockResponse(for: message, history: conversationHistory)
             }
             throw error
@@ -68,21 +69,20 @@ class OpenAIService {
         conversationHistory: [LyoMessage],
         systemPrompt: String?
     ) async throws -> String {
-        // Send clean message to backend - it handles course detection natively
         let cleanMessage = message
 
-        let body: [String: Any] = [
-            "message": cleanMessage,
-            "session_id": NSNull(),
-            "include_audio": false
-        ]
-        
-        let encodableBody = body.mapValues { AnyEncodable(value: $0) }
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/classroom/chat",
-            method: .post,
-            body: encodableBody
+        // Build conversation history for multi-turn context
+        let historyPayload: [[String: String]] = conversationHistory.suffix(8).map { msg in
+            [
+                "role": msg.isFromUser ? "user" : "assistant",
+                "content": msg.content
+            ]
+        }
+
+        let endpoint = Endpoints.Classroom.classroomChat(
+            message: cleanMessage,
+            conversationHistory: historyPayload,
+            systemPrompt: systemPrompt
         )
 
         let chat: BackendClassroomChatResponse = try await NetworkClient.shared.request(endpoint)

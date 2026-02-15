@@ -247,23 +247,26 @@ enum Endpoints {
         case submitInteraction(courseId: String, nodeId: String, answerId: String, timeTaken: Double)
         case getLookahead(courseId: String, count: Int)
         case requestRemediation(courseId: String, nodeId: String, complaint: String?, tag: String?)
+        case getLessonUI(lessonId: String)
+        case classroomChat(message: String, conversationHistory: [[String: String]], systemPrompt: String?)
 
         var path: String {
             switch self {
             case .getCourses: return "/api/v1/classroom/courses"
-            case .generateCourse: return "/api/v1/classroom/chat"
+            case .generateCourse, .classroomChat: return "/api/v1/classroom/chat"
             case .getCourse(let id): return "/api/v1/classroom/courses/\(id)"
             case .startCourse(let id): return "/api/v1/classroom/playback/courses/\(id)/start"
             case .advance(let id, _, _): return "/api/v1/classroom/playback/courses/\(id)/advance"
             case .submitInteraction: return "/api/v1/classroom/playback/interactions/submit"
             case .getLookahead(let id, _): return "/api/v1/classroom/playback/courses/\(id)/lookahead"
             case .requestRemediation: return "/api/v1/classroom/playback/remediation/request"
+            case .getLessonUI(let lessonId): return "/api/v1/classroom/lesson/\(lessonId)/ui"
             }
         }
 
         var method: HTTPMethod {
             switch self {
-            case .getCourses, .getCourse, .getLookahead: return .get
+            case .getCourses, .getCourse, .getLookahead, .getLessonUI: return .get
             default: return .post
             }
         }
@@ -303,6 +306,15 @@ enum Endpoints {
                 if let complaint = complaint { body["user_complaint"] = complaint }
                 if let tag = tag { body["misconception_tag"] = tag }
                 return EndpointAnyCodable(body)
+            case .classroomChat(let message, let history, let systemPrompt):
+                var body: [String: Any] = [
+                    "message": message,
+                    "session_id": NSNull(),
+                    "include_audio": false
+                ]
+                if !history.isEmpty { body["conversation_history"] = history }
+                if let sp = systemPrompt, !sp.isEmpty { body["system_prompt"] = sp }
+                return EndpointAnyCodable(body)
             default: return nil
             }
         }
@@ -333,12 +345,13 @@ enum Endpoints {
         case mentorChat(message: String, attachments: [String]?, context: ChatContext?)
         case generateCourseStream(topic: String, level: String, outcomes: [String], teachingStyle: String)
         case chatStream(message: String, context: [String: String]?)
+        case generateCourseContent(prompt: String, topic: String, level: String)
 
         var path: String {
             switch self {
             // Use the lightweight conversational endpoint for chat
             case .chat: return "/api/v1/ai/chat"
-            case .chatStream: return "/api/v1/ai/chat/stream"
+            case .chatStream: return "/api/v1/chat/stream"
             case .generateContent: return "/api/v1/ai/generate"
             case .tutorSession: return "/api/v1/ai/generate"
             case .generateQuiz: return "/api/v1/ai/generate"
@@ -348,6 +361,7 @@ enum Endpoints {
             case .mentorConversation: return "/api/v1/ai/generate"
             case .mentorChat: return "/ai/mentor/conversation"
             case .generateCourseStream: return "/api/content/generate-course/stream"
+            case .generateCourseContent: return "/api/v1/ai/generate"
             }
         }
 
@@ -355,6 +369,15 @@ enum Endpoints {
             switch self {
             case .recommend: return .get
             default: return .post
+            }
+        }
+
+        var requiresAuth: Bool {
+            switch self {
+            case .chat:
+                return false // Public endpoint
+            default:
+                return true
             }
         }
 
@@ -379,7 +402,7 @@ enum Endpoints {
                 
                 return AIChatRequest(
                     message: message,
-                    stream: false, // Default to non-streaming for LioChatService interactions
+                    stream: false, // Default to non-streaming for v1 chat endpoint
                     provider: providerId,
                     context: contextDict.isEmpty ? nil : contextDict
                 )
@@ -511,6 +534,26 @@ enum Endpoints {
                 return ChatStreamRequest(
                     message: message,
                     context: contextString
+                )
+
+            case .generateCourseContent(let prompt, let topic, let level):
+                struct CourseContentRequest: Encodable {
+                    let prompt: String
+                    let task_type: String
+                    let max_tokens: Int
+                    let temperature: Double
+                    let context: [String: String]
+                }
+                return CourseContentRequest(
+                    prompt: prompt,
+                    task_type: "CONTENT_GENERATION",
+                    max_tokens: 4000,
+                    temperature: 0.7,
+                    context: [
+                        "type": "course_generation",
+                        "topic": topic,
+                        "level": level
+                    ]
                 )
 
             default:
@@ -679,9 +722,49 @@ enum Endpoints {
     // MARK: - Course Generation V2
     enum CourseGenerationV2: Endpoint {
         case stream(topic: String, options: CourseGenerationOptions)
+        case generate(body: Encodable)
+        case outline(body: Encodable)
+        case estimateCost(body: Encodable)
+        case status(jobId: String)
+        case result(jobId: String)
+        case forceComplete(jobId: String)
+        case getModule(courseId: String, moduleId: String)
+        case generateModule(courseId: String, moduleId: String, body: Encodable?)
+        case generatorDemo
+        case generatorGenerate(body: Encodable)
         
-        var path: String { "/api/v2/courses/stream" }
-        var method: HTTPMethod { .post }
+        var path: String {
+            switch self {
+            case .stream: return "/api/v2/courses/stream"
+            case .generate: return "/api/v2/courses/generate"
+            case .outline: return "/api/v2/courses/outline"
+            case .estimateCost: return "/api/v2/courses/estimate-cost"
+            case .status(let jobId): return "/api/v2/courses/status/\(jobId)"
+            case .result(let jobId): return "/api/v2/courses/\(jobId)/result"
+            case .forceComplete(let jobId): return "/api/v2/courses/\(jobId)/force-complete"
+            case .getModule(let courseId, let moduleId): return "/api/v2/courses/\(courseId)/modules/\(moduleId)"
+            case .generateModule(let courseId, let moduleId, _): return "/api/v2/courses/\(courseId)/modules/\(moduleId)/generate"
+            case .generatorDemo: return "/api/v2/generator/spanish-101-demo"
+            case .generatorGenerate: return "/api/v2/generator/generate"
+            }
+        }
+        
+        var method: HTTPMethod {
+            switch self {
+            case .stream, .generate, .outline, .estimateCost, .forceComplete, .generateModule, .generatorGenerate:
+                return .post
+            case .status, .result, .getModule, .generatorDemo:
+                return .get
+            }
+        }
+        
+        var requiresAuth: Bool {
+            switch self {
+            case .estimateCost: return false  // Public endpoint
+            default: return true
+            }
+        }
+        
         var body: Encodable? {
             switch self {
             case .stream(let topic, let options):
@@ -707,8 +790,66 @@ enum Endpoints {
                     target_language: options.targetLanguage,
                     max_budget_usd: options.maxBudgetUSD
                 )
+            case .generate(let body), .outline(let body), .estimateCost(let body), .generatorGenerate(let body):
+                return body
+            case .generateModule(_, _, let body):
+                return body
+            default: return nil
             }
         }
+        var cacheTTL: TimeInterval { 0 }
+    }
+
+    // MARK: - A2A Protocol
+    enum A2A: Endpoint {
+        case stream(topic: String, qualityTier: String, userContext: [String: String]?)
+        case discoverAgents
+        case getAgentCard(name: String)
+        case protocolDiscovery
+        
+        var path: String {
+            switch self {
+            case .stream: return "/api/v2/courses/stream-a2a"
+            case .discoverAgents: return "/api/v2/agents"
+            case .getAgentCard(let name): return "/api/v2/agents/\(name)"
+            case .protocolDiscovery: return "/.well-known/agent.json"
+            }
+        }
+        
+        var method: HTTPMethod {
+            switch self {
+            case .stream: return .post
+            case .discoverAgents, .getAgentCard, .protocolDiscovery: return .get
+            }
+        }
+        
+        var requiresAuth: Bool {
+            switch self {
+            case .protocolDiscovery: return false
+            default: return true
+            }
+        }
+        
+        var body: Encodable? {
+            switch self {
+            case .stream(let topic, let qualityTier, let userContext):
+                struct A2AStreamRequest: Encodable {
+                    let request: String
+                    let quality_tier: String
+                    let user_context: [String: String]?
+                    let enable_visuals: Bool = true
+                    let enable_voice: Bool = true
+                    let enable_quality_gates: Bool = true
+                }
+                return A2AStreamRequest(
+                    request: topic,
+                    quality_tier: qualityTier,
+                    user_context: userContext
+                )
+            default: return nil
+            }
+        }
+        
         var cacheTTL: TimeInterval { 0 }
     }
 
@@ -1647,6 +1788,362 @@ enum Endpoints {
             }
         }
     }
+    
+    // MARK: - Community Feed (Social Posts, Comments, Moderation)
+    enum CommunityFeed: Endpoint {
+        // Posts
+        case getPosts(page: Int, limit: Int, filters: FeedFilters)
+        case getPost(id: String)
+        case createPost(request: CommunityCreatePostRequest)
+        case updatePost(id: String, request: CommunityUpdatePostRequest)
+        case deletePost(id: String)
+        
+        // Likes
+        case likePost(id: String)
+        case unlikePost(id: String)
+        case bookmarkPost(id: String)
+        case unbookmarkPost(id: String)
+        case getBookmarks(page: Int, limit: Int)
+        
+        // Comments
+        case getComments(postId: String, page: Int, limit: Int)
+        case createComment(postId: String, request: CommunityCreateCommentRequest)
+        case deleteComment(postId: String, commentId: String)
+        case likeComment(postId: String, commentId: String)
+        
+        // Moderation
+        case report(request: CommunityReportRequest)
+        case blockUser(request: CommunityBlockUserRequest)
+        case unblockUser(userId: String)
+        case getBlockedUsers
+        
+        var path: String {
+            switch self {
+            // Posts
+            case .getPosts: return "/api/v1/community/posts"
+            case .getPost(let id): return "/api/v1/community/posts/\(id)"
+            case .createPost: return "/api/v1/community/posts"
+            case .updatePost(let id, _): return "/api/v1/community/posts/\(id)"
+            case .deletePost(let id): return "/api/v1/community/posts/\(id)"
+            
+            // Likes
+            case .likePost(let id): return "/api/v1/community/posts/\(id)/like"
+            case .unlikePost(let id): return "/api/v1/community/posts/\(id)/like"
+            case .bookmarkPost(let id): return "/api/v1/community/posts/\(id)/bookmark"
+            case .unbookmarkPost(let id): return "/api/v1/community/posts/\(id)/bookmark"
+            case .getBookmarks: return "/api/v1/community/posts/bookmarks"
+            
+            // Comments
+            case .getComments(let postId, _, _): return "/api/v1/community/posts/\(postId)/comments"
+            case .createComment(let postId, _): return "/api/v1/community/posts/\(postId)/comments"
+            case .deleteComment(let postId, let commentId): return "/api/v1/community/posts/\(postId)/comments/\(commentId)"
+            case .likeComment(let postId, let commentId): return "/api/v1/community/posts/\(postId)/comments/\(commentId)/like"
+            
+            // Moderation
+            case .report: return "/api/v1/community/reports"
+            case .blockUser: return "/api/v1/community/blocks"
+            case .unblockUser(let userId): return "/api/v1/community/blocks/\(userId)"
+            case .getBlockedUsers: return "/api/v1/community/blocks"
+            }
+        }
+        
+        var method: HTTPMethod {
+            switch self {
+            case .getPosts, .getPost, .getComments, .getBlockedUsers, .getBookmarks:
+                return .get
+            case .createPost, .createComment, .likePost, .likeComment, .bookmarkPost, .report, .blockUser:
+                return .post
+            case .updatePost:
+                return .put
+            case .deletePost, .deleteComment, .unlikePost, .unbookmarkPost, .unblockUser:
+                return .delete
+            }
+        }
+        
+        var body: Encodable? {
+            switch self {
+            case .createPost(let request): return request
+            case .updatePost(_, let request): return request
+            case .createComment(_, let request): return request
+            case .report(let request): return request
+            case .blockUser(let request): return request
+            default: return nil
+            }
+        }
+        
+        var queryItems: [URLQueryItem]? {
+            switch self {
+            case .getPosts(let page, let limit, let filters):
+                let items = [
+                    URLQueryItem(name: "page", value: "\(page)"),
+                    URLQueryItem(name: "limit", value: "\(limit)")
+                ] + filters.toQueryItems()
+                return items
+                
+            case .getComments(_, let page, let limit):
+                return [
+                    URLQueryItem(name: "page", value: "\(page)"),
+                    URLQueryItem(name: "limit", value: "\(limit)")
+                ]
+                
+            case .getBookmarks(let page, let limit):
+                return [
+                    URLQueryItem(name: "page", value: "\(page)"),
+                    URLQueryItem(name: "limit", value: "\(limit)")
+                ]
+                
+            default: return nil
+            }
+        }
+        
+        var cacheTTL: TimeInterval {
+            switch self {
+            case .getPosts: return 30  // 30 seconds for feed freshness
+            case .getPost: return 60   // 1 minute for single post
+            case .getComments: return 30
+            default: return 0
+            }
+        }
+    }
+    
+    // MARK: - Clips
+    enum Clips: Endpoint {
+        case create(body: Encodable)
+        case list(page: Int, perPage: Int)
+        case discover(page: Int, perPage: Int)
+        case get(id: String)
+        case update(id: String, body: Encodable)
+        case delete(id: String)
+        case like(id: String)
+        case recordView(id: String)
+        case generateCourse(clipId: String, body: Encodable)
+
+        var path: String {
+            switch self {
+            case .create: return "/api/v1/clips"
+            case .list: return "/api/v1/clips"
+            case .discover: return "/api/v1/clips/discover"
+            case .get(let id): return "/api/v1/clips/\(id)"
+            case .update(let id, _): return "/api/v1/clips/\(id)"
+            case .delete(let id): return "/api/v1/clips/\(id)"
+            case .like(let id): return "/api/v1/clips/\(id)/like"
+            case .recordView(let id): return "/api/v1/clips/\(id)/view"
+            case .generateCourse(let id, _): return "/api/v1/clips/\(id)/generate-course"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .list, .discover, .get: return .get
+            case .update: return .put
+            case .delete: return .delete
+            default: return .post
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .create(let body), .update(_, let body), .generateCourse(_, let body): return body
+            default: return nil
+            }
+        }
+
+        var queryItems: [URLQueryItem]? {
+            switch self {
+            case .list(let page, let perPage), .discover(let page, let perPage):
+                return [
+                    URLQueryItem(name: "page", value: "\(page)"),
+                    URLQueryItem(name: "per_page", value: "\(perPage)")
+                ]
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval { 0 }
+    }
+
+    // MARK: - Uploads (Cloud Storage)
+    enum Uploads: Endpoint {
+        case presignedURL(body: Encodable)
+        case uploadAvatar
+        case deleteAvatar
+        case usage
+        case deleteFile(blobName: String)
+        case validate(body: Encodable)
+        case supportedTypes
+
+        var path: String {
+            switch self {
+            case .presignedURL: return "/api/v1/uploads/presigned-url"
+            case .uploadAvatar, .deleteAvatar: return "/api/v1/uploads/avatar"
+            case .usage: return "/api/v1/uploads/usage"
+            case .deleteFile(let name):
+                let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+                return "/api/v1/uploads/file/\(encoded)"
+            case .validate: return "/api/v1/uploads/validate"
+            case .supportedTypes: return "/api/v1/uploads/supported-types"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .usage, .supportedTypes: return .get
+            case .deleteAvatar, .deleteFile: return .delete
+            default: return .post
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .presignedURL(let body), .validate(let body): return body
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval {
+            switch self {
+            case .supportedTypes: return 3600
+            default: return 0
+            }
+        }
+    }
+
+    // MARK: - User Context
+    enum UserContext: Endpoint {
+        case current
+
+        var path: String { "/api/v1/context/current" }
+        var method: HTTPMethod { .get }
+        var cacheTTL: TimeInterval { 120 }
+    }
+
+    // MARK: - Skills
+    enum Skills: Endpoint {
+        case softSkills
+
+        var path: String { "/api/v1/skills/soft-skills" }
+        var method: HTTPMethod { .get }
+        var cacheTTL: TimeInterval { 300 }
+    }
+
+    // MARK: - Tutor (V2)
+    enum Tutor: Endpoint {
+        case ask(body: Encodable)
+        case explain(body: Encodable)
+        case hint(body: Encodable)
+
+        var path: String {
+            switch self {
+            case .ask: return "/api/v2/tutor/ask"
+            case .explain: return "/api/v2/tutor/explain"
+            case .hint: return "/api/v2/tutor/hint"
+            }
+        }
+
+        var method: HTTPMethod { .post }
+
+        var body: Encodable? {
+            switch self {
+            case .ask(let body), .explain(let body), .hint(let body): return body
+            }
+        }
+
+        var cacheTTL: TimeInterval { 0 }
+    }
+
+    // MARK: - Exercises (V2)
+    enum Exercises: Endpoint {
+        case validate(body: Encodable)
+        case validateCode(body: Encodable)
+
+        var path: String {
+            switch self {
+            case .validate: return "/api/v2/exercises/validate"
+            case .validateCode: return "/api/v2/exercises/validate/code"
+            }
+        }
+
+        var method: HTTPMethod { .post }
+
+        var body: Encodable? {
+            switch self {
+            case .validate(let body), .validateCode(let body): return body
+            }
+        }
+
+        var cacheTTL: TimeInterval { 0 }
+    }
+
+    // MARK: - Personalization (AI Recommendations)
+    enum Personalization: Endpoint {
+        case nextAction(body: Encodable)
+        case updateState(body: Encodable)
+        case traceKnowledge(body: Encodable)
+        case masteryProfile
+
+        var path: String {
+            switch self {
+            case .nextAction: return "/api/v1/ai/recommendations/next-action"
+            case .updateState: return "/api/v1/ai/recommendations/state"
+            case .traceKnowledge: return "/api/v1/ai/recommendations/trace"
+            case .masteryProfile: return "/api/v1/ai/recommendations/profile"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .masteryProfile: return .get
+            default: return .post
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .nextAction(let body), .updateState(let body), .traceKnowledge(let body): return body
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval {
+            switch self {
+            case .masteryProfile: return 300
+            default: return 0
+            }
+        }
+    }
+
+    // MARK: - Subscription (User-facing monetization)
+    enum Subscription: Endpoint {
+        case getStatus
+        case validatePurchase(body: Encodable)
+        case sync(body: Encodable)
+        case useEnergy(body: Encodable)
+
+        var path: String {
+            switch self {
+            case .getStatus: return "/api/v1/users/me/subscription"
+            case .validatePurchase: return "/api/v1/purchases/validate"
+            case .sync: return "/api/v1/users/me/subscription/sync"
+            case .useEnergy: return "/api/v1/users/me/energy/use"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .getStatus: return .get
+            default: return .post
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .validatePurchase(let body), .sync(let body), .useEnergy(let body): return body
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval { 0 }
+    }
 }
 
 // MARK: - Supporting Enums
@@ -1775,7 +2272,27 @@ private struct EndpointAnyCodable: Encodable {
     }
 }
 
-// MARK: - Dynamic Endpoint Support
+// MARK: - Community Feed Request Types
+
+struct FeedFilters: Encodable {
+    var postType: String?
+    var tags: [String] = []
+    var sortBy: String = "recent"
+    
+    func toQueryItems() -> [URLQueryItem] {
+        var items: [URLQueryItem] = []
+        if let postType = postType {
+            items.append(URLQueryItem(name: "post_type", value: postType))
+        }
+        if !tags.isEmpty {
+            items.append(URLQueryItem(name: "tags", value: tags.joined(separator: ",")))
+        }
+        items.append(URLQueryItem(name: "sort_by", value: sortBy))
+        return items
+    }
+}
+
+// MARK: - Dynamic Endpoint Support (legacy — prefer typed Endpoints above)
 
 struct DynamicEndpoint: Endpoint {
     let path: String

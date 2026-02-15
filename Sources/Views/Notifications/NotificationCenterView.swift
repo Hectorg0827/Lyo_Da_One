@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct NotificationCenterView: View {
     @StateObject private var viewModel = NotificationCenterViewModel()
@@ -187,9 +188,9 @@ class NotificationCenterViewModel: ObservableObject {
 
         do {
             notifications = try await repository.getNotifications()
-            print("✅ Loaded \\(notifications.count) notifications")
+            Log.ui.info("Loaded \\(notifications.count) notifications")
         } catch {
-            print("❌ Failed to load notifications: \\(error.localizedDescription)")
+            Log.ui.error("Failed to load notifications: \\(error.localizedDescription)")
             // Create some mock notifications for demo
             notifications = createMockNotifications()
         }
@@ -208,7 +209,7 @@ class NotificationCenterViewModel: ObservableObject {
         do {
             try await repository.markNotificationAsRead(notificationId)
         } catch {
-            print("❌ Failed to mark notification as read: \\(error.localizedDescription)")
+            Log.ui.error("Failed to mark notification as read: \\(error.localizedDescription)")
         }
     }
 
@@ -221,7 +222,7 @@ class NotificationCenterViewModel: ObservableObject {
         do {
             try await repository.markAllNotificationsAsRead()
         } catch {
-            print("❌ Failed to mark all notifications as read: \\(error.localizedDescription)")
+            Log.ui.error("Failed to mark all notifications as read: \\(error.localizedDescription)")
         }
     }
 

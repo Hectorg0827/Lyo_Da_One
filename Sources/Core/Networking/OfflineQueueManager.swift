@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Offline Queue Manager
 /// Actor-based manager for queuing and retrying network requests when offline
@@ -87,7 +88,7 @@ actor OfflineQueueManager {
         queue.sort { $0.priority > $1.priority } // Higher priority first
         saveQueue()
         
-        print("📋 Queued request: \(endpointPath) (queue size: \(queue.count))")
+        Log.net.info("Queued request: \(endpointPath) (queue size: \(self.queue.count))")
     }
     
     /// Get current queue size
@@ -104,7 +105,7 @@ actor OfflineQueueManager {
     func clearQueue() {
         queue.removeAll()
         saveQueue()
-        print("🗑️ Offline queue cleared")
+        Log.net.info("Offline queue cleared")
     }
     
     /// Remove a specific request from queue
@@ -116,31 +117,31 @@ actor OfflineQueueManager {
     /// Process all queued requests (called when connectivity restored)
     func processQueue() async {
         guard !isProcessing else {
-            print("⏳ Queue processing already in progress")
+            Log.net.info("⏳ Queue processing already in progress")
             return
         }
         
         guard !queue.isEmpty else {
-            print("✅ No queued requests to process")
+            Log.net.info("No queued requests to process")
             return
         }
         
         isProcessing = true
-        print("🔄 Processing offline queue (\(queue.count) requests)...")
+        Log.net.info("Processing offline queue (\(self.queue.count) requests)...")
         
         var failedRequests: [QueuedRequest] = []
         
         for var request in queue {
             do {
                 try await executeQueuedRequest(request)
-                print("✅ Processed: \(request.endpointPath)")
+                Log.net.info("Processed: \(request.endpointPath)")
             } catch {
                 request.retryCount += 1
                 if request.retryCount < request.maxRetries {
                     failedRequests.append(request)
-                    print("⚠️ Failed (will retry): \(request.endpointPath)")
+                    Log.net.warning("Failed (will retry): \(request.endpointPath)")
                 } else {
-                    print("❌ Max retries exceeded: \(request.endpointPath)")
+                    Log.net.error("Max retries exceeded: \(request.endpointPath)")
                 }
             }
         }
@@ -150,7 +151,7 @@ actor OfflineQueueManager {
         saveQueue()
         isProcessing = false
         
-        print("🏁 Queue processing complete. Remaining: \(queue.count)")
+        Log.net.info("🏁 Queue processing complete. Remaining: \(self.queue.count)")
     }
     
     // MARK: - Private Methods

@@ -102,47 +102,15 @@ struct A2UIAutoNotesView: View {
 struct A2UIFlashcardView: View {
     let props: A2UIProps
     let onAction: ((A2UIAction) -> Void)?
-    @State private var isFlipped = false
     
     var body: some View {
-        ZStack {
-            // Back
-            VStack {
-                Text(props.flashcardBack ?? "Answer")
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding()
-            .background(Color.green.opacity(0.2))
-            .cornerRadius(16)
-            .opacity(isFlipped ? 1 : 0)
-            .rotation3DEffect(.degrees(isFlipped ? 0 : 180), axis: (x: 0, y: 1, z: 0))
-            
-            // Front
-            VStack {
-                Text(props.flashcardFront ?? props.title ?? "Question")
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                if let hint = props.hint {
-                    Text("💡 \(hint)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding()
-            .background(Color.blue.opacity(0.2))
-            .cornerRadius(16)
-            .opacity(isFlipped ? 0 : 1)
-            .rotation3DEffect(.degrees(isFlipped ? -180 : 0), axis: (x: 0, y: 1, z: 0))
-        }
-        .frame(height: 200)
-        .onTapGesture {
-            withAnimation(.spring()) {
-                isFlipped.toggle()
-            }
-        }
+        PremiumFlashcardView(
+            front: props.flashcardFront ?? props.title ?? "Question",
+            back: props.flashcardBack ?? "Answer",
+            hint: props.hint,
+            showMasteryButton: false
+        )
+        .frame(height: 220)
     }
 }
 
@@ -342,7 +310,28 @@ struct A2UIButtonView: View {
 
     private var baseButton: some View {
         Button {
-            // Handle action
+            // FIX: Prioritize explicit action type or title over random IDs
+            // If the backend provided a specific action (e.g. "create_course"), use it
+            // Otherwise use the button text which the AI can understand (e.g. "Quiz Me")
+            let actionType = props.actionType
+            let displayTitle = props.title ?? props.label ?? "Button"
+            
+            // Use action_title prop if available (legacy support)
+            let legacyActionTitle = props.actionTitle
+            
+            let finalId = actionType ?? legacyActionTitle ?? displayTitle
+            
+            let action = A2UIAction(
+                id: UUID().uuidString,
+                trigger: .tap,
+                type: .deepLink,
+                payload: [
+                    "id": .string(finalId),
+                    "title": .string(displayTitle),
+                    "action_type": .string(actionType ?? "user_intent")
+                ]
+            )
+            onAction?(action)
         } label: {
             HStack {
                 if let icon = props.iconName {

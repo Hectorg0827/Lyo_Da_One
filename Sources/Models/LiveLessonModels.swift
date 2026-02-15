@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // Redundant models moved to LessonBlock.swift for unified rich-content rendering.
 
@@ -163,6 +164,7 @@ enum LessonBlockType: String, Codable, CaseIterable {
     // Learning Aids
     case flashcard
     case flashcardDeck
+    case notes
     case timeline
     case comparison    // Side-by-side
     case stepByStep    // Numbered steps
@@ -212,8 +214,10 @@ enum LessonBlockType: String, Codable, CaseIterable {
             self = .code
         case "interaction", "input":
             self = .textInput
+        case "note", "notes":
+            self = .notes
         default:
-            print("⚠️ Unknown block type: '\(rawValue)' - using .unknown")
+            Log.data.warning("Unknown block type: '\(rawValue)' - using .unknown")
             self = .unknown
         }
     }
@@ -370,6 +374,10 @@ struct LessonBlock: Identifiable, Codable {
         }
     }
     
+    var isCallout: Bool {
+        type == .callout
+    }
+    
     // MARK: - Codable
     
     enum CodingKeys: String, CodingKey {
@@ -394,12 +402,8 @@ struct LessonBlock: Identifiable, Codable {
         case duration, difficulty, tags
     }
     
-
-}
-
-
-// MARK: - Safe Decoder Extension
-extension LessonBlock {
+    // MARK: - Safe Decoder
+    
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         

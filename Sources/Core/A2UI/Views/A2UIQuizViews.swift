@@ -12,57 +12,21 @@ import SwiftUI
 struct A2UIQuizMCQView: View {
     let props: A2UIProps
     let onAction: ((A2UIAction) -> Void)?
-    @State private var selectedOption: String?
-    @State private var showFeedback = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Question
-            Text(props.question ?? "")
-                .font(.headline)
-            
-            // Options
-            ForEach(props.options ?? [], id: \.id) { option in
-                Button {
-                    selectedOption = option.id
-                    if props.showFeedback == true {
-                        showFeedback = true
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: selectedOption == option.id ? "circle.fill" : "circle")
-                        Text(option.text)
-                        Spacer()
-                        if showFeedback && selectedOption == option.id {
-                            Image(systemName: option.isCorrect == true ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundColor(option.isCorrect == true ? .green : .red)
-                        }
-                    }
-                    .padding()
-                    .background(backgroundColor(for: option))
-                    .cornerRadius(12)
-                }
-                .buttonStyle(.plain)
+        let options = props.options ?? []
+        let correctOption = options.first { $0.isCorrect == true } ?? options.first
+        let correctIndex = correctOption.flatMap { options.firstIndex(of: $0) } ?? 0
+        
+        PremiumQuizView(
+            question: props.question ?? "Question",
+            options: options.map { $0.text },
+            correctIndex: correctIndex,
+            explanation: props.explanation,
+            onAnswerSubmitted: { index, _ in
+                // Handle action if needed
             }
-            
-            // Explanation
-            if showFeedback, let explanation = props.explanation {
-                Text(explanation)
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-            }
-        }
-        .padding()
-    }
-    
-    private func backgroundColor(for option: A2UIQuizOption) -> Color {
-        guard showFeedback, selectedOption == option.id else {
-            return Color(.systemGray6)
-        }
-        return option.isCorrect == true ? Color.green.opacity(0.2) : Color.red.opacity(0.2)
+        )
     }
 }
 

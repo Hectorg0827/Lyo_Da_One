@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 import AVFoundation
+import os
 
 // MARK: - Clip Service
 
@@ -96,12 +97,7 @@ final class ClipService {
             enableCourseGeneration: metadata.enableCourseGeneration
         )
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips",
-            method: .post,
-            body: request,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.create(body: request)
         
         let response: ClipResponse = try await network.request(endpoint)
         
@@ -111,7 +107,7 @@ final class ClipService {
         
         progressHandler?(1.0)
         
-        print("✅ Clip created: \(clip.title)")
+        Log.net.info("Clip created: \(clip.title)")
         return clip
     }
     
@@ -119,11 +115,7 @@ final class ClipService {
     
     /// Fetch clips created by the current user
     func getMyClips(page: Int = 1, perPage: Int = 20) async throws -> [Clip] {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips?page=\(page)&per_page=\(perPage)",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.list(page: page, perPage: perPage)
         
         let response: ClipsListResponse = try await network.request(endpoint)
         return response.clips
@@ -133,11 +125,7 @@ final class ClipService {
     
     /// Fetch clips for the Discover feed
     func getDiscoverClips(page: Int = 1, perPage: Int = 20) async throws -> [Clip] {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips/discover?page=\(page)&per_page=\(perPage)",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.discover(page: page, perPage: perPage)
         
         let response: ClipsListResponse = try await network.request(endpoint)
         return response.clips
@@ -147,11 +135,7 @@ final class ClipService {
     
     /// Fetch a specific clip by ID
     func getClip(id: String) async throws -> Clip {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips/\(id)",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.get(id: id)
         
         let response: ClipResponse = try await network.request(endpoint)
         
@@ -166,12 +150,7 @@ final class ClipService {
     
     /// Update clip metadata
     func updateClip(id: String, update: ClipUpdateRequest) async throws -> Clip {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips/\(id)",
-            method: .put,
-            body: update,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.update(id: id, body: update)
         
         let response: ClipResponse = try await network.request(endpoint)
         
@@ -186,25 +165,17 @@ final class ClipService {
     
     /// Delete a clip
     func deleteClip(id: String) async throws {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips/\(id)",
-            method: .delete,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.delete(id: id)
         
         let _: EmptyResponse = try await network.request(endpoint)
-        print("✅ Clip deleted: \(id)")
+        Log.net.info("Clip deleted: \(id)")
     }
     
     // MARK: - Like/Unlike Clip
     
     /// Toggle like status for a clip
     func toggleLike(clipId: String) async throws -> Bool {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips/\(clipId)/like",
-            method: .post,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.like(id: clipId)
         
         struct LikeResponse: Codable {
             let isLiked: Bool
@@ -220,15 +191,11 @@ final class ClipService {
     /// Record a view for a clip
     func recordView(clipId: String) async {
         do {
-            let endpoint = DynamicEndpoint(
-                urlString: "/api/v1/clips/\(clipId)/view",
-                method: .post,
-                requiresAuth: true
-            )
+            let endpoint = Endpoints.Clips.recordView(id: clipId)
             let _: EmptyResponse = try await network.request(endpoint)
         } catch {
             // Silently fail - view recording is not critical
-            print("⚠️ Failed to record clip view: \(error)")
+            Log.net.warning("Failed to record clip view: \(error)")
         }
     }
     
@@ -248,12 +215,7 @@ final class ClipService {
             additionalContext: additionalContext
         )
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/clips/\(clipId)/generate-course",
-            method: .post,
-            body: request,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.Clips.generateCourse(clipId: clipId, body: request)
         
         let response: GenerateCourseFromClipResponse = try await network.request(endpoint)
         
@@ -261,7 +223,7 @@ final class ClipService {
             throw ClipError.courseGenerationFailed(response.error ?? "Failed to generate course")
         }
         
-        print("✅ Course generated from clip: \(courseId)")
+        Log.net.info("Course generated from clip: \(courseId)")
         return courseId
     }
     
@@ -274,7 +236,7 @@ final class ClipService {
             let duration = try await asset.load(.duration)
             return CMTimeGetSeconds(duration)
         } catch {
-            print("⚠️ Failed to get video duration: \(error)")
+            Log.net.warning("Failed to get video duration: \(error)")
             return 0
         }
     }
@@ -292,7 +254,7 @@ final class ClipService {
             let cgImage = try await imageGenerator.image(at: time).image
             return UIImage(cgImage: cgImage)
         } catch {
-            print("⚠️ Failed to generate thumbnail: \(error)")
+            Log.net.warning("Failed to generate thumbnail: \(error)")
             return nil
         }
     }

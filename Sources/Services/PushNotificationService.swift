@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import UIKit
+import os
 
 // MARK: - Push Notification Service
 
@@ -29,10 +30,10 @@ final class PushNotificationService: NSObject {
         center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
                 if granted {
-                    print("✅ Push notification permission granted")
+                    Log.push.info("Push notification permission granted")
                     UIApplication.shared.registerForRemoteNotifications()
                 } else {
-                    print("❌ Push notification permission denied")
+                    Log.push.error("Push notification permission denied")
                 }
                 completion(granted, error)
             }
@@ -54,7 +55,7 @@ final class PushNotificationService: NSObject {
     func didRegisterForRemoteNotifications(deviceToken: Data) {
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         self.deviceToken = tokenString
-        print("📱 Device token received: \(tokenString.prefix(20))...")
+        Log.push.info("Device token received: \(tokenString.prefix(20))...")
         
         // Auto-register with backend if user is logged in
         Task {
@@ -64,7 +65,7 @@ final class PushNotificationService: NSObject {
     
     /// Called by AppDelegate when registration fails
     func didFailToRegisterForRemoteNotifications(error: Error) {
-        print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
+        Log.push.error("Failed to register for remote notifications: \(error.localizedDescription)")
     }
     
     // MARK: - Backend Registration
@@ -93,7 +94,7 @@ final class PushNotificationService: NSObject {
         )
         
         isRegisteredWithBackend = true
-        print("✅ Device registered with backend: \(response.id)")
+        Log.push.info("Device registered with backend: \(response.id)")
         return response
     }
     
@@ -106,7 +107,7 @@ final class PushNotificationService: NSObject {
         do {
             _ = try await registerDeviceWithBackend()
         } catch {
-            print("⚠️ Auto device registration failed: \(error.localizedDescription)")
+            Log.push.warning("Auto device registration failed: \(error.localizedDescription)")
         }
     }
     
@@ -136,7 +137,7 @@ final class PushNotificationService: NSObject {
     func unregisterDevice(deviceId: String) async throws {
         let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Push.unregisterDevice(deviceId: deviceId))
         isRegisteredWithBackend = false
-        print("✅ Device unregistered from backend")
+        Log.push.info("Device unregistered from backend")
     }
     
     // MARK: - Notification Preferences
@@ -156,7 +157,7 @@ final class PushNotificationService: NSObject {
     /// Send a test notification to verify setup
     func sendTestNotification(title: String = "Test from Lyo", body: String = "Push notifications are working!") async throws {
         let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Push.testPush(title: title, body: body))
-        print("✅ Test notification sent")
+        Log.push.info("Test notification sent")
     }
     
     // MARK: - Handle Incoming Notifications
@@ -164,7 +165,7 @@ final class PushNotificationService: NSObject {
     /// Process a notification payload when app is in foreground
     func handleForegroundNotification(_ notification: UNNotification) {
         let content = notification.request.content
-        print("📬 Foreground notification: \(content.title) - \(content.body)")
+        Log.push.info("📬 Foreground notification: \(content.title) - \(content.body)")
         
         // Extract custom data
         let userInfo = content.userInfo
@@ -176,7 +177,7 @@ final class PushNotificationService: NSObject {
     /// Process notification tap when user interacts with it
     func handleNotificationTap(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
-        print("👆 Notification tapped: \(userInfo)")
+        Log.push.info("👆 Notification tapped: \(userInfo)")
         
         if let action = userInfo["action"] as? String {
             handleNotificationAction(action, data: userInfo)
@@ -211,7 +212,7 @@ final class PushNotificationService: NSObject {
             NotificationCenter.default.post(name: .openChat, object: nil)
             
         default:
-            print("⚠️ Unknown notification action: \(action)")
+            Log.push.warning("Unknown notification action: \(action)")
         }
     }
 }

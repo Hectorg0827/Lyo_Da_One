@@ -18,7 +18,7 @@ struct A2UIStackRenderer: View {
         let spacing = component.props.spacing ?? 12
         let children = component.children ?? []
 
-        if component.props.axis == "horizontal" {
+        if component.type == .hStack || component.props.axis == "horizontal" {
             HStack(spacing: spacing) {
                 ForEach(children) { child in
                     A2UIRenderer(component: child, context: context, onAction: { action, _ in

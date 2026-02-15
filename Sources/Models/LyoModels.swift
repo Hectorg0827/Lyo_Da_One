@@ -73,3 +73,6 @@ public struct ImagePayload: Codable {
     public let url: URL
     public let caption: String?
 }
+
+// NOTE: Lyo 2.0 models (Lyo2RouterRequest, Lyo2UIBlock, Lyo2StreamEvent, etc.)
+// live in Lyo2Models.swift. Do NOT duplicate them here.

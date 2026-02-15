@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct GlobalLeaderboardView: View {
     @Environment(\.dismiss) var dismiss
@@ -159,7 +160,7 @@ struct GlobalLeaderboardView: View {
                 self.myRank = try await LyoRepository.shared.getMyLeaderboardRank(type: selectedType.apiKey)
                 self.isLoading = false
             } catch {
-                print("❌ Leaderboard fetch error: \(error)")
+                Log.social.error("Leaderboard fetch error: \(error)")
                 // Mock data fallback for preview/demo
                 generateMockData()
                 self.isLoading = false

@@ -85,15 +85,14 @@ struct LyoAvatarView: View {
     
     // Avatar Image Logic
     private var avatarImage: Image {
-        // Fallback to static avatar until reading_0...4 assets are added
-        return Image("LyoAvatar")
-        /*
         if isThinking {
-            return Image("reading_\(readingFrame)")
+            // Using reading_0 as the thinking/reading state asset
+            // Note: If more frames (reading_1, etc.) are added, the startReadingAnimation
+            // will cycle through them automatically.
+            return Image("reading_0")
         } else {
             return Image("LyoAvatar")
         }
-        */
     }
     
     private func startReadingAnimation() {

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - A2A Task Models (Google A2A Spec)
 
@@ -168,7 +169,7 @@ final class A2ATaskManager: ObservableObject {
         )
         activeTasks[response.id] = task
         
-        print("📤 A2A Task sent: \(response.id) - State: \(response.state)")
+        Log.ai.info("📤 A2A Task sent: \(response.id) - State: \(String(describing: response.state))")
         
         return response
     }
@@ -319,7 +320,7 @@ final class A2ATaskManager: ObservableObject {
             activeTasks[taskId] = task
         }
         
-        print("🚫 A2A Task canceled: \(taskId)")
+        Log.ai.info("🚫 A2A Task canceled: \(taskId)")
     }
     
     // MARK: - Session Management
@@ -327,7 +328,7 @@ final class A2ATaskManager: ObservableObject {
     func startNewSession() {
         currentSessionId = UUID().uuidString
         activeTasks.removeAll()
-        print("🔄 New A2A session: \(currentSessionId ?? "nil")")
+        Log.ai.info("New A2A session: \(self.currentSessionId ?? "nil")")
     }
     
     func getCurrentSessionId() -> String? {

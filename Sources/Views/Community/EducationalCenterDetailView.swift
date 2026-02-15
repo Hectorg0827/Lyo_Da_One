@@ -15,6 +15,8 @@ struct EducationalCenterDetailView: View {
     @State private var showingChat = false
     @State private var showingReviewInput = false
     @State private var region: MKCoordinateRegion
+    @State private var averageRating: Double = 0.0
+    @State private var totalReviews: Int = 0
     
     init(center: APIEducationalCenter) {
         self.center = center
@@ -85,6 +87,18 @@ struct EducationalCenterDetailView: View {
                 targetType: "center",
                 targetName: center.name
             )
+        }
+        .task {
+            do {
+                let stats = try await ReviewService.shared.fetchReviewStats(
+                    targetType: "institution",
+                    targetId: String(center.id)
+                )
+                averageRating = stats.averageRating
+                totalReviews = stats.reviewCount
+            } catch {
+                // Silently fall back to defaults
+            }
         }
     }
     
@@ -213,12 +227,12 @@ struct EducationalCenterDetailView: View {
             Divider()
                 .frame(height: 50)
             
-            // Rating placeholder
+            // Rating from ReviewService
             VStack(spacing: 4) {
                 Image(systemName: "star.fill")
                     .font(.title2)
                     .foregroundColor(.yellow)
-                Text("4.5")
+                Text(totalReviews > 0 ? String(format: "%.1f", averageRating) : "N/A")
                     .font(.headline)
                 Text("rating")
                     .font(.caption)
@@ -263,8 +277,13 @@ struct EducationalCenterDetailView: View {
             }
             
             // Map
-            Map(coordinateRegion: .constant(region), annotationItems: [MapLocation(coordinate: region.center)]) { location in
-                MapMarker(coordinate: location.coordinate, tint: categoryColor)
+            Map(position: .constant(.region(region))) {
+                Annotation("Location", coordinate: region.center) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(categoryColor)
+                        .font(.title)
+                        .background(Circle().fill(.white))
+                }
             }
             .frame(height: 150)
             .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -404,3 +423,4 @@ private struct MapLocation: Identifiable {
         )
     }
 }
+

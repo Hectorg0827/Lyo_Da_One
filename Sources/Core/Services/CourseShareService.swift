@@ -7,6 +7,7 @@
 
 import UIKit
 import SwiftUI
+import os
 
 @MainActor
 final class CourseShareService: ObservableObject {
@@ -41,12 +42,12 @@ final class CourseShareService: ObservableObject {
         
         viewController.present(activityVC, animated: true)
         
-        print("📤 Sharing course: \(courseId)")
+        Log.net.info("📤 Sharing course: \(courseId)")
         
         // 🏆 Award XP for viral contribution
         Task {
-            try? await LyoRepository.shared.awardXP(amount: 50, category: "viral")
-            try? await LyoRepository.shared.awardContributorXP(courseId: courseId, action: "share")
+            _ = try? await LyoRepository.shared.awardXP(amount: 50, category: "viral")
+            _ = try? await LyoRepository.shared.awardContributorXP(courseId: courseId, action: "share")
         }
     }
     
@@ -77,7 +78,7 @@ final class CourseShareService: ObservableObject {
         
         viewController.present(activityVC, animated: true)
         
-        print("🏆 Sharing completion for course: \(courseId)")
+        Log.net.info("🏆 Sharing completion for course: \(courseId)")
         
         // 🏆 Award XP for celebration
         Task {

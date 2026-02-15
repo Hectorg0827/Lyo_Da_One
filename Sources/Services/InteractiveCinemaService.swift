@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Interactive Cinema Service
 // This service interfaces with the backend's graph-based course system
@@ -21,7 +22,7 @@ public final class InteractiveCinemaService: ObservableObject {
     }
     
     public func generateGraphCourse(topic: String, level: String = "beginner") async throws -> GraphCourseItem {
-        print("📡 Generating graph course: \(topic) at \(level) level")
+        Log.ai.info("Generating graph course: \(topic) at \(level) level")
         
         // Start course generation immediately (blocks until complete or fallback)
         let generatedCourse = try await CourseGenerationService.shared.generateCourse(
@@ -35,7 +36,7 @@ public final class InteractiveCinemaService: ObservableObject {
             teachingStyle: "interactive"
         )
         
-        print("✅ Course generation completed: \(generatedCourse.title) with \(generatedCourse.modules.count) modules")
+        Log.ai.info("Course generation completed: \(generatedCourse.title) with \(generatedCourse.modules.count) modules")
         
         // Return course item using the SAME ID from generated course
         let courseItem = GraphCourseItem(
@@ -74,51 +75,51 @@ public final class InteractiveCinemaService: ObservableObject {
     
     private func fetchCourseDetails(courseId: String) async throws -> GraphCourseItem {
         let course: GraphCourseItem = try await NetworkClient.shared.request(Endpoints.Classroom.getCourse(id: courseId))
-        print("✅ Successfully fetched course details: \(course.id)")
+        Log.ai.info("Successfully fetched course details: \(course.id)")
         return course
     }
     
     // MARK: - Playback
     
     public func startCourse(courseId: String) async throws -> PlaybackState {
-        print("▶️ starting course with ID: \(courseId)")
+        Log.ai.info("▶️ starting course with ID: \(courseId)")
         isLoading = true
         defer { isLoading = false }
         
         // FIRST: Check if course was just generated - it's in the cache
         if let generatedCourse = CourseGenerationService.shared.generatedCourse {
-            print("📦 Checking cache - Cached ID: \(generatedCourse.courseId) vs Requested ID: \(courseId)")
+            Log.ai.info("Checking cache - Cached ID: \(generatedCourse.courseId) vs Requested ID: \(courseId)")
             
             if generatedCourse.courseId == courseId {
-                print("✅ Found generated course in cache: \(generatedCourse.title)")
-                print("   Modules: \(generatedCourse.modules.count)")
+                Log.ai.info("Found generated course in cache: \(generatedCourse.title)")
+                Log.ai.info("   Modules: \(generatedCourse.modules.count)")
                 if let first = generatedCourse.modules.first?.lessons.first {
-                     print("   First Lesson Content Length: \(first.content.count)")
+                     Log.ai.info("   First Lesson Content Length: \(first.content.count)")
                 }
                 return convertGeneratedCourseToPlayback(course: generatedCourse, courseId: courseId)
             } else {
-                print("⚠️ Cached course ID mismatch.")
+                Log.ai.warning("Cached course ID mismatch.")
             }
         } else {
-            print("⚠️ No generated course in cache.")
+            Log.ai.warning("No generated course in cache.")
         }
         
         // SECOND: Check for mock course (testing only)
         if courseId.starts(with: "mock_") {
-            print("🎬 Starting Mock Course (no generated course found - fallback to generic): \(courseId)")
+            Log.ai.info("🎬 Starting Mock Course (no generated course found - fallback to generic): \(courseId)")
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay
             return getMockPlaybackState(courseId: courseId)
         }
         
         // THIRD: Check for Shell Course (Optimistic UI)
         if courseId.starts(with: "temp_") {
-            print("🎬 Starting Shell Course (Optimistic UI): \(courseId)")
+            Log.ai.info("🎬 Starting Shell Course (Optimistic UI): \(courseId)")
             // Return a loading/intro state
             return createWelcomePlaybackState(courseId: courseId)
         }
         
         // LAST: Fetch from backend
-        print("🌐 Fetching course from backend: \(courseId)")
+        Log.ai.info("Fetching course from backend: \(courseId)")
         let playbackState: PlaybackState = try await NetworkClient.shared.request(Endpoints.Classroom.startCourse(id: courseId))
         currentPlaybackState = playbackState
         return playbackState
@@ -134,39 +135,39 @@ public final class InteractiveCinemaService: ObservableObject {
             // Check if course is ready
             if let generatedCourse = CourseGenerationService.shared.generatedCourse,
                !generatedCourse.modules.isEmpty {
-                print("✅ Course ready after \(attempts) attempts, converting to playback...")
+                Log.ai.info("Course ready after \(attempts) attempts, converting to playback...")
                 return convertGeneratedCourseToPlayback(course: generatedCourse, courseId: courseId)
             }
             
             // Wait 1 second before next check
             try await Task.sleep(nanoseconds: 1_000_000_000)
             attempts += 1
-            print("⏳ Waiting for course generation... attempt \(attempts)/\(maxAttempts)")
+            Log.ai.info("⏳ Waiting for course generation... attempt \(attempts)/\(maxAttempts)")
         }
         
         // Fallback: create a welcome node if generation took too long
-        print("⚠️ Course generation timed out, showing welcome screen...")
+        Log.ai.warning("Course generation timed out, showing welcome screen...")
         return createWelcomePlaybackState(courseId: courseId)
     }
     
     private func convertGeneratedCourseToPlayback(course: GeneratedCourseResponse, courseId: String) -> PlaybackState {
-        print("🔄 Converting course '\(course.title)' to playback - Modules: \(course.modules.count)")
+        Log.ai.info("Converting course '\(course.title)' to playback - Modules: \(course.modules.count)")
         
         guard !course.modules.isEmpty else {
-            print("⚠️ No modules in generated course!")
+            Log.ai.warning("No modules in generated course!")
             return createWelcomePlaybackState(courseId: courseId)
         }
         
         let firstModule = course.modules[0]
-        print("📚 First module: '\(firstModule.title)' - Lessons: \(firstModule.lessons.count)")
+        Log.ai.info("📚 First module: '\(firstModule.title)' - Lessons: \(firstModule.lessons.count)")
         
         guard !firstModule.lessons.isEmpty else {
-            print("⚠️ No lessons in first module!")
+            Log.ai.warning("No lessons in first module!")
             return createWelcomePlaybackState(courseId: courseId)
         }
         
         let firstLesson = firstModule.lessons[0]
-        print("✅ Starting with lesson: '\(firstLesson.title)'")
+        Log.ai.info("Starting with lesson: '\(firstLesson.title)'")
         
         // Create main content node
         var contentDict: [String: AnyCodable] = [:]
@@ -280,7 +281,7 @@ public final class InteractiveCinemaService: ObservableObject {
         
         // Check for mock course
         if courseId.starts(with: "mock_") {
-            print("⏩ Advancing Mock Course: \(courseId) -> Next Node")
+            Log.ai.info("⏩ Advancing Mock Course: \(courseId) -> Next Node")
             try await Task.sleep(nanoseconds: 300_000_000) // 0.3s delay
             let currentNum = Int(String(currentNodeId.last ?? "1")) ?? 1
             let nextNodeId = "node_\(currentNum + 1)"
@@ -289,7 +290,7 @@ public final class InteractiveCinemaService: ObservableObject {
         
         // Check for generated course
         if courseId.starts(with: "gen_") {
-            print("⏩ Advancing Generated Course: \(courseId) -> Next Node")
+            Log.ai.info("⏩ Advancing Generated Course: \(courseId) -> Next Node")
             guard let generatedCourse = CourseGenerationService.shared.generatedCourse else {
                 throw CourseGenerationError.noContent
             }
@@ -397,9 +398,9 @@ public final class InteractiveCinemaService: ObservableObject {
             Task {
                 do {
                     try await PersonalizationService.shared.traceKnowledge(trace: trace)
-                    print("✅ Knowledge traced for skill: \(skillId)")
+                    Log.ai.info("Knowledge traced for skill: \(skillId)")
                 } catch {
-                    print("⚠️ Failed to trace knowledge: \(error)")
+                    Log.ai.warning("Failed to trace knowledge: \(error)")
                 }
             }
         }
@@ -453,7 +454,7 @@ public final class InteractiveCinemaService: ObservableObject {
             title: isFirstNode ? "Introduction" : "Concept \(nodeId.last ?? "1")",
             content: ["text": AnyCodable("This is a mock lesson content for \(nodeId).")],
             orderIndex: isFirstNode ? 1 : 2,
-            assets: NodeAssets(audioUrl: nil, imageUrl: "LyoThinking", duration: 10.0)
+            assets: NodeAssets(audioUrl: nil, imageUrl: nil, duration: 10.0)
         )
         
         let nextNodes = isLastNode ? [] : [

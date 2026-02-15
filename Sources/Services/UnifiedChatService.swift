@@ -401,9 +401,23 @@ final class UnifiedChatService: ObservableObject {
             Log.ai.info("Answer block received — content keys: \(block.content.keys.sorted())")
             
             // Extract text: backend may send "text" or "markdown" key
-            let answerText = (block.content["text"]?.value as? String)
+            let rawText = (block.content["text"]?.value as? String)
                 ?? (block.content["markdown"]?.value as? String)
                 ?? ""
+            
+            // Strip agent markers injected by the backend (e.g. "[tutor]\n", "[quiz]\n")
+            let agentTags = ["[tutor]", "[quiz]", "[sentiment]", "[content]", "[metacognition]"]
+            var answerText = rawText
+            for tag in agentTags {
+                if answerText.hasPrefix(tag) {
+                    answerText = String(answerText.dropFirst(tag.count))
+                    if answerText.hasPrefix("\n") {
+                        answerText = String(answerText.dropFirst())
+                    }
+                    break
+                }
+            }
+            answerText = answerText.trimmingCharacters(in: .whitespacesAndNewlines)
             
             Log.ai.info("Answer text (\(answerText.count) chars): \(answerText.prefix(100))")
             
@@ -1095,6 +1109,11 @@ final class UnifiedChatService: ObservableObject {
             
             messages.append(greetingMessage)
             conversationHistory.append(ConversationMessage(role: "assistant", content: response.greeting))
+            
+            // Surface greeting suggestions as quick chips if provided
+            if let chips = response.suggestions, !chips.isEmpty {
+                suggestions = chips.map { SuggestionChip(id: UUID().uuidString, text: $0) }
+            }
             
         } catch {
             Log.ai.warning("Failed to fetch proactive greeting: \(error)")

@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import os
 
 // MARK: - Feed View
 struct FeedView: View {
@@ -6,6 +8,9 @@ struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @State private var selectedPost: RepoPost?
     @State private var showComments = false
+    @State private var sharePost: RepoPost?
+    @State private var showReportSheet = false
+    @State private var reportTargetPost: RepoPost?
 
     var body: some View {
         NavigationView {
@@ -68,8 +73,24 @@ struct FeedView: View {
             }
             .sheet(isPresented: $showComments) {
                 if let post = selectedPost {
-                    CommentsView(post: post, viewModel: viewModel)
+                    FeedCommentsView(post: post, viewModel: viewModel)
                 }
+            }
+            .sheet(item: $sharePost) { post in
+                let shareText = "\(post.content)\n\nShared via Lyo \u{1F680}"
+                ActivityViewControllerRepresentable(activityItems: [shareText])
+            }
+            .confirmationDialog(
+                "Report Post",
+                isPresented: $showReportSheet,
+                titleVisibility: .visible
+            ) {
+                Button("Spam") { reportPost(reason: "spam") }
+                Button("Inappropriate Content") { reportPost(reason: "inappropriate") }
+                Button("Harassment") { reportPost(reason: "harassment") }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Why are you reporting this post?")
             }
             .overlay {
                 if viewModel.isLoading {
@@ -77,7 +98,10 @@ struct FeedView: View {
                         .scaleEffect(1.5)
                 }
             }
-            .alert("Error", isPresented: .constant(viewModel.error != nil)) {
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
                 Button("OK") {
                     viewModel.error = nil
                 }
@@ -104,8 +128,11 @@ struct FeedView: View {
             showComments = true
 
         case .share:
-            // TODO: Implement share sheet
-            print("Share post: \(post.id)")
+            sharePost = post
+
+        case .report:
+            reportTargetPost = post
+            showReportSheet = true
 
         case .delete:
             Task {
@@ -123,6 +150,24 @@ struct FeedView: View {
         } else {
             PostCardView(post: post) { action in
                 handlePostAction(post: post, action: action)
+            }
+        }
+    }
+
+    private func reportPost(reason: String) {
+        guard let post = reportTargetPost else { return }
+        Task {
+            do {
+                let request = CommunityReportRequest(
+                    targetType: .post,
+                    targetId: post.id,
+                    reason: .spam, // Backend maps from enum
+                    description: reason
+                )
+                let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.CommunityFeed.report(request: request))
+                HapticManager.shared.playSuccess()
+            } catch {
+                Log.social.warning("Failed to report post: \(error.localizedDescription)")
             }
         }
     }
@@ -216,7 +261,7 @@ struct PostCardView: View {
 
                 Menu {
                     Button {
-                        // TODO: Report post
+                        onAction(.report)
                     } label: {
                         Label("Report", systemImage: "flag")
                     }
@@ -330,6 +375,7 @@ enum PostAction {
     case comment
     case share
     case delete
+    case report
 }
 
 // MARK: - Empty Feed View
@@ -402,7 +448,7 @@ struct NewPostView: View {
 }
 
 // MARK: - Comments View
-struct CommentsView: View {
+struct FeedCommentsView: View {
     let post: RepoPost
     @ObservedObject var viewModel: FeedViewModel
     @Environment(\.dismiss) var dismiss
@@ -462,7 +508,17 @@ struct CommentsView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(comments) { comment in
-                                CommentRowView(comment: comment)
+                                CommentRowView(comment: comment) { liked in
+                                    Task {
+                                        do {
+                                            let _: EmptyResponse = try await NetworkClient.shared.request(
+                                                Endpoints.CommunityFeed.likeComment(postId: post.id, commentId: liked.id)
+                                            )
+                                        } catch {
+                                            Log.social.warning("Failed to like comment: \(error.localizedDescription)")
+                                        }
+                                    }
+                                }
                                 Divider()
                             }
                         }
@@ -537,6 +593,7 @@ struct CommentsView: View {
 // MARK: - Comment Row View
 struct CommentRowView: View {
     let comment: Comment
+    var onLike: ((Comment) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -587,7 +644,7 @@ struct CommentRowView: View {
 
                 HStack(spacing: 16) {
                     Button {
-                        // TODO: Like comment
+                        onLike?(comment)
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "heart")
@@ -626,4 +683,16 @@ struct FeedView_Previews: PreviewProvider {
     static var previews: some View {
         FeedView()
     }
+}
+
+// MARK: - Activity View Controller (Share Sheet)
+struct ActivityViewControllerRepresentable: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    var applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

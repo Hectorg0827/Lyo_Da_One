@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Unified data service that handles real backend calls and demo mode fallback
 @MainActor
@@ -22,16 +23,16 @@ final class DataService: ObservableObject {
     
     func fetchCourses() async -> [Course] {
         if isInDemoMode {
-            print("📱 Demo Mode: returning mock courses")
+            Log.data.info("Demo Mode: returning mock courses")
             return mockCourses()
         }
         
         do {
             let courses = try await apiClient.fetchCourses()
-            print("✅ Fetched \(courses.count) courses from backend")
+            Log.data.info("Fetched \(courses.count) courses from backend")
             return courses
         } catch {
-            print("❌ Failed to fetch courses: \(error.localizedDescription)")
+            Log.data.error("Failed to fetch courses: \(error.localizedDescription)")
             lastError = error.localizedDescription
             return [] // Return empty list instead of mocks
         }
@@ -41,7 +42,7 @@ final class DataService: ObservableObject {
     
     func fetchDiscoverFeed() async -> [DiscoverItem] {
         if isInDemoMode {
-            print("📱 Demo Mode: returning mock discover items")
+            Log.data.info("Demo Mode: returning mock discover items")
             return mockDiscoverItems()
         }
         
@@ -72,10 +73,10 @@ final class DataService: ObservableObject {
                 items.append(contentsOf: mappedCourses)
             }
             
-            print("✅ Fetched \(items.count) total discover items (including \(communityCourses?.count ?? 0) from community)")
+            Log.data.info("Fetched \(items.count) total discover items (including \(communityCourses?.count ?? 0) from community)")
             return items
         } catch {
-            print("❌ Failed to fetch discover feed: \(error.localizedDescription)")
+            Log.data.error("Failed to fetch discover feed: \(error.localizedDescription)")
             lastError = error.localizedDescription
             return [] // Return empty list instead of mocks
         }
@@ -85,16 +86,16 @@ final class DataService: ObservableObject {
     
     func fetchCampusEvents() async -> [CampusItem] {
         if isInDemoMode {
-            print("📱 Demo Mode: returning mock campus items")
+            Log.data.info("Demo Mode: returning mock campus items")
             return mockCampusItems()
         }
         
         do {
             let items = try await apiClient.fetchCampusEvents()
-            print("✅ Fetched \(items.count) campus items from backend")
+            Log.data.info("Fetched \(items.count) campus items from backend")
             return items
         } catch {
-            print("❌ Failed to fetch campus events: \(error.localizedDescription)")
+            Log.data.error("Failed to fetch campus events: \(error.localizedDescription)")
             lastError = error.localizedDescription
             return [] // Return empty list instead of mocks
         }
@@ -114,7 +115,7 @@ final class DataService: ObservableObject {
             }
             return events
         } catch {
-            print("❌ Failed to fetch community events: \(error)")
+            Log.data.error("Failed to fetch community events: \(error)")
             return mockCommunityEvents()
         }
     }

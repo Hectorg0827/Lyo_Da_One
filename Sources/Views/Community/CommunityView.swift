@@ -47,13 +47,36 @@ struct CommunityView: View {
                                 .shadow(color: .black.opacity(0.1), radius: 4)
                         }
                         .padding(.trailing, 20)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 100) // Avoid Tab Bar overlap
                     }
                 }
-            }
+                
+                // ADD ITEM FAB
+                VStack {
+                    Spacer()
+                    HStack {
+                         Spacer()
+                         Button(action: { showCreateSheet = true }) {
+                             Image(systemName: "plus")
+                                 .font(.title2.bold())
+                                 .foregroundColor(.white)
+                                 .frame(width: 56, height: 56)
+                                 .background(Color.blue)
+                                 .clipShape(Circle())
+                                 .shadow(radius: 4, y: 3)
+                         }
+                         .padding(.trailing, 20)
+                         .padding(.bottom, 100)
+                    }
+                }
         }
         .sheet(isPresented: $showCreateSheet) {
             CreateCommunityItemSheet(viewModel: viewModel)
+        }
+        .sheet(item: $viewModel.selectedPin) { pin in
+           // Detail View for the selected pin
+           CommunityPinDetailSheet(pin: pin)
+               .presentationDetents([.medium, .fraction(0.8)])
         }
         .sheet(isPresented: $showingActivities) {
             MyActivitiesView()
@@ -202,7 +225,7 @@ struct CommunityGoogleStyleMap: View {
                 Annotation(beacon.title, coordinate: beacon.coordinate) {
                     // Interactive Beacon Pin
                     Button(action: {
-                        // Selection logic could go here
+                        viewModel.selectedPin = beacon
                     }) {
                         ZStack {
                             Circle()
@@ -503,4 +526,55 @@ struct CommunityItemCard: View {
         .shadow(color: .black.opacity(0.05), radius: 3, x: 0, y: 2)
         .padding(.horizontal)
     }
+}
+
+// Simple Detail Sheet for Map Pins
+struct CommunityPinDetailSheet: View {
+    let pin: CommunityBeacon
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Icon
+            Circle()
+                .fill(pin.type.color.opacity(0.1))
+                .frame(width: 80, height: 80)
+                .overlay(
+                    Image(systemName: pin.type.icon)
+                        .font(.system(size: 32))
+                        .foregroundColor(pin.type.color)
+                )
+                .padding(.top, 40)
+            
+            Text(pin.title)
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+            
+            if let sub = pin.subtitle {
+                Text(sub)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+            }
+            
+            Divider()
+            
+            // Placeholder Actions
+            HStack(spacing: 20) {
+                Button(action: {}) {
+                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                
+                Button(action: {}) {
+                    Label("View Details", systemImage: "info.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.horizontal)
+            
+            Spacer()
+        }
+    }
+}
 }

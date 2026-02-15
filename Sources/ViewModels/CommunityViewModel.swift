@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import Combine
 import CoreLocation
+import os
 
 // MARK: - Models
 
@@ -92,6 +93,9 @@ struct CommunityBeacon: Identifiable {
     let type: CommunityItemType
     let title: String
     let subtitle: String?
+    let imageURL: String?
+    let hasLinkedCourse: Bool
+    var distance: Double?
 }
 
 
@@ -129,7 +133,6 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     @Published var filteredItems: [CommunityItem] = [] // NEW: For List View
     @Published var beacons: [CommunityBeacon] = []
-    @Published var mapPins: [MapPin] = []  // For CommunityDockView compatibility
     
     // Map State
     @Published var region = MKCoordinateRegion(
@@ -142,7 +145,21 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
             span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
         )
     )
-    @Published var selectedPin: MapPin?  // For dock view selection tracking
+    
+    @Published var selectedPin: CommunityBeacon? {
+        didSet {
+            // When a pin is selected, ensure it's visible in the UI
+            if let pin = selectedPin {
+                 withAnimation {
+                     region.center = pin.coordinate
+                     // We intentionally don't change span to avoid zooming in too much automatically
+                 }
+            }
+        }
+    }
+    
+    // De-bouncer for map updates
+    private var mapUpdateTask: Task<Void, Never>?
     
     // Location Manager
     private let locationManager = CLLocationManager()
@@ -169,14 +186,24 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     
     // Track map region changes to refresh real-world data
+    // Track map region changes to refresh real-world data AND backend beacons
     func handleMapRegionChange(_ newRegion: MKCoordinateRegion) {
-        // Only refresh if the change is significant (e.g. moved > 1km)
-        let latDiff = abs(newRegion.center.latitude - region.center.latitude)
-        let lonDiff = abs(newRegion.center.longitude - region.center.longitude)
-        
-        if latDiff > 0.01 || lonDiff > 0.01 {
-            self.region = newRegion
-            fetchRealWorldCenters()
+        // Debounce map updates
+        mapUpdateTask?.cancel()
+        mapUpdateTask = Task {
+            try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s debounce
+            
+            // Only refresh if the change is significant (e.g. moved > 1km)
+            let latDiff = abs(newRegion.center.latitude - region.center.latitude)
+            let lonDiff = abs(newRegion.center.longitude - region.center.longitude)
+            
+            if latDiff > 0.005 || lonDiff > 0.005 {
+                await MainActor.run {
+                    self.region = newRegion
+                    // Reload data for the new region
+                    self.loadData()
+                }
+            }
         }
     }
     
@@ -197,7 +224,7 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("❌ Location Manager Error: \(error.localizedDescription)")
+        Log.social.error("Location Manager Error: \(error.localizedDescription)")
     }
     
     // MARK: - Operations
@@ -207,130 +234,136 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
         isLoading = true
         
         Task {
-            do {
-                // Parallel fetch from all community endpoints
-                async let groupsTask = fetchStudyGroups()
-                async let eventsTask = fetchEvents()
-                async let listingsTask = fetchListings()
-                async let lessonsTask = fetchPrivateLessons()
-                async let centersTask = fetchEducationalCenters()
-                async let coursesTask = fetchSharedCourses() // NEW
+            if viewMode == .map {
+                // Optimized fetch for Map: Get Beacons + Real World
+                let apiBeacons = await fetchBeacons()
                 
-                let (groups, events, listings, lessons, centers, courses) = try await (groupsTask, eventsTask, listingsTask, lessonsTask, centersTask, coursesTask)
-                
-                // Clear and re-populate with Backend Data only
-                var newItems: [CommunityItem] = []
-                
-                // Process Groups
-                newItems.append(contentsOf: groups.map { group in
-                    CommunityItem(
-                        id: String(group.id),
-                        type: .group,
-                        title: group.name,
-                        subtitle: "\(group.memberCount) members • \(group.subject)",
-                        coordinate: CLLocationCoordinate2D(latitude: group.lat ?? 0, longitude: group.lng ?? 0),
-                        imageURL: nil,
-                        userAvatar: group.host.avatar,
-                        timestamp: group.nextSession ?? Date(),
-                        groupData: group
-                    )
-                })
-                
-                // Process Events
-                newItems.append(contentsOf: events.map { event in
-                    CommunityItem(
-                        id: String(event.id),
-                        type: .event,
-                        title: event.title,
-                        subtitle: event.locationName,
-                        coordinate: CLLocationCoordinate2D(latitude: event.lat ?? 0, longitude: event.lng ?? 0),
-                        imageURL: event.imageURL,
-                        userAvatar: event.organizerProfile?.avatar,
-                        timestamp: event.date,
-                        eventData: event
-                    )
-                })
-                
-                // Process Listings
-                newItems.append(contentsOf: listings.map { listing in
-                    CommunityItem(
-                        id: String(listing.id),
-                        type: .marketplace,
-                        title: listing.title,
-                        subtitle: "\(listing.currency)\(listing.price)",
-                        coordinate: CLLocationCoordinate2D(latitude: listing.lat ?? 0, longitude: listing.lng ?? 0),
-                        imageURL: listing.images.first,
-                        userAvatar: listing.sellerAvatar,
-                        timestamp: Date(), 
-                        listingData: listing
-                    )
-                })
-                
-                // Process Private Lessons
-                newItems.append(contentsOf: lessons.map { lesson in
-                    CommunityItem(
-                        id: "lesson-\(lesson.id)",
-                        type: .privateLesson,
-                        title: lesson.title,
-                        subtitle: "with \(lesson.instructor.name) • $\(lesson.cost)/hr",
-                        coordinate: CLLocationCoordinate2D(latitude: lesson.lat ?? 0, longitude: lesson.lng ?? 0),
-                        imageURL: lesson.imageURL,
-                        userAvatar: lesson.instructor.avatar,
-                        timestamp: Date(),
-                        lessonData: lesson
-                    )
-                })
-                
-                // Process Educational Centers
-                newItems.append(contentsOf: centers.map { center in
-                    CommunityItem(
-                        id: "center-\(center.id)",
-                        type: .educationalCenter,
-                        title: center.name,
-                        subtitle: "\(center.category) • \(center.openingHours ?? "")",
-                        coordinate: CLLocationCoordinate2D(latitude: center.lat, longitude: center.lng),
-                        imageURL: center.imageURL,
-                        userAvatar: nil,
-                        timestamp: Date(),
-                        centerData: center
-                    )
-                })
-                
-                // Process Shared Courses (NEW)
-                newItems.append(contentsOf: courses.map { course in
-                    CommunityItem(
-                        id: "course-\(course.id)",
-                        type: .course,
-                        title: course.title,
-                        subtitle: "by \(course.creator.name) • \(course.difficulty)",
-                        coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0), // Courses often global
-                        imageURL: course.thumbnailURL,
-                        userAvatar: course.creator.avatar,
-                        timestamp: course.createdAt,
-                        courseData: course
-                    )
-                })
-                
-                // Update Main Thread
                 await MainActor.run {
-                    self.items = newItems
+                    self.beacons = apiBeacons.compactMap { self.mapBeaconToViewModel($0) }
                     
-                    // Only supplement with real-world places if discovery is toggled ON
                     if showNearbyPlaces {
                         fetchRealWorldCenters()
                     }
-                    
                     self.isLoading = false
                 }
-                
-            } catch {
-                print("❌ Community Fetch Error: \(error.localizedDescription)")
-                self.errorMessage = "Failed to load community data: \(error.localizedDescription)"
-                self.isLoading = false
+            } else {
+                // Full fetch for List Mode
+                 await loadFullList()
             }
         }
     }
     
+    private func loadFullList() async {
+        // Parallel fetch from all community endpoints (each helper handles its own errors)
+        async let groupsTask = fetchStudyGroups()
+            async let eventsTask = fetchEvents()
+            async let listingsTask = fetchListings()
+            async let lessonsTask = fetchPrivateLessons()
+            async let centersTask = fetchEducationalCenters()
+            async let coursesTask = fetchSharedCourses() // NEW
+
+            let (groups, events, listings, lessons, centers, courses) = await (groupsTask, eventsTask, listingsTask, lessonsTask, centersTask, coursesTask)
+
+            // Clear and re-populate with Backend Data only
+            var newItems: [CommunityItem] = []
+            
+            // Process Groups
+            newItems.append(contentsOf: groups.map { group in
+                CommunityItem(
+                    id: String(group.id),
+                    type: .group,
+                    title: group.name,
+                    subtitle: "\(group.memberCount) members • \(group.subject)",
+                    coordinate: CLLocationCoordinate2D(latitude: group.lat ?? 0, longitude: group.lng ?? 0),
+                    imageURL: nil,
+                    userAvatar: group.host.avatar,
+                    timestamp: group.nextSession ?? Date(),
+                    groupData: group
+                )
+            })
+            
+            // Process Events
+            newItems.append(contentsOf: events.map { event in
+                CommunityItem(
+                    id: String(event.id),
+                    type: .event,
+                    title: event.title,
+                    subtitle: event.locationName,
+                    coordinate: CLLocationCoordinate2D(latitude: event.lat ?? 0, longitude: event.lng ?? 0),
+                    imageURL: event.imageURL,
+                    userAvatar: event.organizerProfile?.avatar,
+                    timestamp: event.date,
+                    eventData: event
+                )
+            })
+            
+            // Process Listings
+            newItems.append(contentsOf: listings.map { listing in
+                CommunityItem(
+                    id: String(listing.id),
+                    type: .marketplace,
+                    title: listing.title,
+                    subtitle: "\(listing.currency)\(listing.price)",
+                    coordinate: CLLocationCoordinate2D(latitude: listing.lat ?? 0, longitude: listing.lng ?? 0),
+                    imageURL: listing.images.first,
+                    userAvatar: listing.sellerAvatar,
+                    timestamp: Date(), 
+                    listingData: listing
+                )
+            })
+            
+            // Process Private Lessons
+            newItems.append(contentsOf: lessons.map { lesson in
+                CommunityItem(
+                    id: "lesson-\(lesson.id)",
+                    type: .privateLesson,
+                    title: lesson.title,
+                    subtitle: "with \(lesson.instructor.name) • $\(lesson.cost)/hr",
+                    coordinate: CLLocationCoordinate2D(latitude: lesson.lat ?? 0, longitude: lesson.lng ?? 0),
+                    imageURL: lesson.imageURL,
+                    userAvatar: lesson.instructor.avatar,
+                    timestamp: Date(),
+                    lessonData: lesson
+                )
+            })
+            
+            // Process Educational Centers
+            newItems.append(contentsOf: centers.map { center in
+                CommunityItem(
+                    id: "center-\(center.id)",
+                    type: .educationalCenter,
+                    title: center.name,
+                    subtitle: "\(center.category) • \(center.openingHours ?? "")",
+                    coordinate: CLLocationCoordinate2D(latitude: center.lat, longitude: center.lng),
+                    imageURL: center.imageURL,
+                    userAvatar: nil,
+                    timestamp: Date(),
+                    centerData: center
+                )
+            })
+            
+            // Process Shared Courses (NEW)
+            newItems.append(contentsOf: courses.map { course in
+                CommunityItem(
+                    id: "course-\(course.id)",
+                    type: .course,
+                    title: course.title,
+                    subtitle: "by \(course.creator.name) • \(course.difficulty)",
+                    coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0), // Courses often global
+                    imageURL: course.thumbnailURL,
+                    userAvatar: course.creator.avatar,
+                    timestamp: course.createdAt,
+                    courseData: course
+                )
+            })
+            
+            await MainActor.run {
+                self.items = newItems
+                // Update beacons derived from items for consistency if switching views
+                self.updateBeacons()
+                self.isLoading = false
+            }
+        }
     func createPrivateLesson(_ lesson: APIPrivateLessonRequest) async throws {
         let _: APIPrivateLesson = try await network.request(Endpoints.Community.createPrivateLesson(lesson: lesson))
         loadData()
@@ -355,7 +388,7 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
         
         self.filteredItems = filtered
         
-        self.beacons = filtered.compactMap { item in
+        self.beacons = filtered.compactMap { item -> CommunityBeacon? in
             // Only include items with valid coordinates
             guard item.coordinate.latitude != 0 && item.coordinate.longitude != 0 else { return nil }
             return CommunityBeacon(
@@ -363,7 +396,9 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
                 coordinate: item.coordinate,
                 type: item.type,
                 title: item.title,
-                subtitle: item.subtitle
+                subtitle: item.subtitle,
+                imageURL: item.imageURL,
+                hasLinkedCourse: item.courseData != nil
             )
         }
         // Also update the list view items if they are driven by a separate published property, 
@@ -372,30 +407,119 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     
     // MARK: - API Calls (Real Backend)
+    // Each fetch is resilient: returns [] on failure so one broken endpoint
+    // doesn't prevent the rest of the community data from loading.
     
-    private func fetchStudyGroups() async throws -> [APIStudyGroup] {
-        return try await network.request(Endpoints.Community.getStudyGroups(filters: nil, location: region.center))
+    private func fetchStudyGroups() async -> [APIStudyGroup] {
+        do {
+            return try await network.request(Endpoints.Community.getStudyGroups(filters: nil, location: region.center))
+        } catch {
+            Log.social.warning("Community: study-groups fetch failed – \(error.localizedDescription)")
+            return []
+        }
     }
     
-    private func fetchEvents() async throws -> [APIEducationalEvent] {
-        return try await network.request(Endpoints.Community.getEvents(filters: nil, location: region.center))
+    private func fetchEvents() async -> [APIEducationalEvent] {
+        do {
+            return try await network.request(Endpoints.Community.getEvents(filters: nil, location: region.center))
+        } catch {
+            Log.social.warning("Community: events fetch failed – \(error.localizedDescription)")
+            return []
+        }
     }
     
-    private func fetchListings() async throws -> [APIMarketplaceListing] {
-        return try await network.request(Endpoints.Community.getListings(filters: nil, location: region.center))
+    private func fetchListings() async -> [APIMarketplaceListing] {
+        do {
+            return try await network.request(Endpoints.Community.getListings(filters: nil, location: region.center))
+        } catch {
+            Log.social.warning("Community: marketplace fetch failed – \(error.localizedDescription)")
+            return []
+        }
     }
     
-    private func fetchPrivateLessons() async throws -> [APIPrivateLesson] {
-        // TODO: Wire to backend lessons endpoint when available
-        return []
+    private func fetchPrivateLessons() async -> [APIPrivateLesson] {
+        do {
+            return try await network.request(Endpoints.Community.getListings(filters: nil, location: region.center))
+        } catch {
+            Log.social.warning("Community: private lessons fetch failed – \(error.localizedDescription)")
+            return []
+        }
     }
     
-    private func fetchEducationalCenters() async throws -> [APIEducationalCenter] {
-        return try await network.request(Endpoints.Community.getInstitutions(filters: nil, location: region.center))
+    private func fetchEducationalCenters() async -> [APIEducationalCenter] {
+        do {
+            return try await network.request(Endpoints.Community.getInstitutions(filters: nil, location: region.center))
+        } catch {
+            Log.social.warning("Community: institutions fetch failed – \(error.localizedDescription)")
+            return []
+        }
     }
     
-    private func fetchSharedCourses() async throws -> [APISharedCourse] {
-        return try await network.request(Endpoints.Community.discoverCourses(filters: nil))
+    
+    private func fetchBeacons() async -> [APIBeacon] {
+        do {
+            // Fetch beacons within ~50km radius of center (approx 0.5 deg)
+            return try await network.request(Endpoints.Community.getBeacons(
+                lat: region.center.latitude,
+                lng: region.center.longitude,
+                radius: 50
+            ))
+        } catch {
+            Log.social.warning("Community: beacons fetch failed – \(error.localizedDescription)")
+            return []
+        }
+    }
+    
+    private func mapBeaconToViewModel(_ apiBeacon: APIBeacon) -> CommunityBeacon {
+        let (lat, lng) = apiBeacon.coordinate
+        let type: CommunityItemType
+        var subtitle: String? = nil
+        
+        switch apiBeacon {
+        case .event(let e):
+            type = .event
+            if let date = e.startTime {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                subtitle = formatter.string(from: date)
+            }
+        case .user:
+            type = .group // Map users to generic group/person icon for now
+            subtitle = "Active User"
+        case .question:
+            type = .question
+            subtitle = "Question"
+        case .marketplace(let m):
+            type = .marketplace
+            subtitle = "$\(m.price)"
+        }
+        
+        return CommunityBeacon(
+            id: apiBeacon.id,
+            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+            type: type,
+            title: {
+                 switch apiBeacon {
+                 case .event(let b): return b.title
+                 case .user(let b): return b.displayName
+                 case .question(let b): return b.text
+                 case .marketplace(let b): return b.title
+                 }
+            }(),
+            subtitle: subtitle,
+            imageURL: nil, // Beacons are lightweight, no images
+            hasLinkedCourse: false
+        )
+    }
+
+    private func fetchSharedCourses() async -> [APISharedCourse] {
+        do {
+            return try await network.request(Endpoints.Community.discoverCourses(filters: nil))
+        } catch {
+            Log.social.warning("Community: discover-courses fetch failed – \(error.localizedDescription)")
+            return []
+        }
     }
     
     private func fetchRealWorldCenters() {
@@ -507,7 +631,7 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
                     urls.append(response.publicUrl)
                 }
             } catch {
-                print("❌ Image upload failed: \(error.localizedDescription)")
+                Log.social.error("Image upload failed: \(error.localizedDescription)")
             }
         }
         return urls
@@ -535,7 +659,7 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
         loadData()
     }
     
-    func centerMapOnPin(_ pin: MapPin) {
+    func centerMapOnPin(_ pin: CommunityBeacon) {
         selectedPin = pin
         region.center = pin.coordinate
         mapCameraPosition = .region(MKCoordinateRegion(center: pin.coordinate, span: region.span))

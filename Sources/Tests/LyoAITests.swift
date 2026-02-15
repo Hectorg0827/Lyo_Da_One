@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import Lyo
 
 @MainActor
@@ -38,7 +39,7 @@ class LyoAITests: XCTestCase {
         // Verify it's using the Learning Consultant persona (Mock mode)
         // The mock response usually starts with "I'm Leo, your Learning Consultant." or similar
         // or at least contains helpful learning advice.
-        print("AI Response: \(aiMessage.content)")
+        Log.general.info("AI Response: \(aiMessage.content)")
     }
 }
 
@@ -114,6 +115,6 @@ class CinemaPriorityTests: XCTestCase {
         XCTAssertEqual(actualTitle, "Lesson 1", "Should use the generated lesson title, NOT generic mock info")
         XCTAssertEqual(actualContent, expectedContent, "Should use the generated content, NOT generic mock content")
         
-        print("✅ PROOF: Loaded content '\(actualContent ?? "nil")' matches expected specific content.")
+        Log.general.info("PROOF: Loaded content '\(actualContent ?? "nil")' matches expected specific content.")
     }
 }

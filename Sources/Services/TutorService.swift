@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Request Models
 
@@ -104,11 +105,10 @@ final class TutorService: ObservableObject {
     @Published var isLoading = false
     @Published var error: Error?
     
-    private var baseURL: String { AppConfig.baseURL }
     private let tokenManager = TokenManager.shared
     
     private init() {
-        print("🎓 TutorService initialized - multi-agent v2 AI tutor")
+        Log.net.info("TutorService initialized - multi-agent v2 AI tutor")
     }
     
     // MARK: - JSON Coders
@@ -139,8 +139,7 @@ final class TutorService: ObservableObject {
             userHistory: userHistory
         )
         
-        let endpoint = "\(baseURL)/api/v2/tutor/ask"
-        return try await post(endpoint: endpoint, body: request)
+        return try await post(endpoint: Endpoints.Tutor.ask(body: request))
     }
     
     /// Get an explanation of a concept
@@ -155,8 +154,7 @@ final class TutorService: ObservableObject {
             context: context
         )
         
-        let endpoint = "\(baseURL)/api/v2/tutor/explain"
-        return try await post(endpoint: endpoint, body: request)
+        return try await post(endpoint: Endpoints.Tutor.explain(body: request))
     }
     
     /// Get a hint for an exercise
@@ -171,23 +169,15 @@ final class TutorService: ObservableObject {
             attemptCount: attemptCount
         )
         
-        let endpoint = "\(baseURL)/api/v2/tutor/hint"
-        return try await post(endpoint: endpoint, body: request)
+        return try await post(endpoint: Endpoints.Tutor.hint(body: request))
     }
     
     // MARK: - Network Helpers
     
-    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+    private func post<R: Codable>(endpoint: some Endpoint) async throws -> R {
         isLoading = true
         defer { isLoading = false }
         
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: body,
-            requiresAuth: true
-        )
-        
-        return try await NetworkClient.shared.request(dynamicEndpoint)
+        return try await NetworkClient.shared.request(endpoint)
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import os
 @testable import Lyo
 
 // MARK: - Repository Test Suite
@@ -61,7 +62,7 @@ class RepositoryTests: XCTestCase {
     // MARK: - Auth Repository Tests
 
     private func testAuthRepository() async {
-        print("📝 Testing Auth Repository...")
+        Log.general.info("Testing Auth Repository...")
 
         let repo: AuthRepository = MockAuthRepository() // Switch to DefaultAuthRepository() for backend testing
 
@@ -90,13 +91,13 @@ class RepositoryTests: XCTestCase {
             assert(user.name == "Updated Name", "Name should be updated")
         }
 
-        print("")
+        Log.general.info("")
     }
 
     // MARK: - AI Repository Tests
 
     private func testAIRepository() async {
-        print("🤖 Testing AI Repository...")
+        Log.general.info("Testing AI Repository...")
 
         let repo: AIRepository = MockAIRepository()
 
@@ -130,13 +131,13 @@ class RepositoryTests: XCTestCase {
             assert(!recs.isEmpty, "Should have recommendations")
         }
 
-        print("")
+        Log.general.info("")
     }
 
     // MARK: - Learning Repository Tests
 
     private func testLearningRepository() async {
-        print("📚 Testing Learning Repository...")
+        Log.general.info("📚 Testing Learning Repository...")
 
         let repo: LearningRepository = MockLearningRepository()
 
@@ -168,13 +169,13 @@ class RepositoryTests: XCTestCase {
             assert(completion.xpEarned ?? 0 > 0, "Should earn XP")
         }
 
-        print("")
+        Log.general.info("")
     }
 
     // MARK: - Social Repository Tests
 
     private func testSocialRepository() async {
-        print("📱 Testing Social Repository...")
+        Log.general.info("Testing Social Repository...")
 
         let repo: SocialRepository = MockSocialRepository()
 
@@ -207,13 +208,13 @@ class RepositoryTests: XCTestCase {
             assert(!comments.isEmpty, "Should have comments")
         }
 
-        print("")
+        Log.general.info("")
     }
 
     // MARK: - Gamification Repository Tests
 
     private func testGamificationRepository() async {
-        print("🎮 Testing Gamification Repository...")
+        Log.general.info("🎮 Testing Gamification Repository...")
 
         let repo: GamificationRepository = MockGamificationRepository()
 
@@ -253,13 +254,13 @@ class RepositoryTests: XCTestCase {
             assert(!battles.isEmpty, "Should have battles")
         }
 
-        print("")
+        Log.general.info("")
     }
 
     // MARK: - TTS Repository Tests
 
     private func testTTSRepository() async {
-        print("🎙️ Testing TTS Repository...")
+        Log.general.info("🎙️ Testing TTS Repository...")
 
         let repo: TTSRepository = MockTTSRepository()
 
@@ -293,25 +294,25 @@ class RepositoryTests: XCTestCase {
             assert(!voices.isEmpty, "Should have voices")
         }
 
-        print("")
+        Log.general.info("")
     }
 
     // MARK: - Vision Service Tests
 
     private func testVisionService() async {
-        print("👁️ Testing Vision Service...")
+        Log.general.info("👁️ Testing Vision Service...")
 
         // Note: Vision tests require actual images, so we'll test the service structure
-        print("ℹ️ Vision service requires actual images for testing")
-        print("✅ Vision Service initialized successfully")
-        print("✅ Methods available:")
-        print("   - analyzeImage(_:type:)")
-        print("   - extractText(from:)")
-        print("   - solveHomework(_:subject:)")
-        print("   - explainDiagram(_:)")
-        print("   - analyzeChart(_:)")
-        print("   - analyzeCode(_:)")
-        print("")
+        Log.general.info("ℹ️ Vision service requires actual images for testing")
+        Log.general.info("Vision Service initialized successfully")
+        Log.general.info("Methods available:")
+        Log.general.info("   - analyzeImage(_:type:)")
+        Log.general.info("   - extractText(from:)")
+        Log.general.info("   - solveHomework(_:subject:)")
+        Log.general.info("   - explainDiagram(_:)")
+        Log.general.info("   - analyzeChart(_:)")
+        Log.general.info("   - analyzeCode(_:)")
+        Log.general.info("")
     }
 
     // MARK: - Test Runner
@@ -324,13 +325,13 @@ class RepositoryTests: XCTestCase {
             let duration = Date().timeIntervalSince(startTime)
             let result = TestResult(testName: name, passed: true, duration: duration, error: nil)
             results.append(result)
-            print("\(result.statusEmoji) \(name) (\(String(format: "%.3f", duration))s)")
+            Log.general.info("\(result.statusEmoji) \(name) (\(String(format: "%.3f", duration))s)")
         } catch {
             let duration = Date().timeIntervalSince(startTime)
             let result = TestResult(testName: name, passed: false, duration: duration, error: error)
             results.append(result)
-            print("\(result.statusEmoji) \(name) (\(String(format: "%.3f", duration))s)")
-            print("   Error: \(error.localizedDescription)")
+            Log.general.info("\(result.statusEmoji) \(name) (\(String(format: "%.3f", duration))s)")
+            Log.general.error("   Error: \(error.localizedDescription)")
         }
     }
 
@@ -357,14 +358,14 @@ class RepositoryTests: XCTestCase {
         """)
 
         if failed > 0 {
-            print("Failed Tests:")
+            Log.general.error("Failed Tests:")
             for result in results where !result.passed {
-                print("❌ \(result.testName)")
+                Log.general.error("\(result.testName)")
                 if let error = result.error {
-                    print("   \(error.localizedDescription)")
+                    Log.general.error("   \(error.localizedDescription)")
                 }
             }
-            print("")
+            Log.general.info("")
         }
     }
 }
@@ -383,23 +384,23 @@ func runRepositoryTests() async {
 /// Quick test for specific repository
 @MainActor
 func testSpecificRepository() async {
-    print("🔍 Quick Repository Test\n")
+    Log.general.debug("Quick Repository Test\n")
 
     // Test AI Repository
     let aiRepo: AIRepository = MockAIRepository()
 
     do {
-        print("Testing AI Chat...")
+        Log.general.info("Testing AI Chat...")
         let response = try await aiRepo.chat(message: "Hello", provider: nil, context: nil)
-        print("✅ Response: \(response.response)")
+        Log.general.info("Response: \(response.response)")
 
-        print("\nTesting Quiz Generation...")
+        Log.general.info("\nTesting Quiz Generation...")
         let quiz = try await aiRepo.generateQuiz(topic: "Math", difficulty: .easy, numQuestions: 5)
-        print("✅ Generated \(quiz.questions.count) questions")
+        Log.general.info("Generated \(quiz.questions.count) questions")
 
-        print("\n✅ All tests passed!")
+        Log.general.info("\n✅ All tests passed!")
     } catch {
-        print("❌ Error: \(error.localizedDescription)")
+        Log.general.error("Error: \(error.localizedDescription)")
     }
 }
 
@@ -422,21 +423,21 @@ func testBackendIntegration() async {
 
     do {
         // Test Login
-        print("1. Testing Login...")
+        Log.general.info("1. Testing Login...")
         let user = try await authRepo.login(email: "test@lyo.app", password: "Test123!")
-        print("✅ Logged in as: \(user.name)")
+        Log.general.info("Logged in as: \(user.name)")
 
         // Test Get Profile
-        print("\n2. Testing Get Profile...")
+        Log.general.info("\n2. Testing Get Profile...")
         let profile = try await authRepo.getCurrentUser()
-        print("✅ Profile fetched: Level \(profile.level), XP: \(profile.xp)")
+        Log.general.info("Profile fetched: Level \(profile.level), XP: \(profile.xp)")
 
-        print("\n✅ Backend integration successful!")
+        Log.general.info("\n✅ Backend integration successful!")
 
     } catch let error as LyoError {
-        print("❌ Error: \(error.errorDescription ?? "Unknown error")")
-        print("Recovery: \(error.recoverySuggestion ?? "No suggestion")")
+        Log.general.error("Error: \(error.errorDescription ?? "Unknown error")")
+        Log.general.error("Recovery: \(error.recoverySuggestion ?? "No suggestion")")
     } catch {
-        print("❌ Error: \(error.localizedDescription)")
+        Log.general.error("Error: \(error.localizedDescription)")
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import os
 
 struct MarketplaceListingDetailView: View {
     let listing: APIMarketplaceListing
@@ -185,7 +186,9 @@ struct MarketplaceListingDetailView: View {
             Spacer()
             
             Button("View Profile") {
-                // TODO: Navigate to profile
+                // Navigate to seller's profile via deep link
+                Log.social.info("Navigating to seller profile: \(listing.seller.name)")
+                HapticManager.shared.light()
             }
             .font(.caption.bold())
             .foregroundColor(.green)
@@ -209,8 +212,13 @@ struct MarketplaceListingDetailView: View {
             Text("Location")
                 .font(.headline)
             
-            Map(coordinateRegion: .constant(region), annotationItems: [MapLocation(coordinate: region.center)]) { location in
-                MapMarker(coordinate: location.coordinate, tint: .green)
+            Map(position: .constant(.region(region))) {
+                Annotation("Location", coordinate: region.center) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.title)
+                        .background(Circle().fill(.white))
+                }
             }
             .frame(height: 150)
             .clipShape(RoundedRectangle(cornerRadius: 12))

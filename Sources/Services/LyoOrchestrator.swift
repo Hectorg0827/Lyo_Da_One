@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Core Models
 
@@ -335,7 +336,7 @@ class LyoOrchestrator: ObservableObject {
         do {
             return try JSONDecoder().decode(LyoOrchestratedResponse.self, from: data)
         } catch {
-            print("Failed to parse JSON response: \(error)")
+            Log.net.error("Failed to parse JSON response: \(error)")
             return nil
         }
     }
@@ -845,7 +846,7 @@ extension LyoOrchestrator {
     /// Store detected learning intent for processing
     func storeDetectedIntent(_ intent: LearningIntent) {
         detectedIntents.append(intent)
-        print("🎯 LyoOrchestrator: Stored intent - \(intent.type.rawValue) for \(intent.topic)")
+        Log.net.info("LyoOrchestrator: Stored intent - \(intent.type.rawValue) for \(intent.topic)")
 
         // Keep only recent intents (last hour)
         let oneHourAgo = Date().addingTimeInterval(-3600)
@@ -921,12 +922,12 @@ extension LyoOrchestrator {
     /// Initialize with UI state
     func initialize(uiState: AppUIState) {
         // Connect to UI state for cross-app context
-        print("🔗 LyoOrchestrator: Initialized with UI state")
+        Log.net.info("LyoOrchestrator: Initialized with UI state")
     }
 
     /// Track user interactions for learning analytics
     func trackUserInteraction(_ interaction: UserInteraction) {
-        print("📊 LyoOrchestrator: Tracking interaction - \(interaction.rawValue)")
+        Log.net.info("LyoOrchestrator: Tracking interaction - \(interaction.rawValue)")
 
         // Update user proficiency based on interaction patterns
         updateProficiencyFromInteraction(interaction)

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 // MARK: - Discover ViewModel
 
@@ -155,9 +156,25 @@ final class DiscoverViewModel: ObservableObject {
     /// Trigger generation of a mini-course from this reel
     func convertToCourse(item: DiscoverItem) {
         HapticManager.shared.success()
-        print("🤖 Generating mini-course for: \(item.title)")
-        // TODO: Call CourseGenerationService
-        // Toast logic would go here
+        Log.ui.info("Generating mini-course for: \(item.title)")
+        
+        Task {
+            do {
+                let topic = item.topic ?? item.title
+                let level = item.level.rawValue
+                _ = try await CourseGenerationService.shared.generateCourse(
+                    topic: topic,
+                    level: level,
+                    outcomes: item.keyPoints.isEmpty ? nil : item.keyPoints
+                )
+                Log.ui.info("Mini-course generated for: \(item.title)")
+            } catch {
+                Log.ui.warning("Failed to generate mini-course: \(error.localizedDescription)")
+                await MainActor.run {
+                    errorMessage = "Failed to generate course: \(error.localizedDescription)"
+                }
+            }
+        }
     }
     
     /// Load items from backend or demo data
@@ -167,15 +184,15 @@ final class DiscoverViewModel: ObservableObject {
         
         // Use DataService for unified data fetching
         // Note: DataService internally handles some fallbacks, but we should be aware of the auth state
-        items = await DataService.shared.fetchDiscoverFeed()
+        self.items = await DataService.shared.fetchDiscoverFeed()
         
         if AuthService.shared.isDemoMode {
-            print("📱 DiscoverViewModel: Loaded \(items.count) items (Demo Mode)")
+            Log.ui.info("DiscoverViewModel: Loaded \(self.items.count) items (Demo Mode)")
         } else {
-            if items.isEmpty {
-                 print("⚠️ DiscoverViewModel: Loaded 0 items from backend. This might indicate an issue if not expected.")
+            if self.items.isEmpty {
+                 Log.ui.warning("DiscoverViewModel: Loaded 0 items from backend. This might indicate an issue if not expected.")
             } else {
-                print("🌐 DiscoverViewModel: Loaded \(items.count) items from backend")
+                Log.ui.info("DiscoverViewModel: Loaded \\(self.items.count) items from backend")
             }
         }
         

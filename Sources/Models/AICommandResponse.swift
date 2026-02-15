@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - AI Command Response Parser
 /// Parses AI responses to detect structured commands (like OPEN_CLASSROOM)
@@ -54,6 +55,10 @@ struct CoursePayload: Codable {
         case id, title, topic, level, language, duration, objectives
         case learningObjectives = "learning_objectives"
         case estimatedHours = "estimated_hours"
+        case estimatedDuration = "estimated_duration"
+        case difficulty
+        case lessons
+        case description
     }
     
     init(from decoder: Decoder) throws {
@@ -61,12 +66,23 @@ struct CoursePayload: Codable {
         id = try container.decodeIfPresent(String.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         topic = (try? container.decode(String.self, forKey: .topic)) ?? title
-        level = (try? container.decode(String.self, forKey: .level)) ?? "Beginner"
+        
+        // Handle level or difficulty
+        if let l = try? container.decode(String.self, forKey: .level) {
+            level = l
+        } else if let d = try? container.decode(String.self, forKey: .difficulty) {
+            level = d
+        } else {
+            level = "Beginner"
+        }
+        
         language = try? container.decodeIfPresent(String.self, forKey: .language)
         
-        // Handle duration or estimated_hours
+        // Handle duration, estimated_duration, or estimated_hours
         if let d = try? container.decode(String.self, forKey: .duration) {
             duration = d
+        } else if let ed = try? container.decode(String.self, forKey: .estimatedDuration) {
+            duration = ed
         } else if let h = try? container.decode(Int.self, forKey: .estimatedHours) {
             duration = "\(h) hours"
         } else if let hString = try? container.decode(String.self, forKey: .estimatedHours) {
@@ -75,11 +91,16 @@ struct CoursePayload: Codable {
             duration = nil
         }
         
-        // Handle objectives or learning_objectives
+        // Handle objectives, learning_objectives, or extract from lessons
         if let obj = try? container.decode([String].self, forKey: .objectives) {
             objectives = obj
         } else if let obj = try? container.decode([String].self, forKey: .learningObjectives) {
             objectives = obj
+        } else if let lessons = try? container.decode([[String: AnyCodableValue]].self, forKey: .lessons) {
+            // Extract lesson titles as objectives
+            objectives = lessons.prefix(6).compactMap { lesson in
+                (lesson["title"]?.value as? String) ?? (lesson["description"]?.value as? String)
+            }
         } else {
             objectives = []
         }
@@ -122,45 +143,44 @@ struct AICommandParser {
     static func parse(_ responseText: String) -> ParsedResponse {
         let trimmed = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        print("🔍 AICommandParser.parse() - Input length: \(trimmed.count) chars")
+        Log.ai.debug("AICommandParser.parse() - Input length: \(trimmed.count) chars")
         
         // 1. Try standard extraction and decoding
         if let jsonString = extractJSON(from: trimmed),
            let jsonData = jsonString.data(using: .utf8) {
-            print("   ✅ Extracted JSON (\(jsonData.count) bytes)")
+            Log.ai.info("   ✅ Extracted JSON (\(jsonData.count) bytes)")
             if let result = attemptDecoding(jsonData: jsonData) {
                 return result
             }
-            print("   ⚠️ JSON extracted but decoding failed")
+            Log.ai.error("   ⚠️ JSON extracted but decoding failed")
         } else {
-            print("   ⚠️ No valid JSON structure found (no closing brace)")
+            Log.ai.info("   ⚠️ No valid JSON structure found (no closing brace)")
         }
         
         // 2. If it failed, it might be truncated. Try healing the JSON.
         if let firstBrace = trimmed.firstIndex(of: "{") {
             let potentialJson = String(trimmed[firstBrace...])
-            print("   🩹 Attempting JSON healing on \(potentialJson.prefix(100))...")
+            Log.ai.info("   🩹 Attempting JSON healing on \(potentialJson.prefix(100))...")
             let healed = healJSON(potentialJson)
-            print("   🩹 Healed JSON length: \(healed.count) bytes")
+            Log.ai.info("   🩹 Healed JSON length: \(healed.count) bytes")
             if let jsonData = healed.data(using: .utf8),
                let result = attemptDecoding(jsonData: jsonData) {
-                print("   ✅ Successfully recovered truncated JSON through healing")
+                Log.ai.info("   ✅ Successfully recovered truncated JSON through healing")
                 return result
             }
-            print("   ❌ Healing failed to produce valid course")
+            Log.ai.error("   ❌ Healing failed to produce valid course")
         }
         
-        // 3. FALLBACK: Check if text CONTAINS course-like keywords even if JSON is broken
-        // This handles cases where the response has descriptive text + broken JSON
-        if trimmed.contains("```json") || (trimmed.contains("\"title\"") && trimmed.contains("\"modules\"")) {
-            print("   🧠 Detected course-like content markers, attempting extraction...")
+        // 3. FALLBACK: Check if text contains an explicit OPEN_CLASSROOM JSON with broken structure
+        // Only trigger when the response explicitly contains "OPEN_CLASSROOM" type marker
+        // AND has course-like JSON keys — prevents false positives from normal markdown.
+        if trimmed.contains("OPEN_CLASSROOM") && trimmed.contains("\"title\"") {
+            Log.ai.info("   🧠 Detected explicit OPEN_CLASSROOM markers, attempting extraction...")
             
-            // Try to extract title and basic info even from broken JSON
             if let titleMatch = extractField(from: trimmed, field: "title"),
                !titleMatch.isEmpty {
-                print("   ✅ Extracted title: \(titleMatch)")
+                Log.ai.info("   ✅ Extracted title: \(titleMatch)")
                 
-                // Create a minimal course payload
                 let topic = extractField(from: trimmed, field: "topic") ?? titleMatch
                 let objectives = extractArrayField(from: trimmed, field: "learning_objectives") 
                     ?? extractArrayField(from: trimmed, field: "objectives")
@@ -180,13 +200,92 @@ struct AICommandParser {
                     type: .openClassroom,
                     payload: AICommandPayload(stackItem: nil, course: course)
                 )
-                print("   ✅ Created course command from partial data")
+                Log.ai.info("   ✅ Created course command from partial OPEN_CLASSROOM data")
                 return .command(command)
             }
         }
         
-        print("   ❌ Treating as plain chat")
+        // NOTE: Markdown fallback (parseMarkdownCourse) was removed.
+        // Normal AI markdown responses (with ** bold ** or # headings) must NOT be
+        // mis-interpreted as course commands. Trust the backend's explicit
+        // open_classroom SSE event instead.
+        
+        Log.ai.error("   ❌ Treating as plain chat")
         return .chat(responseText)
+    }
+    
+    // MARK: - Markdown Parser
+    private static func parseMarkdownCourse(from text: String) -> CoursePayload? {
+        // 1. EXTRACT TITLE
+        var title = "New Course"
+        var topic = "General"
+        
+        // Regex for Title: Matches "**I. Title**" or "**1. Title**" or "## Title"
+        // We use a flexible pattern that looks for bold headings with numbers/roman numerals
+        let patterns = [
+            "\\*\\*(?:[XVI]+|\\d+)\\.?\\s*(.+?)\\*\\*", // **I. Title**
+            "#+\\s*(.+)"                                 // # Title
+        ]
+        
+        var foundTitle = false
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let nsString = text as NSString
+                let range = NSRange(location: 0, length: nsString.length)
+                if let match = regex.firstMatch(in: text, options: [], range: range) {
+                    // Capture group 1 is the title
+                    if match.numberOfRanges > 1 {
+                        let titleRange = match.range(at: 1)
+                        title = nsString.substring(with: titleRange).trimmingCharacters(in: .punctuationCharacters)
+                        topic = title
+                        foundTitle = true
+                        break
+                    }
+                }
+            }
+        }
+        
+        // 2. EXTRACT OBJECTIVES
+        // Look for lines starting with *, -, or 1.
+        var objectives: [String] = []
+        let listPattern = "(?:^|\\n)\\s*(?:[*+-]|\\d+\\.)\\s+(.+)"
+        
+        if let regex = try? NSRegularExpression(pattern: listPattern, options: []) {
+            let nsString = text as NSString
+            let range = NSRange(location: 0, length: nsString.length)
+            let matches = regex.matches(in: text, options: [], range: range)
+            
+            for match in matches {
+                if match.numberOfRanges > 1 {
+                    let textRange = match.range(at: 1)
+                    let rawLine = nsString.substring(with: textRange)
+                    // Clean up bold markers from the objective text
+                    let cleanLine = rawLine.replacingOccurrences(of: "**", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    if cleanLine.count > 3 {
+                        objectives.append(cleanLine)
+                    }
+                }
+            }
+        }
+        
+        // 3. VALIDATION
+        // We need either a strong title signal OR a good list of objectives to consider this a course
+        let hasGoodStructure = foundTitle || (objectives.count >= 2)
+        
+        guard hasGoodStructure else { return nil }
+        
+        // 4. CONSTRUCT PAYLOAD
+        return CoursePayload(
+            id: "gen_" + UUID().uuidString.prefix(8),
+            title: title,
+            topic: topic,
+            level: "Adaptive",
+            language: "en",
+            duration: "\(max(15, objectives.count * 10)) min",
+            objectives: Array(objectives.prefix(6))
+        )
     }
     
     private static func attemptDecoding(jsonData: Data) -> ParsedResponse? {
@@ -195,7 +294,7 @@ struct AICommandParser {
         // 1. Attempt to decode as standard AICommandResponse
         if let command = try? decoder.decode(AICommandResponse.self, from: jsonData) {
             if command.type != .normalChat {
-                print("🎯 Parsed AI command: \(command.type.rawValue)")
+                Log.ai.info("Parsed AI command: \(command.type.rawValue)")
                 return .command(command)
             }
         }
@@ -203,7 +302,7 @@ struct AICommandParser {
         // 2. Fallback: Attempt to decode as raw CoursePayload
         // Sometimes AI returns only the course object without the command wrapper
         if let course = try? decoder.decode(CoursePayload.self, from: jsonData) {
-            print("🚀 Detected raw CoursePayload, wrapping in OPEN_CLASSROOM command")
+            Log.ai.info("Detected raw CoursePayload, wrapping in OPEN_CLASSROOM command")
             
             let command = AICommandResponse(
                 type: .openClassroom,
@@ -215,7 +314,7 @@ struct AICommandParser {
         // 3. Last Resort: Manual mapping for very loose structures
         if let jsonObject = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
             if jsonObject["title"] != nil || jsonObject["learning_objectives"] != nil || jsonObject["topic"] != nil {
-                print("🧠 Detected course-like JSON structure, attempting manual mapping...")
+                Log.ai.info("Detected course-like JSON structure, attempting manual mapping...")
                 
                 let title = jsonObject["title"] as? String ?? jsonObject["topic"] as? String ?? "Custom Course"
                 let topic = jsonObject["topic"] as? String ?? title

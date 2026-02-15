@@ -16,6 +16,8 @@ struct PrivateLessonDetailView: View {
     @State private var showingChat = false
     @State private var showingReviewInput = false
     @State private var region: MKCoordinateRegion
+    @State private var averageRating: Double = 0.0
+    @State private var totalReviews: Int = 0
     
     init(lesson: APIPrivateLesson) {
         self.lesson = lesson
@@ -93,6 +95,18 @@ struct PrivateLessonDetailView: View {
                 targetType: "lesson",
                 targetName: lesson.title
             )
+        }
+        .task {
+            do {
+                let stats = try await ReviewService.shared.fetchReviewStats(
+                    targetType: "lesson",
+                    targetId: String(lesson.id)
+                )
+                averageRating = stats.averageRating
+                totalReviews = stats.reviewCount
+            } catch {
+                // Silently fall back to defaults
+            }
         }
     }
     
@@ -239,14 +253,15 @@ struct PrivateLessonDetailView: View {
                     Text(lesson.instructor.name)
                         .font(.title3.bold())
                     
-                    // Rating placeholder - will be enhanced in Phase 3
+                    // Rating from ReviewService
                     HStack(spacing: 2) {
+                        let filledStars = Int(averageRating.rounded())
                         ForEach(0..<5) { index in
-                            Image(systemName: index < 4 ? "star.fill" : "star")
+                            Image(systemName: index < filledStars ? "star.fill" : "star")
                                 .font(.caption)
                                 .foregroundColor(.yellow)
                         }
-                        Text("(4.0)")
+                        Text(totalReviews > 0 ? "(\(String(format: "%.1f", averageRating)))" : "(No reviews)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -289,8 +304,13 @@ struct PrivateLessonDetailView: View {
             Text("Location")
                 .font(.headline)
             
-            Map(coordinateRegion: .constant(region), annotationItems: [MapLocation(coordinate: region.center)]) { location in
-                MapMarker(coordinate: location.coordinate, tint: .purple)
+            Map(position: .constant(.region(region))) {
+                Annotation("Location", coordinate: region.center) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(.purple)
+                        .font(.title)
+                        .background(Circle().fill(.white))
+                }
             }
             .frame(height: 150)
             .clipShape(RoundedRectangle(cornerRadius: 12))

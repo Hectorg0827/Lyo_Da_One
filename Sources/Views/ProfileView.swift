@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 // Ensure Views/Gamification is imported if needed, or if it's in the same module it's fine.
 // Assuming AllAchievementsView is available in the module.
 
@@ -568,9 +569,9 @@ class ProfileViewModel: ObservableObject {
             // Get leaderboard rank
             self.myRank = try await repository.getMyLeaderboardRank(type: "xp")
             
-            print("✅ Profile gamification data loaded")
+            Log.ui.info("Profile gamification data loaded")
         } catch {
-            print("⚠️ Failed to load gamification data: \(error.localizedDescription)")
+            Log.ui.warning("Failed to load gamification data: \(error.localizedDescription)")
             // Use fallback mock data
             coursesCompleted = 5
             currentStreak = 7
@@ -590,9 +591,9 @@ class ProfileViewModel: ObservableObject {
             // Build recent activity from achievements
             self.recentActivity = recentAchievements.map { "Earned '\($0.name)' achievement" }
             
-            print("✅ Achievements loaded: \(achievements.count)")
+            Log.ui.info("Achievements loaded: \(achievements.count)")
         } catch {
-            print("⚠️ Failed to load achievements: \(error.localizedDescription)")
+            Log.ui.warning("Failed to load achievements: \(error.localizedDescription)")
             recentActivity = [
                 "Completed Python Basics",
                 "Earned 'Week Warrior' achievement",
@@ -604,9 +605,9 @@ class ProfileViewModel: ObservableObject {
     private func loadBadges() async {
         do {
             self.badges = try await repository.getMyBadges()
-            print("✅ Badges loaded: \(badges.count)")
+            Log.ui.info("Badges loaded: \(self.badges.count)")
         } catch {
-            print("⚠️ Failed to load badges: \(error.localizedDescription)")
+            Log.ui.warning("Failed to load badges: \(error.localizedDescription)")
         }
     }
     
@@ -617,7 +618,7 @@ class ProfileViewModel: ObservableObject {
                 badges[index] = updatedBadge
             }
         } catch {
-            print("❌ Failed to equip badge: \(error.localizedDescription)")
+            Log.ui.error("Failed to equip badge: \(error.localizedDescription)")
         }
     }
     
@@ -626,9 +627,9 @@ class ProfileViewModel: ObservableObject {
             // Fetch stacks from repository
             let items = try await repository.getStackItems()
             self.activeStacks = items.filter { $0.type == .course && $0.status == .active }
-            print("✅ Profile active stacks loaded: \(activeStacks.count)")
+            Log.ui.info("Profile active stacks loaded: \(self.activeStacks.count)")
         } catch {
-            print("⚠️ Failed to load active stacks: \(error.localizedDescription)")
+            Log.ui.warning("Failed to load active stacks: \(error.localizedDescription)")
         }
     }
     

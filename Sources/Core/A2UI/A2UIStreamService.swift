@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 /// Service to handle real-time streaming updates for A2UI components
 /// Used for "ChatGPT-style" text streaming and live data updates
@@ -30,7 +31,7 @@ class A2UIStreamService: ObservableObject {
     /// Request the backend to start streaming for a component
     func subscribe(to streamId: String) {
         // Send subscription message to backend
-        print("🔌 Subscribing to A2UI stream: \(streamId)")
+        Log.a2ui.info("🔌 Subscribing to A2UI stream: \(streamId)")
         
         Task {
             do {
@@ -66,14 +67,14 @@ class A2UIStreamService: ObservableObject {
         }
         
         wsManager.onMessage(type: "a2ui_stream_complete") { [weak self] message in
-             guard let self = self,
+             guard let _ = self,
                   let data = message.data,
                   let streamId = data["stream_id"] as? String else {
                 return
             }
             
             // Cleanup if needed
-            print("✅ Stream complete: \(streamId)")
+            Log.a2ui.info("Stream complete: \(streamId)")
             // self?.streamSubjects[streamId]?.send(completion: .finished)
         }
     }

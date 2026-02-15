@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import Lyo
 
 final class LyoCinematicIntegrationTests: XCTestCase {
@@ -7,7 +8,7 @@ final class LyoCinematicIntegrationTests: XCTestCase {
     let backendPayload = """
     {
       "id": "4dad7879-8e63-4e30-8295-f6acab67dc82",
-      "type": "hook",
+      "type": "concept",
       "role": "hook",
       "presentation_hint": "cinematic",
       "content": {
@@ -34,14 +35,14 @@ final class LyoCinematicIntegrationTests: XCTestCase {
         let block = try decoder.decode(LyoBlock.self, from: data)
         
         // 2. Verify Block Properties
-        XCTAssertEqual(block.type, .hook)
-        XCTAssertEqual(block.presentationHint, "cinematic")
+        XCTAssertEqual(block.type, .concept)
+        XCTAssertEqual(block.presentationHint, .cinematic)
         
         // 3. Run through LyoAdapter (The "Integration" step)
         let a2uiContent = LyoAdapter.render(block)
         
         // 4. Assert A2UI Content Type
-        XCTAssertEqual(a2uiContent.type, .cinematic, "Adapter should map hook/cinematic to .cinematic type")
+        XCTAssertEqual(a2uiContent.type, A2UIContentType.cinematic, "Adapter should map hook/cinematic to .cinematic type")
         
         // 5. Assert Cinematic Data Model (What the View sees)
         XCTAssertNotNil(a2uiContent.cinematic, "Cinematic payload should not be nil")
@@ -49,6 +50,6 @@ final class LyoCinematicIntegrationTests: XCTestCase {
         XCTAssertEqual(a2uiContent.cinematic?.subtitle, "What if the past isn't truly gone?")
         XCTAssertEqual(a2uiContent.cinematic?.mood, "epic")
         
-        print("✅ Frontend Integration Verified: JSON -> LyoBlock -> LyoAdapter -> A2UIContent")
+        Log.general.info("Frontend Integration Verified: JSON -> LyoBlock -> LyoAdapter -> A2UIContent")
     }
 }

@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import os
 
 // MARK: - Course Library Service
 
@@ -62,11 +63,11 @@ final class CourseLibraryService: ObservableObject {
             // Categorize courses
             categorizeCourses()
             
-            print("✅ Fetched \(allCourses.count) courses")
+            Log.net.info("Fetched \(self.allCourses.count) courses")
             
         } catch {
             self.error = error.localizedDescription
-            print("❌ Failed to fetch courses: \(error)")
+            Log.net.error("Failed to fetch courses: \(error)")
         }
         
         isLoading = false
@@ -94,7 +95,7 @@ final class CourseLibraryService: ObservableObject {
             trendingCourses = Array(cards.prefix(10))
             
         } catch {
-            print("❌ Failed to fetch trending: \(error)")
+            Log.net.error("Failed to fetch trending: \(error)")
         }
     }
     
@@ -123,7 +124,7 @@ final class CourseLibraryService: ObservableObject {
             allCourses = results.map { convertToCard($0) }
             categorizeCourses()
         } catch {
-            print("❌ Search failed: \(error)")
+            Log.net.error("Search failed: \(error)")
         }
     }
     
@@ -177,8 +178,16 @@ final class CourseLibraryService: ObservableObject {
             }
         }
         
-        // Update backend
-        // TODO: Add completion endpoint to backend
+        // Persist to UIStackStore so Focus screen shows 100%
+        stackStore.updateCourseProgress(courseId: courseId, progress: 1.0)
+        
+        // Sync completion to backend
+        do {
+            let _ = try await LyoRepository.shared.markLessonComplete(lessonId: courseId)
+            Log.net.info("CourseLibrary: Marked course \(courseId) as completed on backend")
+        } catch {
+            Log.net.warning("CourseLibrary: Failed to sync course completion: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Helpers

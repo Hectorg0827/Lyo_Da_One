@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import os
 
 // MARK: - Course Social Service
 
@@ -41,7 +42,7 @@ final class CourseSocialService: ObservableObject {
             let response = try await repository.likeCourse(courseId: courseId)
             courseLikes[courseId] = response.totalLikes
             saveToCache()
-            print("✅ Liked course: \(courseId) (total: \(response.totalLikes))")
+            Log.social.info("Liked course: \(courseId) (total: \(response.totalLikes))")
             
             // 🏆 Award XP for social engagement
             // _ = try? await repository.awardXP(amount: 10, category: "social")
@@ -64,7 +65,7 @@ final class CourseSocialService: ObservableObject {
         // Backend sync
         do {
             try await repository.unlikeCourse(courseId: courseId)
-            print("✅ Unliked course: \(courseId)")
+            Log.social.info("Unliked course: \(courseId)")
         } catch {
             // Rollback on error
             userLikedCourses.insert(courseId)
@@ -113,7 +114,7 @@ final class CourseSocialService: ObservableObject {
             saveToCache()
             
             saveToCache()
-            print("✅ Rated course \(courseId): \(rating) stars (avg: \(response.averageRating))")
+            Log.social.info("Rated course \(courseId): \(rating) stars (avg: \(response.averageRating))")
             
             // 🏆 Award XP for social engagement
             _ = try? await repository.awardXP(amount: 25, category: "social")

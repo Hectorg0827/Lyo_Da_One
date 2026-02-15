@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - A2UI Protocol Definitions
 
@@ -40,7 +41,7 @@ final class AIResponseParser {
            let data = jsonBlock.data(using: .utf8),
            let wrapper = try? JSONDecoder().decode(AIActionWrapper.self, from: data) {
             
-            print("🤖 A2UI Protocol: Action Detected -> \(wrapper.type)")
+            Log.a2ui.info("A2UI Protocol: Action Detected -> \(wrapper.type)")
             
             // Check if there was text *before* the JSON
             let textPart = extractTextBefore(original: trimmed, jsonBlock: jsonBlock)

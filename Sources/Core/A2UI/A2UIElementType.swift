@@ -12,7 +12,52 @@ import Foundation
 
 /// Complete catalog of A2UI element types
 /// Backend sends these types to drive dynamic UI rendering
+/// Supports both camelCase (iOS native) and snake_case (backend) raw values
 enum A2UIElementType: String, Codable, CaseIterable {
+    
+    // MARK: - Custom Decoder (snake_case → camelCase bridge)
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        
+        // 1. Try exact match first (camelCase)
+        if let exact = A2UIElementType(rawValue: rawValue) {
+            self = exact
+            return
+        }
+        
+        // 2. Convert snake_case → camelCase and try again
+        let camelCased = Self.snakeToCamelCase(rawValue)
+        if let converted = A2UIElementType(rawValue: camelCased) {
+            self = converted
+            return
+        }
+        
+        // 3. Check manual mapping for known mismatches
+        if let mapped = Self.backendToIOSMapping[rawValue] {
+            self = mapped
+            return
+        }
+        
+        // 4. Fallback to unknown
+        self = .unknown
+    }
+    
+    /// Converts "snake_case" → "snakeCase"
+    private static func snakeToCamelCase(_ string: String) -> String {
+        let parts = string.split(separator: "_")
+        guard let first = parts.first else { return string }
+        return String(first) + parts.dropFirst().map { $0.capitalized }.joined()
+    }
+    
+    /// Manual mapping for types where snake_case→camelCase doesn't match iOS enum
+    private static let backendToIOSMapping: [String: A2UIElementType] = [
+        "action_button": .button,
+        "scroll": .scrollView,
+        "progress_ring": .progressBar,
+        "code_block": .codeBlock,
+    ]
     
     // MARK: - Core Display Elements
     case text

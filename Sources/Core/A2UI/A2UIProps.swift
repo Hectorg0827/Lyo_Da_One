@@ -299,6 +299,7 @@ struct A2UIProps: Codable, Equatable {
     var statValue: String?
     var isDismissible: Bool?
     var actionTitle: String?
+    var actionType: String?
     var score: Double?
     var earnedDate: Date?
     var xpAwarded: Int?
@@ -320,6 +321,39 @@ struct A2UIProps: Codable, Equatable {
     var transform: String?
     
     init() {}
+    
+    /// Convenience initializer for common properties used by A2UIContentSynthesizer
+    init(
+        text: String? = nil,
+        title: String? = nil,
+        spacing: Double? = nil,
+        axis: String? = nil,
+        padding: A2UIEdgeInsets? = nil,
+        fontSize: Double? = nil,
+        fontWeight: String? = nil,
+        lineHeight: Double? = nil,
+        foregroundColor: String? = nil,
+        backgroundColor: String? = nil,
+        borderColor: String? = nil,
+        borderWidth: Double? = nil,
+        borderRadius: Double? = nil,
+        code: String? = nil
+    ) {
+        self.text = text
+        self.title = title
+        self.spacing = spacing
+        self.axis = axis
+        self.padding = padding
+        self.fontSize = fontSize
+        self.fontWeight = fontWeight
+        self.lineHeight = lineHeight
+        self.foregroundColor = foregroundColor
+        self.backgroundColor = backgroundColor
+        self.borderColor = borderColor
+        self.borderWidth = borderWidth
+        self.borderRadius = borderRadius
+        self.code = code
+    }
     
     enum CodingKeys: String, CodingKey {
         case text, title, subtitle, body, placeholder, value, label, hint
@@ -531,6 +565,7 @@ struct A2UIProps: Codable, Equatable {
         case statValue = "stat_value"
         case isDismissible = "is_dismissible"
         case actionTitle = "action_title"
+        case actionType = "action_type"
         case score
         case earnedDate = "earned_date"
         case xpAwarded = "xp_awarded"

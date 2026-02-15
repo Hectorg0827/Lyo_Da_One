@@ -11,7 +11,7 @@ enum AttachmentType: String, Codable {
     case document
 }
 
-struct LyoMessage: Identifiable, Codable {
+struct LyoMessage: Identifiable, Codable, Equatable {
     let id: String
     // Added session ID for isolating chat contexts
     var sessionId: String?
@@ -30,14 +30,40 @@ struct LyoMessage: Identifiable, Codable {
     var quickExplainer: QuickExplainerData?
     var courseProposal: CourseProposalData?
     
+    // MARK: - Lyo Protocol Animation State
+    /// When true, ChatBubbleView will run the typewriter animation on appear,
+    /// then flip this to false so scrolling back never re-triggers it.
+    var shouldAnimate: Bool = false
+    /// When false, the message view is hidden; flipping to true triggers a spring reveal.
+    /// Used by buffer-and-reveal for artifact cards (quiz, flashcards, study plans, etc.).
+    var isRevealed: Bool = true
+    
+    // Exclude ephemeral animation state from Codable
+    enum CodingKeys: String, CodingKey {
+        case id, sessionId, content, isFromUser, timestamp
+        case attachments, actions, status, contentTypes
+        case responseMode, quickExplainer, courseProposal
+    }
+    
     enum MessageStatus: String, Codable {
         case sending
         case sent
         case failed
     }
+    
+    // Manual Equatable: compare by id + content + status + reveal state
+    // (avoids requiring deep Equatable conformance on every nested A2UI / mentor type).
+    static func == (lhs: LyoMessage, rhs: LyoMessage) -> Bool {
+        lhs.id == rhs.id
+            && lhs.content == rhs.content
+            && lhs.status == rhs.status
+            && lhs.isFromUser == rhs.isFromUser
+            && lhs.isRevealed == rhs.isRevealed
+            && lhs.shouldAnimate == rhs.shouldAnimate
+    }
 }
 
-struct MessageAttachment: Identifiable, Codable {
+struct MessageAttachment: Identifiable, Codable, Equatable {
     let id: String
     let type: AttachmentType
     let url: String
@@ -46,7 +72,7 @@ struct MessageAttachment: Identifiable, Codable {
     var mimeType: String?
 }
 
-struct MessageAction: Identifiable, Codable {
+struct MessageAction: Identifiable, Codable, Equatable {
     let id: String
     let label: String
     let actionType: ActionType
@@ -145,6 +171,20 @@ struct LyoChatResponse: Codable {
     }
 }
 
+// MARK: - Legacy Chat Models (Preserved for Proactive Greetings)
+
+struct LioGreetingResponse: Codable {
+    let greeting: String
+    let contextUsed: Bool
+    let suggestions: [String]?
+    
+    enum CodingKeys: String, CodingKey {
+        case greeting
+        case contextUsed = "context_used"
+        case suggestions
+    }
+}
+
 // MARK: - A2UI Envelope (Backend Protocol)
 /// Envelope structure sent by backend for rendering UI components
 struct A2UIEnvelope: Codable {
@@ -156,6 +196,7 @@ struct A2UIEnvelope: Codable {
         case courseRoadmap = "course_roadmap"
         case quizCard = "quiz_card"
         case flashcards
+        case notes           // Structured notes/cheat sheets
         case topicSelection = "topic_selection"
         case unknown
         

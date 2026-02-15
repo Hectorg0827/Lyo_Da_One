@@ -41,13 +41,19 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
     
     static func == (lhs: A2UIComponent, rhs: A2UIComponent) -> Bool {
         lhs.id == rhs.id
+        && lhs.type == rhs.type
+        && lhs.props == rhs.props
+        && lhs.children == rhs.children
+        && lhs.actions == rhs.actions
+        && lhs.conditions == rhs.conditions
+        && lhs.metadata == rhs.metadata
     }
 }
 
 // MARK: - A2UI Action
 
 /// Actions that can be triggered by user interaction
-struct A2UIAction: Codable, Identifiable {
+struct A2UIAction: Codable, Identifiable, Equatable {
     let id: String
     let trigger: A2UIActionTrigger
     let type: A2UIActionType
@@ -59,6 +65,22 @@ struct A2UIAction: Codable, Identifiable {
         case id, trigger, type, payload
         case debounceMs = "debounce_ms"
         case hapticFeedback = "haptic_feedback"
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        trigger: A2UIActionTrigger,
+        type: A2UIActionType,
+        payload: [String: AnyCodableValue]? = nil,
+        debounceMs: Int? = nil,
+        hapticFeedback: String? = nil
+    ) {
+        self.id = id
+        self.trigger = trigger
+        self.type = type
+        self.payload = payload
+        self.debounceMs = debounceMs
+        self.hapticFeedback = hapticFeedback
     }
 }
 
@@ -156,7 +178,7 @@ enum A2UIActionType: String, Codable {
 // MARK: - A2UI Conditions
 
 /// Conditional rendering rules
-struct A2UIConditions: Codable {
+struct A2UIConditions: Codable, Equatable {
     let showIf: String?
     let hideIf: String?
     let enableIf: String?
@@ -183,7 +205,7 @@ struct A2UIConditions: Codable {
 // MARK: - A2UI Metadata
 
 /// Additional component metadata for analytics and debugging
-struct A2UIMetadata: Codable {
+struct A2UIMetadata: Codable, Equatable {
     let analyticsId: String?
     let testId: String?
     let debugLabel: String?

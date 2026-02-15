@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - API Response Types
 
@@ -145,9 +146,9 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/courses", requiresAuth: false)
         } catch {
-            print("⚠️ Failed to fetch courses: \(error)")
+            Log.net.warning("Failed to fetch courses: \(error)")
             if AppConfig.allowMockFallbacks {
-                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                Log.net.info("   Using mock data (LYO_ALLOW_MOCKS=1)")
                 return LyoAPIClient.mockCourses()
             }
             throw error
@@ -162,9 +163,9 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/courses/\(courseId)/lessons", requiresAuth: false)
         } catch {
-            print("⚠️ Failed to fetch lessons: \(error)")
+            Log.net.warning("Failed to fetch lessons: \(error)")
             if AppConfig.allowMockFallbacks {
-                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                Log.net.info("   Using mock data (LYO_ALLOW_MOCKS=1)")
                 return LyoAPIClient.mockLessons()
             }
             throw error
@@ -174,16 +175,16 @@ final class LyoAPIClient {
     func fetchLiveLesson(courseId: String, lessonId: String) async throws -> LiveLesson {
         // Only use mock for demo IDs if mock fallbacks are allowed
         if AppConfig.allowMockFallbacks && (["intro_1", "intro_2", "video_1"].contains(lessonId) || courseId.contains("demo") || courseId == "calculus_101") {
-            print("🚀 Loading mock for demo lesson: \(lessonId) (LYO_ALLOW_MOCKS=1)")
+            Log.net.info("Loading mock for demo lesson: \(lessonId) (LYO_ALLOW_MOCKS=1)")
             return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
         }
         
         do {
             return try await request(path: "/api/v1/learning/courses/\(courseId)/lessons/\(lessonId)/live", requiresAuth: false)
         } catch {
-            print("⚠️ Failed to fetch live lesson: \(error)")
+            Log.net.warning("Failed to fetch live lesson: \(error)")
             if AppConfig.allowMockFallbacks {
-                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                Log.net.info("   Using mock data (LYO_ALLOW_MOCKS=1)")
                 return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
             }
             throw error
@@ -194,9 +195,9 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/enrollments")
         } catch {
-            print("⚠️ Failed to fetch enrollments: \(error)")
+            Log.net.warning("Failed to fetch enrollments: \(error)")
             if AppConfig.allowMockFallbacks {
-                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                Log.net.info("   Using mock data (LYO_ALLOW_MOCKS=1)")
                 return LyoAPIClient.mockEnrollments()
             }
             throw error
@@ -431,16 +432,16 @@ final class LyoAPIClient {
                 ))
             }
         } catch {
-            print("Failed to fetch courses for discover: \(error)")
+            Log.net.error("Failed to fetch courses for discover: \(error)")
         }
         
         // Fallback to mocks if we have no items (either request failed or returned empty)
         if discoverItems.isEmpty {
             if AppConfig.allowMockFallbacks {
-                print("⚠️ Using mock discover items (LYO_ALLOW_MOCKS=1)")
+                Log.net.warning("Using mock discover items (LYO_ALLOW_MOCKS=1)")
                 return LyoAPIClient.mockDiscoverItems()
             }
-            print("⚠️ No discover items available from backend")
+            Log.net.warning("No discover items available from backend")
             return []
         }
         
@@ -487,9 +488,9 @@ final class LyoAPIClient {
             return items
             
         } catch {
-            print("⚠️ Failed to fetch campus events: \(error)")
+            Log.net.warning("Failed to fetch campus events: \(error)")
             if AppConfig.allowMockFallbacks {
-                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                Log.net.info("   Using mock data (LYO_ALLOW_MOCKS=1)")
                 return LyoAPIClient.mockCampusEvents()
             }
             throw error
@@ -892,3 +893,6 @@ extension LyoAPIClient {
         let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(postId)/like")
     }
 }
+
+// NOTE: Lyo2ChatService and Lyo2StreamingManager live in Lyo2ChatService.swift
+// Do NOT duplicate them here.

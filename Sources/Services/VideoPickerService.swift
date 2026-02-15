@@ -8,6 +8,7 @@
 import SwiftUI
 import PhotosUI
 import AVFoundation
+import os
 
 // MARK: - Video Picker Service
 
@@ -107,7 +108,7 @@ final class VideoPickerService: ObservableObject {
             let duration = try await asset.load(.duration)
             return CMTimeGetSeconds(duration)
         } catch {
-            print("⚠️ Failed to get video duration: \(error)")
+            Log.media.warning("Failed to get video duration: \(error)")
             return 0
         }
     }
@@ -126,7 +127,7 @@ final class VideoPickerService: ObservableObject {
             let cgImage = try await imageGenerator.image(at: time).image
             return UIImage(cgImage: cgImage)
         } catch {
-            print("⚠️ Failed to generate thumbnail: \(error)")
+            Log.media.warning("Failed to generate thumbnail: \(error)")
             return nil
         }
     }

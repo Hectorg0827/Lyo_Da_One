@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Notification Service
 @MainActor
@@ -31,7 +32,7 @@ class NotificationService: ObservableObject {
             let notifications = try await repository.getNotifications()
             unreadCount = notifications.filter { !$0.isRead }.count
         } catch {
-            print("❌ Failed to load notification count: \\(error.localizedDescription)")
+            Log.net.error("Failed to load notification count: \\(error.localizedDescription)")
             // Set mock count for demo
             unreadCount = 2
         }
@@ -50,7 +51,7 @@ class NotificationService: ObservableObject {
         do {
             try await repository.markAllNotificationsAsRead()
         } catch {
-            print("❌ Failed to mark all notifications as read: \\(error.localizedDescription)")
+            Log.net.error("Failed to mark all notifications as read: \\(error.localizedDescription)")
         }
     }
 }

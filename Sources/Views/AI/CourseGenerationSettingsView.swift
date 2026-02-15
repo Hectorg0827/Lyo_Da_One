@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct CourseGenerationSettingsView: View {
     @Binding var options: CourseGenerationOptions
@@ -219,7 +220,7 @@ struct CourseGenerationSettingsView: View {
                     isLoadingEstimate = false
                 }
             } catch {
-                print("Failed to estimate cost: \(error)")
+                Log.course.error("Failed to estimate cost: \(error)")
                 await MainActor.run {
                     isLoadingEstimate = false
                 }
@@ -245,7 +246,7 @@ struct CourseGenerationSettingsView: View {
             options: .constant(.recommended),
             topic: "Python Programming for Beginners"
         ) { options in
-            print("Generate with options: \(options)")
+            Log.course.info("Generate with options: \(String(describing: options))")
         }
     }
 }

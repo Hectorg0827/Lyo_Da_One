@@ -8,6 +8,7 @@
 
 import Foundation
 import UIKit
+import os
 
 // MARK: - Capability Negotiator
 
@@ -21,7 +22,7 @@ struct A2UICapabilityNegotiator {
         return await MainActor.run {
             let caps = ClientCapabilities(
                 version: "2.1.0", // Bump version to reflect expanded catalog
-                supportedCategories: A2UIElementType.allCases.map { $0.category.rawValue }, // Dynamic categories from elements
+                supportedCategories: Array(Set(A2UIElementType.allCases.map { $0.category.rawValue })).sorted(), // Unique categories only
                 supportedComponents: A2UIElementType.allCases.map { $0.rawValue },
                 features: [
                     "streaming": true,
@@ -43,7 +44,7 @@ struct A2UICapabilityNegotiator {
                 let data = try JSONEncoder().encode(caps)
                 return String(data: data, encoding: .utf8) ?? ""
             } catch {
-                print("❌ Failed to encode client capabilities: \(error)")
+                Log.a2ui.error("Failed to encode client capabilities: \(error)")
                 return ""
             }
         }

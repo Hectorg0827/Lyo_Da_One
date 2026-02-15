@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import Lyo
 
 final class IntegrationTests: XCTestCase {
@@ -7,16 +8,16 @@ final class IntegrationTests: XCTestCase {
     
     override func setUp() async throws {
         // Ensure we are using the correct base URL (already set in AppConfig)
-        print("Testing against: \(AppConfig.baseURL)")
+        Log.general.info("Testing against: \(AppConfig.baseURL)")
     }
     
     func testDiscoverCourses() async throws {
         do {
             let courses = try await repository.getDiscoverCourses()
-            print("✅ Fetched \(courses.count) courses")
+            Log.general.info("Fetched \(courses.count) courses")
             XCTAssertFalse(courses.isEmpty, "Should return courses (or at least not fail)")
         } catch {
-            print("❌ Failed to fetch courses: \(error)")
+            Log.general.error("Failed to fetch courses: \(error)")
             // If it's 401, it means we connected but need auth. That's "working" connectivity.
             // But public endpoints should work.
             throw error
@@ -26,9 +27,9 @@ final class IntegrationTests: XCTestCase {
     func testDiscoverEvents() async throws {
         do {
             let events = try await repository.getDiscoverEvents()
-            print("✅ Fetched \(events.count) events")
+            Log.general.info("Fetched \(events.count) events")
         } catch {
-            print("❌ Failed to fetch events: \(error)")
+            Log.general.error("Failed to fetch events: \(error)")
             throw error
         }
     }
@@ -37,9 +38,9 @@ final class IntegrationTests: XCTestCase {
         do {
             // Use a default location (e.g., San Francisco)
             let beacons = try await repository.getBeacons(latitude: 37.7749, longitude: -122.4194)
-            print("✅ Fetched \(beacons.count) beacons")
+            Log.general.info("Fetched \(beacons.count) beacons")
         } catch {
-            print("❌ Failed to fetch beacons: \(error)")
+            Log.general.error("Failed to fetch beacons: \(error)")
             throw error
         }
     }
@@ -51,7 +52,7 @@ final class IntegrationTests: XCTestCase {
             _ = try await repository.getStackItems()
             XCTFail("Should fail without auth")
         } catch {
-            print("✅ Correctly failed (expected 401/Auth error): \(error)")
+            Log.general.error("Correctly failed (expected 401/Auth error): \(error)")
         }
     }
 }

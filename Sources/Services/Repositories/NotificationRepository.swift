@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 protocol NotificationRepository {
     func getNotifications() async throws -> [NotificationItem]
@@ -17,12 +18,12 @@ class DefaultNotificationRepository: NotificationRepository {
             let notifications: [NotificationItem] = try await NetworkClient.shared.request(Endpoints.Notifications.getNotifications(unreadOnly: false, category: nil, limit: 50, offset: 0))
             
             let duration = CFAbsoluteTimeGetCurrent() - startTime
-            print("🔔 Notifications fetched in \(String(format: "%.3f", duration))s")
+            Log.net.info("🔔 Notifications fetched in \(String(format: "%.3f", duration))s")
             
             return notifications
         } catch {
             let duration = CFAbsoluteTimeGetCurrent() - startTime
-            print("⚠️ Failed to fetch notifications from backend: \(error). Using mock data. (Duration: \(String(format: "%.3f", duration))s)")
+            Log.net.warning("Failed to fetch notifications from backend: \(error). Using mock data. (Duration: \(String(format: "%.3f", duration))s)")
             
             // Fallback to mock data
             return [
@@ -38,9 +39,9 @@ class DefaultNotificationRepository: NotificationRepository {
     func markAllAsRead() async {
         do {
             _ = try await NetworkClient.shared.request(Endpoints.Notifications.markAllRead(category: nil)) as VoidResponse?
-            print("✅ All notifications marked as read")
+            Log.net.info("All notifications marked as read")
         } catch {
-             print("⚠️ Failed to mark notifications as read: \(error)")
+             Log.net.warning("Failed to mark notifications as read: \(error)")
         }
     }
 }

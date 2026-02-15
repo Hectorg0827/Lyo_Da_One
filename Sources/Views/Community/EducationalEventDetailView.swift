@@ -190,8 +190,13 @@ struct EducationalEventDetailView: View {
                     .font(.subheadline)
             }
             
-            Map(coordinateRegion: .constant(region), annotationItems: [MapLocation(coordinate: region.center)]) { location in
-                MapMarker(coordinate: location.coordinate, tint: .orange)
+            Map(position: .constant(.region(region))) {
+                Annotation("Location", coordinate: region.center) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(.orange)
+                        .font(.title)
+                        .background(Circle().fill(.white))
+                }
             }
             .frame(height: 150)
             .clipShape(RoundedRectangle(cornerRadius: 12))

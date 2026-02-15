@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Foundation
+import os
 
 // Wrapper for different activity types
 enum AnyActivityItem: Identifiable {
@@ -77,7 +78,7 @@ class MyActivitiesViewModel: ObservableObject {
             filterItems()
             
         } catch {
-            print("❌ Failed to fetch my activities: \(error)")
+            Log.ui.error("Failed to fetch my activities: \(error)")
         }
     }
     

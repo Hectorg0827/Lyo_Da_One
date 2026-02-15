@@ -84,14 +84,9 @@ struct LyoOverlayView: View {
                     if animationState == .chatting {
                         ScrollViewReader { proxy in
                             ScrollView {
-                                VStack(spacing: 16) {
+                                VStack(spacing: 24) { // Increased spacing between bubbles
                                     ForEach(viewModel.messages) { message in
-                                        HStack(alignment: .top, spacing: 0) {
-                                            // Add left padding for AI messages to make room for the small avatar
-                                            if !message.isFromUser {
-                                                Spacer().frame(width: 50)
-                                            }
-                                            
+                                        VStack(alignment: .leading, spacing: 0) {
                                             // Convert LyoMessage to MultimodalMessage for A2UI widgets
                                             EnhancedMessageBubble(
                                                 message: MultimodalMessage(from: message),
@@ -113,18 +108,22 @@ struct LyoOverlayView: View {
                                     
                                     // Thinking indicator bubble
                                     if isThinking {
-                                        HStack(alignment: .top, spacing: 0) {
-                                            Spacer().frame(width: 50)
-                                            ThinkingBubble()
-                                        }
-                                        .id("thinking")
+                                        LyoUnifiedThinkingIndicator()
+                                            .id("thinking")
                                     }
                                 }
                                 .padding(.top, 60) // Space for header/back button
+                                .padding(.horizontal, 8) // Minimal side padding for full-width look
                                 .padding(.bottom, 20) // Minimal space before input
                             }
-                            .onChange(of: viewModel.messages.count) { _, _ in
-                                if let lastId = viewModel.messages.last?.id {
+                            .onChange(of: isThinking) { _, newValue in
+                                if !newValue {
+                                    // Revert to original mascot state if needed (handled by view state)
+                                    HapticManager.shared.light()
+                                }
+                            }
+                            .onChange(of: viewModel.messages) { _, newMessages in
+                                if let lastId = newMessages.last?.id {
                                     withAnimation {
                                         proxy.scrollTo(lastId, anchor: .bottom)
                                     }
@@ -210,10 +209,11 @@ struct LyoOverlayView: View {
                     }
                 }
                 
-                // Avatar - Always visible, different sizes and positions based on state
-                ZStack {
-                    // Large avatar glow in active state
-                    if animationState == .active {
+                // Avatar - Only visible in active state (Center) or initial state (Tab Bar)
+                // In chatting state, it's now embedded in the chat bubbles
+                if animationState == .active {
+                    ZStack {
+                        // Large avatar glow in active state
                         Circle()
                             .fill(
                                 RadialGradient(
@@ -245,44 +245,32 @@ struct LyoOverlayView: View {
                                     .id(viewModel.lastLiveTranscript)
                             }
                         }
-                    }
-                    
-                    // Avatar with thinking indicator
-                    ZStack {
+                        
                         LyoAvatarView(
-                            size: animationState == .active ? 200 : (animationState == .chatting ? 44 : 60),
+                            size: 200,
                             isListening: viewModel.isVoiceActive || viewModel.isLiveMode,
-                            isThinking: (viewModel.isAIThinking && animationState == .chatting) || viewModel.isLiveMode,
+                            isThinking: viewModel.isAIThinking || viewModel.isLiveMode,
                             isLiveMode: viewModel.isLiveMode,
                             isSpeaking: viewModel.isAISpeaking,
                             userLevel: viewModel.userLiveAudioLevel,
                             aiLevel: viewModel.aiLiveAudioLevel
-                        ) {
-                            // On Tap Avatar
-                        }
-                        
-                        // Thinking ring around small avatar
-                        if animationState == .chatting && isThinking {
-                            Circle()
-                                .trim(from: 0, to: 0.7)
-                                .stroke(
-                                    AngularGradient(
-                                        colors: [Color(hex: "6366F1"), Color(hex: "8B5CF6"), Color(hex: "EC4899"), Color(hex: "6366F1")],
-                                        center: .center
-                                    ),
-                                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                                )
-                                .frame(width: 52, height: 52)
-                                .rotationEffect(.degrees(thinkingRotation))
-                        }
+                        )
                     }
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: geometry.size.height / 2 - 50 + avatarFloatOffset
+                    )
+                    .transition(.opacity.combined(with: .scale))
+                } else if animationState == .initial {
+                    LyoAvatarView(
+                        size: 60,
+                        isListening: false,
+                        isThinking: false,
+                        isLiveMode: false,
+                        isSpeaking: false
+                    )
+                    .position(x: startFrame.midX, y: startFrame.midY)
                 }
-                .position(
-                    x: animationState == .active ? geometry.size.width / 2 : (animationState == .chatting ? 36 : startFrame.midX),
-                    y: animationState == .active ? geometry.size.height / 2 - 50 + avatarFloatOffset : (animationState == .chatting ? 85 : startFrame.midY)
-                )
-                .animation(.spring(response: 0.5, dampingFraction: 0.8), value: animationState)
-                .zIndex(animationState == .chatting ? 100 : 10)
                 
                 // Live Stage Widget Area (Generative UI)
                 if let widget = viewModel.activeLiveWidget {
@@ -425,12 +413,14 @@ struct LyoOverlayView: View {
         // Clear current messages and load from saved conversation
         viewModel.messages.removeAll()
         for message in conversation.messages {
-            viewModel.messages.append(LyoMessage(
-                id: UUID().uuidString,
+            var lyoMsg = LyoMessage(
+                id: message.id,
                 content: message.content,
                 isFromUser: message.role == .user,
                 timestamp: message.timestamp
-            ))
+            )
+            lyoMsg.contentTypes = message.contentTypes
+            viewModel.messages.append(lyoMsg)
         }
         conversationManager.loadConversation(conversation)
     }
@@ -487,39 +477,7 @@ enum ChatMode: String, CaseIterable {
 }
 
 // MARK: - Thinking Bubble
-struct ThinkingBubble: View {
-    @State private var dotScale: [CGFloat] = [1, 1, 1]
-    
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(Color.white.opacity(0.6))
-                    .frame(width: 8, height: 8)
-                    .scaleEffect(dotScale[index])
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(Color(hex: "1e293b"))
-        .cornerRadius(20)
-        .onAppear {
-            animateDots()
-        }
-    }
-    
-    private func animateDots() {
-        for i in 0..<3 {
-            withAnimation(
-                Animation.easeInOut(duration: 0.5)
-                    .repeatForever(autoreverses: true)
-                    .delay(Double(i) * 0.15)
-            ) {
-                dotScale[i] = 1.4
-            }
-        }
-    }
-}
+
 
 struct LyoSuggestionChip: View {
     let text: String

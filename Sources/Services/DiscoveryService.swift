@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Discovery Service
 @MainActor
@@ -15,9 +16,9 @@ class DiscoveryService: ObservableObject {
     private let cloudStorage = CloudStorageService.shared
     
     private init() {
-        Task {
-            await loadMyDiscoveries()
-            await loadSavedDiscoveries()
+        Task { [weak self] in
+            await self?.loadMyDiscoveries()
+            await self?.loadSavedDiscoveries()
         }
     }
     
@@ -29,13 +30,13 @@ class DiscoveryService: ObservableObject {
         
         do {
             myDiscoveries = try await apiClient.fetchMyDiscoveries()
-            print("✅ Loaded \(myDiscoveries.count) my discoveries from backend")
+            Log.discover.info("Loaded \(self.myDiscoveries.count) my discoveries from backend")
         } catch {
-            print("❌ Failed to load my discoveries: \(error.localizedDescription)")
+            Log.discover.error("Failed to load my discoveries: \(error.localizedDescription)")
             self.error = error.localizedDescription
             // Fallback to mock data only if explicitly allowed
             if AppConfig.allowMockFallbacks {
-                print("⚠️ Using mock discoveries as fallback (AppConfig.allowMockFallbacks = true)")
+                Log.discover.warning("Using mock discoveries as fallback (AppConfig.allowMockFallbacks = true)")
                 loadMockDiscoveries()
             } else {
                  self.error = error.localizedDescription
@@ -48,9 +49,9 @@ class DiscoveryService: ObservableObject {
     func loadSavedDiscoveries() async {
         do {
             savedDiscoveries = try await apiClient.fetchSavedDiscoveries()
-            print("✅ Loaded \(savedDiscoveries.count) saved discoveries from backend")
+            Log.discover.info("Loaded \(self.savedDiscoveries.count) saved discoveries from backend")
         } catch {
-            print("❌ Failed to load saved discoveries: \(error.localizedDescription)")
+            Log.discover.error("Failed to load saved discoveries: \(error.localizedDescription)")
         }
     }
     
@@ -73,9 +74,9 @@ class DiscoveryService: ObservableObject {
             // Update local state
             myDiscoveries.insert(newDiscovery, at: 0)
             
-            print("✅ Discovery created: \(title)")
+            Log.discover.info("Discovery created: \(title)")
         } catch {
-            print("❌ Failed to create discovery: \(error.localizedDescription)")
+            Log.discover.error("Failed to create discovery: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -90,9 +91,9 @@ class DiscoveryService: ObservableObject {
         do {
             try await apiClient.saveDiscovery(discoveryId: discoveryId)
             await loadSavedDiscoveries()
-            print("✅ Discovery saved")
+            Log.discover.info("Discovery saved")
         } catch {
-            print("❌ Failed to save discovery: \(error.localizedDescription)")
+            Log.discover.error("Failed to save discovery: \(error.localizedDescription)")
             throw error
         }
     }
@@ -101,9 +102,9 @@ class DiscoveryService: ObservableObject {
         do {
             try await apiClient.unsaveDiscovery(discoveryId: discoveryId)
             savedDiscoveries.removeAll { $0.id == discoveryId }
-            print("✅ Discovery unsaved")
+            Log.discover.info("Discovery unsaved")
         } catch {
-            print("❌ Failed to unsave discovery: \(error.localizedDescription)")
+            Log.discover.error("Failed to unsave discovery: \(error.localizedDescription)")
             throw error
         }
     }

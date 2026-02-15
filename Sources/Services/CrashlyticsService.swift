@@ -2,6 +2,7 @@ import Foundation
 
 #if canImport(FirebaseCrashlytics)
 import FirebaseCrashlytics
+import os
 #endif
 
 // MARK: - Crashlytics Service
@@ -52,9 +53,9 @@ final class CrashlyticsService {
         
         // Also log locally in debug
         #if DEBUG
-        print("❌ [CrashlyticsService] Error logged: \(error.localizedDescription)")
+        Log.net.error("[CrashlyticsService] Error logged: \(error.localizedDescription)")
         if let context = context {
-            print("   Context: \(context)")
+            Log.net.info("   Context: \(context)")
         }
         #endif
     }
@@ -67,7 +68,7 @@ final class CrashlyticsService {
         #endif
         
         #if DEBUG
-        print("❌ [CrashlyticsService] Error: \(message)")
+        Log.net.error("[CrashlyticsService] Error: \(message)")
         #endif
     }
     
@@ -80,7 +81,7 @@ final class CrashlyticsService {
         #endif
         
         #if DEBUG
-        print("📝 [Crashlytics] \(message)")
+        Log.net.error("[Crashlytics] \(message)")
         #endif
     }
     
@@ -105,9 +106,9 @@ final class CrashlyticsService {
         #endif
         
         #if DEBUG
-        print("❌ [API Error] \(endpoint) - Status: \(statusCode ?? -1)")
+        Log.net.error("[API Error] \(endpoint) - Status: \(statusCode ?? -1)")
         if let error = error {
-            print("   Error: \(error.localizedDescription)")
+            Log.net.error("   Error: \(error.localizedDescription)")
         }
         #endif
     }

@@ -10,6 +10,7 @@ import Combine
 
 // MARK: - ViewModel
 
+@MainActor
 class BookingViewModel: ObservableObject {
     @Published var selectedDate = Date()
     @Published var availableSlots: [APIBookingSlot] = []
@@ -36,47 +37,23 @@ class BookingViewModel: ObservableObject {
     func fetchSlots(for date: Date) {
         isLoadingSlots = true
         bookingError = nil
-        availableSlots = [] // Clear previous slots while loading
+        availableSlots = []
         
-        Task { @MainActor in
+        Task {
             do {
-                // In a real app, we'd use NetworkClient
-                // let slots: [APIBookingSlot] = try await NetworkClient.shared.request(Endpoints.Community.getAvailableSlots(lessonId: lessonId, date: date))
+                let slots: [APIBookingSlot] = try await NetworkClient.shared.request(
+                    Endpoints.Community.getAvailableSlots(lessonId: lessonId, date: date)
+                )
                 
-                // MOCK DATA for now, until backend is ready
-                try await Task.sleep(nanoseconds: 1_000_000_000) // 1s delay
-                
-                let calendar = Calendar.current
-                let startHour = 9
-                let endHour = 17
-                
-                // Deterministic mock generation based on date
-                let day = calendar.component(.day, from: date)
-                
-                self.availableSlots = (startHour...endHour).compactMap { hour in
-                    // Skip lunch break
-                    if hour == 12 { return nil }
-                    
-                    // Random-ish availability based on hour + day
-                    let isAvailable = (hour + day) % 3 != 0
-                    
-                    guard let start = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: date),
-                          let end = calendar.date(bySettingHour: hour + 1, minute: 0, second: 0, of: date) else {
-                        return nil
-                    }
-                    
-                    return APIBookingSlot(
-                        id: UUID().uuidString,
-                        startTime: start,
-                        endTime: end,
-                        isAvailable: isAvailable
-                    )
+                await MainActor.run {
+                    self.availableSlots = slots
+                    self.isLoadingSlots = false
                 }
-                
-                self.isLoadingSlots = false
             } catch {
-                self.bookingError = "Failed to load slots. Please try again."
-                self.isLoadingSlots = false
+                await MainActor.run {
+                    self.bookingError = "Failed to load slots. Please try again."
+                    self.isLoadingSlots = false
+                }
             }
         }
     }
@@ -85,25 +62,28 @@ class BookingViewModel: ObservableObject {
         isBooking = true
         bookingError = nil
         
-        Task { @MainActor in
+        Task {
             do {
-                let _ = APIBookingRequest(
+                let request = APIBookingRequest(
                     lessonId: lessonId,
                     slotId: slot.id,
                     notes: nil
                 )
                 
-                // let response: APIBookingResponse = try await NetworkClient.shared.request(Endpoints.Community.createBooking(request: request))
+                let _: APIBookingResponse = try await NetworkClient.shared.request(
+                    Endpoints.Community.createBooking(request: request)
+                )
                 
-                // MOCK SUCCESS
-                try await Task.sleep(nanoseconds: 1_500_000_000)
-                
-                HapticManager.shared.playSuccess()
-                self.showingConfirmation = true
-                self.isBooking = false
+                await MainActor.run {
+                    HapticManager.shared.playSuccess()
+                    self.showingConfirmation = true
+                    self.isBooking = false
+                }
             } catch {
-                self.bookingError = "Booking failed. Please try again."
-                self.isBooking = false
+                await MainActor.run {
+                    self.bookingError = "Booking failed. Please try again."
+                    self.isBooking = false
+                }
             }
         }
     }

@@ -1,4 +1,0 @@
-/Users/hectorgarcia/LYO_Da_ONE/Lyo.xcodeproj: error: Signing for "LyoTests" requires a development team. Select a development team in the Signing & Capabilities editor. (in target 'LyoTests' from project 'Lyo')
-/Users/hectorgarcia/LYO_Da_ONE/Lyo.xcodeproj: error: Signing for "Lyo" requires a development team. Select a development team in the Signing & Capabilities editor. (in target 'Lyo' from project 'Lyo')
-** BUILD FAILED **
-

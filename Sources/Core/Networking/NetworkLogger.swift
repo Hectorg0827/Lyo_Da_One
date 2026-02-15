@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Network Logger
 /// Logs all network requests and responses for debugging
@@ -19,7 +20,7 @@ struct NetworkLogger {
 
     func log(_ message: String) {
         guard isEnabled else { return }
-        print("🌐 [Network] \(message)")
+        Log.net.info("[Network] \(message)")
     }
 
     func logRequest(_ request: URLRequest, attempt: Int = 0) {

@@ -1,9 +1,10 @@
-
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
+import os
 
 /// Service for real-time bidirectional audio streaming via WebSockets (True Live Mode)
+@MainActor
 class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegate {
     static let shared = AudioStreamManager()
     
@@ -39,16 +40,21 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
     
     // MARK: - WebSocket Properties
     private var webSocket: URLSessionWebSocketTask?
-    private var session: URLSession!
+    private var session: URLSession?
     private var currentSessionId: String?
+
+    /// Create a fresh URLSession for each live connection.
+    /// Reusing a session after a connection/init failure can cause
+    /// "invalid reuse after initialization failure" crashes.
+    private func makeSession() -> URLSession {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        return URLSession(configuration: config, delegate: self, delegateQueue: .main)
+    }
     
     private override init() {
         super.init()
-        let config = URLSessionConfiguration.default
-        // Give it plenty of time, but keep it snappy
-        config.timeoutIntervalForRequest = 30
-        self.session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
-        
+        // Removed persistent URLSession creation per instructions
         // Setup internal format: 24kHz, 16-bit Mono PCM
         self.streamFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, 
                                         sampleRate: sampleRate, 
@@ -68,22 +74,27 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
         do {
             try setupAudioSession()
             try setupAudioEngine()
+
+            // Create fresh session per connection (avoids reuse after failure)
+            self.session?.invalidateAndCancel()
+            self.session = self.makeSession()
+
             try await connectWebSocket(sessionId: sessionId)
             
             try audioEngine.start()
             isLive = true
-            print("🎙️ True Live Mode initiated for session: \(sessionId)")
+            Log.audio.info("🎙️ True Live Mode initiated for session: \(sessionId)")
             
         } catch {
             self.error = "Failed to start Live Mode: \(error.localizedDescription)"
-            print("❌ Failed to start Live Mode: \(error)")
+            Log.audio.error("Failed to start Live Mode: \(error)")
             stopLiveMode()
         }
     }
     
     @MainActor
     func stopLiveMode() {
-        print("🎙️ Stopping True Live Mode")
+        Log.audio.info("🎙️ Stopping True Live Mode")
         isLive = false
         
         audioEngine.stop()
@@ -93,6 +104,9 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
         connectionStatus = .disconnected
+        
+        session?.invalidateAndCancel()
+        session = nil
         
         // Restore session if needed elsewhere
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -126,6 +140,8 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
         }
         
         connectionStatus = .connecting
+
+        guard let session = session else { throw NSError(domain: "AudioStreamManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "URLSession not initialized"]) }
         webSocket = session.webSocketTask(with: request)
         webSocket?.resume()
         
@@ -134,22 +150,24 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
     
     private func receiveAudio() {
         webSocket?.receive { [weak self] result in
-            guard let self = self, self.isLive else { return }
-            
-            switch result {
-            case .success(let message):
-                switch message {
-                case .data(let data):
-                    self.handleIncomingAudio(data)
-                case .string(let text):
-                    self.handleIncomingCommand(text)
-                @unknown default:
-                    break
+            guard let self = self else { return }
+            Task { @MainActor in
+                guard self.isLive else { return }
+                switch result {
+                case .success(let message):
+                    switch message {
+                    case .data(let data):
+                        self.handleIncomingAudio(data)
+                    case .string(let text):
+                        self.handleIncomingCommand(text)
+                    @unknown default:
+                        break
+                    }
+                    self.receiveAudio() // Loop
+                case .failure(let error):
+                    Log.audio.error("Audio WebSocket receive error: \(error)")
+                    self.handleWebSocketFailure(error)
                 }
-                self.receiveAudio() // Loop
-            case .failure(let error):
-                print("❌ Audio WebSocket receive error: \(error)")
-                self.handleWebSocketFailure(error)
             }
         }
     }
@@ -163,7 +181,7 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
                 DispatchQueue.main.async {
                     switch type {
                     case "interrupt":
-                        print("🛑 AI Interrupted by Backend")
+                        Log.audio.error("AI Interrupted by Backend")
                         self.stopPlayback()
                     case "transcript":
                         if let text = json["text"] as? String {
@@ -185,7 +203,7 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
                             var widgetData = data
                             widgetData["_component"] = component
                             self.activeWidget = widgetData
-                            print("🎨 New widget received: \(component)")
+                            Log.audio.info("🎨 New widget received: \(component)")
                         }
                     default:
                         break
@@ -193,7 +211,7 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
                 }
             }
         } catch {
-            print("❌ Failed to parse command: \(text)")
+            Log.audio.error("Failed to parse command: \(text)")
         }
     }
     
@@ -223,9 +241,10 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
                 playerNode.play()
             }
             
-            // Calculate AI audio level for visualization
+            // Calculate AI audio level for visualization without capturing `buffer` in a @Sendable closure
+            let level = self.calculateLevel(buffer: buffer)
             DispatchQueue.main.async {
-                self.aiAudioLevel = self.calculateLevel(buffer: buffer)
+                self.aiAudioLevel = level
                 if self.aiAudioLevel > 0.05 {
                     self.isAISpeaking = true
                     self.isAIThinking = false
@@ -238,6 +257,8 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
         DispatchQueue.main.async {
             self.connectionStatus = .error(error.localizedDescription)
             self.stopLiveMode()
+            self.session?.invalidateAndCancel()
+            self.session = nil
         }
     }
     
@@ -246,7 +267,7 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
     private func setupAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         // .playAndRecord with .voiceChat provides best echo cancellation and ducking logic
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try session.setActive(true)
     }
     
@@ -289,7 +310,7 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
         }
         
         if status == .error || conversionError != nil {
-            print("❌ Audio Conversion failed: \(conversionError?.localizedDescription ?? "unknown")")
+            Log.audio.error("Audio Conversion failed: \(conversionError?.localizedDescription ?? "unknown")")
             return
         }
         
@@ -298,14 +319,15 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
         if !pcmData.isEmpty {
             webSocket?.send(.data(pcmData)) { error in
                 if let error = error {
-                    print("❌ WebSocket Send error: \(error)")
+                    Log.audio.error("WebSocket Send error: \(error)")
                 }
             }
         }
         
-        // Update user audio level visualization
+        // Update user audio level visualization without capturing non-Sendable buffer
+        let level = self.calculateLevel(buffer: outBuffer)
         DispatchQueue.main.async {
-            self.userAudioLevel = self.calculateLevel(buffer: outBuffer)
+            self.userAudioLevel = level
         }
     }
     
@@ -330,16 +352,16 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
     
     // MARK: - URLSessionWebSocketDelegate
     
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
-        print("✅ Audio WebSocket Connected")
-        DispatchQueue.main.async {
+    nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        Log.audio.info("Audio WebSocket Connected")
+        Task { @MainActor in
             self.connectionStatus = .connected
         }
     }
     
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        print("🔌 Audio WebSocket Closed")
-        DispatchQueue.main.async {
+    nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        Log.audio.info("🔌 Audio WebSocket Closed")
+        Task { @MainActor in
             self.connectionStatus = .disconnected
             self.isLive = false
         }
@@ -362,3 +384,4 @@ extension Data {
         }
     }
 }
+

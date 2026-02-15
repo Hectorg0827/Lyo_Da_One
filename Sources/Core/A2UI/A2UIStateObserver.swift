@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 /// Observer for synchronizing client UI state with the backend
 class A2UIStateObserver: ObservableObject {
@@ -51,7 +52,7 @@ class A2UIStateObserver: ObservableObject {
     }
     
     private func syncStateToBackend(_ state: A2UIClientState) {
-        print("🔄 Syncing UI state to backend: \(state.screenId)")
+        Log.a2ui.info("Syncing UI state to backend: \(state.screenId)")
         
         Task {
             do {
@@ -60,9 +61,9 @@ class A2UIStateObserver: ObservableObject {
                 
                 // For now, we simulate the sync success
                 try await Task.sleep(nanoseconds: 500_000_000)
-                print("✅ State synced successfully")
+                Log.a2ui.info("State synced successfully")
             } catch {
-                print("⚠️ Failed to sync state: \(error)")
+                Log.a2ui.warning("Failed to sync state: \(error)")
             }
         }
     }

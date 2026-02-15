@@ -380,3 +380,124 @@ struct CourseSocialStats: Codable {
         case ratingCount = "rating_count"
     }
 }
+
+// MARK: - Beacon DTOs
+
+enum APIBeacon: Codable, Identifiable {
+    case event(APIEventBeacon)
+    case user(APIUserActivityBeacon)
+    case question(APIQuestionBeacon)
+    case marketplace(APIMarketplaceBeacon)
+    
+    var id: String {
+        switch self {
+        case .event(let b): return "event-\(b.id)"
+        case .user(let b): return "user-\(b.userId)"
+        case .question(let b): return "question-\(b.id)"
+        case .marketplace(let b): return "market-\(b.id)"
+        }
+    }
+    
+    // Helper to extract coordinate for Map use
+    var coordinate: (lat: Double, lng: Double) {
+        switch self {
+        case .event(let b): return (b.latitude, b.longitude)
+        case .user(let b): return (b.latitude ?? 0, b.longitude ?? 0)
+        case .question(let b): return (b.latitude, b.longitude)
+        case .marketplace(let b): return (b.latitude, b.longitude)
+        }
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .event(let b):
+            try container.encode("event", forKey: .type)
+            try b.encode(to: encoder)
+        case .user(let b):
+            try container.encode("user_activity", forKey: .type)
+            try b.encode(to: encoder)
+        case .question(let b):
+            try container.encode("question", forKey: .type)
+            try b.encode(to: encoder)
+        case .marketplace(let b):
+            try container.encode("marketplace", forKey: .type)
+            try b.encode(to: encoder)
+        }
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        
+        switch type {
+        case "event":
+            let val = try APIEventBeacon(from: decoder)
+            self = .event(val)
+        case "user_activity":
+             let val = try APIUserActivityBeacon(from: decoder)
+             self = .user(val)
+        case "question":
+             let val = try APIQuestionBeacon(from: decoder)
+             self = .question(val)
+        case "marketplace":
+             let val = try APIMarketplaceBeacon(from: decoder)
+             self = .marketplace(val)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown beacon type: \(type)")
+        }
+    }
+}
+
+struct APIEventBeacon: Codable {
+    let id: Int
+    let title: String
+    let latitude: Double
+    let longitude: Double
+    let startTime: Date?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, latitude, longitude
+        case startTime = "start_time"
+    }
+}
+
+struct APIUserActivityBeacon: Codable {
+    let userId: Int
+    let displayName: String
+    let latitude: Double?
+    let longitude: Double?
+    
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case displayName = "display_name"
+        case latitude, longitude
+    }
+}
+
+struct APIQuestionBeacon: Codable {
+    let id: String
+    let text: String
+    let latitude: Double
+    let longitude: Double
+    
+    enum CodingKeys: String, CodingKey {
+        case id, text, latitude, longitude
+    }
+}
+
+struct APIMarketplaceBeacon: Codable {
+    let id: Int
+    let title: String
+    let price: Double
+    let latitude: Double
+    let longitude: Double
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, price, latitude, longitude
+    }
+}

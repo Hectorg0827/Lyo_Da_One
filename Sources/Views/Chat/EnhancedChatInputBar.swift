@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import os
 
 enum AIChatMode: String, CaseIterable, Identifiable {
     case chat = "Chat"
@@ -396,7 +397,7 @@ struct EnhancedChatInputBar: View {
                 try await voiceService.startRecording()
                 HapticManager.shared.playRecordingStarted()
             } catch {
-                print("❌ Failed to start recording: \(error)")
+                Log.ai.error("Failed to start recording: \(error)")
             }
         }
     }
@@ -435,7 +436,7 @@ struct EnhancedChatInputBar: View {
                 try await voiceService.startRecording()
                 // In voice mode, continuously listen and auto-send on pause
             } catch {
-                print("❌ Failed to start voice mode: \(error)")
+                Log.ai.error("Failed to start voice mode: \(error)")
                 isVoiceModeActive = false
             }
         }
@@ -451,6 +452,10 @@ struct EnhancedChatInputBar: View {
         guard !messageText.isEmpty || !mediaService.selectedMedia.isEmpty else { return }
         
         HapticManager.shared.playMessageSent()
+
+        // Proactively dismiss the keyboard before triggering any async work to avoid
+        // UIKit snapshot warnings when the keyboard view is no longer on-screen.
+        dismissKeyboard()
         
         // Upload attachments if any
         var attachmentIds: [String]? = nil
@@ -460,17 +465,32 @@ struct EnhancedChatInputBar: View {
                 attachmentIds = try await mediaService.uploadSelectedMedia()
                 mediaService.clearSelection()
             } catch {
-                print("❌ Failed to upload attachments: \(error)")
+                Log.ai.error("Failed to upload attachments: \(error)")
             }
             isUploading = false
         }
         
-        // Clear input
-        text = ""
+        // IMPORTANT: Clear input AFTER capturing the message text
+        // The onSend closure reads the parent's bound text, so we must call it first
         isTextFieldFocused = false
         
-        // Send
+        // Send first (before clearing text so parent can read it)
         await onSend(attachmentIds)
+        
+        // Clear input after send completes
+        text = ""
+    }
+
+    /// Resign first responder to hide the keyboard safely on send.
+    private func dismissKeyboard() {
+        DispatchQueue.main.async {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
+        }
     }
 }
 

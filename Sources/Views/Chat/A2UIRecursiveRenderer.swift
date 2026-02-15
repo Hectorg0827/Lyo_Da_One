@@ -124,7 +124,7 @@ struct A2UIRecursiveRenderer: View {
             LessonCardRenderer(data: data, onAction: onAction)
             
         case .courseCard(let data):
-            A2UICourseCardRenderer(data: data, onAction: onAction)
+            LegacyCourseCardRenderer(data: data, onAction: onAction)
             
         case .grid(let data):
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: data.columns), spacing: data.spacing ?? 12) {
@@ -869,7 +869,7 @@ struct InteractiveLessonRenderer: View {
                 .lineLimit(nil)
 
             // Media Preview (if available)
-            if let mediaUrl = data.mediaUrl {
+            if data.mediaUrl != nil {
                 Rectangle()
                     .fill(Color.gray.opacity(0.2))
                     .frame(height: 120)
@@ -1005,7 +1005,7 @@ struct LessonCardRenderer: View {
     }
 }
 
-struct A2UICourseCardRenderer: View {
+struct LegacyCourseCardRenderer: View {
     let data: A2UICourseCardPayload
     let onAction: ((String) -> Void)?
     

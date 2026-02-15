@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import os
 
 @MainActor
 class ChallengesViewModel: ObservableObject {
@@ -51,9 +52,9 @@ class ChallengesViewModel: ObservableObject {
             // Load achievements
             self.achievements = try await repository.getAchievements()
             
-            print("✅ Challenge data loaded successfully")
+            Log.social.info("Challenge data loaded successfully")
         } catch {
-            print("❌ Failed to load challenge data: \(error.localizedDescription)")
+            Log.social.error("Failed to load challenge data: \(error.localizedDescription)")
             errorMessage = "Failed to load challenges. Using offline data."
             
             // Load mock data as fallback
@@ -83,21 +84,21 @@ class ChallengesViewModel: ObservableObject {
             // Load my rank
             self.myLeaderboardRank = try await repository.getMyLeaderboardRank(type: "xp")
             
-            print("✅ Gamification data loaded successfully")
+            Log.social.info("Gamification data loaded successfully")
         } catch {
-            print("⚠️ Failed to load gamification data: \(error.localizedDescription)")
+            Log.social.warning("Failed to load gamification data: \(error.localizedDescription)")
         }
     }
     
     func updateStreak() async {
         do {
             let response = try await repository.updateStreak(type: "daily_login")
-            print("✅ Streak updated: \(response.currentCount) days")
+            Log.social.info("Streak updated: \(response.currentCount) days")
             
             // Refresh streak data
             self.streakData = try await repository.getStreakData()
         } catch {
-            print("⚠️ Failed to update streak: \(error.localizedDescription)")
+            Log.social.warning("Failed to update streak: \(error.localizedDescription)")
         }
     }
     
@@ -144,7 +145,7 @@ class ChallengesViewModel: ObservableObject {
     // MARK: - Challenge Actions
     
     func startChallenge(_ challenge: Challenge) {
-        print("Starting challenge: \(challenge.title)")
+        Log.social.info("Starting challenge: \(challenge.title)")
         // Navigate to challenge detail or start directly
     }
     
@@ -158,9 +159,9 @@ class ChallengesViewModel: ObservableObject {
             // Award XP for completion
             let _ = try await repository.awardXP(amount: challenge.xpReward, activity: "challenge_complete", metadata: ["challenge_id": challenge.id])
             
-            print("✅ Challenge completed: \(challenge.title)")
+            Log.social.info("Challenge completed: \(challenge.title)")
         } catch {
-            print("❌ Error completing challenge: \(error.localizedDescription)")
+            Log.social.error("Error completing challenge: \(error.localizedDescription)")
             errorMessage = "Failed to complete challenge. Please try again."
         }
     }
@@ -173,9 +174,9 @@ class ChallengesViewModel: ObservableObject {
             if let index = myBadges.firstIndex(where: { $0.id == badge.id }) {
                 myBadges[index] = updatedBadge
             }
-            print("✅ Badge \(badge.isEquipped ? "unequipped" : "equipped")")
+            Log.social.info("Badge \(badge.isEquipped ? "unequipped" : "equipped")")
         } catch {
-            print("❌ Error updating badge: \(error.localizedDescription)")
+            Log.social.error("Error updating badge: \(error.localizedDescription)")
         }
     }
 }

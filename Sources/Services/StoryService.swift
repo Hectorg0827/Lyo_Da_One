@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Story Error
 enum StoryError: LocalizedError {
@@ -45,9 +46,9 @@ class StoryService: ObservableObject {
             let response = try await apiClient.fetchStories()
             stories = response.stories
             myStory = response.myStory
-            print("✅ Loaded \(stories.count) stories from backend")
+            Log.net.info("Loaded \(self.stories.count) stories from backend")
         } catch {
-            print("❌ Failed to load stories: \(error.localizedDescription)")
+            Log.net.error("Failed to load stories: \(error.localizedDescription)")
             self.error = error.localizedDescription
             // Production: Do not fallback to mocks automatically to ensure we see backend issues
             // loadMockStories() 
@@ -79,9 +80,9 @@ class StoryService: ObservableObject {
             myStory = newStory
             await loadStories() // Refresh all stories
             
-            print("✅ Story created successfully")
+            Log.net.info("Story created successfully")
         } catch {
-            print("❌ Failed to create story: \(error.localizedDescription)")
+            Log.net.error("Failed to create story: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -102,9 +103,9 @@ class StoryService: ObservableObject {
             }
             stories.removeAll { $0.id == storyId }
             
-            print("✅ Story deleted successfully")
+            Log.net.info("Story deleted successfully")
         } catch {
-            print("❌ Failed to delete story: \(error.localizedDescription)")
+            Log.net.error("Failed to delete story: \(error.localizedDescription)")
             throw error
         }
     }
@@ -121,7 +122,7 @@ class StoryService: ObservableObject {
         do {
             try await apiClient.markStorySeen(storyId: storyId)
         } catch {
-            print("❌ Failed to mark story as seen: \(error.localizedDescription)")
+            Log.net.error("Failed to mark story as seen: \(error.localizedDescription)")
         }
     }
     

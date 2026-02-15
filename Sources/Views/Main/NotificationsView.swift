@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct NotificationsView: View {
     @Environment(\.dismiss) var dismiss
@@ -82,7 +83,7 @@ struct NotificationsView: View {
                     notifications = try await repository.getNotifications()
                     isLoading = false
                 } catch {
-                    print("Error loading notifications: \(error)")
+                    Log.ui.error("Error loading notifications: \(error)")
                     isLoading = false
                 }
             }

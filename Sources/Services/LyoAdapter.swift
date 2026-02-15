@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Lyo Core Protocol
 // These match the Pydantic schemas in your System Prompt perfectly.
@@ -18,7 +19,7 @@ class LyoAdapter {
         do {
             return try unsafeRender(block)
         } catch {
-            print("⚠️ LyoAdapter: Failed to render block \(block.id) of type \(block.type). Error: \(error)")
+            Log.net.warning("LyoAdapter: Failed to render block \(block.id) of type \(String(describing: block.type)). Error: \(error)")
             // Fallback: Render as simple text so the user still sees the data
             return A2UIContent(
                 type: .text,

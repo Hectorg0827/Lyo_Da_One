@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct AllAchievementsView: View {
     @StateObject private var viewModel = AllAchievementsViewModel()
@@ -131,7 +132,7 @@ class AllAchievementsViewModel: ObservableObject {
             let allAchievements = try await LyoRepository.shared.getAchievements()
             self.achievements = allAchievements
         } catch {
-            print("❌ Failed to load all achievements: \(error.localizedDescription)")
+            Log.ui.error("Failed to load all achievements: \(error.localizedDescription)")
             self.achievements = [] 
         }
     }

@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 
 // MARK: - A2A Generation Progress View
 
@@ -406,7 +407,7 @@ struct A2AGenerationProgressView: View {
             enableVoice: true
         ) { event in
             // Handle individual events if needed
-            print("📨 Event received: \(event.type.rawValue)")
+            Log.ai.info("📨 Event received: \(event.type.rawValue)")
         }
     }
 }

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Request Models
 
@@ -92,11 +93,10 @@ final class ExerciseValidationService: ObservableObject {
     @Published var isLoading = false
     @Published var error: Error?
     
-    private var baseURL: String { AppConfig.baseURL }
     private let tokenManager = TokenManager.shared
     
     private init() {
-        print("✅ ExerciseValidationService initialized - multi-agent v2 validation")
+        Log.net.info("ExerciseValidationService initialized - multi-agent v2 validation")
     }
     
     // MARK: - JSON Coders
@@ -127,8 +127,7 @@ final class ExerciseValidationService: ObservableObject {
             attemptCount: attemptCount
         )
         
-        let endpoint = "\(baseURL)/api/v2/exercises/validate"
-        return try await post(endpoint: endpoint, body: request)
+        return try await post(endpoint: Endpoints.Exercises.validate(body: request))
     }
     
     /// Validate code with optional test cases
@@ -145,23 +144,15 @@ final class ExerciseValidationService: ObservableObject {
             testCases: testCases
         )
         
-        let endpoint = "\(baseURL)/api/v2/exercises/validate/code"
-        return try await post(endpoint: endpoint, body: request)
+        return try await post(endpoint: Endpoints.Exercises.validateCode(body: request))
     }
     
     // MARK: - Network Helpers
     
-    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+    private func post<R: Codable>(endpoint: some Endpoint) async throws -> R {
         isLoading = true
         defer { isLoading = false }
         
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: body,
-            requiresAuth: true
-        )
-        
-        return try await NetworkClient.shared.request(dynamicEndpoint)
+        return try await NetworkClient.shared.request(endpoint)
     }
 }

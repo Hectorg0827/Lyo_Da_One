@@ -73,8 +73,8 @@ actor NetworkClient: NetworkRequestable {
         let decoder = JSONDecoder.lyoDecoder
         let decoded: T = try decoder.decode(T.self, from: processedResponse.data)
 
-        // 7. Cache if policy allows
-        if cachePolicy != .reloadIgnoringCache {
+        // 7. Cache if policy allows and TTL > 0 (skip caching for dynamic endpoints with TTL=0)
+        if cachePolicy != .reloadIgnoringCache && endpoint.cacheTTL > 0 {
             await cache.set(
                 key: endpoint.cacheKey,
                 value: decoded,
@@ -177,6 +177,20 @@ actor NetworkClient: NetworkRequestable {
         logger.logRequest(request, attempt: 0)
         
         return try await session.bytes(for: request)
+    }
+
+    /// Execute a request and return raw Data (for binary responses like TTS audio)
+    func requestRawData(_ endpoint: Endpoint) async throws -> Data {
+        var request = try endpoint.buildURLRequest()
+        request = try await applyHeaders(request, endpoint: endpoint)
+        
+        let response = try await executeWithRetry(request: request, endpoint: endpoint)
+        
+        guard (200...299).contains(response.statusCode) else {
+            throw LyoError.network(.serverError(response.statusCode))
+        }
+        
+        return response.data
     }
 
     // MARK: - Request Execution

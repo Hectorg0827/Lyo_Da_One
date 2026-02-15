@@ -2,6 +2,7 @@ import SwiftUI
 import AVKit
 import PhotosUI
 import UIKit
+import os
 
 struct CreateStoryView: View {
     @Binding var isPresented: Bool
@@ -42,12 +43,12 @@ struct CreateStoryView: View {
         .onAppear {
             cameraManager.checkPermissions()
         }
-        .onChange(of: cameraManager.permissionGranted) { granted in
+        .onChange(of: cameraManager.permissionGranted) { _, granted in
             if !granted {
                 showPermissionsError = true
             }
         }
-        .onChange(of: selectedMediaItem) { newItem in
+        .onChange(of: selectedMediaItem) { _, newItem in
             Task {
                 if let data = try? await newItem?.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
@@ -248,7 +249,7 @@ struct CreateStoryView: View {
                 isUploading = false
                 isPresented = false
             } catch {
-                print("Failed to post story: \(error)")
+                Log.ui.error("Failed to post story: \(error)")
                 isUploading = false
                 // Handle error alert
             }

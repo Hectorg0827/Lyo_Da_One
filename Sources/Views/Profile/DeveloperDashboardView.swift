@@ -1,5 +1,6 @@
 
 import SwiftUI
+import os
 
 struct DeveloperDashboardView: View {
     @StateObject private var viewModel = DeveloperDashboardViewModel()
@@ -263,7 +264,7 @@ class DeveloperDashboardViewModel: ObservableObject {
             self.usage = stats
             self.apiKeys = keys
         } catch {
-            print("Dashboard load error: \(error)")
+            Log.ui.error("Dashboard load error: \(error)")
         }
     }
     
@@ -273,7 +274,7 @@ class DeveloperDashboardViewModel: ObservableObject {
             await fetchData() // Refresh list
             return key
         } catch {
-            print("Create key error: \(error)")
+            Log.ui.error("Create key error: \(error)")
             return nil
         }
     }
@@ -285,7 +286,7 @@ class DeveloperDashboardViewModel: ObservableObject {
                 apiKeys.remove(at: index)
             }
         } catch {
-            print("Revoke error: \(error)")
+            Log.ui.error("Revoke error: \(error)")
         }
     }
 }

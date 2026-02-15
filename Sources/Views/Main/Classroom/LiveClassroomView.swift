@@ -12,7 +12,8 @@ struct LiveClassroomView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var uiStackStore: UIStackStore
     @EnvironmentObject var uiState: AppUIState
-    @EnvironmentObject var aiViewModel: LyoAIViewModel
+    @State private var showShareSheet = false
+    @State private var shareURL: URL?
     
     // MARK: - Body
     
@@ -33,6 +34,20 @@ struct LiveClassroomView: View {
                 }
                 .transition(.opacity)
                 .ignoresSafeArea()
+            }
+            
+            // Completion View Overlay
+            if viewModel.isLessonComplete {
+                LessonCompletionView(
+                    courseTitle: courseTitle,
+                    lessonTitle: viewModel.lesson?.title ?? lessonTitle,
+                    xpGained: viewModel.xpGained,
+                    onDismiss: {
+                        dismiss()
+                    }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .zIndex(20)
             }
             
             VStack(spacing: 0) {
@@ -70,6 +85,10 @@ struct LiveClassroomView: View {
                 }
             }
         }
+        .sheet(isPresented: $viewModel.showEnergySheet) {
+            EnergyPaymentSheet()
+                .environmentObject(MonetizationService.shared)
+        }
         .sheet(isPresented: $uiState.isLioChatPresented) {
             LioChatSheet(isPresented: $uiState.isLioChatPresented)
         }
@@ -80,6 +99,11 @@ struct LiveClassroomView: View {
                 title: courseTitle,
                 subtitle: lessonTitle
             )
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = shareURL {
+                ClassroomShareSheet(activityItems: ["Check out this course on Lyo!", url])
+            }
         }
     }
     
@@ -140,6 +164,25 @@ struct LiveClassroomView: View {
             
             Spacer()
             
+            // Share Button
+            Button(action: {
+                HapticManager.shared.light()
+                // Create a deep link (mock or real)
+                shareURL = URL(string: "https://lyo.app/course/\(courseId)")
+                showShareSheet = true
+            }) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+            }
+            
             // AI Assistant Button
             Button(action: {
                 HapticManager.shared.light()
@@ -177,17 +220,67 @@ struct LiveClassroomView: View {
         ZStack {
             if viewModel.isLoading {
                 loadingView
-            } else if let a2ui = viewModel.a2uiComponent {
-                // A2UI Rendering
+            } else if let errorMsg = viewModel.errorMessage {
+                // Error state
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.orange)
+                    Text("Something went wrong")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                    Text(errorMsg)
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button("Try Again") {
+                        Task {
+                            await viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+            } else if let block = viewModel.currentBlock {
+                // Block-based rendering (PRIMARY — the proven workhorse with 27+ block types)
+                blockContentView(block: block)
+                    .id(block.id)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                        removal: .opacity.combined(with: .scale(scale: 1.1))
+                    ))
+            } else if let a2uiComp = viewModel.fullA2UIComponent {
+                // Full A2UI Rendering (upgrade path — uses the full 120+ component renderer)
                 ScrollView {
-                    A2UIRecursiveRenderer(component: a2ui, onAction: { actionId in
-                        Task { await viewModel.handleA2UIAction(actionId) }
-                    })
+                    A2UIRenderer(
+                        component: a2uiComp,
+                        context: A2UIRenderContext(),
+                        onAction: { action, component in
+                            Task { await viewModel.handleA2UIAction(action.id) }
+                        }
+                    )
                     .padding(.horizontal)
                     .padding(.top, 20)
-                    .padding(.bottom, 120) // Space for bottom bar
+                    .padding(.bottom, 120)
                 }
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+            } else if let lesson = viewModel.lesson, lesson.blocks.isEmpty {
+                // Course is generating content
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                    Text("Generating your course...")
+                        .font(.title3)
+                        .foregroundColor(.white)
+                    Text("This usually takes 2–5 minutes. You can stay here and the content will appear automatically.")
+                        .font(.footnote)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .padding()
             } else if let block = viewModel.currentBlock {
                 blockContentView(block: block)
                     .id(block.id) // Ensure unique ID for transitions
@@ -195,6 +288,23 @@ struct LiveClassroomView: View {
                         insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
                         removal: .opacity.combined(with: .scale(scale: 1.1))
                     ))
+            } else {
+                // Fallback - no content available
+                VStack(spacing: 20) {
+                    Image(systemName: "book.closed")
+                        .font(.system(size: 50))
+                        .foregroundColor(.white.opacity(0.5))
+                    Text("No lesson content available")
+                        .font(.title2)
+                        .foregroundColor(.white.opacity(0.7))
+                    Button("Reload") {
+                        Task {
+                            await viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
             }
             
             // Navigation arrows (Floating)
@@ -428,6 +538,9 @@ struct LiveClassroomView: View {
                 )
                 .frame(width: 44, height: 44)
                 .shadow(color: DesignSystem.Colors.fallbackPrimary.opacity(0.5), radius: viewModel.lioState == .celebrating ? 15 : 0)
+                // Breathing Animation when IDLE
+                .scaleEffect(viewModel.lioState == .idle ? 1.05 : 1.0)
+                .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: viewModel.lioState == .idle)
             
             // State-specific Icon
             Image(systemName: viewModel.lioState.icon)
@@ -483,4 +596,112 @@ struct LiveClassroomView: View {
         lessonTitle: "Variables & Constants"
     )
     .environmentObject(UIStackStore.shared)
+}
+
+// MARK: - Share Sheet
+
+struct ClassroomShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Lesson Completion View
+
+struct LessonCompletionView: View {
+    let courseTitle: String
+    let lessonTitle: String
+    let xpGained: Int
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        ZStack {
+            // Background
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 32) {
+                // Trophy Icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.yellow, Color.orange],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 120, height: 120)
+                        .blur(radius: 10)
+                        .opacity(0.5)
+                    
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.yellow)
+                        .shadow(color: .orange, radius: 10)
+                }
+                .scaleEffect(1.0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.5, blendDuration: 0).repeatForever(autoreverses: true), value: true)
+                
+                VStack(spacing: 8) {
+                    Text("Lesson Complete!")
+                        .font(.largeTitle.bold())
+                        .foregroundColor(.white)
+                    
+                    Text("You've mastered")
+                        .font(.title3)
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    Text(lessonTitle)
+                        .font(.title2.weight(.heavy))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                
+                // Stats Grid
+                HStack(spacing: 40) {
+                    VStack {
+                        Text("100%")
+                            .font(.title3.bold())
+                            .foregroundColor(.green)
+                        Text("Accuracy")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    
+                    VStack {
+                        Text("+\(xpGained)")
+                            .font(.title3.bold())
+                            .foregroundColor(.yellow)
+                        Text("XP Gained")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
+                .padding()
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(16)
+                
+                Button(action: onDismiss) {
+                    Text("Continue Journey")
+                        .font(.headline)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.white)
+                        .clipShape(Capsule())
+                        .shadow(color: .white.opacity(0.3), radius: 10)
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding()
+        }
+    }
 }

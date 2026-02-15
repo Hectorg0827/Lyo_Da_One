@@ -33,6 +33,10 @@ enum SaaSHeaders {
         request.setValue("iOS", forHTTPHeaderField: "X-Platform")
         request.setValue(AppConfig.version, forHTTPHeaderField: "X-App-Version")
         request.setValue(Bundle.main.bundleIdentifier ?? "com.lyo.app", forHTTPHeaderField: "X-Bundle-Id")
+        
+        // 5. Client Capabilities (Unbreakable Protocol)
+        request.setValue(ClientCapabilities.shared.versionHeader, forHTTPHeaderField: "X-Client-Version")
+        request.setValue(ClientCapabilities.shared.componentsHeader, forHTTPHeaderField: "X-Client-Capabilities")
     }
     
     /// Convenience for synchronous contexts (uses cached values)
@@ -50,6 +54,10 @@ enum SaaSHeaders {
         
         request.setValue("iOS", forHTTPHeaderField: "X-Platform")
         request.setValue(AppConfig.version, forHTTPHeaderField: "X-App-Version")
+        
+        // Client Capabilities (Unbreakable Protocol)
+        request.setValue(ClientCapabilities.shared.versionHeader, forHTTPHeaderField: "X-Client-Version")
+        request.setValue(ClientCapabilities.shared.componentsHeader, forHTTPHeaderField: "X-Client-Capabilities")
     }
     
     /// Apply only API key (for public endpoints that don't need auth)
@@ -62,5 +70,9 @@ enum SaaSHeaders {
         
         request.setValue("iOS", forHTTPHeaderField: "X-Platform")
         request.setValue(AppConfig.version, forHTTPHeaderField: "X-App-Version")
+        
+        // Client Capabilities (Unbreakable Protocol)
+        request.setValue(ClientCapabilities.shared.versionHeader, forHTTPHeaderField: "X-Client-Version")
+        request.setValue(ClientCapabilities.shared.componentsHeader, forHTTPHeaderField: "X-Client-Capabilities")
     }
 }

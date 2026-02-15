@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 @MainActor
 final class A2ACourseAgent {
@@ -85,7 +86,7 @@ final class A2ACourseAgent {
                     onProgress(status, progress)
                 },
                 onArtifact: { artifact in
-                    print("📦 Received artifact: \(artifact.name)")
+                    Log.ai.info("Received artifact: \(artifact.name)")
                 },
                 onComplete: { task in
                     // Parse the completed task artifacts into a course

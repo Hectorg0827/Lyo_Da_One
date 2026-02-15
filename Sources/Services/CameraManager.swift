@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import UIKit
+import os
 
 // MARK: - Enhanced Camera Manager
 
@@ -131,7 +132,7 @@ class CameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDel
         guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
               let videoDeviceInput = try? AVCaptureDeviceInput(device: videoDevice),
               session.canAddInput(videoDeviceInput) else {
-            print("⚠️ Failed to configure video input for position: \(position)")
+            Log.media.warning("Failed to configure video input for position: \(String(describing: position))")
             return
         }
         
@@ -147,7 +148,7 @@ class CameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDel
         guard let audioDevice = AVCaptureDevice.default(for: .audio),
               let audioDeviceInput = try? AVCaptureDeviceInput(device: audioDevice),
               session.canAddInput(audioDeviceInput) else {
-            print("⚠️ Failed to configure audio input")
+            Log.media.warning("Failed to configure audio input")
             return
         }
         
@@ -195,7 +196,7 @@ class CameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDel
             
             device.unlockForConfiguration()
         } catch {
-            print("⚠️ Failed to toggle flash: \(error)")
+            Log.media.warning("Failed to toggle flash: \(error)")
         }
     }
     
@@ -219,7 +220,7 @@ class CameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDel
                 self.isFlashOn = on
             }
         } catch {
-            print("⚠️ Failed to set flash: \(error)")
+            Log.media.warning("Failed to set flash: \(error)")
         }
     }
     
@@ -288,19 +289,19 @@ class CameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDel
     // MARK: - AVCaptureFileOutputRecordingDelegate
     
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        print("📹 Recording started: \(fileURL)")
+        Log.media.info("📹 Recording started: \(fileURL)")
     }
     
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
         if let error = error {
-            print("❌ Recording error: \(error.localizedDescription)")
+            Log.media.error("Recording error: \(error.localizedDescription)")
             DispatchQueue.main.async {
                 self.errorMessage = error.localizedDescription
             }
             return
         }
         
-        print("✅ Recording finished: \(outputFileURL)")
+        Log.media.info("Recording finished: \(outputFileURL)")
         
         // Generate thumbnail
         Task {
@@ -327,7 +328,7 @@ class CameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDel
             let cgImage = try await imageGenerator.image(at: time).image
             return UIImage(cgImage: cgImage)
         } catch {
-            print("⚠️ Failed to generate thumbnail: \(error)")
+            Log.media.warning("Failed to generate thumbnail: \(error)")
             return nil
         }
     }

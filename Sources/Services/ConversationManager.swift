@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import os
 
 /// Represents a saved conversation
 struct SavedConversation: Identifiable, Codable {
@@ -72,7 +73,7 @@ class ConversationManager: ObservableObject {
     
     // MARK: - Conversation Management
     
-    /// Create a new conversation
+    /// Create a new conversation (Ephemeral until Used)
     func createNewConversation() -> SavedConversation {
         let conversation = SavedConversation(
             title: "New Conversation",
@@ -93,8 +94,8 @@ class ConversationManager: ObservableObject {
         var newConv = conversation
         newConv.messages = [welcomeMessage]
         
+        // Set as current but DO NOT add to saved list yet
         currentConversation = newConv
-        saveConversation(newConv)
         
         // Sync with UnifiedChatService for session isolation
         Task { @MainActor in
@@ -137,7 +138,12 @@ class ConversationManager: ObservableObject {
         conversation.lastMessagePreview = SavedConversation.getLastMessagePreview(from: messages)
         
         currentConversation = conversation
-        saveConversation(conversation)
+        
+        // Only save to persistence if we have user messages (not just welcome)
+        let hasUserMessage = messages.contains(where: { $0.role == .user })
+        if hasUserMessage {
+            saveConversation(conversation)
+        }
     }
     
     /// Load a specific conversation
@@ -183,7 +189,7 @@ class ConversationManager: ObservableObject {
             let data = try encoder.encode(conversations)
             userDefaults.set(data, forKey: conversationsKey)
         } catch {
-            print("❌ Failed to persist conversations: \(error)")
+            Log.net.error("Failed to persist conversations: \(error)")
         }
     }
     
@@ -199,17 +205,12 @@ class ConversationManager: ObservableObject {
             decoder.dateDecodingStrategy = .iso8601
             conversations = try decoder.decode([SavedConversation].self, from: data)
             
-            // Load current conversation
-            if let currentId = userDefaults.string(forKey: currentConversationKey),
-               let conversation = conversations.first(where: { $0.id == currentId }) {
-                currentConversation = conversation
-            } else if let first = conversations.first {
-                currentConversation = first
-            } else {
-                _ = createNewConversation()
-            }
+            // ALWAYS finish loading by starting a NEW chat on launch
+            // We ignore the stored `current_conversation_id` so the user starts fresh
+            _ = createNewConversation()
+            
         } catch {
-            print("❌ Failed to load conversations: \(error)")
+            Log.net.error("Failed to load conversations: \(error)")
             // Create new conversation on error
             _ = createNewConversation()
         }

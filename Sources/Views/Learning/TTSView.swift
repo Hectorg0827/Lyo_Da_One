@@ -186,7 +186,10 @@ struct TTSView: View {
             .sheet(isPresented: $showSpeedSelector) {
                 SpeedSelectorView(viewModel: viewModel)
             }
-            .alert("Error", isPresented: .constant(viewModel.error != nil)) {
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
                 Button("OK") {
                     viewModel.error = nil
                 }
@@ -292,9 +295,15 @@ struct VoiceSelectorView: View {
 
                                 Spacer()
 
-                                if voice.previewURL != nil {
+                                if let previewURLString = voice.previewURL,
+                                   let previewURL = URL(string: previewURLString) {
                                     Button {
-                                        // TODO: Play preview
+                                        Task {
+                                            await AudioPlaybackService.shared.playAudioURL(
+                                                previewURL,
+                                                messageId: "voice-preview-\(voice.name)"
+                                            )
+                                        }
                                     } label: {
                                         Image(systemName: "play.circle")
                                             .foregroundColor(.blue)
