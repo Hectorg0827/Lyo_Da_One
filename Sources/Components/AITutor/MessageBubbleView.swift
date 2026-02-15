@@ -15,57 +15,58 @@ struct LyoMessageBubbleView: View {
     
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     
+    @State private var frameIndex = 0
+    private let frames = ["Mascot_Reading_1", "Mascot_Reading_2", "Mascot_Reading_3", "Mascot_Reading_4"]
+    private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+    
+    /// True when contentTypes contains rich content (.a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards)
+    /// — hides raw text so the rich component renders exclusively without duplication
+    private var hasRichContent: Bool {
+        guard let types = message.contentTypes else { return false }
+        return types.contains { contentType in
+            switch contentType {
+            case .a2ui: return true
+            case .courseProposal: return true
+            case .courseRoadmap: return true
+            case .quiz: return true
+            case .flashcards: return true
+            case .studyPlan: return true
+            case .recursiveUI: return true
+            case .cinematic: return true
+            default: return false
+            }
+        }
+    }
+    
     var body: some View {
         VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: 0) {
-            // AI Header: Mascot OVERLAPPING (3D effect)
+            // AI Header: Mascot & Speaker ABOVE the bubble
             if !message.isFromUser {
-                HStack {
-                    ZStack(alignment: .bottom) {
-                        // Decorative glowing gradient behind avatar for 3D depth
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(hex: "8B5CF6").opacity(0.8), Color(hex: "3B82F6").opacity(0.6)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 32, height: 32)
-                            .blur(radius: 6)
-                        
-                        PremiumLyoAvatar(size: 30)
+                HStack(alignment: .center, spacing: 10) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image("Mascot_Standing")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
                             .overlay(
                                 Circle()
-                                    .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
                             )
+                        
+                        Text("Lyo")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.9))
                     }
-                    .offset(y: 15) // Overlap the bubble
-                    .zIndex(10)
                     
-                    Text("Lyo")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white)
-                        .padding(.top, 10)
+                    if message.status == .sending || (message.content.isEmpty && !message.isFromUser) {
+                        ThinkingDotsView()
+                    }
                     
                     Spacer()
-                }
-                .padding(.leading, 20)
-                .padding(.bottom, -8) // Pull content closer
-            }
-            
-            // Main Bubble Content
-            VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: DesignTokens.Spacing.xs) {
-                // Message content with premium styling
-                HStack(alignment: .top, spacing: 8) {
-                    Text(message.content)
-                        .font(DesignTokens.Typography.bodyMedium)
-                        .foregroundColor(.white) // Force white text
-                        .fixedSize(horizontal: false, vertical: true) // Wrap text
-                        .lineSpacing(4)
                     
-                    // TTS Audio Button (AI messages only)
-                    if !message.isFromUser && onAudioToggle != nil {
-                        Spacer()
+                    // Speaker icon aligned with mascot above the bubble
+                    if !message.content.isEmpty && onAudioToggle != nil {
                         MessageAudioButton(
                             messageId: message.id,
                             text: message.content,
@@ -75,11 +76,32 @@ struct LyoMessageBubbleView: View {
                                 onAudioToggle?(message.id, message.content)
                             }
                         )
+                        .scaleEffect(0.85) // Slightly smaller helper icon
                     }
                 }
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .padding(.vertical, DesignTokens.Spacing.md) // Increased padding
-                .background(messageBackground)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+            
+            // Main Bubble Content
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: DesignTokens.Spacing.xs) {
+                    // Message content with premium styling
+                    // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
+                    if !hasRichContent {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(message.content)
+                            .font(DesignTokens.Typography.bodyMedium)
+                            .foregroundColor(.white) // Force white text
+                            .fixedSize(horizontal: false, vertical: true) // Wrap text
+                            .lineSpacing(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.trailing, !message.isFromUser ? 32 : 0) // Leave room for speaker icon
+                    }
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .padding(.vertical, DesignTokens.Spacing.md)
+                    .background(messageBackground)
+                    }
                 
                 // ==== A2UI RICH CONTENT RENDERING ====
                 // This renders Course Roadmaps, Quizzes, Flashcards inline
@@ -144,12 +166,13 @@ struct LyoMessageBubbleView: View {
                     }
                 }
                 .padding(.horizontal, 8)
+                .padding(.bottom, 4)
             }
-            .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.99, alignment: message.isFromUser ? .trailing : .leading) // 99% width for AI
-            
+            .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.995, alignment: message.isFromUser ? .trailing : .leading)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, DesignTokens.Spacing.xs)
+        }
     }
     
     // MARK: - A2UI Content Type Rendering
@@ -201,6 +224,9 @@ struct LyoMessageBubbleView: View {
             }
             FlashcardsCardView(flashcards: FlashcardData(title: title, cards: convertedCards))
             
+        case .notes(let title, let sections):
+            NotesView(notes: NotesPayload(title: title, sections: sections))
+            
         case .courseCard(let courseId, let title, let subtitle, let thumbnail):
             // Render as a mini course card
             InlineCourseCardView(
@@ -238,9 +264,62 @@ struct LyoMessageBubbleView: View {
             A2UIRecursiveRenderer(component: component) { actionId in
                 onQuickChipTap?(actionId)
             }
+
+        case .studyPlan(let plan):
+            StudyPlanView(plan: plan)
+            
+        case .suggestions(let title, let options):
+            // Render suggestions as quick chips
+            VStack(alignment: .leading, spacing: 10) {
+                if !title.isEmpty {
+                    Text(title)
+                        .font(.caption.bold())
+                        .foregroundColor(.gray)
+                }
+                FlowLayout(spacing: 8) {
+                    ForEach(options, id: \.self) { option in
+                        Button {
+                            onQuickChipTap?(option)
+                        } label: {
+                            Text(option)
+                                .font(.caption.bold())
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.accentColor.opacity(0.1))
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+            
+        case .cinematic(let data):
+            Button {
+                NotificationCenter.default.post(name: Notification.Name("PlayCinematic"), object: data)
+            } label: {
+                HStack {
+                    Image(systemName: "play.rectangle.fill")
+                    Text("Watch \(data.title)")
+                        .bold()
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.purple.opacity(0.2))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.purple, lineWidth: 1))
+            }
+            
+        case .a2ui(let component):
+            A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ component: A2UIComponent) in
+                onQuickChipTap?("a2ui-\(action.id)")
+            })
+            .padding(.horizontal, -8)
             
         default:
-            // Text, image, audio, video, file, poll - either already handled or not needed inline
             EmptyView()
         }
     }
@@ -265,23 +344,13 @@ struct LyoMessageBubbleView: View {
             }
             .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
         } else {
-            // AI message: Dark Transparent Black with glowing gradient line (3D effect under mascot)
+            // AI message: Dark Transparent Black with Pulses (Integrated with PulsingTrim)
             ZStack {
                 RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                    .fill(Color.black.opacity(0.85)) // Darker but Maintain Transparency
+                    .fill(Color.black.opacity(0.85))
                 
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")], // Purple to Blue
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.5
-                    )
+                PulsingTrimOverlay(cornerRadius: DesignTokens.Radius.lg)
             }
-            // Deeper Glowing effect highlighting the trim
-            .shadow(color: Color(hex: "8B5CF6").opacity(0.3), radius: 12, x: 0, y: 0)
         }
     }
     
@@ -553,5 +622,25 @@ struct InlineCourseCardView: View {
     }
 }
 
-// Note: CodeSnippetView, RichCardView, ProcessingIndicatorView, and TopicSelectionView
-// are defined in Sources/Components/Common/ or Classroom/ to avoid duplication
+// MARK: - Thinking Dots helper
+struct ThinkingDotsView: View {
+    @State private var animationPhase = 0
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(Color.white.opacity(0.6))
+                    .frame(width: 4, height: 4)
+                    .scaleEffect(animationPhase == index ? 1.2 : 0.8)
+                    .opacity(animationPhase == index ? 1.0 : 0.4)
+            }
+        }
+        .onReceive(timer) { _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                animationPhase = (animationPhase + 1) % 3
+            }
+        }
+    }
+}

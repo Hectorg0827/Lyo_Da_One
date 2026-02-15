@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 /// New 5-button navigation with center FAB (Lyo Avatar)
 /// Design: Focus | Discover | [Lyo FAB] | Post | Profile
@@ -41,6 +42,9 @@ struct MainTabView: View {
     @State private var isNotificationsPresented = false
     @State private var isSearchPresented = false
     @State private var recorderMode: CreationOption = .story
+    
+    // Runtime State (New Architecture)
+    @State private var runtimeViewModel: LyoCourseRuntime?
     
     // Computed property for App Drawer visibility
     private var shouldShowAppDrawer: Bool {
@@ -111,6 +115,7 @@ struct MainTabView: View {
                     .tag(Tab.profile)
             }
             .environmentObject(stackService)
+            .environmentObject(uiStackStore)
             .environmentObject(uiState)
             .toolbar(.hidden, for: .tabBar)
             .onChange(of: selectedTab) { _, newValue in
@@ -180,7 +185,14 @@ struct MainTabView: View {
             }
         }
         .onChange(of: deepLinkHandler.pendingAction) { _, action in
-            if let action = action {
+            guard let action = action else { return }
+            if action == .openDemo {
+                Log.ui.info("Launching Demo Runtime...")
+                let course = DemoCourseLoader.shared.loadSpanish101()
+                let runtime = LyoCourseRuntime(course: course)
+                self.runtimeViewModel = runtime
+                deepLinkHandler.clearPendingAction()
+            } else {
                 handleDeepLinkAction(action)
             }
         }
@@ -248,6 +260,20 @@ struct MainTabView: View {
                 }
             }
         }
+        // MARK: - New Runtime Integration
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { runtimeViewModel != nil },
+                set: { presented in
+                    if !presented { runtimeViewModel = nil }
+                }
+            )
+        ) {
+            if let vm = runtimeViewModel {
+                CourseRuntimeView(runtime: vm)
+            }
+        }
+
     }
     
     private func createMode(for option: CreationOption) -> CreateMode {
@@ -293,7 +319,7 @@ struct MainTabView: View {
     }
     
     private func navigateToCourse(_ courseId: String) {
-        if let courseItem = uiStackStore.items.first(where: { $0.id == courseId && $0.type == .course }) {
+        if let courseItem = uiStackStore.items.first(where: { $0.courseId == courseId && $0.type == .course }) {
             let lessonId: String = courseItem.lessonId ?? "lesson-1"
             let courseTitle: String = courseItem.title
             let lessonTitle: String = courseItem.subtitle ?? "Lesson"
@@ -307,7 +333,7 @@ struct MainTabView: View {
     // MARK: - Deep Link Handler Logic
     
     private func handleDeepLinkAction(_ action: DeepLinkHandler.DeepLinkAction) {
-        print("🚀 MainTabView: Handling deep link action: \(action)")
+        Log.ui.info("MainTabView: Handling deep link action: \(String(describing: action))")
         
         switch action {
         case .openCourse(let id):
@@ -322,6 +348,11 @@ struct MainTabView: View {
             
         case .openChat:
             selectedTab = .messages
+
+        case .openDemo:
+            let course = DemoCourseLoader.shared.loadSpanish101()
+            let runtime = LyoCourseRuntime(course: course)
+            runtimeViewModel = runtime
         }
         
         // Clear after handling
@@ -330,18 +361,20 @@ struct MainTabView: View {
     
     // MARK: - Notification Handlers
     
-    private let tutorModePublisher = NotificationCenter.default.publisher(for: NSNotification.Name("TriggerTutorMode"))
-    private let liveLessonPublisher = NotificationCenter.default.publisher(for: NSNotification.Name("TriggerLiveLesson"))
+    private let tutorModePublisher = NotificationCenter.default.publisher(for: .triggerTutorMode)
+    private let liveLessonPublisher = NotificationCenter.default.publisher(for: .triggerLiveLesson)
     private let openClassroomPublisher = NotificationCenter.default.publisher(for: .openClassroom)
+    private let dismissOverlayPublisher = NotificationCenter.default.publisher(for: .dismissLyoOverlay)
 }
 
 extension MainTabView {
     var notificationListeners: some View {
         EmptyView()
             .onReceive(tutorModePublisher) { notification in
-                if let userInfo = notification.userInfo,
-                   let _ = userInfo["topic"] as? String {
-                    navigateToTutor = (courseId: "calculus_101", lessonId: "intro")
+                if let userInfo = notification.userInfo {
+                    let courseId = userInfo["courseId"] as? String ?? userInfo["topic"] as? String ?? "general"
+                    let lessonId = userInfo["lessonId"] as? String ?? "intro"
+                    navigateToTutor = (courseId: courseId, lessonId: lessonId)
                     isTutorModePresented = true
                 }
             }
@@ -354,14 +387,17 @@ extension MainTabView {
                         // Pass special "GENERATE:" prefix to signal LiveClassroomViewModel
                         liveClassroomData = ("GENERATE:\(topic)", lessonId, topic, "Introduction")
                     } else {
-                        // Standard navigation (or existing mock fallback)
-                        liveClassroomData = ("calculus_101", lessonId, "Calculus", "Introduction")
+                        // Read actual course info from userInfo
+                        let courseId = userInfo["courseId"] as? String ?? "GENERATE:\(userInfo["topic"] as? String ?? "Course")"
+                        let courseTitle = userInfo["courseTitle"] as? String ?? userInfo["topic"] as? String ?? "Course"
+                        let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
+                        liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
                     }
                     isLiveClassroomPresented = true
                 }
             }
             .onReceive(openClassroomPublisher) { notification in
-                print("🎓 MainTabView: Received openClassroom notification")
+                Log.ui.info("MainTabView: Received openClassroom notification")
                 
                 // Add a small delay to ensure any currently presented sheets (like LioChatSheet) 
                 // have time to start dismissing before we present the fullScreenCover.
@@ -379,14 +415,20 @@ extension MainTabView {
                             self.isLiveClassroomPresented = true
                         }
                         
-                        print("🚀 MainTabView: Transitioning to LiveClassroomView for \(courseTitle)")
+                        Log.ui.info("MainTabView: Transitioning to LiveClassroomView for \(courseTitle)")
                     }
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SaveCourseToLibrary"))) { notification in
+            .onReceive(dismissOverlayPublisher) { _ in
+                Log.ui.info("MainTabView: Dismissing Lyo overlay for classroom transition")
+                withAnimation(.easeOut(duration: 0.3)) {
+                    isLyoOverlayPresented = false
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .saveCourseToLibrary)) { notification in
                 if let userInfo = notification.userInfo,
                    let topic = userInfo["topic"] as? String {
-                    print("📚 Saving course stack: \(topic)")
+                    Log.ui.info("📚 Saving course stack: \(topic)")
                     Task {
                         // Create a stack for this course
                         await stackService.createStackItem(
@@ -399,7 +441,7 @@ extension MainTabView {
                     }
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("TriggerLioChat"))) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .triggerLioChat)) { _ in
                 uiState.isLioChatPresented = true
             }
     }
@@ -1265,7 +1307,7 @@ struct AppDrawerOverlay: View {
                     startingStoryId: story.id,
                     onAskLio: { context in
                         // Future: Open Lio Chat with context
-                        print("Asked Lio about: \(context)")
+                        Log.ui.info("Asked Lio about: \(context)")
                     }
                 )
             } else {
@@ -1277,7 +1319,7 @@ struct AppDrawerOverlay: View {
             }
         }
 
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ResetInactivityTimer"))) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .resetInactivityTimer)) { _ in
             resetTimer()
         }
     }

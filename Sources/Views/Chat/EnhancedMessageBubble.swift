@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVKit
+import os
 
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
@@ -42,6 +43,24 @@ struct EnhancedMessageBubble: View {
         self.onCinematicPlay = onCinematicPlay
     }
     
+    /// True when contentTypes contains rich content that should suppress raw text rendering
+    /// to prevent duplicate display (text + card both showing)
+    private var hasRichContent: Bool {
+        message.contentTypes.contains { contentType in
+            switch contentType {
+            case .a2ui: return true
+            case .courseProposal: return true
+            case .courseRoadmap: return true
+            case .quiz: return true
+            case .flashcards: return true
+            case .studyPlan: return true
+            case .recursiveUI: return true
+            case .cinematic: return true
+            default: return false
+            }
+        }
+    }
+    
     var body: some View {
         if message.role == .assistant {
             // AI Message - Full Width with Avatar on Top
@@ -57,208 +76,247 @@ struct EnhancedMessageBubble: View {
     // MARK: - AI Message View (Enhanced Island Style)
     
     private var aiMessageView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Content Area
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(0..<message.contentTypes.count, id: \.self) { index in
-                    let contentType = message.contentTypes[index]
+        VStack(alignment: .leading, spacing: 0) {
+            // Header showing Mascot and "Lyo" (Standardized to original mascot)
+            HStack(alignment: .center, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image("Mascot_Standing")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 28, height: 28)
+                        .clipShape(Circle())
                     
-                    switch contentType {
-                    case .text:
-                        if !message.content.isEmpty {
-                            Text(LocalizedStringKey(message.content))
-                                .font(.body)
-                                .foregroundColor(.white)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        
-                    case .processing(let step, let progress):
-                        ProcessingBubbleView(step: step, progress: progress)
-                        
-                    case .topicSelection(let title, let topics):
-                        TopicSelectionBubbleView(
-                            title: title,
-                            topics: topics,
-                            onSelect: { topic in
-                                onTopicSelect?(topic)
-                            }
-                        )
-                        .padding(.horizontal, -8)
-                        
-                    case .courseRoadmap(let title, let modules, let total, let completed):
-                        CourseRoadmapBubbleView(
-                            title: title,
-                            modules: modules,
-                            totalModules: total,
-                            completedModules: completed,
-                            onModuleSelect: { module in
-                                onModuleSelect?(module)
-                            }
-                        )
-                        
-                    case .flashcards(let title, let cards):
-                        FlashcardCarouselBubbleView(
-                            title: title,
-                            cards: cards
-                        )
-                        .padding(.horizontal, -8)
-                        
-                    case .quiz(let question, let options, let correctIndex, let explanation):
-                        InteractiveQuizBubbleView(
-                            question: question,
-                            options: options,
-                            correctIndex: correctIndex,
-                            explanation: explanation,
-                            onAnswerSelected: { index in
-                                onQuizAnswer?(index)
-                            }
-                        )
-                        
-                    case .courseCard(let courseId, let title, let subtitle, _):
-                         Button {
-                             onCourseOpen?(courseId)
-                         } label: {
-                             VStack(alignment: .leading) {
-                                 Text(title).font(.headline)
-                                 if let subtitle { Text(subtitle).font(.caption) }
-                             }
-                             .padding()
-                             .frame(maxWidth: .infinity, alignment: .leading)
-                             .background(Color(.secondarySystemBackground))
-                             .cornerRadius(12)
-                         }
-                    
-                    case .suggestions(let title, let options):
-                        InlineSuggestionsView(title: title, options: options) { selected in
-                            onSuggestionSelect?(selected)
-                        }
-
-                    case .recursiveUI(let component):
-                        A2UIRecursiveRenderer(component: component) { actionId in
-                            handleA2UIAction(actionId)
-                        }
-
-                    case .a2ui(let component):
-                        A2UIRenderer(component: component) { action, _ in
-                            handleA2UIAction("a2ui-\(action.id)")
-                        }
-                        .padding(.horizontal, -8)
-
-                    case .cinematic(let data):
-                        // Render a "Trailer" card that invites the user to tap
-                        Button {
-                            // Trigger callback
-                            onCinematicPlay?(data)
-                        } label: {
-                            ZStack {
-                                Color.black
-                                
-                                // Placeholder Gradient
-                                LinearGradient(colors: [.purple, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    .opacity(0.6)
-                                
-                                VStack(spacing: 16) {
-                                    Image(systemName: "play.circle.fill")
-                                        .font(.system(size: 48))
-                                        .foregroundColor(.white)
-                                        .shadow(radius: 10)
-                                    
-                                    VStack(spacing: 4) {
-                                        Text(data.title.uppercased())
-                                            .font(.headline)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                            .multilineTextAlignment(.center)
-                                        
-                                        if let subtitle = data.subtitle {
-                                            Text(subtitle)
-                                                .font(.caption)
-                                                .foregroundColor(.white.opacity(0.8))
-                                                .multilineTextAlignment(.center)
-                                        }
-                                    }
-                                }
-                                .padding()
-                            }
-                            .frame(height: 180)
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                            )
-                        }
-                        .padding(.horizontal, -8)
-
-                    default:
-                        EmptyView()
-                    }
+                    Text("Lyo")
+                        .font(.caption.bold())
+                        .foregroundColor(.white.opacity(0.9))
                 }
                 
-                // Attachments
-                if !message.attachments.isEmpty {
-                    attachmentsGrid(message.attachments)
-                }
-            }
-            
-            // Action Footer (Share, Copy, Read Aloud)
-            HStack(spacing: 16) {
                 Spacer()
                 
-                // Copy
-                Button(action: {
-                    UIPasteboard.general.string = message.content
-                    HapticManager.shared.light()
-                }) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                
-                // Share
-                Button(action: {
-                    // Start simple share sheet
-                    let activityVC = UIActivityViewController(activityItems: [message.content], applicationActivities: nil)
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let rootVC = windowScene.windows.first?.rootViewController {
-                        rootVC.present(activityVC, animated: true)
-                    }
-                }) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                
-                // Read Aloud (TTS)
+                // Read Aloud (TTS) in Header — only when there's text to speak
+                if !message.content.isEmpty {
                 Button(action: {
                     onTTSToggle?()
                 }) {
                     Image(systemName: audioService.isPlaying ? "stop.circle.fill" : "speaker.wave.2")
                         .font(.system(size: 14))
                         .foregroundColor(audioService.isPlaying ? .red : .white.opacity(0.6))
+                        .padding(8)
+                        .background(Color.white.opacity(0.05))
+                        .clipShape(Circle())
+                }
                 }
             }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity) // Take up available width
-        // 99% logic handled by parent padding or frame, but here we enforce taking space
-        .background(
-            ZStack {
-                Color.black.opacity(0.4) // Darker, transparent, enough for white text
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
+            // Content Area
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(0..<message.contentTypes.count, id: \.self) { index in
+                        let contentType = message.contentTypes[index]
+                        
+                        switch contentType {
+                        case .text:
+                            // Suppress raw text when rich content (A2UI, courseProposal, quiz, etc.) is present
+                            if !hasRichContent && !message.content.isEmpty {
+                                Text(LocalizedStringKey(message.content))
+                                    .font(.body)
+                                    .foregroundColor(.white)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            
+                        case .processing(let step, let progress):
+                            ProcessingBubbleView(step: step, progress: progress)
+                            
+                        case .topicSelection(let title, let topics):
+                            TopicSelectionBubbleView(
+                                title: title,
+                                topics: topics,
+                                onSelect: { topic in
+                                    onTopicSelect?(topic)
+                                }
+                            )
+                            .padding(.horizontal, -8)
+                            
+                        case .courseRoadmap(let title, let modules, let total, let completed):
+                            CourseRoadmapBubbleView(
+                                title: title,
+                                modules: modules,
+                                totalModules: total,
+                                completedModules: completed,
+                                onModuleSelect: { module in
+                                    onModuleSelect?(module)
+                                }
+                            )
+                            
+                        case .flashcards(let title, let cards):
+                            FlashcardCarouselBubbleView(
+                                title: title,
+                                cards: cards
+                            )
+                            .padding(.horizontal, -8)
+                            
+                        case .quiz(let question, let options, let correctIndex, let explanation):
+                            PremiumQuizView(
+                                question: question,
+                                options: options,
+                                correctIndex: correctIndex,
+                                explanation: explanation,
+                                onAnswerSubmitted: { index, _ in
+                                    onQuizAnswer?(index)
+                                }
+                            )
+                            .padding(.horizontal, -8)
+                            
+                        case .courseCard(let courseId, let title, let subtitle, _):
+                             Button {
+                                 onCourseOpen?(courseId)
+                             } label: {
+                                 VStack(alignment: .leading) {
+                                     Text(title).font(.headline)
+                                     if let subtitle { Text(subtitle).font(.caption) }
+                                 }
+                                 .padding()
+                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                 .background(Color(.secondarySystemBackground))
+                                 .cornerRadius(12)
+                             }
+                        
+                        case .suggestions(let title, let options):
+                            InlineSuggestionsView(title: title, options: options) { selected in
+                                onSuggestionSelect?(selected)
+                            }
+
+                        case .recursiveUI(let component):
+                            A2UIRecursiveRenderer(component: component) { actionId in
+                                handleA2UIAction(actionId)
+                            }
+
+                        case .courseProposal(let payload):
+                            CourseProposalCardView(
+                                payload: payload,
+                                onStart: {
+                                    AICommandHandler.shared.executeOpenClassroom(for: payload)
+                                },
+                                onAdjust: {
+                                    onSuggestionSelect?("I'd like to adjust the course: \(payload.title). Can you modify it?")
+                                }
+                            )
+                            .padding(.horizontal, -8)
+
+                        case .a2ui(let component):
+                            A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ component: A2UIComponent) in
+                                let actionId = action.payload?["id"]?.stringValue ?? action.id
+                                handleA2UIAction(actionId)
+                            })
+                            .padding(.horizontal, -8)
+
+                        case .cinematic(let data):
+                            // Render a "Trailer" card that invites the user to tap
+                            Button {
+                                // Trigger callback
+                                onCinematicPlay?(data)
+                            } label: {
+                                ZStack {
+                                    Color.black
+                                    
+                                    // Placeholder Gradient
+                                    LinearGradient(colors: [.purple, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                        .opacity(0.6)
+                                    
+                                    VStack(spacing: 16) {
+                                        Image(systemName: "play.circle.fill")
+                                            .font(.system(size: 48))
+                                            .foregroundColor(.white)
+                                            .shadow(radius: 10)
+                                        
+                                        VStack(spacing: 4) {
+                                            Text(data.title.uppercased())
+                                                .font(.headline)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.white)
+                                                .multilineTextAlignment(.center)
+                                            
+                                            if let subtitle = data.subtitle {
+                                                Text(subtitle)
+                                                    .font(.caption)
+                                                    .foregroundColor(.white.opacity(0.8))
+                                                    .multilineTextAlignment(.center)
+                                            }
+                                        }
+                                    }
+                                    .padding()
+                                }
+                                .frame(height: 180)
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
+                            }
+                            .padding(.horizontal, -8)
+
+                        case .notes(let title, let sections):
+                            NotesView(notes: NotesPayload(title: title, sections: sections))
+                                .padding(.horizontal, -8)
+
+                        default:
+                            EmptyView()
+                        }
+                    }
+                    
+                    // Attachments
+                    if !message.attachments.isEmpty {
+                        attachmentsGrid(message.attachments)
+                    }
+                }
                 
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.2), .white.opacity(0.05)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
+                // Action Footer (Share, Copy) — only when there's text to copy
+                if !message.content.isEmpty {
+                HStack(spacing: 16) {
+                    Spacer()
+                    
+                    // Copy
+                    Button(action: {
+                        UIPasteboard.general.string = message.content
+                        HapticManager.shared.light()
+                    }) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    
+                    // Share
+                    Button(action: {
+                        // Start simple share sheet
+                        let activityVC = UIActivityViewController(activityItems: [message.content], applicationActivities: nil)
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let rootVC = windowScene.windows.first?.rootViewController {
+                            rootVC.present(activityVC, animated: true)
+                        }
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
+                } // end if !message.content.isEmpty
             }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                ZStack {
+                    Color.black.opacity(0.85) // Match LyoMessageBubbleView styling
+                    
+                    PulsingTrimOverlay(cornerRadius: 20)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+        }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 4) // Slight padding from screen edge for the "99%" feel
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
@@ -392,7 +450,7 @@ struct EnhancedMessageBubble: View {
     // MARK: - A2UI Action Handling
 
     private func handleA2UIAction(_ actionId: String) {
-        print("🎯 A2UI Action triggered: \(actionId)")
+        Log.ai.info("A2UI Action triggered: \(actionId)")
         HapticManager.shared.light()
 
         // Parse action and route to appropriate handler
@@ -430,6 +488,7 @@ struct EnhancedMessageBubble: View {
     }
 }
 
+
 // MARK: - Preview
 
 #Preview {
@@ -456,3 +515,4 @@ struct EnhancedMessageBubble: View {
     }
     .padding()
 }
+

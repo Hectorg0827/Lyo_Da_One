@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import os
 
 // MARK: - AI Command Handler
 /// Handles structured AI commands and triggers appropriate app actions
@@ -57,55 +58,75 @@ class AICommandHandler: ObservableObject {
         }
     }
     
+    /// Returns the CoursePayload for rendering as a proposal card in chat.
+    /// The user must tap "Start Learning" on the card before actual generation begins.
     public func handleOpenClassroom(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
         guard let course = payload?.course else {
-            print("⚠️ OPEN_CLASSROOM command missing course payload")
+            Log.ai.warning("OPEN_CLASSROOM command missing course payload")
             return ("I'd love to create a course for you! Could you tell me what topic you'd like to learn?", false)
         }
         
-        print("🎓 Opening AI Classroom for: \(course.title)")
+        Log.ai.info("📋 Course proposal prepared (not auto-triggering): \(course.title)")
         
-        // 🔧 FIX: Populate the generated course so LiveClassroomViewModel can find it
-        CourseGenerationService.shared.populateGeneratedCourse(from: course)
-        
-        // Store the course details for navigation
+        // Store the course + stack item for later execution (when user taps "Start Learning")
         self.pendingClassroomCourse = course
         self.pendingStackItem = payload?.stackItem
+        
+        // Return empty string with wasCommand = true
+        // The caller (UnifiedChatService) will render a CourseProposalCardView instead
+        return ("", true)
+    }
+    
+    /// Actually execute course creation + navigation.
+    /// Called ONLY when user taps "Start Learning" on the CourseProposalCardView.
+    public func executeOpenClassroom(for course: CoursePayload) {
+        Log.ai.info("🚀 User approved course — executing: \(course.title)")
+        
+        // Populate the generated course so LiveClassroomViewModel can find it
+        CourseGenerationService.shared.populateGeneratedCourse(from: course)
         
         // Trigger local navigation flag
         self.shouldOpenClassroom = true
         
-        // Post notification for MainTabView to trigger fullScreenCover
-        // Using the central Notification.Name extension if available
+        // Resolve the actual courseId
+        let resolvedCourseId = CourseGenerationService.shared.generatedCourse?.courseId
+            ?? course.id
+            ?? "gen_\(UUID().uuidString.prefix(6))"
+        
+        // 1. Dismiss the Lyo overlay first so fullScreenCover can appear
         NotificationCenter.default.post(
-            name: Notification.Name("openClassroom"),
-            object: nil,
-            userInfo: [
-                "courseId": "GENERATE:\(course.topic)",
-                "lessonId": "intro_1",
-                "courseTitle": course.title,
-                "lessonTitle": "Introduction"
-            ]
+            name: .dismissLyoOverlay,
+            object: nil
         )
         
-        // Also add to stack if provided
-        if let stackItem = payload?.stackItem {
+        // 2. Post navigation notification after a brief delay for overlay to dismiss
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            NotificationCenter.default.post(
+                name: Notification.Name("openClassroom"),
+                object: nil,
+                userInfo: [
+                    "courseId": resolvedCourseId,
+                    "lessonId": "intro_1",
+                    "courseTitle": course.title,
+                    "lessonTitle": "Introduction"
+                ]
+            )
+        }
+        
+        // Add to UIStackStore so the course appears in the Stack
+        UIStackStore.shared.upsertCourse(
+            courseId: resolvedCourseId,
+            title: course.title,
+            subtitle: "AI Generated Course",
+            progress: 0.0
+        )
+        
+        // Also persist to backend stack if stored
+        if let stackItem = pendingStackItem {
             Task {
                 await addToStack(stackItem, course: course)
             }
         }
-        
-        // Return confirmation message (will be displayed while navigating)
-        let confirmationMessage = """
-        🎓 Perfect! I'm setting up your **\(course.title)** course now!
-        
-        **What you'll learn:**
-        \(course.objectives.prefix(3).map { "• \($0)" }.joined(separator: "\n"))
-        
-        Opening the AI Classroom...
-        """
-        
-        return (confirmationMessage, true)
     }
     
     func handleAddToStack(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
@@ -190,10 +211,10 @@ class AICommandHandler: ObservableObject {
             )
             
             let _ = try await LyoRepository.shared.createStackItem(request: request)
-            print("✅ Added to Stack: \(item.title)")
+            Log.ai.info("Added to Stack: \(item.title)")
             
         } catch {
-            print("⚠️ Failed to add to stack: \(error.localizedDescription)")
+            Log.ai.warning("Failed to add to stack: \(error.localizedDescription)")
         }
     }
     
