@@ -15,7 +15,7 @@ struct BlockRendererView: View {
     var onAction: ((String) -> Void)?
     
     var body: some View {
-        Group {
+        VStack {
             switch block.type {
             // MARK: - Content Blocks
             case .text, .paragraph:
@@ -95,6 +95,9 @@ struct BlockRendererView: View {
                 
             case .flashcardDeck:
                 FlashcardDeckBlockView(cards: block.cards ?? [])
+                
+            case .notes:
+                NotesBlockView(block: block)
                 
             case .timeline:
                 TimelineBlockView(block: block)
@@ -297,76 +300,17 @@ struct QuizMCQBlockView: View {
     let block: LessonBlock
     var onAnswer: ((Int) -> Void)?
     
-    @State private var selectedIndex: Int?
-    @State private var hasSubmitted = false
-    
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(block.question ?? "Question")
-                .font(.headline)
-                .foregroundColor(.primary)
-            
-            if let options = block.options {
-                ForEach(0..<options.count, id: \.self) { index in
-                    Button(action: {
-                        if !hasSubmitted {
-                            selectedIndex = index
-                            hasSubmitted = true
-                            onAnswer?(index)
-                        }
-                    }) {
-                        HStack {
-                            Text(options[index])
-                                .font(.subheadline)
-                                .foregroundColor(selectedIndex == index ? .white : .primary)
-                            Spacer()
-                            if hasSubmitted && index == block.correctIndex {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                            } else if selectedIndex == index {
-                                Image(systemName: hasSubmitted ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                    .foregroundColor(hasSubmitted ? .red : .white)
-                            } else {
-                                Circle()
-                                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                                    .frame(width: 20, height: 20)
-                            }
-                        }
-                        .padding()
-                        .background(backgroundColor(for: index))
-                        .cornerRadius(10)
-                    }
-                }
+        PremiumQuizView(
+            question: block.question ?? "Question",
+            options: block.options ?? [],
+            correctIndex: block.correctIndex ?? 0,
+            explanation: block.explanation,
+            onAnswerSubmitted: { index, _ in
+                onAnswer?(index)
             }
-            
-            // Explanation after submission
-            if hasSubmitted, let explanation = block.explanation {
-                Text(explanation)
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .padding()
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(8)
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
+        )
         .padding(.vertical, 8)
-    }
-    
-    private func backgroundColor(for index: Int) -> Color {
-        if !hasSubmitted {
-            return selectedIndex == index ? Color.blue : Color.secondary.opacity(0.05)
-        }
-        if index == block.correctIndex {
-            return Color.green.opacity(0.2)
-        }
-        if selectedIndex == index {
-            return Color.red.opacity(0.2)
-        }
-        return Color.secondary.opacity(0.05)
     }
 }
 
@@ -1062,61 +1006,14 @@ struct FlashcardBlockView: View {
     let back: String
     let hint: String?
     
-    @State private var isFlipped = false
-    
     var body: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                // Back side
-                VStack(spacing: 12) {
-                    Text("Answer")
-                        .font(.caption.bold())
-                        .foregroundColor(.green)
-                    Text(back)
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity)
-                .frame(height: 180)
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(16)
-                .opacity(isFlipped ? 1 : 0)
-                .rotation3DEffect(.degrees(isFlipped ? 0 : 180), axis: (x: 0, y: 1, z: 0))
-                
-                // Front side
-                VStack(spacing: 12) {
-                    Text("Question")
-                        .font(.caption.bold())
-                        .foregroundColor(.blue)
-                    Text(front)
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                    
-                    if let hint = hint {
-                        Text("💡 \(hint)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity)
-                .frame(height: 180)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(16)
-                .opacity(isFlipped ? 0 : 1)
-                .rotation3DEffect(.degrees(isFlipped ? -180 : 0), axis: (x: 0, y: 1, z: 0))
-            }
-            .onTapGesture {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                    isFlipped.toggle()
-                }
-            }
-            
-            Text("Tap to flip")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
+        PremiumFlashcardView(
+            front: front,
+            back: back,
+            hint: hint,
+            showMasteryButton: false
+        )
+        .frame(height: 220)
         .padding(.vertical, 8)
     }
 }
@@ -1434,3 +1331,119 @@ struct UnknownBlockView: View {
     }
 }
 
+// MARK: - Appended Required Views (to fix project inclusion issues)
+
+struct PremiumFlashcardView: View {
+    let front: String
+    let back: String
+    var hint: String? = nil
+    var isMastered: Bool = false
+    var onToggleMastery: (() -> Void)? = nil
+    var showMasteryButton: Bool = true
+    
+    @State private var isFlipped = false
+    
+    var body: some View {
+        ZStack {
+            // BACK (Answer)
+            FlashcardFaceView(
+                content: back,
+                isBackContent: true,
+                isFlipped: isFlipped,
+                hint: nil
+            )
+            .rotation3DEffect(
+                .degrees(isFlipped ? 0 : -180),
+                axis: (x: 0.0, y: 1.0, z: 0.0)
+            )
+            .opacity(isFlipped ? 1 : 0)
+            
+            // FRONT (Question)
+            FlashcardFaceView(
+                content: front,
+                isBackContent: false,
+                isFlipped: isFlipped,
+                hint: hint
+            )
+            .rotation3DEffect(
+                .degrees(isFlipped ? 180 : 0),
+                axis: (x: 0.0, y: 1.0, z: 0.0)
+            )
+            .opacity(isFlipped ? 0 : 1)
+        }
+        .onTapGesture {
+            flip()
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if showMasteryButton {
+                Button {
+                    onToggleMastery?()
+                } label: {
+                    Image(systemName: isMastered ? "star.fill" : "star")
+                        .font(.title2)
+                        .foregroundStyle(isMastered ? .yellow : .white.opacity(0.4))
+                        .padding(16)
+                        .contentShape(Rectangle())
+                }
+            }
+        }
+    }
+    
+    
+    private func flip() {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+            isFlipped.toggle()
+        }
+    }
+}
+
+private struct FlashcardFaceView: View {
+    let content: String
+    let isBackContent: Bool
+    let isFlipped: Bool
+    let hint: String?
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24)
+                .fill(
+                    LinearGradient(
+                        colors: isBackContent ? 
+                            [Color.purple, Color.blue] : 
+                            [Color(white: 0.12), Color(white: 0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            
+            VStack(spacing: 16) {
+                HStack {
+                    Text(isBackContent ? "ANSWER" : "QUESTION")
+                        .font(.system(size: 10, weight: .bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(isBackContent ? Color.white.opacity(0.2) : Color.blue.opacity(0.2))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                    Spacer()
+                }
+                
+                Spacer()
+                Text(content)
+                    .font(.system(size: 22, weight: .medium, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white)
+                    .padding(.horizontal)
+                Spacer()
+                
+                if let hint = hint, !hint.isEmpty {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .italic()
+                }
+            }
+            .padding(24)
+        }
+    }
+}

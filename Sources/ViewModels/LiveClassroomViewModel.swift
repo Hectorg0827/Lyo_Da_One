@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import Combine
+import AVFoundation
+import os
 
 // MARK: - Live Classroom ViewModel
 
@@ -53,24 +55,49 @@ final class LiveClassroomViewModel: ObservableObject {
     
     @Published var showTranscriptSheet: Bool = false
     @Published var showAskQuestionSheet: Bool = false
+    @Published var showEnergySheet: Bool = false
     @Published var userQuestion: String = ""
     @Published var isProcessingQuestion: Bool = false
     
     // Progress
     @Published var completedBlocks: Set<String> = []
     @Published var quizResults: [String: Bool] = [:]
+    @Published var isLessonComplete: Bool = false
+    @Published var xpGained: Int = 0
     
     // MARK: - Dependencies
     
     private let openAIService: OpenAIService
     private let apiClient = LyoAPIClient.shared
     private let cinemaService = InteractiveCinemaService.shared
-    private let tokenManager = TokenManager.shared
     private let repository = LyoRepository.shared
+    private let contentStore = GeneratedContentStore.shared
     private var cancellables = Set<AnyCancellable>()
+    
+    // TTS & Audio
+    private let ttsRepository = DefaultTTSRepository()
+    private var audioPlayer: AVPlayer?
     
     // Graph-based playback state
     private var currentCourseId: String?
+    
+    // MARK: - Resume Support
+    
+    /// Key for persisting the last viewed block index per course
+    private func resumeKey(for courseId: String) -> String {
+        "classroom_resume_\(courseId)"
+    }
+    
+    /// Save current block index so user can resume later
+    private func saveResumePosition() {
+        guard let courseId = currentCourseId ?? lesson?.courseId else { return }
+        UserDefaults.standard.set(currentBlockIndex, forKey: resumeKey(for: courseId))
+    }
+    
+    /// Restore last block index for a given course
+    private func restoreResumePosition(for courseId: String) -> Int {
+        UserDefaults.standard.integer(forKey: resumeKey(for: courseId))
+    }
     
     var currentBlock: LessonBlock? {
         if isMasteryCheckActive {
@@ -134,6 +161,14 @@ final class LiveClassroomViewModel: ObservableObject {
     
     init(openAIService: OpenAIService? = nil) {
         self.openAIService = openAIService ?? OpenAIService.shared
+        
+        // Setup audio session for playback
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            Log.classroom.error("Failed to setup audio session: \(error)")
+        }
     }
     
     // MARK: - Public Methods
@@ -143,10 +178,44 @@ final class LiveClassroomViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
+        // 🚀 GeneratedContentStore-first: serve cached content instantly
+        let cacheKey = "\(courseId)_\(lessonId)"
+        if let cached = contentStore.retrieve(id: cacheKey) {
+            Log.classroom.info("⚡ Cache hit for \(courseId)/\(lessonId) — serving instantly")
+            
+            // If we have A2UI component JSON, we could use it in the future
+            // For now, use the agent blocks or raw content to build the lesson
+            if let agentBlocks = cached.agentBlocks, !agentBlocks.isEmpty {
+                let blocks = agentBlocks.map { agentBlock in
+                    LessonBlock(
+                        id: agentBlock.id,
+                        type: agentBlock.blockType == AgentBlockType.checkpoint ? .quizMcq : .text,
+                        title: agentBlock.blockType.rawValue.capitalized,
+                        content: agentBlock.content
+                    )
+                }
+                
+                self.lesson = LiveLesson(
+                    courseId: courseId,
+                    lessonId: lessonId,
+                    title: cached.title,
+                    blocks: blocks
+                )
+                
+                isLoading = false
+                Log.classroom.info("⚡ Served \(blocks.count) blocks from GeneratedContentStore")
+                
+                if currentBlock != nil {
+                    await speakCurrentBlock()
+                }
+                return
+            }
+        }
+        
         // Check for Generated Course (mock_, gen_, etc.)
         // These courses were already generated and cached in CourseGenerationService
         if courseId.starts(with: "mock_") || courseId.starts(with: "gen_") || courseId.starts(with: "temp_") {
-            print("🎨 LiveClassroom: Loading generated course: \(courseId)")
+            Log.classroom.info("🎨 LiveClassroom: Loading generated course: \(courseId)")
             
             do {
                 // Start playback from the cached/generated course
@@ -159,10 +228,17 @@ final class LiveClassroomViewModel: ObservableObject {
                     courseTitle: playbackState.currentNode.title
                 )
                 
-                print("✅ LiveClassroom: Loaded generated course with \(lesson?.blocks.count ?? 0) blocks")
+                Log.classroom.info("LiveClassroom: Loaded generated course with \(self.lesson?.blocks.count ?? 0) blocks")
+                
+                // Restore resume position
+                let resumeBlock = restoreResumePosition(for: courseId)
+                if resumeBlock > 0, resumeBlock < (lesson?.totalBlocks ?? 0) {
+                    currentBlockIndex = resumeBlock
+                    Log.classroom.info("▶️ Resuming from block \(resumeBlock)")
+                }
                 
             } catch {
-                print("❌ LiveClassroom: Failed to load generated course: \(error.localizedDescription)")
+                Log.classroom.error("LiveClassroom: Failed to load generated course: \(error.localizedDescription)")
                 errorMessage = "Failed to load course. Please try again."
                 isLoading = false
                 return
@@ -179,9 +255,9 @@ final class LiveClassroomViewModel: ObservableObject {
         if courseId.hasPrefix("GENERATE:") {
             let topic = String(courseId.dropFirst(9))
             
-            // � FIX: Always generate FULL course content, don't just use the placeholder cache
+            //  FIX: Always generate FULL course content, don't just use the placeholder cache
             // The cached course from chat only contains objectives, not actual lesson content
-            print("🎨 LiveClassroom: Generating FULL course for topic: \(topic)")
+            Log.classroom.info("🎨 LiveClassroom: Generating FULL course for topic: \(topic)")
             
             do {
                 // Generate FULL course via CourseGenerationService (uses AI to create rich content)
@@ -192,7 +268,7 @@ final class LiveClassroomViewModel: ObservableObject {
                     teachingStyle: "interactive"
                 )
                 
-                print("✅ Generated full course: \(fullCourse.title) with \(fullCourse.modules.count) modules")
+                Log.classroom.info("Generated full course: \(fullCourse.title) with \(fullCourse.modules.count) modules")
                 
                 // Now use this full course for the lesson
                 let firstLessonId = fullCourse.modules.first?.lessons.first?.id ?? "intro"
@@ -222,16 +298,30 @@ final class LiveClassroomViewModel: ObservableObject {
                     courseTitle: fullCourse.title
                 )
                 
-                print("✅ LiveClassroom: Created lesson with \(lesson?.blocks.count ?? 0) blocks")
+                Log.classroom.info("LiveClassroom: Created lesson with \(self.lesson?.blocks.count ?? 0) blocks")
+                if let lessonData = lesson {
+                    Log.classroom.info("   📋 Lesson ID: \(lessonData.lessonId)")
+                    Log.classroom.info("   📋 Title: \(lessonData.title)")
+                    Log.classroom.info("   📋 Blocks: \(lessonData.blocks.map { $0.title ?? "untitled" })")
+                }
+                Log.classroom.info("   📋 currentBlockIndex: \(self.currentBlockIndex)")
+                Log.classroom.info("   📋 currentBlock: \(self.currentBlock?.title ?? "nil")")
+                
+                // Cache in GeneratedContentStore for instant re-access
+                if let lessonData = lesson {
+                    cacheLesson(lessonData, courseId: courseId, lessonId: lessonId)
+                }
                 
             } catch {
-                print("❌ LiveClassroom: Course generation failed: \(error.localizedDescription)")
-                errorMessage = "Failed to generate course. Please try again."
+                Log.classroom.error("LiveClassroom: Course generation failed: \(error.localizedDescription)")
+                Log.classroom.error("Full error: \(error)")
+                errorMessage = "Failed to generate course: \(error.localizedDescription)"
                 isLoading = false
                 return
             }
             
             isLoading = false
+            Log.classroom.info("🏁 LiveClassroom: isLoading set to false, currentBlock = \(self.currentBlock?.title ?? "nil")")
             if currentBlock != nil {
                 await speakCurrentBlock()
             }
@@ -242,11 +332,11 @@ final class LiveClassroomViewModel: ObservableObject {
             // Try to fetch from backend
             lesson = try await apiClient.fetchLiveLesson(courseId: courseId, lessonId: lessonId)
         } catch {
-            print("LiveClassroom: Failed to fetch lesson from API: \(error.localizedDescription)")
+            Log.classroom.error("LiveClassroom: Failed to fetch lesson from API: \(error.localizedDescription)")
             
             // Only fall back to mock data if explicitly allowed
             if AppConfig.allowMockFallbacks {
-                print("   Using mock lesson (LYO_ALLOW_MOCKS=1)")
+                Log.classroom.info("   Using mock lesson (LYO_ALLOW_MOCKS=1)")
                 lesson = LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
             } else {
                 // Surface the real error to user
@@ -260,10 +350,35 @@ final class LiveClassroomViewModel: ObservableObject {
         
         isLoading = false
         
+        // Restore resume position for standard courses too
+        let resumeBlock = restoreResumePosition(for: courseId)
+        if resumeBlock > 0, resumeBlock < (lesson?.totalBlocks ?? 0) {
+            currentBlockIndex = resumeBlock
+            Log.classroom.info("▶️ Resuming from block \(resumeBlock)")
+        }
+        
         // Start speaking first block
         if currentBlock != nil {
             await speakCurrentBlock()
         }
+    }
+    
+    /// Cache lesson content in GeneratedContentStore for instant re-access
+    private func cacheLesson(_ lesson: LiveLesson, courseId: String, lessonId: String) {
+        let entry = StoredContentEntry(
+            id: "\(courseId)_\(lessonId)",
+            courseId: courseId,
+            lessonId: lessonId,
+            title: lesson.title,
+            content: lesson.blocks.compactMap { $0.content }.joined(separator: "\n\n"),
+            agentBlocks: nil,
+            a2uiComponentJSON: nil,
+            createdAt: Date(),
+            lastAccessedAt: Date(),
+            metadata: nil
+        )
+        contentStore.store(entry)
+        Log.classroom.info("💾 Cached lesson \(lessonId) in GeneratedContentStore")
     }
     
     /// Move to the next block
@@ -288,6 +403,19 @@ final class LiveClassroomViewModel: ObservableObject {
             currentBlockIndex += 1
             HapticManager.shared.light()
             
+            // Save resume position so user can come back
+            saveResumePosition()
+            
+            // Update UIStackStore progress for the Focus screen
+            if let courseId = currentCourseId ?? self.lesson?.courseId {
+                let progress = Double(currentBlockIndex + 1) / Double(lesson.totalBlocks)
+                UIStackStore.shared.updateCourseProgress(
+                    courseId: courseId,
+                    progress: progress,
+                    completedLessons: completedBlocks.count
+                )
+            }
+            
             // Trigger "Next Topic" state safely
             setLioState(.thinking, duration: 1.5)
             
@@ -309,10 +437,8 @@ final class LiveClassroomViewModel: ObservableObject {
                 }
             }
         } else {
-            // 🔥 FINAL BLOCK: Mark lesson as completed
-            Task {
-                await markLessonCompleted()
-            }
+            // Lesson completed
+            Task { await markLessonCompleted() }
         }
     }
     
@@ -323,6 +449,7 @@ final class LiveClassroomViewModel: ObservableObject {
         resetQuizState()
         currentBlockIndex -= 1
         HapticManager.shared.light()
+        saveResumePosition()
         
         // Trigger "Next Topic" state safely
         setLioState(.thinking, duration: 1.5)
@@ -426,15 +553,18 @@ final class LiveClassroomViewModel: ObservableObject {
                 message: fullQuestion
             )
             appendToTranscript(isUser: false, text: response)
-            setLioState(.speaking, duration: 3.0)
+            
+            // Speak the AI response using Neural TTS
+            isProcessingQuestion = false
+            showAskQuestionSheet = false
+            
+            try await speakText(response, type: .explanation)
+            
         } catch {
             appendToTranscript(isUser: false, text: "I'm having trouble answering that right now. Let's continue with the lesson.")
             setLioState(.confused, duration: 2.0)
+            isProcessingQuestion = false
         }
-        
-        userQuestion = ""
-        isProcessingQuestion = false
-        showAskQuestionSheet = false
     }
     
     // MARK: - Mastery Check
@@ -445,42 +575,75 @@ final class LiveClassroomViewModel: ObservableObject {
             return
         }
         
-        print("🤖 Triggering Mastery Check for: \(struggle.topic)")
+        Log.classroom.info("Triggering Mastery Check for: \(struggle.topic)")
         setLioState(.pondering)
         
+        // Randomize quiz type (weighted towards MCQ for safety, but includes variety)
+        let quizType = [LessonBlockType.quizMcq, .quizMcq, .quizTrueFalse, .quizFillBlank].randomElement() ?? .quizMcq
+        
         do {
-            let prompt = "Generate a single multiple-choice question to test if a user has mastered '\(struggle.topic)'. Return only a JSON object with keys: 'question', 'options' (array of 4), 'correct_index' (0-3), and 'explanation'."
+            let prompt: String
+            switch quizType {
+            case .quizTrueFalse:
+                prompt = "Generate a single True/False question to test if a user understands '\(struggle.topic)'. Return only a JSON object with keys: 'question' (statement), 'correct_answer' ('True' or 'False'), 'explanation'."
+            case .quizFillBlank:
+                prompt = "Generate a single Fill-in-the-Blank question to test if a user understands '\(struggle.topic)'. Return only a JSON object with keys: 'question' (sentence with a blank ____), 'correct_answer' (word/phrase to fill), 'explanation'."
+            default: // MCQ
+                prompt = "Generate a single multiple-choice question to test if a user has mastered '\(struggle.topic)'. Return only a JSON object with keys: 'question', 'options' (array of 4), 'correct_index' (0-3), and 'explanation'."
+            }
             
             let response = try await openAIService.sendMessage(message: prompt)
             
-            // Basic extraction (Assuming OpenAI returns clean JSON or we wrap it)
+            // Basic extraction
             if let data = response.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let question = json["question"] as? String,
-               let options = json["options"] as? [String],
-               let correctIndex = json["correct_index"] as? Int,
                let explanation = json["explanation"] as? String {
                 
-                let block = LessonBlock(
+                var block = LessonBlock(
                     id: "mastery_\(UUID().uuidString)",
-                    type: .quizMcq,
+                    type: quizType,
                     title: "🧠 Mastery Check: \(struggle.topic)",
                     content: question,
-                    options: options,
-                    correctIndex: correctIndex,
                     explanation: explanation
                 )
+                
+                // Parse specific fields based on type
+                if quizType == .quizMcq,
+                   let options = json["options"] as? [String],
+                   let correctIndex = json["correct_index"] as? Int {
+                    block = LessonBlock(
+                        id: block.id,
+                        type: quizType,
+                        title: block.title,
+                        content: question,
+                        options: options,
+                        correctIndex: correctIndex,
+                        explanation: explanation
+                    )
+                } else if quizType == .quizTrueFalse || quizType == .quizFillBlank,
+                          let correctAnswer = json["correct_answer"] as? String {
+                    block = LessonBlock(
+                        id: block.id,
+                        type: quizType,
+                        title: block.title,
+                        content: question,
+                        correctAnswer: correctAnswer,
+                        explanation: explanation
+                    )
+                }
                 
                 withAnimation {
                     self.masteryCheckBlock = block
                     self.isMasteryCheckActive = true
                 }
                 
-                appendToTranscript(isUser: false, text: "Hey! Before we continue, let's see if you remember '\(struggle.topic)'...")
-                setLioState(.speaking, duration: 3.0)
+                let introText = "Hey! Before we continue, let's see if you remember '\(struggle.topic)'..."
+                appendToTranscript(isUser: false, text: introText)
+                try await speakText(introText, type: .question)
             }
         } catch {
-            print("⚠️ Failed to generate mastery check: \(error)")
+            Log.classroom.warning("Failed to generate mastery check: \(error)")
             setLioState(.confused, duration: 2.0)
         }
         
@@ -498,7 +661,12 @@ final class LiveClassroomViewModel: ObservableObject {
             self.masteryCheckBlock = nil
         }
         
-        appendToTranscript(isUser: false, text: isCorrect ? "Excellent! You've clearly mastered that. Let's get back to our lesson." : "No worries, we'll keep practicing that topic later! Back to the lesson.")
+        let text = isCorrect ? "Excellent! You've clearly mastered that. Let's get back to our lesson." : "No worries, we'll keep practicing that topic later! Back to the lesson."
+        appendToTranscript(isUser: false, text: text)
+        
+        Task {
+            try? await speakText(text, type: .feedback)
+        }
         
         setLioState(isCorrect ? .celebrating : .pondering, duration: 2.5)
     }
@@ -515,69 +683,161 @@ final class LiveClassroomViewModel: ObservableObject {
     private func speakCurrentBlock() async {
         guard let block = currentBlock else { return }
         
+        // Stop any existing playback
+        audioPlayer?.pause()
+        
+        // Determine text to speak based on block type
+        let textToSpeak: String
+        let voiceType: TTSVoiceType
+        
+        switch block.type {
+        case .text, .paragraph:
+            textToSpeak = block.safeContent
+            voiceType = .explanation
+        case .heading:
+            textToSpeak = "Next up: \(block.safeTitle). " + block.safeContent
+            voiceType = .narrative
+        case .callout:
+            textToSpeak = block.safeContent
+            voiceType = .highlight
+        case .image:
+            textToSpeak = block.title ?? "Take a look at this visual."
+            voiceType = .narrative
+        case .video:
+            textToSpeak = "Watch this video to learn more."
+            voiceType = .narrative
+        case .quiz, .quizMcq:
+            textToSpeak = "Quick check! \(block.question ?? block.title ?? "")"
+            voiceType = .question
+        case .code:
+            textToSpeak = "Here's a code snippet in \(block.language ?? "code"). Listen closely."
+            voiceType = .technical
+        case .summary:
+            textToSpeak = "Let's recap what we've learned today."
+            voiceType = .summary
+        default:
+            textToSpeak = block.safeContent
+            voiceType = .explanation
+        }
+        
+        guard !textToSpeak.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        appendToTranscript(isUser: false, text: textToSpeak)
+        
+        do {
+            try await speakText(textToSpeak, type: voiceType)
+        } catch {
+            Log.classroom.error("Failed to speak block: \(error)")
+            // Fallback to idle if speech fails
+            setLioState(.idle)
+        }
+        
+        // After speaking, go back to idle or listening (if we implement conversational mode fully)
+        setLioState(.idle)
+    }
+    
+    /// Helper to synthesize and play text using Backend Neural TTS
+    /// - Parameters:
+    ///   - text: The text to speak
+    ///   - type: Context for voice selection (optional future enhancement)
+    private func speakText(_ text: String, type: TTSVoiceType = .explanation) async throws {
         isLioSpeaking = true
         lioState = .speaking
         
-        // Simulate Lio speaking the content
-        let speakText: String
-        switch block.type {
-        case .text, .paragraph:
-            speakText = block.safeContent
-        case .heading:
-            speakText = "Next, let's look at: \(block.safeTitle)"
-        case .callout:
-            speakText = block.safeContent
-        case .image:
-            speakText = block.title ?? "Take a look at this visual."
-        case .video:
-            speakText = "Watch this video to learn more."
-        case .quiz, .quizMcq:
-            speakText = "Quick check! \(block.question ?? block.title ?? "")"
-        case .code:
-            speakText = "Here's a code example in \(block.language ?? "this language")."
-        case .summary:
-            speakText = "Let's recap what we've learned."
-        default:
-            speakText = block.safeContent
+        // 1. Generate Audio via Backend
+        // 'nova' is a great energetic voice for Lio. 'alloy' is good for neutral.
+        let voice: TTSVoice = .nova
+        
+        let result = try await ttsRepository.generate(
+            text: text,
+            voice: voice,
+            speed: 1.0, // Normal speed for clarity
+            withTimings: false // We don't need word timings yet
+        )
+        
+        guard let url = URL(string: result.audioURL) else {
+            throw LyoError.network(.invalidURL)
         }
         
-        appendToTranscript(isUser: false, text: speakText)
+        // 2. Play Audio via AVPlayer
+        let playerItem = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: playerItem)
+        self.audioPlayer = player
         
-        // Simulate speaking duration
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        // Play and wait for completion
+        player.play()
+        
+        // Wait for playback to finish
+        // We use a continuation to bridge the notification to async/await
+        await withCheckedContinuation { continuation in
+            let observation = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: playerItem,
+                queue: .main
+            ) { _ in
+                continuation.resume()
+            }
+            
+            // Store observation token if needed, or rely on the single-fire nature here
+            // For robustness, we could use a stored cancellable in a real app
+        }
         
         isLioSpeaking = false
-        setLioState(.idle)
+    }
+    
+    // Enum to help categorize speech context (for future voice variations)
+    private enum TTSVoiceType {
+        case narrative
+        case explanation
+        case question
+        case technical
+        case highlight
+        case summary
+        case feedback
     }
     
     private func handleSentimentSignal(_ signal: SentimentSignal) async {
         isLioSpeaking = true
         lioState = .speaking
         
-        var response: String
         switch signal {
         case .confused:
-            response = "No worries! Let me explain that differently..."
-            lioState = .pondering // Lio is pondering how to re-explain
-            // In production, would regenerate explanation
+            appendToTranscript(isUser: false, text: "No worries! Let me explain that differently...")
+            setLioState(.pondering)
+            // Actually re-explain via AI
+            if let block = currentBlock {
+                do {
+                    let prompt = "The student is confused about the following content. Re-explain it in simpler terms with an analogy:\n\n\(block.safeContent)"
+                    let explanation = try await openAIService.sendMessage(message: prompt)
+                    appendToTranscript(isUser: false, text: explanation)
+                    setLioState(.speaking, duration: 3.0)
+                } catch {
+                    appendToTranscript(isUser: false, text: "Let me try again: \(block.safeContent)")
+                    setLioState(.idle)
+                }
+            }
+            
         case .slower:
-            response = "I'll slow down. Take your time with this concept."
+            appendToTranscript(isUser: false, text: "I'll slow down. Take your time with this concept.")
+            // Re-read the current block content for emphasis
+            if let block = currentBlock {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                appendToTranscript(isUser: false, text: "📝 Key point: \(block.safeContent)")
+            }
+            
         case .tooEasy:
-            response = "Got it! Let's pick up the pace."
-            // Could skip to next block or harder content
+            appendToTranscript(isUser: false, text: "Got it! Let's skip ahead.")
+            // Actually advance to the next block
+            advanceToNextBlock()
+            
         case .quizMe:
-            response = "Sure! Let me quiz you on what we've covered."
+            appendToTranscript(isUser: false, text: "Sure! Let me quiz you on what we've covered.")
             setLioState(.thinking)
-            // Could insert a quiz block
+            // Trigger a real mastery check
+            await triggerMasteryCheck()
         }
         
-        appendToTranscript(isUser: false, text: response)
-        
-        try? await Task.sleep(nanoseconds: 300_000_000)
         isLioSpeaking = false
-        
-        // Return to idle after a short delay
-        setLioState(.idle, duration: 1.0)
     }
     
     private func appendToTranscript(isUser: Bool, text: String) {
@@ -660,8 +920,21 @@ final class LiveClassroomViewModel: ObservableObject {
         guard let lesson = lesson else { return }
         
         // Fix 404: Do not sync progress for mock or temp (shell) courses
+        // But DO save progress locally so it persists across app restarts
         if lesson.courseId.hasPrefix("mock_") || lesson.courseId.hasPrefix("temp_") || lesson.courseId.hasPrefix("gen_") {
-            print("🚫 Skipping backend sync for local/mock course: \(lesson.courseId)")
+            Log.classroom.info("Saving progress locally for generated course: \(lesson.courseId)")
+            let progress = LessonProgress(
+                lessonId: lesson.lessonId,
+                moduleProgress: [:],
+                overallProgress: Double(completedBlocks.count) / Double(max(lesson.totalBlocks, 1)),
+                startedAt: Date(),
+                lastAccessedAt: Date(),
+                completedAt: nil
+            )
+            // Persist to UserDefaults so progress survives app close
+            if let data = try? JSONEncoder().encode(progress) {
+                UserDefaults.standard.set(data, forKey: "lesson_progress_\(lesson.lessonId)")
+            }
             return
         }
         
@@ -681,9 +954,9 @@ final class LiveClassroomViewModel: ObservableObject {
                     completedAt: nil
                 )
             )
-            print("✅ Synced progress to backend: \(completedBlocks.count)/\(lesson.totalBlocks) blocks")
+            Log.classroom.info("Synced progress to backend: \(self.completedBlocks.count)/\(lesson.totalBlocks) blocks")
         } catch {
-            print("⚠️ Failed to sync progress: \(error.localizedDescription)")
+            Log.classroom.warning("Failed to sync progress: \(error.localizedDescription)")
             // Don't show error to user - continue with local tracking
         }
     }
@@ -692,30 +965,48 @@ final class LiveClassroomViewModel: ObservableObject {
     private func markLessonCompleted() async {
         guard let lesson = lesson else { return }
         
+        Log.classroom.info("🎉 Lesson Completed!")
+        
+        // Update UI
+        await MainActor.run {
+            withAnimation { isLessonComplete = true }
+        }
+        
+        // Clear resume position — course is done
+        if let courseId = currentCourseId ?? self.lesson?.courseId {
+            UserDefaults.standard.removeObject(forKey: resumeKey(for: courseId))
+            UIStackStore.shared.updateCourseProgress(
+                courseId: courseId,
+                progress: 1.0,
+                completedLessons: completedBlocks.count
+            )
+        }
+        
         // Show completion celebration
         await MainActor.run {
             appendToTranscript(isUser: false, text: "🎉 Lesson Complete! Great work!")
             setLioState(.celebrating, duration: 5.0)
-        }
-        
-        // Check if there's a next lesson
-        if let generatedCourse = CourseGenerationService.shared.generatedCourse {
-            print("✅ Lesson completed, checking for next lesson...")
-            // Give user option to continue
-            await MainActor.run {
-                // The UI will show "Next Lesson" button which calls moveToNextLesson()
-            }
+            HapticManager.shared.success()
         }
         
         // If lesson from generated course, trigger next lesson
+        
+        // Mark complete in backend (include score if we have quiz results)
         let totalQuizzes = quizResults.count
         let correctQuizzes = quizResults.values.filter { $0 }.count
-        let score = totalQuizzes > 0 ? Int((Double(correctQuizzes) / Double(totalQuizzes)) * 100) : 100
-        // Mark complete in backend
-        do {
-            try await repository.markLessonComplete(lessonId: lesson.lessonId)
-        } catch {
-            print("❌ Failed to mark lesson as complete: \(error)")
+        if totalQuizzes > 0 {
+            let score = Int((Double(correctQuizzes) / Double(totalQuizzes)) * 100)
+            do {
+                _ = try await repository.markLessonComplete(lessonId: lesson.lessonId, score: score)
+            } catch {
+                Log.classroom.error("Failed to mark lesson as complete: \(error)")
+            }
+        } else {
+            do {
+                _ = try await repository.markLessonComplete(lessonId: lesson.lessonId)
+            } catch {
+                Log.classroom.error("Failed to mark lesson as complete: \(error)")
+            }
         }
     }
     
@@ -724,16 +1015,16 @@ final class LiveClassroomViewModel: ObservableObject {
     /// Move to the next lesson in the course
     func moveToNextLesson() {
         guard let generatedCourse = CourseGenerationService.shared.generatedCourse else {
-            print("⚠️ No generated course available")
+            Log.classroom.warning("No generated course available")
             return
         }
         
         guard let currentLesson = lesson else {
-            print("⚠️ No current lesson")
+            Log.classroom.warning("No current lesson")
             return
         }
         
-        print("🔍 Looking for next lesson after: \(currentLesson.lessonId)")
+        Log.classroom.debug("Looking for next lesson after: \(currentLesson.lessonId)")
         
         // Find current lesson position in course structure
         var foundCurrent = false
@@ -742,18 +1033,18 @@ final class LiveClassroomViewModel: ObservableObject {
             for (index, courseLesson) in module.lessons.enumerated() {
                 if foundCurrent {
                     // This is the next lesson!
-                    print("✅ Found next lesson: \(courseLesson.title)")
+                    Log.classroom.info("Found next lesson: \(courseLesson.title)")
                     loadLessonFromGenerated(courseLesson, moduleTitle: module.title)
                     return
                 }
                 
                 if courseLesson.id == currentLesson.lessonId {
                     foundCurrent = true
-                    print("📍 Found current lesson at module: \(module.title), lesson index: \(index)")
+                    Log.classroom.info("📍 Found current lesson at module: \(module.title), lesson index: \(index)")
                     // Check if there's a next lesson in this module
                     if index + 1 < module.lessons.count {
                         let nextLesson = module.lessons[index + 1]
-                        print("✅ Next lesson in same module: \(nextLesson.title)")
+                        Log.classroom.info("Next lesson in same module: \(nextLesson.title)")
                         loadLessonFromGenerated(nextLesson, moduleTitle: module.title)
                         return
                     }
@@ -762,13 +1053,13 @@ final class LiveClassroomViewModel: ObservableObject {
         }
         
         // No more lessons - course complete!
-        print("🎉 All lessons completed!")
+        Log.classroom.info("All lessons completed!")
         showCourseCompletion()
     }
     
     /// Load a lesson from the generated course
     private func loadLessonFromGenerated(_ courseLesson: GenerationCourseLesson, moduleTitle: String) {
-        print("📚 Loading lesson: \(courseLesson.title)")
+        Log.classroom.info("📚 Loading lesson: \(courseLesson.title)")
         
         // Reset state
         currentBlockIndex = 0
@@ -810,7 +1101,7 @@ final class LiveClassroomViewModel: ObservableObject {
         setLioState(.celebrating, duration: 5.0)
         
         // Optionally dismiss classroom or show completion screen
-        print("🎊 Course completion celebration triggered")
+        Log.classroom.info("Course completion celebration triggered")
         
         // Could navigate back to course library or show achievements
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
@@ -824,8 +1115,8 @@ final class LiveClassroomViewModel: ObservableObject {
         // STEP 1: Check if we have a generated course in cache with FULL content
         // This is the key fix - use the FULL generated course, not just playback nodes
         if let generatedCourse = CourseGenerationService.shared.generatedCourse {
-            print("🎬 Converting FULL generated course to LiveLesson: \(generatedCourse.title)")
-            print("   Modules: \(generatedCourse.modules.count)")
+            Log.classroom.info("🎬 Converting FULL generated course to LiveLesson: \(generatedCourse.title)")
+            Log.classroom.info("   Modules: \(generatedCourse.modules.count)")
             
             // Iterate through ALL modules and lessons
             for (moduleIndex, module) in generatedCourse.modules.enumerated() {
@@ -852,7 +1143,7 @@ final class LiveClassroomViewModel: ObservableObject {
                             id: "visual_\(lesson.id)",
                             type: .image,
                             title: "Key Insight",
-                            imageURL: URL(string: "LyoThinking")
+                            imageURL: nil
                         ))
                     }
                 }
@@ -882,7 +1173,7 @@ final class LiveClassroomViewModel: ObservableObject {
                 content: "Congratulations! You've completed '\(generatedCourse.title)'. You covered \(generatedCourse.modules.count) modules and learned the fundamentals. Keep practicing!"
             ))
             
-            print("✅ Created \(blocks.count) blocks from generated course")
+            Log.classroom.info("Created \(blocks.count) blocks from generated course")
             
             return LiveLesson(
                 courseId: playbackState.courseId,
@@ -895,7 +1186,7 @@ final class LiveClassroomViewModel: ObservableObject {
         }
         
         // FALLBACK: Extract from playback state nodes (limited content)
-        print("⚠️ No cached generated course, using playback nodes")
+        Log.classroom.warning("No cached generated course, using playback nodes")
         
         let currentNode = playbackState.currentNode
         let content = currentNode.content
@@ -974,37 +1265,58 @@ final class LiveClassroomViewModel: ObservableObject {
     
     // MARK: - A2UI Classroom Support
     
-    /// A2UI component fetched from backend
+    /// Legacy DynamicComponent A2UI (kept for backwards compatibility)
     @Published var a2uiComponent: DynamicComponent?
     
-    /// Load lesson UI from backend using A2UI
+    /// Full A2UIComponent rendered with the complete A2UIRenderer (120+ types)
+    @Published var fullA2UIComponent: A2UIComponent?
+    
+    /// Load lesson UI from backend using A2UI (optional enhancement - won't override existing lesson)
     func loadLessonUI(_ lessonId: String) async {
-        isLoading = true
-        errorMessage = nil
+        // Don't reset loading state if we already have lesson content - A2UI is optional upgrade
+        let hadLesson = lesson != nil
+        if !hadLesson {
+            isLoading = true
+        }
+        
         a2uiComponent = nil
+        fullA2UIComponent = nil
         
         do {
             let component = try await fetchLessonUIFromBackend(lessonId)
             self.a2uiComponent = component
-            self.isLoading = false
+            
+            // Also try to decode as full A2UIComponent for the upgraded renderer
+            if let data = try? JSONEncoder().encode(component),
+               let fullComponent = try? JSONDecoder().decode(A2UIComponent.self, from: data) {
+                self.fullA2UIComponent = fullComponent
+                Log.classroom.info("🎨 Full A2UIComponent decoded from DynamicComponent")
+            }
+            
+            if !hadLesson {
+                self.isLoading = false
+            }
         } catch {
-            self.errorMessage = "Failed to load lesson: \(error.localizedDescription)"
-            self.isLoading = false
-            print("❌ Error loading lesson UI: \(error)")
+            // A2UI is optional - only set error if we don't have lesson content already
+            if !hadLesson {
+                self.errorMessage = "Failed to load lesson: \(error.localizedDescription)"
+                self.isLoading = false
+            }
+            Log.classroom.warning("A2UI upgrade not available: \(error.localizedDescription)")
         }
     }
     
     /// Handle A2UI action callbacks (button taps, etc.)
     func handleA2UIAction(_ actionId: String) async {
-        print("🎯 A2UI Action: \(actionId)")
+        Log.classroom.info("A2UI Action: \(actionId)")
         
         switch actionId {
         case "load_next_lesson":
-            await moveToNextLesson()
+            moveToNextLesson()
             
         case "load_previous_lesson":
-            // TODO: Implement previous lesson navigation
-            print("⬅️ Previous lesson requested")
+            goToPreviousBlock()
+            Log.classroom.info("⬅️ Navigated to previous block")
             
         case "complete_course":
             showCourseCompletion()
@@ -1017,33 +1329,14 @@ final class LiveClassroomViewModel: ObservableObject {
             }
             
         default:
-            print("⚠️ Unhandled action: \(actionId)")
+            Log.classroom.warning("Unhandled action: \(actionId)")
         }
     }
     
     /// Fetch lesson UI from backend endpoint
     private func fetchLessonUIFromBackend(_ lessonId: String) async throws -> DynamicComponent {
-        guard let token = await tokenManager.getToken() else {
-            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "No valid token"])
-        }
-        
-        guard let url = URL(string: "\(AppConfig.baseURL)/api/v1/classroom/lesson/\(lessonId)/ui") else {
-            throw NSError(domain: "URL", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-        }
-        
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let (data, httpUrlResponse) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = httpUrlResponse as? HTTPURLResponse else {
-            throw NSError(domain: "Network", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            throw NSError(domain: "HTTP", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned \(httpResponse.statusCode)"])
-        }
+        // Use typed endpoint for proper SaaS headers (X-API-Key, X-Tenant-Id, Authorization)
+        let endpoint = Endpoints.Classroom.getLessonUI(lessonId: lessonId)
         
         // Parse response
         struct LessonUIResponse: Codable {
@@ -1057,17 +1350,15 @@ final class LiveClassroomViewModel: ObservableObject {
             }
         }
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let finalResponse = try decoder.decode(LessonUIResponse.self, from: data)
+        let response: LessonUIResponse = try await NetworkClient.shared.request(endpoint)
         
-        print("✅ Loaded A2UI for lesson: \(finalResponse.lessonId)")
-        return finalResponse.a2ui
+        Log.classroom.info("Loaded A2UI for lesson: \(response.lessonId)")
+        return response.a2ui
     }
     
     /// Handle quiz answer selection
     private func handleQuizAnswer(_ index: Int) {
-        print("📝 Quiz answer selected: Option \(index)")
+        Log.classroom.info("Quiz answer selected: Option \(index)")
         selectedQuizOption = index
         quizSubmitted = true
         
@@ -1120,3 +1411,38 @@ final class LiveClassroomViewModel: ObservableObject {
         }
     }
 }
+
+// MARK: - TTS Completion Helper
+
+/// Lightweight delegate that calls a closure when speech finishes.
+/// Used by LiveClassroomViewModel for async/await TTS integration.
+/// Thread-safe: guarantees the continuation is resumed exactly once.
+private class SpeechCompletionDelegate: NSObject, AVSpeechSynthesizerDelegate {
+    private let onFinish: () -> Void
+    /// Atomic flag: ensures we only call onFinish once, preventing double-resume crashes.
+    private let hasResumed = OSAllocatedUnfairLock(initialState: false)
+    
+    init(onFinish: @escaping () -> Void) {
+        self.onFinish = onFinish
+        super.init()
+    }
+    
+    private func resumeOnce() {
+        let alreadyResumed = hasResumed.withLock { done -> Bool in
+            if done { return true }
+            done = true
+            return false
+        }
+        guard !alreadyResumed else { return }
+        onFinish()
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        resumeOnce()
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        resumeOnce()
+    }
+}
+

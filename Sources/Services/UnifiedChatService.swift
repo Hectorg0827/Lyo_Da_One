@@ -409,7 +409,7 @@ final class UnifiedChatService: ObservableObject {
             
             if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Update the skeleton/placeholder message with the real answer
-                // 🎬 shouldAnimate = true → triggers typewriter in ChatBubbleView
+                // 🎬 shouldAnimate = true → triggers typewriter in the message bubble
                 let updatedMessage = LyoMessage(
                     id: aiMessageId,
                     sessionId: messages[idx].sessionId,

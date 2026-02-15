@@ -17,7 +17,7 @@ struct CourseProposalCardView: View {
     @State private var isExpanded = false
     @State private var isGenerating = false
     
-    /// Convenience init matching the older call site (ChatBubbleView)
+    /// Convenience init matching older call sites
     init(coursePayload: CoursePayload, onStartLearning: @escaping () -> Void) {
         self.payload = coursePayload
         self.onStart = onStartLearning

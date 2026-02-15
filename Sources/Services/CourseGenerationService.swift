@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Course Generation Request
 
@@ -87,6 +88,8 @@ final class CourseGenerationService: ObservableObject {
     @Published var streamingText: String = ""
     @Published var streamingBlocks: [LessonBlock] = []
     @Published var isStreaming: Bool = false
+
+    @Published var isGeneratingModule: Bool = false
     
     private var baseURL: String { AppConfig.baseURL }
     
@@ -94,77 +97,113 @@ final class CourseGenerationService: ObservableObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("last_generated_course.json")
     }
-    
-    private init() {}
-    
-    // MARK: - Course Population
-    
-    /// Populates the generated course locally from a payload (e.g. from chat)
-    func populateGeneratedCourse(from payload: CoursePayload) {
-        // Create a simple structure if we only have high-level info
-        let modules = [
-            GenerationCourseModule(
-                id: "mod_intro",
-                title: "Introduction to \(payload.topic)",
-                description: "Overview of \(payload.title)",
-                lessons: [
-                    GenerationCourseLesson(
-                        id: "les_intro",
-                        title: "Welcome & Objectives",
-                        content: "### Learning Objectives\n\n" + payload.objectives.map { "• \($0)" }.joined(separator: "\n"),
-                        durationMinutes: 5,
-                        order: 1
-                    )
-                ],
-                order: 1
-            )
-        ]
-        
-        let course = GeneratedCourseResponse(
-            courseId: payload.id ?? "gen_\(UUID().uuidString.prefix(8))",
-            title: payload.title,
-            description: payload.topic,
-            modules: modules,
-            estimatedDuration: 15,
-            difficulty: payload.level
-        )
-        
-        self.generatedCourse = course
-        
-        // STABILITY FIX: Persist immediately
-        saveCourseToDisk(course)
-        
-        print("💾 CourseGenerationService: Populated course locally: \(payload.title)")
-    }
-    
-    // MARK: - Persistence Methods
-    
+
     private func saveCourseToDisk(_ course: GeneratedCourseResponse) {
-        Task {
-            do {
-                let data = try JSONEncoder().encode(course)
-                try data.write(to: fileURL)
-                print("💾 Course saved to disk for offline recovery.")
-            } catch {
-                print("⚠️ Failed to save course: \(error)")
-            }
+        do {
+            let data = try JSONEncoder().encode(course)
+            try data.write(to: fileURL, options: [.atomic])
+            Log.course.info("Saved generated course to disk.")
+        } catch {
+            Log.course.warning("Failed to save course to disk: \(error)")
         }
     }
     
-    func recoverLastCourse() {
-        Task {
-            do {
-                if FileManager.default.fileExists(atPath: fileURL.path) {
-                    let data = try Data(contentsOf: fileURL)
-                    let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
-                    await MainActor.run {
-                        self.generatedCourse = course
-                        print("♻️ Recovered last generated course from disk.")
+    private init() {}
+    
+    // MARK: - Schema Validation (V2)
+    func recoverLastGeneratedCourseFromDisk() async {
+        do {
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                let data = try Data(contentsOf: fileURL)
+                let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
+                await MainActor.run {
+                    self.generatedCourse = course
+                    Log.course.info("♻️ Recovered last generated course from disk.")
+                }
+            }
+        } catch {
+            Log.course.warning("Failed to recover course: \(error)")
+        }
+    }
+
+    /// Populates a lightweight local draft from OPEN_CLASSROOM metadata.
+    /// This enables immediate classroom launch while the full course hydrates in background.
+    func populateGeneratedCourse(from payload: CoursePayload) {
+        let draft = buildLocalDraftCourse(topic: payload.topic, level: payload.level)
+        
+        // Ensure the ID starts with 'gen_' so LiveClassroomViewModel knows to load it from cache,
+        // rather than trying to fetch it from the API (which would 404).
+        var resolvedCourseId = (payload.id?.isEmpty == false) ? payload.id! : "gen_\(UUID().uuidString.prefix(6))"
+        if !resolvedCourseId.hasPrefix("gen_") && !resolvedCourseId.hasPrefix("mock_") {
+            resolvedCourseId = "gen_" + resolvedCourseId
+        }
+
+        // Merge payload objectives into the draft lessons where possible
+        // so the user sees real objectives even in the draft stage
+        var enrichedModules = draft.modules
+        if !payload.objectives.isEmpty {
+            for (mIdx, mod) in enrichedModules.enumerated() {
+                var updatedLessons = mod.lessons
+                for (lIdx, lesson) in updatedLessons.enumerated() {
+                    // Inject real objective text into lesson content as context headers
+                    let objIndex = mIdx * mod.lessons.count + lIdx
+                    if objIndex < payload.objectives.count {
+                        let realObjective = payload.objectives[objIndex]
+                        let enrichedContent = """
+                        ### 🎯 Learning Objective
+                        \(realObjective)
+                        
+                        \(lesson.content)
+                        """
+                        updatedLessons[lIdx] = GenerationCourseLesson(
+                            id: lesson.id,
+                            title: lesson.title,
+                            content: enrichedContent,
+                            durationMinutes: lesson.durationMinutes,
+                            order: lesson.order
+                        )
                     }
                 }
-            } catch {
-                print("⚠️ Failed to recover course: \(error)")
+                enrichedModules[mIdx] = GenerationCourseModule(
+                    id: mod.id,
+                    title: mod.title,
+                    description: mod.description,
+                    lessons: updatedLessons,
+                    order: mod.order
+                )
             }
+        }
+
+        let updated = GeneratedCourseResponse(
+            courseId: resolvedCourseId,
+            title: payload.title,
+            description: draft.description,
+            modules: enrichedModules,
+            estimatedDuration: draft.estimatedDuration,
+            difficulty: payload.level
+        )
+
+        generatedCourse = updated
+        currentStep = "Draft ready — hydrating with real content..."
+        progress = 0.3
+        saveCourseToDisk(updated)
+        Log.course.info("📋 Populated draft course from OPEN_CLASSROOM payload: \(resolvedCourseId)")
+        
+        // 🚀 Start background hydration to replace template content with REAL AI-generated content
+        let topic = payload.topic
+        let level = payload.level
+        let objectives = payload.objectives
+        Task { [weak self] in
+            guard let self else { return }
+            Log.course.info("🌊 Starting background hydration for: \(topic)")
+            await self.startLegacyGenerationInBackground(
+                topic: topic,
+                level: level,
+                teachingStyle: "interactive",
+                learningOutcomes: objectives.isEmpty
+                    ? ["Understand core concepts of \(topic)", "Apply knowledge through practical examples", "Build confidence in \(topic)"]
+                    : objectives
+            )
         }
     }
     
@@ -193,7 +232,6 @@ final class CourseGenerationService: ObservableObject {
         for (index, chunk) in moduleChunks.enumerated() {
             if index == 0 { continue } // Skip preamble
             
-            let moduleText = "Module" + chunk // Restore "Module" prefix for clarity if needed, or just parse
             let lines = chunk.components(separatedBy: .newlines)
             
             // First line is module title, e.g. "1: Numbers..."
@@ -269,7 +307,7 @@ final class CourseGenerationService: ObservableObject {
             difficulty: "Adaptive"
         )
         
-        print("🛟 CourseGenerationService: Rescued course '\(title)' with \(modules.count) modules")
+        Log.course.info("🛟 CourseGenerationService: Rescued course '\(title)' with \(modules.count) modules")
         return courseId
     }
     
@@ -297,9 +335,241 @@ final class CourseGenerationService: ObservableObject {
             "Apply knowledge through practical examples",
             "Build confidence in \(topic)"
         ]
+
+        // 🚀 NEW STRATEGY: Instant "Local Draft" first, then Hydrate in Background.
+        // This ensures <1s response time for the user UI.
+        Log.course.info("️ SPEED MODE: Generating Instant Local Draft for: \(topic)")
         
+        // 1. Generate Instant Template (0.1s)
+        let draftCourse = buildLocalDraftCourse(topic: topic, level: level)
+        
+        // 2. Publish immediately so UI unlocks
+        await MainActor.run {
+            self.generatedCourse = draftCourse
+            self.currentStep = "Draft ready..."
+            self.progress = 0.5
+            self.saveCourseToDisk(draftCourse)
+        }
+        
+        // 2b. Add to Stack immediately so course is visible in Focus screen
+        await addCourseToStack(courseId: draftCourse.courseId, title: draftCourse.title, topic: topic)
+        
+        // 3. Start Background Hydration (errors surface to UI)
+        Task { [weak self] in
+            guard let self else { return }
+            Log.course.info("🌊 Starting Background Hydration...")
+            await self.startLegacyGenerationInBackground(
+                topic: topic,
+                level: level,
+                teachingStyle: teachingStyle,
+                learningOutcomes: learningOutcomes
+            )
+        }
+
+        // 4. Return immediately to unblock `await` callers
+        return draftCourse
+    }
+
+    // MARK: - Smart Review Generation
+
+    /// Generates a personalized review lesson based on user struggles
+    func generateSmartReview(struggles: [StruggleItem]) async throws -> GeneratedCourseResponse {
+        guard !struggles.isEmpty else {
+            throw CourseGenerationError.invalidRequest // Or handle gracefully
+        }
+        
+        let topics = struggles.prefix(3).map { $0.topic }.joined(separator: ", ")
+        let reviewTopic = "Personalized Review: \(topics)"
+        
+        Log.course.info("🧠 Generating Smart Review for: \(topics)")
+        
+        // Creating specific learning outcomes based on struggles
+        let outcomes = struggles.prefix(5).map { "Reinforce understanding of \($0.topic)" }
+        
+        // Reuse the main generation pipeline
+        return try await generateCourse(
+            topic: reviewTopic,
+            level: "adaptive",
+            outcomes: outcomes,
+            teachingStyle: "coaching"
+        )
+    }
+
+    // MARK: - Legacy / Background Generation Logic
+
+    private func startLegacyGenerationInBackground(
+        topic: String,
+        level: String,
+        teachingStyle: String,
+        learningOutcomes: [String]
+    ) async {
+        do {
+            // Step 1: Map level to CourseGenerationOptions
+            let options: CourseGenerationOptions
+            switch level.lowercased() {
+            case "beginner":
+                options = .economical
+            case "intermediate":
+                options = .recommended
+            case "advanced":
+                options = .premium
+            default:
+                options = .recommended
+            }
+            
+            // Step 2: Call Backend (this might take 20-30s, but user is already happy)
+            let jobResponse = try await BackendAIService.shared.generateCourse(
+                topic: topic,
+                options: options,
+                userContext: [
+                    "level": level,
+                    "style": teachingStyle,
+                    "outcomes": learningOutcomes.joined(separator: ", ")
+                ]
+            )
+
+            // Step 3: Poll until done
+            let finalCourse = try await pollForCourseCompletion(jobId: jobResponse.jobId)
+
+            // Step 4: Silent Swap (Smart Hydration)
+            // Step 5 is also inside MainActor.run to avoid data race on self.generatedCourse
+            await MainActor.run {
+                Log.course.info("✨ Background Hydration Complete! Merging Content safely...")
+                
+                // CRITICAL: We must NOT replace the whole object if the user is using it.
+                // We merge the 'Real' content into the 'Draft' structure to preserve UUIDs and Navigation State.
+                if let currentDraft = self.generatedCourse {
+                    let mergedCourse = self.mergeContent(real: finalCourse, into: currentDraft)
+                    self.generatedCourse = mergedCourse
+                    self.saveCourseToDisk(mergedCourse)
+                } else {
+                    // Fallback if no draft exists
+                    self.generatedCourse = finalCourse
+                    self.saveCourseToDisk(finalCourse)
+                }
+                
+                self.currentStep = "Course ready!"
+                self.progress = 1.0
+            }
+
+            // Step 5: Persist to Backend DB (safe: reads self.generatedCourse on MainActor)
+            do {
+                let finalToSave = await MainActor.run { self.generatedCourse ?? finalCourse }
+                
+                let persistenceData = CourseCreationData(
+                    id: finalToSave.courseId,
+                    title: finalToSave.title,
+                    topic: topic,
+                    level: level,
+                    modules: finalToSave.modules.map { mod in
+                        CourseModuleData(
+                            id: mod.id,
+                            title: mod.title,
+                            description: mod.description,
+                            lessons: mod.lessons.map { les in
+                                CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
+                            }
+                        )
+                    }
+                )
+                try await LyoRepository.shared.saveCourse(data: persistenceData)
+                
+                // Update the stack card with final course metadata
+                await MainActor.run {
+                    UIStackStore.shared.upsertCourse(
+                        courseId: finalToSave.courseId,
+                        title: finalToSave.title,
+                        subtitle: "\(finalToSave.modules.count) modules • AI Generated",
+                        lessonCount: finalToSave.modules.flatMap { $0.lessons }.count
+                    )
+                }
+            } catch {
+                Log.course.warning("Failed to persist final course to backend: \(error)")
+            }
+
+        } catch {
+            Log.course.warning("Background Generation Failed: \(error)")
+            // Surface error to UI so user knows hydration failed
+            await MainActor.run {
+                self.currentStep = "Content upgrade failed — using draft version"
+                self.error = "Background generation failed: \(error.localizedDescription). You can still use the draft course."
+            }
+        }
+    }
+    
+    // MARK: - Smart Selection (Merge)
+    
+    /// Merges high-quality content from 'real' course into 'draft' course structure
+    /// Preserves Draft UUIDs where possible to prevent UI resets.
+    private func mergeContent(real: GeneratedCourseResponse, into draft: GeneratedCourseResponse) -> GeneratedCourseResponse {
+        // 1. Map Real Modules to Draft Modules by Index (Order)
+        var mergedModules: [GenerationCourseModule] = []
+        
+        for (index, draftMod) in draft.modules.enumerated() {
+            // Find corresponding real module
+            if index < real.modules.count {
+                let realMod = real.modules[index]
+                
+                // Merge Lessons
+                var mergedLessons: [GenerationCourseLesson] = []
+                for (lIndex, draftLes) in draftMod.lessons.enumerated() {
+                    if lIndex < realMod.lessons.count {
+                        let realLes = realMod.lessons[lIndex]
+                        
+                        // HYDRATION MAGIC:
+                        // Keep Draft ID (so UI validation stays valid)
+                        // Take Real Title & Content (Upgrade)
+                        mergedLessons.append(GenerationCourseLesson(
+                            id: draftLes.id,
+                            title: realLes.title,
+                            content: realLes.content,
+                            durationMinutes: realLes.durationMinutes,
+                            order: draftLes.order
+                        ))
+                    } else {
+                        // If Draft has more lessons, keep them (or remove?) -> Keep to be safe
+                        mergedLessons.append(draftLes)
+                    }
+                }
+                
+                // Check if Real has *more* lessons than Draft, add them (with new IDs)
+                if realMod.lessons.count > draftMod.lessons.count {
+                     let extraLessons = realMod.lessons.dropFirst(draftMod.lessons.count)
+                     mergedLessons.append(contentsOf: extraLessons)
+                }
+                
+                mergedModules.append(GenerationCourseModule(
+                    id: draftMod.id, // Keep Draft ID
+                    title: realMod.title,
+                    description: realMod.description,
+                    lessons: mergedLessons,
+                    order: draftMod.order
+                ))
+            } else {
+                mergedModules.append(draftMod)
+            }
+        }
+        
+        // Add extra modules from Real if any
+        if real.modules.count > draft.modules.count {
+            mergedModules.append(contentsOf: real.modules.dropFirst(draft.modules.count))
+        }
+        
+        return GeneratedCourseResponse(
+            courseId: draft.courseId, // Keep Draft Course ID
+            title: real.title,        // Use Real Title
+            description: real.description,
+            modules: mergedModules,
+            estimatedDuration: real.estimatedDuration,
+            difficulty: real.difficulty
+        )
+    }
+
+    // MARK: - Old Logic (Kept for reference if we need to revert)
+    /*
+    func generateCourseLegacy(...) async throws -> GeneratedCourseResponse {
         // 🚀 CALLING REAL BACKEND Multi-Agent Pipeline (A2A Orchestrator)
-        print("🎯 Calling REAL Backend Multi-Agent Pipeline for: \(topic)")
+        Log.course.info("Calling REAL Backend Multi-Agent Pipeline for: \(topic)")
         
         do {
             // Step 1: Map level to CourseGenerationOptions
@@ -318,8 +588,8 @@ final class CourseGenerationService: ObservableObject {
             currentStep = "Submitting to AI agents..."
             progress = 0.1
             
-            // Step 2: Submit course generation job to backend
-            let jobResponse = try await BackendAIService.shared.generateCourse(
+            // Step 2: Submit outline request (fast) and start background generation
+            let outlineResponse = try await BackendAIService.shared.generateCourseOutline(
                 topic: topic,
                 options: options,
                 userContext: [
@@ -328,58 +598,89 @@ final class CourseGenerationService: ObservableObject {
                     "outcomes": learningOutcomes.joined(separator: ", ")
                 ]
             )
-            
-            print("✅ Job submitted: \(jobResponse.jobId)")
-            print("💰 Estimated cost: $\(jobResponse.estimatedCostUsd)")
-            
-            currentStep = "AI agents working..."
-            progress = 0.3
-            
-            // Step 3: Poll for completion
-            let finalCourse = try await pollForCourseCompletion(jobId: jobResponse.jobId)
-            
-            print("✅ SUCCESS: Backend generated course: \(finalCourse.title)")
-            print("📦 Course ID: \(finalCourse.courseId)")
-            print("📚 Modules count: \(finalCourse.modules.count)")
-            
-            currentStep = "Course ready!"
-            progress = 1.0
-            
-            generatedCourse = finalCourse
-            
-            // 💾 Persist to backend for cross-device access
-            do {
-                let persistenceData = CourseCreationData(
-                    id: finalCourse.courseId,
-                    title: finalCourse.title,
-                    topic: topic,
-                    level: level,
-                    modules: finalCourse.modules.map { mod in
-                        CourseModuleData(
-                            id: mod.id,
-                            title: mod.title,
-                            description: mod.description,
-                            lessons: mod.lessons.map { les in
-                                CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
-                            }
-                        )
-                    }
-                )
-                try await LyoRepository.shared.saveCourse(data: persistenceData)
-            } catch {
-                print("⚠️ Failed to persist course to backend: \(error)")
-                // Non-blocking error, we still have the local course
-            }
-            
-            return finalCourse
+
+            return try await handleOutlineAndBackground(
+                outlineResponse: outlineResponse,
+                topic: topic,
+                level: level,
+                options: options,
+                learningOutcomes: learningOutcomes
+            )
             
         } catch {
-            print("❌ Backend generation failed: \(error)")
-            print("❌ DEBUG: Full error details: \(String(describing: error))")
+            if shouldFallbackToLegacyOutline(error) {
+                Log.course.warning("Outline endpoint unavailable. Falling back to legacy generate.")
+
+                let options: CourseGenerationOptions
+                switch level.lowercased() {
+                case "beginner":
+                    options = .economical
+                case "intermediate":
+                    options = .recommended
+                case "advanced":
+                    options = .premium
+                default:
+                    options = .recommended
+                }
+
+                let draftCourse = buildLocalDraftCourse(topic: topic, level: level)
+                generatedCourse = draftCourse
+                saveCourseToDisk(draftCourse)
+                await addCourseToStack(courseId: draftCourse.courseId, title: draftCourse.title, topic: topic)
+
+                Task {
+                    do {
+                        let jobResponse = try await BackendAIService.shared.generateCourse(
+                            topic: topic,
+                            options: options,
+                            userContext: [
+                                "level": level,
+                                "style": teachingStyle,
+                                "outcomes": learningOutcomes.joined(separator: ", ")
+                            ]
+                        )
+                        let finalCourse = try await pollForCourseCompletion(jobId: jobResponse.jobId)
+                        await MainActor.run {
+                            self.generatedCourse = finalCourse
+                            self.currentStep = "Course ready!"
+                            self.progress = 1.0
+                        }
+
+                        do {
+                            let persistenceData = CourseCreationData(
+                                id: finalCourse.courseId,
+                                title: finalCourse.title,
+                                topic: topic,
+                                level: level,
+                                modules: finalCourse.modules.map { mod in
+                                    CourseModuleData(
+                                        id: mod.id,
+                                        title: mod.title,
+                                        description: mod.description,
+                                        lessons: mod.lessons.map { les in
+                                            CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
+                                        }
+                                    )
+                                }
+                            )
+                            try await LyoRepository.shared.saveCourse(data: persistenceData)
+                        } catch {
+                            Log.course.warning("Failed to persist final course to backend: \(error)")
+                        }
+                    } catch {
+                        Log.course.warning("Legacy background completion failed: \(error)")
+                    }
+                }
+
+                return draftCourse
+            }
+
+            Log.course.error("Backend generation failed: \(error)")
+            Log.course.error("DEBUG: Full error details: \(String(describing: error))")
             
             // Only use mock if explicitly allowed
             if AppConfig.allowMockFallbacks {
-                print("🛠 FALLBACK: Using mock course (LYO_ALLOW_MOCKS=1)")
+                Log.course.info("🛠 FALLBACK: Using mock course (LYO_ALLOW_MOCKS=1)")
                 let course = generateMockCourse(topic: topic)
                 
                 currentStep = "Course ready (Offline Mode)!"
@@ -388,45 +689,139 @@ final class CourseGenerationService: ObservableObject {
                 generatedCourse = course
                 return course
             } else {
-                print("❌ PRODUCTION MODE: No mock fallback allowed")
-                currentStep = "Failed: \(error.localizedDescription)"
+                Log.course.warning("PRODUCTION MODE: Falling back to local draft (generation delayed)")
+                let draftCourse = buildLocalDraftCourse(topic: topic, level: level)
+                generatedCourse = draftCourse
+                saveCourseToDisk(draftCourse)
+                currentStep = "Generating content..."
                 self.error = error.localizedDescription
-                throw error
+
+                await addCourseToStack(courseId: draftCourse.courseId, title: draftCourse.title, topic: topic)
+
+                Task {
+                    await startLegacyGenerationInBackground(
+                        topic: topic,
+                        level: level,
+                        teachingStyle: teachingStyle,
+                        learningOutcomes: learningOutcomes
+                    )
+                }
+
+                return draftCourse
             }
         }
     }
+    */
     
-    // MARK: - Poll for Course Completion
+    // MARK: - Poll for Course Completion (with Stall Detection + Auto-Recovery)
     
     private func pollForCourseCompletion(jobId: String) async throws -> GeneratedCourseResponse {
         let maxAttempts = 60  // 5 minutes max (5 second intervals)
+        let stallThresholdSeconds: TimeInterval = 45  // Force-complete if no progress for 45s
         var attempts = 0
+        var lastProgressPercent = -1  // Track last known progress
+        var lastProgressUpdate = Date()  // When progress last changed
+        var forceCompleteAttempted = false
+        var backendResultUnavailable = false
         
         while attempts < maxAttempts {
+            // Check for cancellation before each poll
+            try Task.checkCancellation()
+            
             let status = try await BackendAIService.shared.getCourseGenerationStatus(jobId: jobId)
             
-            print("📊 Status: \(status.status) - Progress: \(status.progressPercent)%")
+            Log.course.info("Status: \(status.status) - Progress: \(status.progressPercent)%")
+            
+            // 🛡️ STALL DETECTION: Track if progress is moving
+            if status.progressPercent != lastProgressPercent {
+                lastProgressPercent = status.progressPercent
+                lastProgressUpdate = Date()
+                Log.course.info("   ⏱️ Progress updated at \(lastProgressUpdate)")
+            }
+            
+            // 🛡️ CHECK FOR STALL: If no progress for 60s and still "processing"
+            let timeSinceLastProgress = Date().timeIntervalSince(lastProgressUpdate)
+            if timeSinceLastProgress > stallThresholdSeconds &&
+               (status.status == "processing" || status.status == "running") &&
+               !forceCompleteAttempted {
+                Log.course.warning("STALL DETECTED: No progress for \(Int(timeSinceLastProgress))s - triggering force-complete")
+                forceCompleteAttempted = true
+                
+                // Try to fetch result directly first (backend may have finished without status updates)
+                do {
+                    let partialCourse = try await fetchGeneratedCourse(jobId: jobId)
+                    Log.course.info("Retrieved course despite stalled status")
+                    return partialCourse
+                } catch {
+                    if isNotFound(error) {
+                        Log.course.warning("Result endpoint unavailable (404) during stall - using local draft")
+                        return try fallbackToLocalDraft(reason: "Result endpoint not found")
+                    }
+                    Log.course.warning("Fetch result failed during stall: \(error.localizedDescription)")
+                }
+
+                // Try to force-complete the stalled job
+                do {
+                    let forceResult = try await forceCompleteJob(jobId: jobId)
+                    Log.course.info("Force-complete triggered: \(forceResult)")
+                    // Reset timer to give backend time to recover
+                    lastProgressUpdate = Date()
+                } catch {
+                    if isNotFound(error) {
+                        Log.course.warning("Force-complete endpoint unavailable (404) - using local draft")
+                        backendResultUnavailable = true
+                    } else {
+                        Log.course.warning("Force-complete failed: \(error.localizedDescription) - continuing poll")
+                    }
+                }
+            }
+
+            if backendResultUnavailable {
+                return try fallbackToLocalDraft(reason: "Force-complete endpoint not found")
+            }
             
             currentStep = status.currentStep ?? "Processing..."
             progress = 0.3 + (Double(status.progressPercent) / 100.0 * 0.6)  // 30% to 90%
             
             switch status.status {
             case "completed":
-                print("✅ Course generation completed!")
+                Log.course.info("Course generation completed!")
                 currentStep = "Fetching course..."
                 progress = 0.95
-                return try await fetchGeneratedCourse(jobId: jobId)
+                do {
+                    return try await fetchGeneratedCourse(jobId: jobId)
+                } catch {
+                    if isNotFound(error) {
+                        Log.course.warning("Result endpoint unavailable (404) after completion - using local draft")
+                        return try fallbackToLocalDraft(reason: "Result endpoint not found")
+                    }
+                    throw error
+                }
                 
             case "failed":
                 let errorMsg = status.error ?? "Unknown error"
-                print("❌ Course generation failed: \(errorMsg)")
-                throw CourseGenerationError.serverError
+                Log.course.error("Course generation failed: \(errorMsg)")
+                // 🛡️ RESILIENCE: Try to fetch what we have instead of throwing
+                Log.course.error("Attempting to fetch partial course despite failure...")
+                do {
+                    let partialCourse = try await fetchGeneratedCourse(jobId: jobId)
+                    Log.course.info("Recovered partial course with \(partialCourse.modules.count) modules")
+                    return partialCourse
+                } catch {
+                    if isNotFound(error) {
+                        Log.course.warning("Result endpoint unavailable (404) after failure - using local draft")
+                        return try fallbackToLocalDraft(reason: "Result endpoint not found")
+                    }
+                    Log.course.error("Could not recover partial course: \(error)")
+                    throw CourseGenerationError.serverError
+                }
                 
-            case "processing":
-                // Continue polling
+            case "processing", "running", "pending":
+                // Continue polling - these are all "in progress" states
                 break
                 
             default:
+                Log.course.warning("Unknown course generation status: \(status.status) - continuing to poll")
                 break
             }
             
@@ -434,21 +829,455 @@ final class CourseGenerationService: ObservableObject {
             try await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
         }
         
+        // 🛡️ TIMEOUT RECOVERY: Instead of throwing, try force-complete one last time
+        Log.course.info("⏰ Polling timeout reached - attempting final force-complete")
+        do {
+            _ = try await forceCompleteJob(jobId: jobId)
+            try await Task.sleep(nanoseconds: 2_000_000_000)  // Wait 2s for backend
+            let finalCourse = try await fetchGeneratedCourse(jobId: jobId)
+            Log.course.info("Recovered course after timeout via force-complete")
+            return finalCourse
+        } catch {
+            if isNotFound(error) {
+                Log.course.warning("Recovery endpoints unavailable (404) - using local draft")
+                return try fallbackToLocalDraft(reason: "Recovery endpoints not found")
+            }
+            Log.course.error("Final recovery failed: \(error)")
+            throw CourseGenerationError.serverError
+        }
+    }
+
+    private func isNotFound(_ error: Error) -> Bool {
+        if case LyoError.network(.notFound) = error {
+            return true
+        }
+        return false
+    }
+
+    private func fallbackToLocalDraft(reason: String) throws -> GeneratedCourseResponse {
+        if let draft = generatedCourse {
+            Log.course.info("🛟 Falling back to local draft: \(reason)")
+            currentStep = "Course ready!"
+            progress = 1.0
+            return draft
+        }
+
+        Log.course.warning("No local draft available for fallback: \(reason)")
         throw CourseGenerationError.serverError
+    }
+    
+    // MARK: - Force Complete Stalled Job
+    
+    private func forceCompleteJob(jobId: String) async throws -> String {
+        let endpoint = Endpoints.CourseGenerationV2.forceComplete(jobId: jobId)
+        
+        struct ForceCompleteResponse: Codable {
+            let status: String
+            let message: String
+            let modulesCompleted: Int?
+            
+            enum CodingKeys: String, CodingKey {
+                case status
+                case message
+                case modulesCompleted = "modules_completed"
+            }
+        }
+        
+        let response: ForceCompleteResponse = try await NetworkClient.shared.request(endpoint)
+        return response.message
     }
     
     // MARK: - Fetch Generated Course
     
     private func fetchGeneratedCourse(jobId: String) async throws -> GeneratedCourseResponse {
         // Call backend to get final course structure
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/courses/\(jobId)/result",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.CourseGenerationV2.result(jobId: jobId)
         
         let backendCourse: BackendCourseResult = try await NetworkClient.shared.request(endpoint)
         return mapBackendCourseToGenerated(backendCourse)
+    }
+
+    private func mapOutlineToGenerated(_ outline: CourseOutlineResponse) -> GeneratedCourseResponse {
+        let modules = outline.modules.enumerated().map { (index, mod) in
+            GenerationCourseModule(
+                id: mod.id,
+                title: mod.title,
+                description: mod.description,
+                lessons: [
+                    GenerationCourseLesson(
+                        id: "\(mod.id)_overview",
+                        title: "Module Overview",
+                        content: "This module is generating. Check back soon.",
+                        durationMinutes: 10,
+                        order: 1
+                    )
+                ],
+                order: index
+            )
+        }
+
+        return GeneratedCourseResponse(
+            courseId: outline.courseId,
+            title: outline.title,
+            description: outline.description,
+            modules: modules,
+            estimatedDuration: outline.estimatedDuration,
+            difficulty: outline.difficulty
+        )
+    }
+
+    private func handleOutlineAndBackground(
+        outlineResponse: CourseOutlineResponse,
+        topic: String,
+        level: String,
+        options: CourseGenerationOptions,
+        learningOutcomes: [String]
+    ) async throws -> GeneratedCourseResponse {
+        Log.course.info("Outline ready: \(outlineResponse.courseId)")
+        currentStep = "Outline ready"
+        progress = 0.4
+
+        let draftCourse = mapOutlineToGenerated(outlineResponse)
+        generatedCourse = draftCourse
+        saveCourseToDisk(draftCourse)
+
+        // Persist outline to backend for sharing immediately
+        do {
+            let persistenceData = CourseCreationData(
+                id: draftCourse.courseId,
+                title: draftCourse.title,
+                topic: topic,
+                level: level,
+                modules: draftCourse.modules.map { mod in
+                    CourseModuleData(
+                        id: mod.id,
+                        title: mod.title,
+                        description: mod.description,
+                        lessons: mod.lessons.map { les in
+                            CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
+                        }
+                    )
+                }
+            )
+            try await LyoRepository.shared.saveCourse(data: persistenceData)
+        } catch {
+            Log.course.warning("Failed to persist outline to backend: \(error)")
+        }
+
+        await addCourseToStack(courseId: draftCourse.courseId, title: draftCourse.title, topic: topic)
+
+        if let firstModuleId = draftCourse.modules.first?.id {
+            Task {
+                await generateModuleIfNeeded(courseId: draftCourse.courseId, moduleId: firstModuleId)
+            }
+        }
+
+        Task {
+            do {
+                let finalCourse = try await pollForCourseCompletion(jobId: outlineResponse.courseId)
+                await MainActor.run {
+                    self.generatedCourse = finalCourse
+                    self.currentStep = "Course ready!"
+                    self.progress = 1.0
+                }
+
+                do {
+                    let persistenceData = CourseCreationData(
+                        id: finalCourse.courseId,
+                        title: finalCourse.title,
+                        topic: topic,
+                        level: level,
+                        modules: finalCourse.modules.map { mod in
+                            CourseModuleData(
+                                id: mod.id,
+                                title: mod.title,
+                                description: mod.description,
+                                lessons: mod.lessons.map { les in
+                                    CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
+                                }
+                            )
+                        }
+                    )
+                    try await LyoRepository.shared.saveCourse(data: persistenceData)
+                } catch {
+                    Log.course.warning("Failed to persist final course to backend: \(error)")
+                }
+            } catch {
+                Log.course.warning("Background course completion failed: \(error)")
+            }
+        }
+
+        return draftCourse
+    }
+
+
+    private func addCourseToStack(courseId: String, title: String, topic: String) async {
+        do {
+            let request = CreateStackItemRequest(
+                type: .course,
+                refId: courseId,
+                tags: ["AI Generated"],
+                contextData: [
+                    "title": title,
+                    "topic": topic
+                ]
+            )
+            _ = try await LyoRepository.shared.createStackItem(request: request)
+            UIStackStore.shared.upsertCourse(
+                courseId: courseId,
+                title: title,
+                subtitle: "AI Generated Course"
+            )
+        } catch {
+            Log.course.warning("Failed to add course to Stack: \(error)")
+        }
+    }
+
+    private func shouldFallbackToLegacyOutline(_ error: Error) -> Bool {
+        if let lyoError = error as? LyoError {
+            switch lyoError {
+            case .network(let type):
+                switch type {
+                case .methodNotAllowed, .notImplemented:
+                    return true
+                case .serverError(let code), .unknown(let code):
+                    return code == 405
+                default:
+                    break
+                }
+            default:
+                break
+            }
+        }
+
+        if let backendError = error as? BackendAIError {
+            switch backendError {
+            case .serverError(let message), .networkError(let message):
+                if message.contains("405") || message.localizedCaseInsensitiveContains("Method Not Allowed") {
+                    return true
+                }
+            default:
+                break
+            }
+        }
+
+        let message = String(describing: error)
+        return message.contains("405") || message.localizedCaseInsensitiveContains("Method Not Allowed")
+    }
+
+    private func buildLocalDraftCourse(topic: String, level: String) -> GeneratedCourseResponse {
+        let cleanTopic = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isAdvanced = level.lowercased().contains("advanced")
+        let isIntermediate = level.lowercased().contains("intermediate")
+        
+        // Smart Title Generation
+        let courseTitle: String
+        let mainDescription: String
+        let mod1Title: String
+        let mod2Title: String
+        let mod3Title: String
+        
+        if isAdvanced {
+            courseTitle = "Advanced Mastery of \(cleanTopic)"
+            mainDescription = "An expert-level deep dive into specific nuances of \(cleanTopic)."
+            mod1Title = "Advanced Context & Architectures"
+            mod2Title = "Professional Application"
+            mod3Title = "Future Trends in \(cleanTopic)"
+        } else if isIntermediate {
+            courseTitle = "Intermediate \(cleanTopic)"
+            mainDescription = "Taking your \(cleanTopic) skills to the next level."
+            mod1Title = "Bridging the Gap"
+            mod2Title = "Core Techniques"
+            mod3Title = "Real-world Projects"
+        } else {
+            courseTitle = "Introduction to \(cleanTopic)"
+            mainDescription = "A comprehensive guide to mastering \(cleanTopic) fundamentals."
+            mod1Title = "Getting Started with \(cleanTopic)"
+            mod2Title = "Core Concepts"
+            mod3Title = "Next Steps"
+        }
+        
+        let modules = [
+            GenerationCourseModule(
+                id: "mod_1",
+                title: mod1Title,
+                description: "Building the necessary mental models.",
+                lessons: [
+                    GenerationCourseLesson(
+                        id: "les_1_1",
+                        title: "Why \(cleanTopic) Matters",
+                        content: """
+                        Welcome to your journey into **\(cleanTopic)**! 🚀
+                        
+                        This isn't just another dry textbook definition. **\(cleanTopic)** is a fundamental skill that unlocks new possibilities in your work and life.
+                        
+                        ### What we'll cover:
+                        1. The "Big Picture" view of \(cleanTopic).
+                        2. Key terminologies (no jargon!).
+                        3. Why experts consider this essential.
+                        
+                        By the end of this lesson, you'll have a clear mental map of the landscape. Let's dive in!
+                        """,
+                        durationMinutes: 5,
+                        order: 1
+                    ),
+                    GenerationCourseLesson(
+                        id: "les_1_2",
+                        title: "Key Pillars",
+                        content: """
+                        Every robust system stands on strong pillars. For **\(cleanTopic)**, there are three main concepts you must know:
+                        
+                        ### 1. The Core Principle 🧠
+                        Everything starts here. If you understand the core logic, everything else falls into place.
+                        
+                        ### 2. The Feedback Loop 🔄
+                        How do you know it's working? We'll explore the signals and metrics.
+                        
+                        ### 3. The Execution Strategy ⚡
+                        Theory is useless without action. We'll look at how to apply this immediately.
+                        """,
+                        durationMinutes: 8,
+                        order: 2
+                    )
+                ],
+                order: 1
+            ),
+            GenerationCourseModule(
+                id: "mod_2",
+                title: mod2Title,
+                description: "Moving from theory to practice.",
+                lessons: [
+                    GenerationCourseLesson(
+                        id: "les_2_1",
+                        title: "Applying the Concepts",
+                        content: """
+                        Now for the fun part: **Action**. 🛠️
+                        
+                        Let's tackle a real-world scenario. Imagine you are faced with a typical challenge in \(cleanTopic).
+                        
+                        **The Scenario:**
+                        You need to optimize for efficiency but constraints are tight.
+                        
+                        **The Solution:**
+                        Using the 'Core Principle' we learned, we can slice through the complexity.
+                        
+                        *   Step 1: Audit the current state.
+                        *   Step 2: Apply the \(cleanTopic) framework.
+                        *   Step 3: Measure results.
+                        """,
+                        durationMinutes: 10,
+                        order: 1
+                    ),
+                    GenerationCourseLesson(
+                        id: "les_2_2",
+                        title: "Common Pitfalls",
+                        content: """
+                        Wait! Before you rush off, let's talk about where people go wrong with **\(cleanTopic)**. ⚠️
+                        
+                        *   **Mistake #1**: Overcomplicating the basics.
+                        *   **Mistake #2**: Ignoring the context.
+                        *   **Mistake #3**: Giving up too early.
+                        
+                        Success comes from consistency. Keep it simple.
+                        """,
+                        durationMinutes: 7,
+                        order: 2
+                    )
+                ],
+                order: 2
+            ),
+            GenerationCourseModule(
+                id: "mod_3",
+                title: mod3Title,
+                description: "Consolidation and future growth.",
+                lessons: [
+                    GenerationCourseLesson(
+                        id: "les_3_1",
+                        title: "Your Growth Roadmap",
+                        content: """
+                        You've built the foundation. Where to next? 🗺️
+                        
+                        Mastery of **\(cleanTopic)** is a journey, not a destination.
+                        
+                        **Recommended Next Steps:**
+                        1.  Practice the 'Key Pillars' daily.
+                        2.  Find a project to apply 'The Execution Strategy'.
+                        3.  Connect with others learning \(cleanTopic).
+                        
+                        You are ready. Go build something amazing!
+                        """,
+                        durationMinutes: 5,
+                        order: 1
+                    )
+                ],
+                order: 3
+            )
+        ]
+
+        return GeneratedCourseResponse(
+             courseId: "gen_\(UUID().uuidString.prefix(8))",
+             title: courseTitle,
+             description: mainDescription,
+             modules: modules,
+             estimatedDuration: 90,
+             difficulty: level
+         )
+    }
+
+    private func generateModuleIfNeeded(courseId: String, moduleId: String) async {
+        guard let current = generatedCourse else { return }
+        guard current.modules.contains(where: { $0.id == moduleId }) else { return }
+
+        isGeneratingModule = true
+        defer { isGeneratingModule = false }
+
+        do {
+            let moduleResponse = try await BackendAIService.shared.generateCourseModule(
+                courseId: courseId,
+                moduleId: moduleId
+            )
+
+            let module = mapBackendModuleToGenerated(moduleResponse.module)
+            await MainActor.run {
+                guard let current = self.generatedCourse else { return }
+                if let index = current.modules.firstIndex(where: { $0.id == moduleId }) {
+                    var modules = current.modules
+                    modules[index] = module
+                    let updated = GeneratedCourseResponse(
+                        courseId: current.courseId,
+                        title: current.title,
+                        description: current.description,
+                        modules: modules,
+                        estimatedDuration: current.estimatedDuration,
+                        difficulty: current.difficulty
+                    )
+                    self.generatedCourse = updated
+                    self.saveCourseToDisk(updated)
+                }
+            }
+        } catch {
+            Log.course.warning("Module generation failed: \(error)")
+        }
+    }
+
+    private func mapBackendModuleToGenerated(_ module: BackendCourseResult.BackendModule) -> GenerationCourseModule {
+        let lessons = module.lessons.enumerated().map { lessonIndex, lesson in
+            GenerationCourseLesson(
+                id: lesson.id,
+                title: lesson.title,
+                content: lesson.content,
+                durationMinutes: lesson.durationMinutes,
+                order: lessonIndex + 1
+            )
+        }
+
+        return GenerationCourseModule(
+            id: module.id,
+            title: module.title,
+            description: module.description,
+            lessons: lessons,
+            order: 1
+        )
     }
     
     // MARK: - Map Backend Course to Generated Response
@@ -522,7 +1351,7 @@ final class CourseGenerationService: ObservableObject {
     // MARK: - Backend Generation (Primary - Uses Gemini AI with Streaming)
     
     private func generateFromBackendStreaming(request: CourseGenerationRequest) async throws -> GeneratedCourseResponse {
-        print("🎓 Starting STREAMING course generation for: \(request.topic)")
+        Log.course.info("Starting STREAMING course generation for: \(request.topic)")
         
         let endpoint = Endpoints.AI.generateCourseStream(
             topic: request.topic,
@@ -531,7 +1360,7 @@ final class CourseGenerationService: ObservableObject {
             teachingStyle: request.teachingStyle
         )
         
-        print("📤 Calling streaming backend: \(endpoint.path)")
+        Log.course.info("📤 Calling streaming backend: \(endpoint.path)")
         
         // Accumulate streamed chunks
         var accumulatedData = Data()
@@ -542,14 +1371,14 @@ final class CourseGenerationService: ObservableObject {
             let (asyncBytes, response) = try await NetworkClient.shared.stream(endpoint)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("❌ Invalid response type")
+                Log.course.error("Invalid response type")
                 throw CourseGenerationError.serverError
             }
             
-            print("📥 Streaming started - status: \(httpResponse.statusCode)")
+            Log.course.info("📥 Streaming started - status: \(httpResponse.statusCode)")
             
             guard (200...299).contains(httpResponse.statusCode) else {
-                print("❌ Backend error status: \(httpResponse.statusCode)")
+                Log.course.error("Backend error status: \(httpResponse.statusCode)")
                 throw CourseGenerationError.serverError
             }
             
@@ -569,21 +1398,21 @@ final class CourseGenerationService: ObservableObject {
                 }
             }
             
-            print("✅ Streaming completed - received \(accumulatedData.count) bytes")
+            Log.course.info("Streaming completed - received \(accumulatedData.count) bytes")
             
             // Log response preview
             if let jsonStr = String(data: accumulatedData, encoding: .utf8) {
-                print("📥 Streamed response preview: \(String(jsonStr.prefix(300)))...")
+                Log.course.info("📥 Streamed response preview: \(String(jsonStr.prefix(300)))...")
             }
             
             // Parse the accumulated response
             return try parseBackendResponse(data: accumulatedData, topic: request.topic)
             
         } catch let streamError as URLError {
-            print("❌ Streaming error: \(streamError.localizedDescription)")
+            Log.course.error("Streaming error: \(streamError.localizedDescription)")
             throw CourseGenerationError.serverError
         } catch {
-            print("❌ Unexpected streaming error: \(error)")
+            Log.course.error("Unexpected streaming error: \(error)")
             throw error
         }
     }
@@ -606,8 +1435,8 @@ final class CourseGenerationService: ObservableObject {
         // Use the backend's Dual AI Orchestrator endpoint (Gemini + OpenAI Hybrid)
         // This endpoint routes to Gemini for educational content generation
         
-        print("🎓 Starting course generation for: \(request.topic)")
-        print("📤 Calling Dual AI Orchestrator: /api/v1/ai/generate")
+        Log.course.info("Starting course generation for: \(request.topic)")
+        Log.course.info("📤 Calling Dual AI Orchestrator: /api/v1/ai/generate")
         
         // Build course generation prompt for the AI
         let outcomesText = request.outcomes.joined(separator: "\n- ")
@@ -634,27 +1463,10 @@ final class CourseGenerationService: ObservableObject {
         Return ONLY valid JSON, no markdown or extra text.
         """
         
-        // Construct request body for /api/v1/ai/generate
-        let requestBody: [String: Any] = [
-            "prompt": coursePrompt,
-            "task_type": "CONTENT_GENERATION",  // Routes to Gemini for educational content
-            "max_tokens": 4000,
-            "temperature": 0.7,
-            "context": [
-                "type": "course_generation",
-                "topic": request.topic,
-                "level": request.level
-            ]
-        ]
-        
-        // Use AnyEncodable wrapper for the body
-        let encodableBody = requestBody.mapValues { AnyEncodable(value: $0) }
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/ai/generate",
-            method: .post,
-            body: encodableBody,
-            requiresAuth: true
+        let endpoint = Endpoints.AI.generateCourseContent(
+            prompt: coursePrompt,
+            topic: request.topic,
+            level: request.level
         )
         
         do {
@@ -662,17 +1474,17 @@ final class CourseGenerationService: ObservableObject {
             
             let content = aiResponse.content ?? aiResponse.response
             guard let validContent = content else {
-                print("❌ Failed to extract content/response from AI JSON")
+                Log.course.error("Failed to extract content/response from AI JSON")
                 throw CourseGenerationError.invalidResponse
             }
             
-            print("🤖 AI used: \(aiResponse.primaryAi ?? "unknown")")
-            print("📄 Content length: \(validContent.count) characters")
+            Log.course.info("AI used: \(aiResponse.primaryAi ?? "unknown")")
+            Log.course.info("📄 Content length: \(validContent.count) characters")
             
             return try parseAIContent(validContent, topic: request.topic)
             
         } catch {
-            print("❌ Backend generation failed: \(error)")
+            Log.course.error("Backend generation failed: \(error)")
             throw error
         }
     }
@@ -693,27 +1505,27 @@ final class CourseGenerationService: ObservableObject {
         }
         
         guard let courseData = cleanJson.data(using: .utf8) else {
-            print("❌ Failed to convert cleaned JSON to data")
+            Log.course.error("Failed to convert cleaned JSON to data")
             throw CourseGenerationError.invalidResponse
         }
         
         // Try to decode as GeneratedCourseResponse
         do {
             let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: courseData)
-            print("✅ Backend (Gemini) generated course: \(course.title)")
+            Log.course.info("Backend (Gemini) generated course: \(course.title)")
             return course
         } catch {
-            print("⚠️ Direct decode failed, trying to map response...")
+            Log.course.warning("Direct decode failed, trying to map response...")
             
             // Try to parse as generic JSON and map
             if let courseJson = try? JSONSerialization.jsonObject(with: courseData) as? [String: Any] {
                 let course = try mapBackendResponse(courseJson, topic: topic)
-                print("✅ Mapped backend course: \(course.title)")
+                Log.course.info("Mapped backend course: \(course.title)")
                 return course
             }
             
-            print("❌ Failed to parse course JSON: \(error)")
-            print("❌ Cleaned JSON was: \(cleanJson.prefix(500))...")
+            Log.course.error("Failed to parse course JSON: \(error)")
+            Log.course.error("Cleaned JSON was: \(cleanJson.prefix(500))...")
             throw CourseGenerationError.invalidResponse
         }
     }
@@ -726,19 +1538,19 @@ final class CourseGenerationService: ObservableObject {
         do {
             // First try direct decode
             let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
-            print("✅ Backend generated course: \(course.title)")
+            Log.course.info("Backend generated course: \(course.title)")
             return course
         } catch {
-            print("⚠️ Direct decode failed, trying to map backend response...")
+            Log.course.warning("Direct decode failed, trying to map backend response...")
             
             // Try to parse as generic JSON and map to our structure
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let course = try mapBackendResponse(json, topic: topic)
-                print("✅ Mapped backend course: \(course.title)")
+                Log.course.info("Mapped backend course: \(course.title)")
                 return course
             }
             
-            print("❌ Failed to decode backend response: \(error)")
+            Log.course.error("Failed to decode backend response: \(error)")
             throw CourseGenerationError.invalidResponse
         }
     }
@@ -870,7 +1682,7 @@ final class CourseGenerationService: ObservableObject {
         IMPORTANT: Return ONLY the JSON object, no markdown code blocks, no extra text.
         """
         
-        print("📤 Sending course generation request to OpenAI...")
+        Log.course.info("📤 Sending course generation request to OpenAI...")
         
         let response = try await OpenAIService.shared.sendMessage(
             message: prompt,
@@ -878,8 +1690,8 @@ final class CourseGenerationService: ObservableObject {
             systemPrompt: "You are a curriculum designer. You must return only valid JSON with no markdown formatting."
         )
         
-        print("📥 OpenAI raw response length: \(response.count) characters")
-        print("📥 OpenAI response preview: \(String(response.prefix(200)))...")
+        Log.course.info("📥 OpenAI raw response length: \(response.count) characters")
+        Log.course.info("📥 OpenAI response preview: \(String(response.prefix(200)))...")
         
         // Clean and parse JSON
         var cleanJson = response
@@ -893,20 +1705,20 @@ final class CourseGenerationService: ObservableObject {
             cleanJson = String(cleanJson[jsonStart...jsonEnd])
         }
         
-        print("🧹 Cleaned JSON length: \(cleanJson.count) characters")
+        Log.course.info("🧹 Cleaned JSON length: \(cleanJson.count) characters")
         
         guard let data = cleanJson.data(using: .utf8) else {
-            print("❌ Failed to convert cleaned JSON to data")
+            Log.course.error("Failed to convert cleaned JSON to data")
             throw CourseGenerationError.invalidResponse
         }
         
         do {
             let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
-            print("✅ Successfully decoded course: \(course.title)")
+            Log.course.info("Successfully decoded course: \(course.title)")
             return course
         } catch let decodingError {
-            print("❌ JSON decoding error: \(decodingError)")
-            print("❌ Cleaned JSON was: \(cleanJson)")
+            Log.course.error("JSON decoding error: \(decodingError)")
+            Log.course.error("Cleaned JSON was: \(cleanJson)")
             throw decodingError
         }
     }
@@ -1217,6 +2029,7 @@ final class CourseGenerationService: ObservableObject {
 
 enum CourseGenerationError: LocalizedError {
     case invalidURL
+    case invalidRequest
     case serverError
     case invalidResponse
     case noContent
@@ -1227,6 +2040,8 @@ enum CourseGenerationError: LocalizedError {
         switch self {
         case .invalidURL:
             return "Invalid server URL"
+        case .invalidRequest:
+            return "Invalid request parameters"
         case .serverError:
             return "Server error during course generation"
         case .invalidResponse:
