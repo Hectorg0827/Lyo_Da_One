@@ -230,6 +230,7 @@ struct BackendAIChatResponse: Codable {
     let responseMode: ResponseMode?
     let quickExplainer: QuickExplainerData?
     let courseProposal: CourseProposalData?
+    let studyPlan: TestPrepData?
     
     // Lyo Protocol Fields
     let lyoBlocks: [LyoBlock]?
@@ -254,6 +255,7 @@ struct BackendAIChatResponse: Codable {
         case responseMode = "responseMode"
         case quickExplainer = "quickExplainer"
         case courseProposal = "courseProposal"
+        case studyPlan = "study_plan"
         case contentTypes = "contentTypes"
         case uiComponent = "uiComponent"
         case lyoBlocks = "lyoBlocks"

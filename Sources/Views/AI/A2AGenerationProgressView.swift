@@ -159,8 +159,9 @@ struct A2AGenerationProgressView: View {
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.7))
                         
-                        if let lastEvent = service.streamingEvents.last {
-                            Text(lastEvent.message)
+                        if let lastEvent = service.streamingEvents.last,
+                           let msg = lastEvent.message {
+                            Text(msg)
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.5))
                                 .lineLimit(2)
@@ -522,7 +523,7 @@ struct EventRowView: View {
                 .font(.caption)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.message)
+                Text(event.message ?? "")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
                 
@@ -615,6 +616,10 @@ extension A2AEventType {
         case .artifactCreated: return "📦"
         case .pipelineCompleted: return "🎉"
         case .error: return "⚠️"
+        case .contentChunk: return "📝"
+        case .thinking: return "💭"
+        case .agentStarted: return "🏁"
+        case .agentCompleted: return "🏆"
         }
     }
 }

@@ -154,6 +154,12 @@ enum A2AEventType: String, Codable {
     case artifactCreated = "artifact_created"
     case pipelineCompleted = "pipeline_completed"
     case error = "error"
+    
+    // Legacy/Internal types from backend schema
+    case contentChunk = "content_chunk"
+    case thinking = "thinking"
+    case agentStarted = "agent_started"
+    case agentCompleted = "agent_completed"
 }
 
 /// Streaming event from A2A pipeline
@@ -163,13 +169,22 @@ struct A2AStreamingEvent: Codable {
     let pipelineId: String
     let phase: A2APipelinePhase?
     let progress: Int  // 0-100
-    let message: String
+    let message: String?
     let data: A2AEventData?
+    
+    // New fields from backend schema
+    let chunkContent: String?
+    let thinkingContent: String?
+    let artifact: A2AArtifact?  // Using A2AArtifact from Agent Execution section
+    let payload: [String: A2AAnyCodableValue]?
     
     enum CodingKeys: String, CodingKey {
         case type, timestamp
         case pipelineId = "pipeline_id"
         case phase, progress, message, data
+        case chunkContent = "chunk_content"
+        case thinkingContent = "thinking_content"
+        case artifact, payload
     }
 }
 

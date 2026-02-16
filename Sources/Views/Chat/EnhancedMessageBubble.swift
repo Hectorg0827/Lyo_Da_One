@@ -306,18 +306,13 @@ struct EnhancedMessageBubble: View {
                 } // end if !message.content.isEmpty
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(
-                ZStack {
-                    Color.black.opacity(0.85) // Match LyoMessageBubbleView styling
-                    
-                    PulsingTrimOverlay(cornerRadius: 20)
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(Color.black.opacity(0.65))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 4) // Slight padding from screen edge for the "99%" feel
+        .padding(.horizontal, 0) // Edge-to-edge Gemini style
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
                 showFullImage = false

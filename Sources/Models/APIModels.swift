@@ -788,3 +788,34 @@ struct Enrollment: Codable, Identifiable {
         case progress
     }
 }
+
+// MARK: - Test Prep Models
+struct TestPrepData: Codable, Identifiable {
+    var id: String { planId }
+    let planId: String
+    let title: String
+    let testDate: Date
+    let sessions: [TestPrepSession]
+    
+    enum CodingKeys: String, CodingKey {
+        case planId = "plan_id"
+        case title
+        case testDate = "test_date"
+        case sessions
+    }
+}
+
+struct TestPrepSession: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let topic: String
+    let durationMinutes: Int
+    let activityType: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, topic
+        case durationMinutes = "duration_minutes"
+        case activityType = "activity_type"
+    }
+}

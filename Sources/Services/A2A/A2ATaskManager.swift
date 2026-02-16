@@ -224,49 +224,14 @@ final class A2ATaskManager: ObservableObject {
                 throw A2ATaskError.invalidResponse
             }
             
-            for try await line in bytes.lines {
-                guard line.hasPrefix("data: ") else { continue }
-                
-                let jsonStr = String(line.dropFirst(6))
-                guard let jsonData = jsonStr.data(using: .utf8) else { continue }
-                
-                // Parse SSE event
-                if let event = try? JSONDecoder().decode(A2ASSEEvent.self, from: jsonData) {
-                    switch event.type {
-                    case "task":
-                        if let taskUpdate = event.task {
-                            currentTask.state = taskUpdate.state
-                            activeTasks[taskId] = currentTask
-                            
-                            let response = A2ATaskResponse(
-                                id: taskId,
-                                sessionId: currentSessionId,
-                                state: taskUpdate.state,
-                                message: taskUpdate.message,
-                                artifacts: nil
-                            )
-                            onUpdate(response)
-                        }
-                        
-                    case "artifact":
-                        if let artifact = event.artifact {
-                            currentTask.artifacts = (currentTask.artifacts ?? []) + [artifact]
-                            activeTasks[taskId] = currentTask
-                            onArtifact(artifact)
-                        }
-                        
-                    default:
-                        break
-                    }
-                    
-                    // Check for completion
-                    if currentTask.state == .completed || currentTask.state == .failed {
-                        isProcessing = false
-                        onComplete(currentTask)
-                        return
-                    }
-                }
-            }
+            try await parseTaskStream(
+                bytes.lines,
+                taskId: taskId,
+                onUpdate: onUpdate,
+                onArtifact: onArtifact,
+                onComplete: onComplete
+            )
+            
         } catch {
             isProcessing = false
             currentTask.state = .failed
@@ -275,6 +240,61 @@ final class A2ATaskManager: ObservableObject {
         }
     }
     
+    /// Generic parsing method for both network strings and test streams
+    func parseTaskStream<S: AsyncSequence>(
+        _ stream: S,
+        taskId: String,
+        onUpdate: @escaping (A2ATaskResponse) -> Void,
+        onArtifact: @escaping (A2ATaskArtifact) -> Void,
+        onComplete: @escaping (A2ATask) -> Void
+    ) async throws where S.Element == String {
+         var currentTask = activeTasks[taskId] ?? A2ATask(id: taskId, sessionId: currentSessionId, state: .submitted, message: A2AMessage(role: "user", parts: []), artifacts: [], history: nil, metadata: nil)
+
+        for try await line in stream {
+            guard line.hasPrefix("data: ") else { continue }
+            
+            let jsonStr = String(line.dropFirst(6))
+            guard let jsonData = jsonStr.data(using: .utf8) else { continue }
+            
+            // Parse SSE event
+            if let event = try? JSONDecoder().decode(A2ASSEEvent.self, from: jsonData) {
+                switch event.type {
+                case "task":
+                    if let taskUpdate = event.task {
+                        currentTask.state = taskUpdate.state
+                        activeTasks[taskId] = currentTask
+                        
+                        let response = A2ATaskResponse(
+                            id: taskId,
+                            sessionId: currentSessionId,
+                            state: taskUpdate.state,
+                            message: taskUpdate.message,
+                            artifacts: nil
+                        )
+                        onUpdate(response)
+                    }
+                    
+                case "artifact":
+                    if let artifact = event.artifact {
+                        currentTask.artifacts = (currentTask.artifacts ?? []) + [artifact]
+                        activeTasks[taskId] = currentTask
+                        onArtifact(artifact)
+                    }
+                    
+                default:
+                    break
+                }
+                
+                // Check for completion
+                if currentTask.state == .completed || currentTask.state == .failed {
+                    isProcessing = false
+                    onComplete(currentTask)
+                    return
+                }
+            }
+        }
+    }
+
     // MARK: - Get Task Status
     
     func getTaskStatus(taskId: String, agentURL: String) async throws -> A2ATask {
@@ -338,13 +358,13 @@ final class A2ATaskManager: ObservableObject {
 
 // MARK: - SSE Event Structure
 
-private struct A2ASSEEvent: Codable {
+struct A2ASSEEvent: Codable {
     let type: String  // "task", "artifact"
     let task: A2ATaskUpdate?
     let artifact: A2ATaskArtifact?
 }
 
-private struct A2ATaskUpdate: Codable {
+struct A2ATaskUpdate: Codable {
     let state: A2ATaskState
     let message: A2AMessage?
 }

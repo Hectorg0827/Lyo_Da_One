@@ -545,6 +545,14 @@ extension A2ACourseService {
         } else if event.type == .error {
             self.errorMessage = event.message
             self.streamingState = .failed(LyoError.network(.serverError(500)))
+        } else if event.type == .contentChunk {
+            // Can be used to stream partial text to UI if needed
+             Log.ai.debug("📝 Chunk: \(event.chunkContent?.prefix(20) ?? "")")
+        } else if event.type == .thinking {
+             Log.ai.debug("🤔 Thinking: \(event.thinkingContent?.prefix(50) ?? "")")
+        } else if event.type == .artifactCreated {
+            Log.ai.info("🎨 Artifact Created: \(event.artifact?.name ?? "Unknown")")
+            // Here we could append to a list of artifacts or notify UI
         }
         
         onEvent(event)

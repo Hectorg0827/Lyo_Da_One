@@ -24,7 +24,8 @@ import os
 /// The result of routing a message through the appropriate pipeline
 enum ChatRouteResult {
     /// Fast path completed — single text response
-    case fastResponse(text: String, latencyMs: Double)
+    /// Fast path completed — single text response with optional Study Plan
+    case fastResponse(text: String, studyPlan: TestPrepData?, latencyMs: Double)
     
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
@@ -149,7 +150,7 @@ final class ChatRouter: ObservableObject {
             recordLatency(latency, for: .fast)
             
             Log.ai.info("⚡ Fast path response in \(String(format: "%.0f", latency))ms")
-            return .fastResponse(text: response, latencyMs: latency)
+            return .fastResponse(text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency)
             
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")
@@ -208,7 +209,7 @@ final class ChatRouter: ObservableObject {
         message: String,
         context: String,
         conversationHistory: [ConversationMessage]
-    ) async throws -> String {
+    ) async throws -> BackendAIChatResponse {
         // Use the existing AI.chat endpoint (non-streaming)
         let response: BackendAIChatResponse = try await NetworkClient.shared.request(
             Endpoints.AI.chat(
@@ -218,7 +219,7 @@ final class ChatRouter: ObservableObject {
             )
         )
         
-        return response.responseText
+        return response
     }
     
     // MARK: - Latency Tracking

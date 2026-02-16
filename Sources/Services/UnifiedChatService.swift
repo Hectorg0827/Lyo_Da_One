@@ -169,15 +169,27 @@ final class UnifiedChatService: ObservableObject {
             await saveConversation()
             Log.ai.info("⚡ Instant response served on-device")
             
-        case .fastResponse(let text, let latencyMs):
+        case .fastResponse(let text, let studyPlan, let latencyMs):
             // Single-agent non-streaming response
+            var contentTypes: [MessageContentType] = [.text]
+            // Note: studyPlan is TestPrepData, but contentType expects StudyPlan.
+            // Bridge the types if a plan is present.
+            if let prep = studyPlan {
+                let days = prep.sessions.enumerated().map { i, s in
+                    StudyDay(id: s.id, dayNumber: i + 1, topic: s.topic, tasks: [
+                        StudyTask(title: s.title, durationMinutes: s.durationMinutes, type: s.activityType)
+                    ])
+                }
+                contentTypes.append(.studyPlan(plan: StudyPlan(title: prep.title, description: nil, schedule: days)))
+            }
+            
             let fastMsg = LyoMessage(
                 id: aiMessageId,
                 sessionId: currentConversationId,
                 content: text,
                 isFromUser: false,
                 timestamp: Date(),
-                contentTypes: [.text],
+                contentTypes: contentTypes,
                 shouldAnimate: true
             )
             messages.append(fastMsg)
@@ -424,6 +436,13 @@ final class UnifiedChatService: ObservableObject {
             if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Update the skeleton/placeholder message with the real answer
                 // 🎬 shouldAnimate = true → triggers typewriter in the message bubble
+                
+                // Merge .text into existing types if not present
+                var finalTypes = messages[idx].contentTypes ?? []
+                if !finalTypes.contains(.text) {
+                     finalTypes.append(.text)
+                }
+
                 let updatedMessage = LyoMessage(
                     id: aiMessageId,
                     sessionId: messages[idx].sessionId,
@@ -433,14 +452,14 @@ final class UnifiedChatService: ObservableObject {
                     attachments: messages[idx].attachments,
                     actions: messages[idx].actions,
                     status: messages[idx].status,
-                    contentTypes: [.text],
+                    contentTypes: finalTypes,
                     responseMode: messages[idx].responseMode,
                     quickExplainer: messages[idx].quickExplainer,
                     courseProposal: messages[idx].courseProposal,
                     shouldAnimate: true
                 )
                 messages[idx] = updatedMessage
-                Log.ai.info("Answer message updated at index \(idx)")
+                Log.ai.info("Answer message updated at index \(idx) with types: \(finalTypes)")
             } else {
                 // No skeleton existed — append as new message
                 let answerMsg = LyoMessage(
@@ -555,13 +574,20 @@ final class UnifiedChatService: ObservableObject {
                 Log.ai.info("🎨 A2UI component decoded from artifact: \(String(describing: a2uiComponent.type))")
                 // Replace existing answer message with A2UI content to avoid duplicate bubbles
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    // Merge types
+                    var currentTypes = messages[idx].contentTypes ?? []
+                    // Remove processing
+                    currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
+                    // Add new component
+                    currentTypes.append(.a2ui(component: a2uiComponent))
+                    
                     let a2uiMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
-                        content: messages[idx].content,
+                        content: messages[idx].content, // Keep existing text
                         isFromUser: false,
                         timestamp: messages[idx].timestamp,
-                        contentTypes: [.a2ui(component: a2uiComponent)]
+                        contentTypes: currentTypes
                     )
                     messages[idx] = a2uiMsg
                 } else {
@@ -586,13 +612,18 @@ final class UnifiedChatService: ObservableObject {
                 )
                 // Replace the existing answer message to avoid duplicates
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    // Merge types
+                    var currentTypes = messages[idx].contentTypes ?? []
+                    currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
+                    currentTypes.append(.courseProposal(payload: coursePayload))
+                    
                     let proposalMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
-                        content: "",
+                        content: messages[idx].content, // Keep existing text
                         isFromUser: false,
                         timestamp: messages[idx].timestamp,
-                        contentTypes: [.courseProposal(payload: coursePayload)]
+                        contentTypes: currentTypes
                     )
                     messages[idx] = proposalMsg
                 } else {
@@ -710,38 +741,42 @@ final class UnifiedChatService: ObservableObject {
             isLoading = false
             
         case .openClassroom(let block):
-            Log.ai.info("📋 OPEN_CLASSROOM stream event — rendering proposal card")
-            // Render a proposal card REPLACING the answer text msg to avoid duplicates
+            Log.ai.info("📋 OPEN_CLASSROOM stream event — auto-opening classroom")
             if let coursePayload = tryDecodeOpenClassroom(from: block) {
-                // Stage the course on AICommandHandler so Start button can find it
+                // Stage the course on AICommandHandler
                 _ = AICommandHandler.shared.handleOpenClassroom(
                     AICommandPayload(stackItem: nil, course: coursePayload)
                 )
                 
-                // Replace the existing answer message (same aiMessageId) with a course card
+                // Show a brief summary card in chat (not the full course)
+                let briefContent = "Creating your course: **\(coursePayload.title)** 🎓\nOpening classroom…"
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    let proposalMsg = LyoMessage(
+                    let summaryMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
-                        content: "",
+                        content: briefContent,
                         isFromUser: false,
                         timestamp: messages[idx].timestamp,
-                        contentTypes: [.courseProposal(payload: coursePayload)]
+                        contentTypes: [.text]
                     )
-                    messages[idx] = proposalMsg
+                    messages[idx] = summaryMsg
                 } else {
-                    // No answer yet — append as new
-                    let proposalMsg = LyoMessage(
+                    let summaryMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: currentConversationId,
-                        content: "",
+                        content: briefContent,
                         isFromUser: false,
                         timestamp: Date(),
-                        contentTypes: [.courseProposal(payload: coursePayload)]
+                        contentTypes: [.text]
                     )
-                    messages.append(proposalMsg)
+                    messages.append(summaryMsg)
                 }
                 Task { await saveConversation() }
+                
+                // Auto-navigate to classroom after a brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
+                }
             }
             
         case .a2ui(let block):
@@ -754,13 +789,18 @@ final class UnifiedChatService: ObservableObject {
                 )
                 // Replace the existing answer message to avoid duplicates
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    // Merge types
+                    var currentTypes = messages[idx].contentTypes ?? []
+                    currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
+                    currentTypes.append(.courseProposal(payload: coursePayload))
+                    
                     let proposalMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
-                        content: "",
+                        content: messages[idx].content, // Keep text
                         isFromUser: false,
                         timestamp: messages[idx].timestamp,
-                        contentTypes: [.courseProposal(payload: coursePayload)]
+                        contentTypes: currentTypes
                     )
                     messages[idx] = proposalMsg
                 } else {
@@ -778,13 +818,18 @@ final class UnifiedChatService: ObservableObject {
             } else if let a2uiComponent = tryDecodeA2UIComponent(from: block) {
                 // Non-course A2UI (quiz, flashcard, etc.) — replace existing answer to avoid duplicates
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    // Merge types
+                    var currentTypes = messages[idx].contentTypes ?? []
+                    currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
+                    currentTypes.append(.a2ui(component: a2uiComponent))
+                    
                     let a2uiMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
-                        content: messages[idx].content,
+                        content: messages[idx].content, // Keep text
                         isFromUser: false,
                         timestamp: messages[idx].timestamp,
-                        contentTypes: [.a2ui(component: a2uiComponent)]
+                        contentTypes: currentTypes
                     )
                     messages[idx] = a2uiMsg
                 } else {

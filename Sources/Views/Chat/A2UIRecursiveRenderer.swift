@@ -25,13 +25,13 @@ struct A2UIRecursiveRenderer: View {
                 if let title = data.title {
                     Text(title)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let subtitle = data.subtitle {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -42,13 +42,13 @@ struct A2UIRecursiveRenderer: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(parseColor(data.backgroundColor) ?? Color(.secondarySystemBackground))
+                    .fill(parseColor(data.backgroundColor) ?? Color.white.opacity(0.08))
             )
 
         case .text(let data):
             Text(data.content)
                 .font(mapFont(data.fontStyle))
-                .foregroundColor(parseColor(data.color) ?? .primary)
+                .foregroundColor(parseColor(data.color) ?? .white)
                 .multilineTextAlignment(mapTextAlignment(data.alignment))
                 .frame(maxWidth: .infinity, alignment: mapFrameAlignment(data.alignment))
 
@@ -79,11 +79,11 @@ struct A2UIRecursiveRenderer: View {
                         VStack {
                             Image(systemName: "photo")
                                 .font(.largeTitle)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.7))
                             if let altText = data.altText {
                                 Text(altText)
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.white.opacity(0.7))
                                     .multilineTextAlignment(.center)
                             }
                         }
@@ -94,7 +94,7 @@ struct A2UIRecursiveRenderer: View {
 
         case .divider(let data):
             Divider()
-                .overlay(parseColor(data.color) ?? Color(.separator))
+                .overlay(parseColor(data.color) ?? Color.white.opacity(0.15))
 
         case .spacer(let data):
             Spacer()
@@ -141,7 +141,7 @@ struct A2UIRecursiveRenderer: View {
             VStack {
                 Text("Unimplemented component: \\(component.type.rawValue)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.7))
                 if let children = data.children {
                     ForEach(children) { child in
                         A2UIRecursiveRenderer(component: child, onAction: onAction)
@@ -273,7 +273,7 @@ struct LegacyQuizRenderer: View {
             Text(data.question)
                 .font(.headline)
                 .fontWeight(.semibold)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
                 .multilineTextAlignment(.leading)
 
             // Options
@@ -287,7 +287,7 @@ struct LegacyQuizRenderer: View {
                         HStack {
                             Text(option)
                                 .font(.body)
-                                .foregroundColor(.primary)
+                                .foregroundColor(.white)
                                 .multilineTextAlignment(.leading)
                             Spacer()
 
@@ -316,20 +316,20 @@ struct LegacyQuizRenderer: View {
                     Text("Explanation")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
 
                     Text(explanation)
                         .font(.body)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                         .multilineTextAlignment(.leading)
                 }
                 .padding()
-                .background(Color(.tertiarySystemBackground))
+                .background(Color.white.opacity(0.06))
                 .cornerRadius(8)
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.05))
         .cornerRadius(12)
     }
 
@@ -339,26 +339,26 @@ struct LegacyQuizRenderer: View {
 
     private func backgroundColorForOption(_ index: Int) -> Color {
         guard let selected = selectedAnswer else {
-            return Color(.tertiarySystemBackground)
+            return Color.white.opacity(0.06)
         }
 
         if selected == index {
             return isCorrectAnswer(index) ? Color.green.opacity(0.1) : Color.red.opacity(0.1)
         }
 
-        return Color(.tertiarySystemBackground)
+        return Color.white.opacity(0.06)
     }
 
     private func borderColorForOption(_ index: Int) -> Color {
         guard let selected = selectedAnswer else {
-            return Color(.separator)
+            return Color.white.opacity(0.15)
         }
 
         if selected == index {
             return isCorrectAnswer(index) ? .green : .red
         }
 
-        return Color(.separator)
+        return Color.white.opacity(0.15)
     }
 }
 
@@ -375,12 +375,12 @@ struct LegacyCourseRoadmapRenderer: View {
                 Text(data.title)
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.white)
 
                 HStack {
                     Text("\(data.completedModules) of \(data.totalModules) modules completed")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
 
                     Spacer()
 
@@ -437,7 +437,7 @@ struct LegacyCourseRoadmapRenderer: View {
             .padding(.top, 10)
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.05))
         .cornerRadius(12)
     }
 }
@@ -462,12 +462,12 @@ struct ModuleRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(module.title)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
 
                     if let description = module.description {
                         Text(description)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                             .lineLimit(isExpanded ? nil : 2)
                     }
 
@@ -475,13 +475,13 @@ struct ModuleRowView: View {
                         if let lessons = module.lessons {
                             Text("\(lessons.count) lessons")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.7))
                         }
 
                         if let duration = module.duration {
                             Text("• \(duration) min")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.7))
                         }
                     }
                 }
@@ -492,7 +492,7 @@ struct ModuleRowView: View {
                 Button(action: onToggleExpansion) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                 }
             }
 
@@ -503,23 +503,23 @@ struct ModuleRowView: View {
                         Text("Lessons")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
 
                         ForEach(lessons) { lesson in
                             HStack {
                                 Text("•")
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.white.opacity(0.7))
 
                                 Text(lesson.title)
                                     .font(.body)
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(.white)
 
                                 Spacer()
 
                                 if let duration = lesson.duration {
                                     Text(duration)
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.white.opacity(0.7))
                                 }
                             }
                         }
@@ -559,7 +559,7 @@ struct ModuleRowView: View {
             }
         }
         .padding()
-        .background(Color(.tertiarySystemBackground))
+        .background(Color.white.opacity(0.06))
         .cornerRadius(8)
     }
 }
@@ -577,11 +577,11 @@ struct CoursePreviewRenderer: View {
                     Text(data.title)
                         .font(.headline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
 
                     Text(data.subject)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                 }
 
                 Spacer()
@@ -597,14 +597,14 @@ struct CoursePreviewRenderer: View {
 
                     Text("\(data.estimatedMinutes) min")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                 }
             }
 
             // Course Description
             Text(data.description)
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
                 .lineLimit(3)
 
             // Course Stats
@@ -625,7 +625,7 @@ struct CoursePreviewRenderer: View {
 
                 Spacer()
             }
-            .foregroundColor(.secondary)
+            .foregroundColor(.white.opacity(0.7))
 
             Divider()
 
@@ -655,7 +655,7 @@ struct CoursePreviewRenderer: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.05))
         .cornerRadius(12)
     }
 }
@@ -679,7 +679,7 @@ struct LearningNodeRenderer: View {
             footerSection
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.05))
         .cornerRadius(12)
     }
 
@@ -699,7 +699,7 @@ struct LearningNodeRenderer: View {
             if let estimatedMinutes = data.estimatedMinutes {
                 Text("\(estimatedMinutes) min")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.7))
             }
         }
     }
@@ -707,7 +707,7 @@ struct LearningNodeRenderer: View {
     private var contentSection: some View {
         Text(data.content ?? "")
             .font(.subheadline)
-            .foregroundColor(.secondary)
+            .foregroundColor(.white.opacity(0.7))
             .lineLimit((data.isCurrent ?? false) ? nil : 2)
     }
 
@@ -745,7 +745,7 @@ struct ProgressTrackerRenderer: View {
             Text(data.courseTitle ?? "Course")
                 .font(.headline)
                 .fontWeight(.semibold)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
 
             // Progress Bar
             VStack(alignment: .leading, spacing: 8) {
@@ -784,7 +784,7 @@ struct ProgressTrackerRenderer: View {
                     HStack {
                         Text("Current:")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                         Text(currentNodeTitle)
                             .font(.caption)
                             .fontWeight(.medium)
@@ -795,7 +795,7 @@ struct ProgressTrackerRenderer: View {
                     HStack {
                         Text("Next:")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                         Text(nextNodeTitle)
                             .font(.caption)
                             .fontWeight(.medium)
@@ -804,7 +804,7 @@ struct ProgressTrackerRenderer: View {
 
                 Text("\(data.currentNode) of \(data.totalNodes) lessons completed")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.7))
             }
 
             // Continue Button
@@ -820,7 +820,7 @@ struct ProgressTrackerRenderer: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.05))
         .cornerRadius(12)
     }
 }
@@ -837,7 +837,7 @@ struct InteractiveLessonRenderer: View {
                     Text(data.title)
                         .font(.headline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
 
                     Text(data.lessonType.capitalized)
                         .font(.caption)
@@ -857,7 +857,7 @@ struct InteractiveLessonRenderer: View {
                             .foregroundColor(.blue)
                         Text("\(durationSeconds / 60):\(String(format: "%02d", durationSeconds % 60))")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                     }
                 }
             }
@@ -865,7 +865,7 @@ struct InteractiveLessonRenderer: View {
             // Lesson Content
             Text(data.content)
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
                 .lineLimit(nil)
 
             // Media Preview (if available)
@@ -881,7 +881,7 @@ struct InteractiveLessonRenderer: View {
                                 .foregroundColor(.gray)
                             Text("Media Content")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.7))
                         }
                     )
             }
@@ -917,7 +917,7 @@ struct InteractiveLessonRenderer: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.05))
         .cornerRadius(12)
     }
 
@@ -961,12 +961,12 @@ struct LessonCardRenderer: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(data.title)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
                         .lineLimit(1)
                     
                     Text(data.description ?? "")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                         .lineLimit(2)
                     
                     HStack {
@@ -975,7 +975,7 @@ struct LessonCardRenderer: View {
                         Text(data.duration ?? "")
                             .font(.caption2)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.7))
                 }
                 
                 Spacer()
@@ -989,7 +989,7 @@ struct LessonCardRenderer: View {
                 }
             }
             .padding()
-            .background(Color(.secondarySystemBackground))
+            .background(Color.white.opacity(0.05))
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
@@ -1028,12 +1028,12 @@ struct LegacyCourseCardRenderer: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(data.title)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
                         .lineLimit(1)
                     
                     Text(data.description)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.7))
                         .lineLimit(2)
                     
                     // Stats row
@@ -1043,7 +1043,7 @@ struct LegacyCourseCardRenderer: View {
                         Label(data.duration, systemImage: "clock")
                     }
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.7))
                     
                     // Progress
                     if data.progress > 0 {
@@ -1051,14 +1051,14 @@ struct LegacyCourseCardRenderer: View {
                             ProgressView(value: data.progress, total: 100)
                             Text("\(Int(data.progress))% Complete")
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.7))
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                 }
             }
             .padding()
-            .background(Color(.secondarySystemBackground))
+            .background(Color.white.opacity(0.05))
             .cornerRadius(12)
         }
         .buttonStyle(.plain)

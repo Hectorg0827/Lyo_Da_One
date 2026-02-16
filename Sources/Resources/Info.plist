@@ -87,6 +87,8 @@
 	<string>Lyo needs photo library access to let you choose profile pictures.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Lyo needs speech recognition access to transcribe your voice interactions with Leo AI.</string>
+    <key>NSCalendarUsageDescription</key>
+    <string>Lyo needs calendar access to schedule your study sessions and reminders.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

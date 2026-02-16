@@ -88,7 +88,6 @@ struct LyoMessageBubbleView: View {
                 VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: DesignTokens.Spacing.xs) {
                     // Message content with premium styling
                     // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
-                    if !hasRichContent {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(message.content)
                             .font(DesignTokens.Typography.bodyMedium)
@@ -101,7 +100,6 @@ struct LyoMessageBubbleView: View {
                     .padding(.horizontal, DesignTokens.Spacing.md)
                     .padding(.vertical, DesignTokens.Spacing.md)
                     .background(messageBackground)
-                    }
                 
                 // ==== A2UI RICH CONTENT RENDERING ====
                 // This renders Course Roadmaps, Quizzes, Flashcards inline
@@ -266,7 +264,48 @@ struct LyoMessageBubbleView: View {
             }
 
         case .studyPlan(let plan):
-            StudyPlanView(plan: plan)
+            // Inline study plan rendering (compatible with StudyPlan type)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Study Plan")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.7))
+                            .textCase(.uppercase)
+                        Text(plan.title)
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
+                    }
+                    Spacer()
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.title)
+                        .foregroundStyle(Color.accentColor)
+                }
+                Divider().background(Color.white.opacity(0.2))
+                ForEach(plan.schedule.prefix(3)) { day in
+                    HStack(spacing: 12) {
+                        Text("Day \(day.dayNumber)")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text(day.topic)
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                        Spacer()
+                    }
+                    .padding(8)
+                    .background(Color.white.opacity(0.06))
+                    .cornerRadius(8)
+                }
+                if plan.schedule.count > 3 {
+                    Text("+ \(plan.schedule.count - 3) more days")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+            }
+            .padding()
+            .background(Color(white: 0.1))
+            .cornerRadius(16)
             
         case .suggestions(let title, let options):
             // Render suggestions as quick chips
