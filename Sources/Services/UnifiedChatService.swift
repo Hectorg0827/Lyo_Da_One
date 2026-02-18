@@ -169,7 +169,7 @@ final class UnifiedChatService: ObservableObject {
             await saveConversation()
             Log.ai.info("⚡ Instant response served on-device")
             
-        case .fastResponse(let text, let studyPlan, let latencyMs):
+        case .fastResponse(let text, let studyPlan, let latencyMs, let chips):
             // Single-agent non-streaming response
             var contentTypes: [MessageContentType] = [.text]
             // Note: studyPlan is TestPrepData, but contentType expects StudyPlan.
@@ -197,6 +197,12 @@ final class UnifiedChatService: ObservableObject {
             isLoading = false
             await saveConversation()
             Log.ai.info("⚡ Fast path response in \(String(format: "%.0f", latencyMs))ms")
+
+            // Update suggestion chips from backend response (context-aware follow-ups)
+            if let backendChips = chips, !backendChips.isEmpty {
+                suggestions = backendChips
+                Log.ai.info("💡 Updated \(backendChips.count) suggestion chips from backend")
+            }
             
             // Bridge: Scan for OPEN_CLASSROOM commands in fast responses too
             scanForCommands(in: text, messageId: aiMessageId)

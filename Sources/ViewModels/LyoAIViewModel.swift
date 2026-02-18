@@ -1024,25 +1024,64 @@ class LyoAIViewModel: ObservableObject {
     }
     
     // MARK: - Suggestions
-    
+
+    /// Hardcoded fallback chips shown instantly before the backend responds
+    private static let fallbackGreetingChips: [SuggestionChip] = [
+        SuggestionChip(id: "1", text: "Teach me something new", icon: "sparkles", actionType: "learn", context: nil),
+        SuggestionChip(id: "2", text: "Create a course for me", icon: "plus.circle", actionType: "create_course", context: nil),
+        SuggestionChip(id: "3", text: "🤖 Multi-Agent Course", icon: "cpu", actionType: "create_course_a2a", context: nil),
+        SuggestionChip(id: "4", text: "Quiz me on a topic", icon: "questionmark.circle", actionType: "quiz", context: nil)
+    ]
+
+    private static let fallbackUploadChips: [SuggestionChip] = [
+        SuggestionChip(id: "u1", text: "Extract key points", icon: "list.star", actionType: "extract", context: nil),
+        SuggestionChip(id: "u2", text: "Turn into a course", icon: "plus.circle", actionType: "create_course", context: nil),
+        SuggestionChip(id: "u3", text: "Quiz me on this", icon: "questionmark.circle", actionType: "quiz", context: nil),
+        SuggestionChip(id: "u4", text: "Make flashcards", icon: "rectangle.stack", actionType: "flashcards", context: nil)
+    ]
+
+    /// Seeds chips instantly with fallback, then replaces them with backend chips once available
     func loadInitialSuggestions() {
-        suggestions = [
-            SuggestionChip(id: "1", text: "Teach me something new", icon: "sparkles", actionType: "learn", context: nil),
-            SuggestionChip(id: "2", text: "Create a course for me", icon: "plus.circle", actionType: "create_course", context: nil),
-            SuggestionChip(id: "3", text: "🤖 Multi-Agent Course", icon: "cpu", actionType: "create_course_a2a", context: nil),
-            SuggestionChip(id: "4", text: "Quiz me on a topic", icon: "questionmark.circle", actionType: "quiz", context: nil)
-        ]
+        // Show hardcoded chips immediately — no waiting
+        unifiedChat.suggestions = Self.fallbackGreetingChips
+
+        // Fire and forget: fetch context-aware chips from backend
+        Task {
+            do {
+                let chips = try await BackendAIService.shared.fetchSuggestions(trigger: "Hello, what can I learn today?")
+                if !chips.isEmpty {
+                    await MainActor.run { [weak self] in
+                        self?.unifiedChat.suggestions = chips
+                        Log.ai.info("💡 Greeting chips from backend: \(chips.count)")
+                    }
+                }
+            } catch {
+                // Fallback already visible — no action needed
+                Log.ai.warning("⚠️ Backend suggestion fetch failed (fallback shown): \(error.localizedDescription)")
+            }
+        }
     }
-    
+
+    /// Seeds upload-specific chips instantly, then refreshes from backend
     func updateSuggestionsForUpload() {
-        suggestions = [
-            SuggestionChip(id: "u1", text: "Extract key points", icon: "list.star", actionType: "extract", context: nil),
-            SuggestionChip(id: "u2", text: "Turn into a course", icon: "plus.circle", actionType: "create_course", context: nil),
-            SuggestionChip(id: "u3", text: "Quiz me on this", icon: "questionmark.circle", actionType: "quiz", context: nil),
-            SuggestionChip(id: "u4", text: "Make flashcards", icon: "rectangle.stack", actionType: "flashcards", context: nil)
-        ]
+        unifiedChat.suggestions = Self.fallbackUploadChips
+
+        Task {
+            do {
+                let chips = try await BackendAIService.shared.fetchSuggestions(trigger: "I just uploaded a file to analyze")
+                if !chips.isEmpty {
+                    await MainActor.run { [weak self] in
+                        self?.unifiedChat.suggestions = chips
+                        Log.ai.info("💡 Upload chips from backend: \(chips.count)")
+                    }
+                }
+            } catch {
+                Log.ai.warning("⚠️ Upload suggestion fetch failed (fallback shown): \(error.localizedDescription)")
+            }
+        }
     }
-    
+
+
     // MARK: - Course Cards
     
     func loadCourseCards() async {

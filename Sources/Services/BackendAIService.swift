@@ -235,6 +235,9 @@ struct BackendAIChatResponse: Codable {
     // Lyo Protocol Fields
     let lyoBlocks: [LyoBlock]?
     
+    // Context-aware suggestion chips returned alongside each response
+    let suggestions: [SuggestionChip]?
+    
     enum CodingKeys: String, CodingKey {
         case response
         case conversationHistory = "conversationHistory"
@@ -259,6 +262,7 @@ struct BackendAIChatResponse: Codable {
         case contentTypes = "contentTypes"
         case uiComponent = "uiComponent"
         case lyoBlocks = "lyoBlocks"
+        case suggestions = "suggestions"
     }
     
     // Computed property for easy access to the AI response text
@@ -440,6 +444,16 @@ final class BackendAIService {
         return encoder
     }
     
+    // MARK: - Context-Aware Suggestions
+
+    /// Fetches context-aware suggestion chips from the fast `/api/v1/ai/chat` endpoint.
+    /// Returns an empty array on failure — callers should already show fallback chips.
+    func fetchSuggestions(trigger message: String) async throws -> [SuggestionChip] {
+        let endpoint = Endpoints.AI.chat(message: message, provider: nil, context: nil)
+        let response: BackendAIChatResponse = try await NetworkClient.shared.request(endpoint)
+        return response.suggestions ?? []
+    }
+
     // MARK: - Streaming Study Session
     
     /// Stream AI response in real-time using Server-Sent Events

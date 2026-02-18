@@ -24,8 +24,8 @@ import os
 /// The result of routing a message through the appropriate pipeline
 enum ChatRouteResult {
     /// Fast path completed — single text response
-    /// Fast path completed — single text response with optional Study Plan
-    case fastResponse(text: String, studyPlan: TestPrepData?, latencyMs: Double)
+    /// Fast path completed — single text response with optional Study Plan + context chips
+    case fastResponse(text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?)
     
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
@@ -150,7 +150,7 @@ final class ChatRouter: ObservableObject {
             recordLatency(latency, for: .fast)
             
             Log.ai.info("⚡ Fast path response in \(String(format: "%.0f", latency))ms")
-            return .fastResponse(text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency)
+            return .fastResponse(text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency, suggestions: response.suggestions)
             
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")
