@@ -401,9 +401,9 @@ extension MainTabView {
             .onReceive(openClassroomPublisher) { notification in
                 Log.ui.info("MainTabView: Received openClassroom notification")
                 
-                // Add a small delay to ensure any currently presented sheets (like LioChatSheet) 
-                // have time to start dismissing before we present the fullScreenCover.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // Wait 0.7 s — the chat sheet dismiss animation takes ~0.4 s;
+                // this ensures it's fully gone before we present the fullScreenCover.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                     if let userInfo = notification.userInfo,
                        let courseId = userInfo["courseId"] as? String {
                         
@@ -422,7 +422,10 @@ extension MainTabView {
                 }
             }
             .onReceive(dismissOverlayPublisher) { _ in
-                Log.ui.info("MainTabView: Dismissing Lyo overlay for classroom transition")
+                Log.ui.info("MainTabView: Dismissing Lyo overlay + chat sheet for classroom transition")
+                // Also dismiss the Lyo chat sheet — iOS cannot stack a fullScreenCover
+                // over an open .sheet, so we must close the chat before presenting the classroom.
+                uiState.isLioChatPresented = false
                 withAnimation(.easeOut(duration: 0.3)) {
                     isLyoOverlayPresented = false
                 }

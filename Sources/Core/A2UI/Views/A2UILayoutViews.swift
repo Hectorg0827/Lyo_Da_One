@@ -181,7 +181,9 @@ struct A2UICardView: View {
     let props: A2UIProps
     let children: [A2UIComponent]
     let onAction: ((A2UIAction, A2UIComponent) -> Void)?
-    
+
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(children, id: \.id) { child in
@@ -193,12 +195,22 @@ struct A2UICardView: View {
         .cornerRadius(props.borderRadius ?? 16)
         .shadow(color: shadowColor.opacity(0.1), radius: props.shadowRadius ?? 8, y: 4)
     }
-    
+
+    /// Returns a background colour that is always legible inside a dark chat bubble.
+    /// When the parent bubble forces `.dark` colour-scheme (via `.environment(\.colorScheme, .dark)`)
+    /// any explicit white / system-background would render as a blinding white card — swap those
+    /// to a subtle glass so the dark bubble can breathe through.
     private var backgroundColor: Color {
         if let hex = props.backgroundColor {
+            let isPlainWhite = ["#ffffff", "#fff", "ffffff", "fff", "white"]
+                .contains(hex.lowercased())
+            if colorScheme == .dark && isPlainWhite {
+                return Color.white.opacity(0.08)
+            }
             return Color(hex: hex)
         }
-        return Color(.systemBackground)
+        // No explicit colour from server — use glass in dark mode, system bg in light mode.
+        return colorScheme == .dark ? Color.white.opacity(0.08) : Color(.systemBackground)
     }
 
     private var shadowColor: Color {
