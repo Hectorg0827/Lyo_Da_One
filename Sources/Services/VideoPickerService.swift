@@ -219,7 +219,7 @@ struct VideoPicker: UIViewControllerRepresentable {
 // MARK: - Video Thumbnail View
 
 /// Preview thumbnail for selected video
-struct VideoThumbnailView: View {
+struct VideoPickerThumbnailView: View {
     let thumbnail: UIImage?
     let duration: Double
     let onRemove: () -> Void
@@ -272,7 +272,7 @@ struct VideoThumbnailView: View {
 // MARK: - Preview
 
 #Preview {
-    VideoThumbnailView(
+    VideoPickerThumbnailView(
         thumbnail: nil,
         duration: 45.5,
         onRemove: {}

@@ -65,7 +65,7 @@ final class GamificationService: ObservableObject {
         if recentTransactions.count > 10 { recentTransactions.removeLast() }
         
         saveProgress()
-        Log.gamification.info("⭐️ Awarded \(amount) XP for: \(reason). Total: \(progress.totalXP)")
+        Log.gamification.info("⭐️ Awarded \(amount) XP for: \(reason). Total: \(self.progress.totalXP)")
     }
     
     /// Mark a topic as mastered
@@ -109,9 +109,4 @@ final class GamificationService: ObservableObject {
             UserDefaults.standard.set(data, forKey: "user_gamification_progress")
         }
     }
-}
-
-// Logger extension
-extension Log {
-    static let gamification = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.lyo.app", category: "Gamification")
 }

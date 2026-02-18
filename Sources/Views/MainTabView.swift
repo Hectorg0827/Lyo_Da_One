@@ -99,8 +99,19 @@ struct MainTabView: View {
                     .tag(Tab.clips)
                 
                 // Create Tab - Multi-Mode Creation Interface
-                MultiModeCreationView()
-                    .tag(Tab.create)
+                VStack {
+                    MultiModeCreationView()
+
+                    // Debug: Add test view link
+                    NavigationLink("🧪 Content Feed Test") {
+                        ContentFeedTestView()
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .padding()
+                }
+                .tag(Tab.create)
                 
                 // Community
                 CommunityView()
@@ -248,17 +259,7 @@ struct MainTabView: View {
             GlobalSearchView()
         }
         .fullScreenCover(isPresented: $isCreateHubPresented) {
-            CreateHubView(initialMode: lastCreateMode) { mode in
-                lastCreateMode = mode
-                switch mode {
-                case .clip, .story, .reel:
-                    selectedTab = .clips
-                case .post, .event:
-                    selectedTab = .community
-                case .course:
-                    selectedTab = .focus
-                }
-            }
+            LyoCreateStudioView()
         }
         // MARK: - New Runtime Integration
         .fullScreenCover(
@@ -292,6 +293,7 @@ struct MainTabView: View {
         case .post: return .post
         case .course: return .discovery
         case .event: return .community
+        case .live: return .discovery
         }
     }
 

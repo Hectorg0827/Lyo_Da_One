@@ -6,10 +6,99 @@ struct CommunityView: View {
     @State private var showCreateSheet = false
     @State private var showingActivities = false
     @State private var showingLeaderboard = false // NEW
-    
+    @State private var selectedTab: CommunityTab = .posts
+
+    enum CommunityTab: CaseIterable {
+        case posts, events
+
+        var title: String {
+            switch self {
+            case .posts: return "Posts"
+            case .events: return "Events"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .posts: return "bubble.left.and.bubble.right.fill"
+            case .events: return "mappin.and.ellipse"
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Tab Picker
+                Picker("Community Tab", selection: $selectedTab) {
+                    ForEach(CommunityTab.allCases, id: \.self) { tab in
+                        Label(tab.title, systemImage: tab.icon)
+                            .tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.top, 8)
+
+                // Tab Content
+                TabView(selection: $selectedTab) {
+                    // Posts Tab - Real Community Feed
+                    CommunityFeedView()
+                        .tag(CommunityTab.posts)
+
+                    // Events Tab - Community Items (Map/List)
+                    CommunityItemsView(viewModel: viewModel)
+                        .tag(CommunityTab.events)
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            }
+            .navigationTitle("Community")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        if selectedTab == .posts {
+                            // Notify CommunityFeedView to open create post
+                        } else {
+                            showCreateSheet = true
+                        }
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showCreateSheet) {
+            CreateCommunityItemSheet(viewModel: viewModel)
+        }
+        .sheet(item: $viewModel.selectedPin) { pin in
+            CommunityPinDetailSheet(pin: pin)
+                .presentationDetents([.medium, .fraction(0.8)])
+        }
+        .sheet(isPresented: $showingActivities) {
+            MyActivitiesView()
+        }
+        .sheet(isPresented: $showingLeaderboard) {
+            GlobalLeaderboardView()
+        }
+        .onAppear {
+            viewModel.loadData()
+        }
+    }
+}
+
+// MARK: - Community Items View (Map/List of Events, Groups, etc.)
+
+struct CommunityItemsView: View {
+    @ObservedObject var viewModel: CommunityViewModel
+    @State private var showCreateSheet = false
+    @State private var showingActivities = false
+    @State private var showingLeaderboard = false
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            
+
             // MAIN CONTENT LAYER
             Group {
                 if viewModel.viewMode == .map {
@@ -19,7 +108,7 @@ struct CommunityView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
+
             // TOP BAR OVERLAY
             VStack(spacing: 0) {
                 CommunityTopBar(viewModel: viewModel, onShowActivities: {
@@ -30,9 +119,9 @@ struct CommunityView: View {
                     .background(.ultraThinMaterial)
                     .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 5)
                     .padding(.trailing, 60) // Add padding to avoid overlap with AppDrawerButton at top right
-                
+
                 Spacer()
-                
+
                 // CURRENT LOCATION BUTTON
                 if viewModel.viewMode == .map {
                     HStack {
@@ -50,42 +139,32 @@ struct CommunityView: View {
                         .padding(.bottom, 100) // Avoid Tab Bar overlap
                     }
                 }
-                
+
                 // ADD ITEM FAB
-                VStack {
+                HStack {
                     Spacer()
-                    HStack {
-                         Spacer()
-                         Button(action: { showCreateSheet = true }) {
-                             Image(systemName: "plus")
-                                 .font(.title2.bold())
-                                 .foregroundColor(.white)
-                                 .frame(width: 56, height: 56)
-                                 .background(Color.blue)
-                                 .clipShape(Circle())
-                                 .shadow(radius: 4, y: 3)
-                         }
-                         .padding(.trailing, 20)
-                         .padding(.bottom, 100)
+                    Button(action: { showCreateSheet = true }) {
+                        Image(systemName: "plus")
+                            .font(.title2.bold())
+                            .foregroundColor(.white)
+                            .frame(width: 56, height: 56)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .shadow(radius: 4, y: 3)
                     }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 100)
                 }
-        }
+            } // end VStack overlay
+        } // end ZStack
         .sheet(isPresented: $showCreateSheet) {
             CreateCommunityItemSheet(viewModel: viewModel)
-        }
-        .sheet(item: $viewModel.selectedPin) { pin in
-           // Detail View for the selected pin
-           CommunityPinDetailSheet(pin: pin)
-               .presentationDetents([.medium, .fraction(0.8)])
         }
         .sheet(isPresented: $showingActivities) {
             MyActivitiesView()
         }
         .sheet(isPresented: $showingLeaderboard) {
             GlobalLeaderboardView()
-        }
-        .onAppear {
-            viewModel.loadData()
         }
     }
 }
@@ -576,5 +655,4 @@ struct CommunityPinDetailSheet: View {
             Spacer()
         }
     }
-}
 }

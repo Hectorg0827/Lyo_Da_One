@@ -21,6 +21,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
     case post = "Post"
     case course = "Course"
     case event = "Event/Group"
+    case live = "Live"
     
     var id: String { rawValue }
     
@@ -31,6 +32,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
         case .post: return "square.and.pencil"
         case .course: return "graduationcap.fill"
         case .event: return "person.3.fill"
+        case .live: return "dot.radiowaves.left.and.right"
         }
     }
     
@@ -41,6 +43,7 @@ enum CreateMode: String, CaseIterable, Identifiable {
         case .post: return Color(hex: "3B82F6") // Blue
         case .course: return Color(hex: "10B981") // Green
         case .event: return Color(hex: "EC4899") // Pink
+        case .live: return Color(hex: "EF4444") // Red
         }
     }
     
@@ -51,15 +54,37 @@ enum CreateMode: String, CaseIterable, Identifiable {
         case .post: return "Share to your feed"
         case .course: return "AI-generated course"
         case .event: return "Create event or group"
+        case .live: return "Go live with your audience"
         }
     }
     
     var requiresCamera: Bool {
         switch self {
-        case .clip, .story, .reel: return true
+        case .clip, .story, .reel, .live: return true
         case .post, .course, .event: return false
         }
     }
+    
+    var gradient: LinearGradient {
+        switch self {
+        case .clip:
+            return LinearGradient(colors: [Color(hex: "8B5CF6"), Color(hex: "06B6D4")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .reel:
+            return LinearGradient(colors: [Color(hex: "EF4444"), Color(hex: "F97316")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .story:
+            return LinearGradient(colors: [Color(hex: "8B5CF6"), Color(hex: "EC4899")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .course:
+            return LinearGradient(colors: [Color(hex: "06B6D4"), Color(hex: "8B5CF6")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .post:
+            return LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EAB308")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .event:
+            return LinearGradient(colors: [Color(hex: "EC4899"), Color(hex: "8B5CF6")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .live:
+            return LinearGradient(colors: [Color(hex: "EF4444"), Color(hex: "EC4899")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+    
+    var displayName: String { rawValue }
 }
 
 // MARK: - Creation State
@@ -285,6 +310,8 @@ class CreateViewModel: ObservableObject {
             case .course:
                 try await generateAndPublishCourse()
             case .event:
+                try await publishEvent()
+            case .live:
                 try await publishEvent()
             }
             

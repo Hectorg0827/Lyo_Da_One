@@ -31,7 +31,7 @@ class CalendarService: ObservableObject {
             self.isAccessGranted = granted
             return granted
         } catch {
-            Log.error("Failed to request calendar access: \(error.localizedDescription)")
+            Log.general.error("Failed to request calendar access: \(error.localizedDescription)")
             return false
         }
     }
@@ -59,12 +59,12 @@ class CalendarService: ObservableObject {
             try eventStore.save(event, span: .thisEvent)
             return true
         } catch {
-            Log.error("Failed to save event: \(error.localizedDescription)")
+            Log.general.error("Failed to save event: \(error.localizedDescription)")
             throw error
         }
     }
     
-    func addStudyPlan(_ plan: StudyPlan) async -> Int {
+    func addStudyPlan(_ plan: CalendarStudyPlan) async -> Int {
         var addedCount = 0
         
         // Start from tomorrow if no date specified, or use plan date
@@ -103,7 +103,7 @@ class CalendarService: ObservableObject {
 
 // MARK: - Models (Mirroring Backend)
 
-struct StudyPlan: Codable, Identifiable {
+struct CalendarStudyPlan: Codable, Identifiable {
     let id: String
     let title: String
     let testDate: Date?

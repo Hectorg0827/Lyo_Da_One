@@ -12,54 +12,50 @@ struct CommunityFeedView: View {
     @State private var showCreatePost = false
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                feedContent
-                
-                // Floating action button
-                VStack {
+        ZStack {
+            feedContent
+            
+            // Floating action button
+            VStack {
+                Spacer()
+                HStack {
                     Spacer()
-                    HStack {
-                        Spacer()
-                        createPostButton
-                    }
-                }
-                .padding()
-                
-                // Toast overlay
-                if let message = viewModel.toastMessage {
-                    toastView(message: message, type: viewModel.toastType)
+                    createPostButton
                 }
             }
-            .navigationTitle("Community")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    filterButton
-                }
+            .padding()
+            
+            // Toast overlay
+            if let message = viewModel.toastMessage {
+                toastView(message: message, type: viewModel.toastType)
             }
-            .sheet(isPresented: $showCreatePost) {
-                CreatePostSheet { content, mediaURLs, tags, postType, visibility in
-                    await viewModel.createPost(
-                        content: content,
-                        mediaURLs: mediaURLs,
-                        tags: tags,
-                        postType: postType,
-                        visibility: visibility
-                    )
-                }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                filterButton
             }
-            .sheet(isPresented: $viewModel.showFilters) {
-                CommunityFiltersSheet(filters: $viewModel.filters)
+        }
+        .sheet(isPresented: $showCreatePost) {
+            CreatePostSheet { content, mediaURLs, tags, postType, visibility in
+                await viewModel.createPost(
+                    content: content,
+                    mediaURLs: mediaURLs,
+                    tags: tags,
+                    postType: postType,
+                    visibility: visibility
+                )
             }
-            .sheet(item: $viewModel.selectedPostForAction) { post in
-                ReportContentSheet(post: post) { reason, description in
-                    await viewModel.reportPost(post, reason: reason, description: description)
-                }
+        }
+        .sheet(isPresented: $viewModel.showFilters) {
+            CommunityFiltersSheet(filters: $viewModel.filters)
+        }
+        .sheet(item: $viewModel.selectedPostForAction) { post in
+            ReportContentSheet(post: post) { reason, description in
+                await viewModel.reportPost(post, reason: reason, description: description)
             }
-            .task {
-                await viewModel.loadInitialData()
-            }
+        }
+        .task {
+            await viewModel.loadInitialData()
         }
     }
     

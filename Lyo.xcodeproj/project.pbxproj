@@ -97,6 +97,9 @@
 		4136639C26A85D95515DB60E /* ClassroomViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3ABC070DDBFEB27A7EF4B1 /* ClassroomViewModel.swift */; };
 		415AC948E5D21104798EFAB5 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B3891E54EB0BF535BA3CEC /* Secrets.swift */; };
 		41EDD43F25BE43986059B129 /* CreationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D179E7F3A152C6F43972E79F /* CreationSheet.swift */; };
+		C4D5E6F7A8B9C0D1E2F3A4B5 /* LyoCreateStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E6F7A8B9C0D1E2F3A4B5C6 /* LyoCreateStudioView.swift */; };
+		D5E6F7A8B9C0D1E2F3A4B5C7 /* CreateModeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F7A8B9C0D1E2F3A4B5C6D7 /* CreateModeDetailView.swift */; };
+		E6F7A8B9C0D1E2F3A4B5C6D8 /* PublishFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A8B9C0D1E2F3A4B5C6D7E8 /* PublishFlowView.swift */; };
 		424B9F105B85A33C73B8C3BD /* HeroSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9D03B4E7833F37BA7A4117 /* HeroSectionView.swift */; };
 		428E50D04E8E4B22E66609C9 /* EnhancedLyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D19F543FE091E7D874DB29 /* EnhancedLyoHomeView.swift */; };
 		4396D781F9022E54E68CEDA7 /* AgentBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64CAB44F5729FD106E3C9842 /* AgentBlock.swift */; };
@@ -110,6 +113,7 @@
 		47341520455D9BC9E063D4D2 /* DefaultCommunityRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B94FA9370ED069CA0296FC8 /* DefaultCommunityRepository.swift */; };
 		4762DEE0A282ED000476B21E /* NetworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C57359EC004F498D4E3C01 /* NetworkCache.swift */; };
 		47B73E6919AA41037370A987 /* A2AIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8B903E7E7D3F11E9D6CD546 /* A2AIntegrationTests.swift */; };
+		A0E85D8C32AF47EA8B9DA069 /* CommentsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA163CDBCEF84F8D91FC92D2 /* CommentsSheet.swift */; };
 		482906CCF057DFD3665853B6 /* ReelActionStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE52F566E6BA65E6CFD0FE0 /* ReelActionStrip.swift */; };
 		486285B3A4ECEDC26C21ECA4 /* ClipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25808DDC1D79FBB409AC6B60 /* ClipService.swift */; };
 		486F4F61F46E99F60ED12C07 /* CourseGenerationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAC2358461A28FEAA891E51 /* CourseGenerationModels.swift */; };
@@ -133,6 +137,7 @@
 		52EE6D029B16451BDC03982D /* VoiceInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0732C42EAC4B5AD46632BF /* VoiceInputService.swift */; };
 		5470BD3BC5FB18803F353AD1 /* ShimmerModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F7A40E3E29C9931F7ED90E /* ShimmerModifier.swift */; };
 		5820C61A0B77B072689343AF /* A2UITestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 145E7716AA44A5B26406DFA0 /* A2UITestView.swift */; };
+		B3E1F2A4C5D67890E1F2A4C5 /* ContentFeedTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F2B1C4D5E67890F1A2B3C4 /* ContentFeedTestView.swift */; };
 		588F5849AAEE058DAF073EE3 /* MyCoursesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AD8DE7A062628A8EF39577 /* MyCoursesView.swift */; };
 		58A08B60309616AA10A69FB6 /* DiscoverViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6F2E23917EB9A90488143D /* DiscoverViewModel.swift */; };
 		5978341A2A0A6F70EC76911F /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517DAF390C898C9C8DF37AB4 /* OfflineQueueManager.swift */; };
@@ -370,6 +375,13 @@
 		F9280AE70A4FBC18F24CE01E /* DefaultAIRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CF638F3BB670D289A0C977 /* DefaultAIRepository.swift */; };
 		F9F7B88BEBCE12BCB6596F1D /* StoryViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB3A317F48B8848AEE894192 /* StoryViewer.swift */; };
 		FADF492A2F86952E46DEF44C /* A2ATaskManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 444CB270870FA0C2C902CA25 /* A2ATaskManager.swift */; };
+		012345678A1B2C3D4E5F6789 /* A2ATaskManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9012345678A1B2C3D4E5F678 /* A2ATaskManagerTests.swift */; };
+		DD1234567890ABCDEF123456 /* ContentStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1234567890ABCDEF123456 /* ContentStorageService.swift */; };
+		FF1234567890ABCDEF123456 /* EnhancedCameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1234567890ABCDEF123456 /* EnhancedCameraManager.swift */; };
+		B2C3D4E5F6789012345678A1 /* GamificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* GamificationService.swift */; };
+		D4E5F6789012345678A1B2C3 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F6789012345678A1B2 /* CalendarService.swift */; };
+		F6789012345678A1B2C3D4E5 /* CreateStudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F6789012345678A1B2C3D4 /* CreateStudioComponents.swift */; };
+		89012345678A1B2C3D4E5F67 /* StudyPlanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 789012345678A1B2C3D4E5F6 /* StudyPlanCard.swift */; };
 		FB16CD1B287B27F8221AD485 /* SmartMemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6093749A86AF324385D0BC3D /* SmartMemoryService.swift */; };
 		FBB7DF1DFB7FC81030F6B7A5 /* SoftSkillsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C98B5B4523D1A9A5240C0C /* SoftSkillsService.swift */; };
 		FBF71C21DE57C15533499177 /* LessonBlockParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0DD15C2BD3A8E41638A13A /* LessonBlockParser.swift */; };
@@ -429,6 +441,7 @@
 		138DADB848E1A09D8B3524C6 /* TutorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorModels.swift; sourceTree = "<group>"; };
 		1402673D3A74F57124D303EE /* VideoRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecorderView.swift; sourceTree = "<group>"; };
 		145E7716AA44A5B26406DFA0 /* A2UITestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UITestView.swift; sourceTree = "<group>"; };
+		A3F2B1C4D5E67890F1A2B3C4 /* ContentFeedTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentFeedTestView.swift; sourceTree = "<group>"; };
 		15920EB95AE0C7AFC1922271 /* DefaultSocialRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultSocialRepository.swift; sourceTree = "<group>"; };
 		160C3AFE3E1DAD351D98977F /* CourseCreationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseCreationCoordinator.swift; sourceTree = "<group>"; };
 		16410FA00D6950A04EF88791 /* CreateStoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateStoryView.swift; sourceTree = "<group>"; };
@@ -509,6 +522,13 @@
 		434E505EB9076ED24F4C86F4 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		4442EBF99D96CDBEF049AFD6 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		444CB270870FA0C2C902CA25 /* A2ATaskManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2ATaskManager.swift; sourceTree = "<group>"; };
+		9012345678A1B2C3D4E5F678 /* A2ATaskManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Tests/A2ATaskManagerTests.swift; sourceTree = SOURCE_ROOT; };
+		CC1234567890ABCDEF123456 /* ContentStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Services/ContentStorageService.swift; sourceTree = SOURCE_ROOT; };
+		EE1234567890ABCDEF123456 /* EnhancedCameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Services/EnhancedCameraManager.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F6789012345678 /* GamificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Services/GamificationService.swift; sourceTree = SOURCE_ROOT; };
+		C3D4E5F6789012345678A1B2 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Services/CalendarService.swift; sourceTree = SOURCE_ROOT; };
+		E5F6789012345678A1B2C3D4 /* CreateStudioComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Components/Creation/CreateStudioComponents.swift; sourceTree = SOURCE_ROOT; };
+		789012345678A1B2C3D4E5F6 /* StudyPlanCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Main/AITutor/StudyPlanCard.swift; sourceTree = SOURCE_ROOT; };
 		446DCA1A8910EFF3CCADEFFB /* LyoError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoError.swift; sourceTree = "<group>"; };
 		448752348ABA6200849DDAF9 /* HybridLyoHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridLyoHomeView.swift; sourceTree = "<group>"; };
 		449898973954CEB145288955 /* CommunityDockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityDockView.swift; sourceTree = "<group>"; };
@@ -703,6 +723,9 @@
 		D08992DC179A8EAE9315102D /* MultiAgentCourseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiAgentCourseModels.swift; sourceTree = "<group>"; };
 		D0A63F786E84E7C13FEC2D88 /* FirebaseAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseAuthManager.swift; sourceTree = "<group>"; };
 		D179E7F3A152C6F43972E79F /* CreationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationSheet.swift; sourceTree = "<group>"; };
+		D5E6F7A8B9C0D1E2F3A4B5C6 /* LyoCreateStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoCreateStudioView.swift; sourceTree = "<group>"; };
+		E6F7A8B9C0D1E2F3A4B5C6D7 /* CreateModeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateModeDetailView.swift; sourceTree = "<group>"; };
+		F7A8B9C0D1E2F3A4B5C6D7E8 /* PublishFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublishFlowView.swift; sourceTree = "<group>"; };
 		D1880BA6E7FEC86C12C48E49 /* LearningModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningModels.swift; sourceTree = "<group>"; };
 		D1C6952904E81E207823392B /* LyoCinematicIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoCinematicIntegrationTests.swift; sourceTree = "<group>"; };
 		D2CF638F3BB670D289A0C977 /* DefaultAIRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultAIRepository.swift; sourceTree = "<group>"; };
@@ -749,6 +772,7 @@
 		EBA872ED82681634487C685F /* AICommandResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommandResponse.swift; sourceTree = "<group>"; };
 		ECE0D0EDA2CB673D15915099 /* CommunityFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityFeedView.swift; sourceTree = "<group>"; };
 		ED51A39AF877C361EA792234 /* A2ACourseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2ACourseService.swift; sourceTree = "<group>"; };
+		AA163CDBCEF84F8D91FC92D2 /* CommentsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentsSheet.swift; sourceTree = "<group>"; };
 		EEE52F566E6BA65E6CFD0FE0 /* ReelActionStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelActionStrip.swift; sourceTree = "<group>"; };
 		F0AB5AC67748757944FFD28C /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		F12C37FBAE51812B79498CCC /* TextToSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechService.swift; sourceTree = "<group>"; };
@@ -877,6 +901,7 @@
 				40D19F543FE091E7D874DB29 /* EnhancedLyoHomeView.swift */,
 				2B9237D79C40F7D1A0BA5FE2 /* LioChatSheet.swift */,
 				6A7D94D2885CAB9768DC0D58 /* LyoHomeView.swift */,
+				789012345678A1B2C3D4E5F6 /* StudyPlanCard.swift */,
 			);
 			path = AITutor;
 			sourceTree = "<group>";
@@ -1007,6 +1032,9 @@
 				65B69F1CC73F360A30729D1F /* CreateHubView.swift */,
 				BC10891F450647B673FC5AC7 /* CreateModePicker.swift */,
 				D179E7F3A152C6F43972E79F /* CreationSheet.swift */,
+				D5E6F7A8B9C0D1E2F3A4B5C6 /* LyoCreateStudioView.swift */,
+				E6F7A8B9C0D1E2F3A4B5C6D7 /* CreateModeDetailView.swift */,
+				F7A8B9C0D1E2F3A4B5C6D7E8 /* PublishFlowView.swift */,
 				C8FF3A9C6BE03A2E42C9185E /* MultiModeCreationView.swift */,
 				2BF6D9451EEA788672DB8D7A /* PostEditorView.swift */,
 				1402673D3A74F57124D303EE /* VideoRecorderView.swift */,
@@ -1058,6 +1086,10 @@
 				5215209E95C644E2A1982F1E /* CourseShareService.swift */,
 				CAA14CFBF3106F28DD5414A0 /* CourseSocialService.swift */,
 				2C47C1772A40B43984C40497 /* UserSessionManager.swift */,
+				CC1234567890ABCDEF123456 /* ContentStorageService.swift */,
+				EE1234567890ABCDEF123456 /* EnhancedCameraManager.swift */,
+				A1B2C3D4E5F6789012345678 /* GamificationService.swift */,
+				C3D4E5F6789012345678A1B2 /* CalendarService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1337,6 +1369,9 @@
 			isa = PBXGroup;
 			children = (
 				145E7716AA44A5B26406DFA0 /* A2UITestView.swift */,
+				A3F2B1C4D5E67890F1A2B3C4 /* ContentFeedTestView.swift */,
+				9012345678A1B2C3D4E5F678 /* A2ATaskManagerTests.swift */,
+				E5F6789012345678A1B2C3D4 /* CreateStudioComponents.swift */,
 			);
 			path = Test;
 			sourceTree = "<group>";
@@ -1655,6 +1690,7 @@
 			isa = PBXGroup;
 			children = (
 				059E2FDA0D8255F29D49A1CA /* QuizOverlayView.swift */,
+				AA163CDBCEF84F8D91FC92D2 /* CommentsSheet.swift */,
 				EEE52F566E6BA65E6CFD0FE0 /* ReelActionStrip.swift */,
 				F7B0B0F6417620C1C0D74271 /* ReelHeaderView.swift */,
 				2A4D89BEFCC1EAE5167A86BF /* ReelInfoOverlay.swift */,
@@ -1840,6 +1876,12 @@
 				6109ED2ECFEC5D23EA844594 /* A2AModels.swift in Sources */,
 				5046DD2BDE677E1B573DBE69 /* A2AProgressView.swift in Sources */,
 				FADF492A2F86952E46DEF44C /* A2ATaskManager.swift in Sources */,
+				DD1234567890ABCDEF123456 /* ContentStorageService.swift in Sources */,
+				FF1234567890ABCDEF123456 /* EnhancedCameraManager.swift in Sources */,
+				B2C3D4E5F6789012345678A1 /* GamificationService.swift in Sources */,
+				D4E5F6789012345678A1B2C3 /* CalendarService.swift in Sources */,
+				F6789012345678A1B2C3D4E5 /* CreateStudioComponents.swift in Sources */,
+				89012345678A1B2C3D4E5F67 /* StudyPlanCard.swift in Sources */,
 				1005C6316A17A5C74AC9D893 /* A2UICapabilityNegotiator.swift in Sources */,
 				441249C078DA5487004D5454 /* A2UIComponent.swift in Sources */,
 				E5249944504F957B4BFE589E /* A2UIContentViews.swift in Sources */,
@@ -1861,6 +1903,7 @@
 				F914F0B88502F3C0F0DCA628 /* A2UIStreamService.swift in Sources */,
 				6FCD120712F971CEF9463AFB /* A2UIStudyPlanViews.swift in Sources */,
 				5820C61A0B77B072689343AF /* A2UITestView.swift in Sources */,
+				B3E1F2A4C5D67890E1F2A4C5 /* ContentFeedTestView.swift in Sources */,
 				0878E07F27CCBE7E525A3C84 /* A2UIVoiceController.swift in Sources */,
 				647247E1AB7C829941DF29D5 /* AICommandHandler.swift in Sources */,
 				400EAE8AD014DDD98B8EA1FA /* AICommandResponse.swift in Sources */,
@@ -1954,6 +1997,9 @@
 				B5E5D9B83D66203C53E7705A /* CreateStoryView.swift in Sources */,
 				874477B53F1F23822490AB5F /* CreateViewModel.swift in Sources */,
 				41EDD43F25BE43986059B129 /* CreationSheet.swift in Sources */,
+				C4D5E6F7A8B9C0D1E2F3A4B5 /* LyoCreateStudioView.swift in Sources */,
+				D5E6F7A8B9C0D1E2F3A4B5C7 /* CreateModeDetailView.swift in Sources */,
+				E6F7A8B9C0D1E2F3A4B5C6D8 /* PublishFlowView.swift in Sources */,
 				3102105FD61B7FA48D0AD660 /* DataService.swift in Sources */,
 				F9280AE70A4FBC18F24CE01E /* DefaultAIRepository.swift in Sources */,
 				45F95565EFE94850F75C26A4 /* DefaultAuthRepository.swift in Sources */,
@@ -2092,6 +2138,7 @@
 				B4252E90A7E95DD030398A6D /* QuizOverlayView.swift in Sources */,
 				CD8C1E0584F1E07D7E9DB59C /* QuizView.swift in Sources */,
 				8012020A4BBFC0959B0EF27D /* QuizViewModel.swift in Sources */,
+				A0E85D8C32AF47EA8B9DA069 /* CommentsSheet.swift in Sources */,
 				482906CCF057DFD3665853B6 /* ReelActionStrip.swift in Sources */,
 				8CE655203524B38455B157DA /* ReelHeaderView.swift in Sources */,
 				4F4F0554435F3843453A4C96 /* ReelInfoOverlay.swift in Sources */,

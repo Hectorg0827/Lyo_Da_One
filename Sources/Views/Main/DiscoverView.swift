@@ -95,6 +95,14 @@ struct DiscoverView: View {
             .presentationDragIndicator(.visible)
             .applyPresentationBackgroundIfAvailable()
         }
+        .sheet(item: $viewModel.selectedItemForComments) { item in
+            CommentsSheet(item: item, isPresented: Binding(
+                get: { viewModel.selectedItemForComments != nil },
+                set: { if !$0 { viewModel.selectedItemForComments = nil } }
+            ))
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
     }
     
     // MARK: - Error Banner
@@ -175,7 +183,9 @@ struct DiscoverView: View {
                         onLike: { 
                             viewModel.toggleLike(for: item)
                         },
-                        onComment: { /* Handle comment */ },
+                        onComment: { 
+                            viewModel.commentsAction(item: item)
+                        },
                         onShare: { 
                             itemToShare = item
                         },

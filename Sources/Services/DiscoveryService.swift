@@ -109,7 +109,45 @@ class DiscoveryService: ObservableObject {
         }
     }
     
-    // MARK: - Upload Media
+    // MARK: - Social Interactions
+    
+    func likeDiscovery(discoveryId: String) async throws {
+        // Assume discoveryId maps to a Post ID
+        try await apiClient.likePost(id: discoveryId)
+        
+        // Optimistically update local state if present
+        if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {
+            var item = myDiscoveries[index]
+            item.isLiked = true
+            item.likes += 1
+            myDiscoveries[index] = item
+        }
+        
+        Log.discover.info("Discovery liked: \(discoveryId)")
+    }
+    
+    func unlikeDiscovery(discoveryId: String) async throws {
+        try await apiClient.unlikePost(id: discoveryId)
+        
+        if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {
+            var item = myDiscoveries[index]
+            item.isLiked = false
+            item.likes = max(0, item.likes - 1)
+            myDiscoveries[index] = item
+        }
+        
+        Log.discover.info("Discovery unliked: \(discoveryId)")
+    }
+    
+    func fetchComments(discoveryId: String) async throws -> [Comment] {
+        return try await apiClient.fetchComments(postId: discoveryId)
+    }
+    
+    func postComment(discoveryId: String, content: String) async throws -> Comment {
+        let comment = try await apiClient.createComment(postId: discoveryId, content: content)
+        Log.discover.info("Comment posted on: \(discoveryId)")
+        return comment
+    }
     
     func uploadDiscoveryVideo(videoURL: URL) async throws -> String {
         // Upload to cloud storage (presigned PUT)

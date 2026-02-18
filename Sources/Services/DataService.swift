@@ -47,38 +47,60 @@ final class DataService: ObservableObject {
         }
         
         do {
-            async let discoverTask = apiClient.fetchDiscoverFeed()
-            async let communityCoursesTask = apiClient.discoverCommunityCourses()
+            // Fetch real posts from public feed
+            let posts = try await apiClient.fetchPublicFeed(limit: 20)
             
-            let (rawItems, communityCourses) = try await (discoverTask, try? communityCoursesTask)
-            
-            var items = rawItems
-            
-            // Map community courses to discover items and append
-            if let communityCourses = communityCourses {
-                let mappedCourses = communityCourses.map { course in
-                    DiscoverItem(
-                        id: "community_course_\(course.id)",
-                        type: .courseSuggestion,
-                        title: course.title,
-                        subtitle: course.description,
-                        tag: course.tags.first ?? "Community",
-                        estimatedMinutes: course.lessonCount * 10, // heuristic
-                        courseId: course.id,
-                        thumbnailURL: course.thumbnailURL != nil ? URL(string: course.thumbnailURL!) : nil,
-                        authorName: course.creator.name,
-                        authorAvatarURL: course.creator.avatar != nil ? URL(string: course.creator.avatar!) : nil
-                    )
+            // Map posts to DiscoverItems
+            let postItems = posts.compactMap { post -> DiscoverItem? in
+                // Only show posts with content or attachments
+                guard !post.content.isEmpty || (post.attachments?.isEmpty == false) else { return nil }
+                
+                // Determine video/image URL
+                var videoURL: URL?
+                var thumbnailURL: URL?
+                
+                if let attachments = post.attachments {
+                    for urlStr in attachments {
+                        if urlStr.hasSuffix(".mp4") || urlStr.contains("video") {
+                            videoURL = URL(string: urlStr)
+                        } else if urlStr.hasSuffix(".jpg") || urlStr.hasSuffix(".png") {
+                            thumbnailURL = URL(string: urlStr)
+                        }
+                    }
                 }
-                items.append(contentsOf: mappedCourses)
+                
+                return DiscoverItem(
+                    id: post.id,
+                    type: .userClip,
+                    title: post.content.components(separatedBy: "\n").first ?? "New Clip",
+                    subtitle: post.content,
+                    tag: post.author.name,
+                    estimatedMinutes: 1,
+                    thumbnailURL: thumbnailURL,
+                    videoURL: videoURL,
+                    aiInsight: nil, // Could generate this later
+                    subject: "Community",
+                    level: .beginner,
+                    xpReward: 10,
+                    keyPoints: [],
+                    quizMoments: [],
+                    isLiked: post.isLiked,
+                    likeCount: post.likes,
+                    viewCount: 0,
+                    shareCount: 0,
+                    isSaved: false,
+                    authorName: post.author.name,
+                    authorAvatarURL: post.author.avatarURL.flatMap { URL(string: $0) }
+                )
             }
             
-            Log.data.info("Fetched \(items.count) total discover items (including \(communityCourses?.count ?? 0) from community)")
-            return items
+            Log.data.info("Fetched \(postItems.count) posts for discover feed")
+            return postItems
+            
         } catch {
             Log.data.error("Failed to fetch discover feed: \(error.localizedDescription)")
             lastError = error.localizedDescription
-            return [] // Return empty list instead of mocks
+            return [] 
         }
     }
     

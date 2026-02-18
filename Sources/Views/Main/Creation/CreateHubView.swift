@@ -288,6 +288,8 @@ struct CreateHubView: View {
                 CourseModeView(viewModel: viewModel)
             case .event:
                 EventModeView(viewModel: viewModel)
+            case .live:
+                EventModeView(viewModel: viewModel)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -307,6 +309,8 @@ struct CreateHubView: View {
                 case .course:
                     CourseGenerationView(viewModel: viewModel)
                 case .event:
+                    EventCreationView(viewModel: viewModel)
+                case .live:
                     EventCreationView(viewModel: viewModel)
                 }
             }

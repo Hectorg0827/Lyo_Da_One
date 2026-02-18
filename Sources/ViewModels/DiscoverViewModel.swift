@@ -17,6 +17,7 @@ final class DiscoverViewModel: ObservableObject {
     // UI State for Context Sheet
     @Published var showVideoContextSheet: Bool = false
     @Published var selectedContextItem: DiscoverItem?
+    @Published var selectedItemForComments: DiscoverItem? // For CommentsSheet
     
     // MARK: - Dependencies
     
@@ -76,6 +77,11 @@ final class DiscoverViewModel: ObservableObject {
         }
     }
     
+    /// Open comments for an item
+    func commentsAction(item: DiscoverItem) {
+        selectedItemForComments = item
+    }
+    
     /// Toggle like status for an item
     func toggleLike(for item: DiscoverItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
@@ -96,7 +102,24 @@ final class DiscoverViewModel: ObservableObject {
         
         // Fire and forget backend request
         Task { 
-            // await api.likeDiscoverItem(id: item.id, like: updatedItem.isLiked) 
+            do {
+                if updatedItem.isLiked {
+                    try await DiscoveryService.shared.likeDiscovery(discoveryId: item.id)
+                } else {
+                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
+                }
+            } catch {
+                print("Failed to toggle like: \(error)")
+                // Revert
+                await MainActor.run {
+                    if let revertIndex = items.firstIndex(where: { $0.id == item.id }) {
+                        items[revertIndex].isLiked.toggle()
+                        // Re-adjust count? Maybe complex if user spammed. Just toggle back.
+                        if items[revertIndex].isLiked { items[revertIndex].likeCount += 1 }
+                        else { items[revertIndex].likeCount = max(0, items[revertIndex].likeCount - 1) }
+                    }
+                }
+            }
         }
     }
     

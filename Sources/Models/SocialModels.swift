@@ -150,9 +150,9 @@ struct Discovery: Identifiable, Codable {
     let description: String?
     let thumbnailURL: String?
     let videoURL: String?
-    let likes: Int
+    var likes: Int
     let views: Int
-    let isLiked: Bool
+    var isLiked: Bool
     let isSaved: Bool
     let createdAt: Date
     

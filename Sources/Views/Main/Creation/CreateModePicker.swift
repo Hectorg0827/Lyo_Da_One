@@ -91,6 +91,7 @@ extension CreateMode {
         case .post: return "✏️"
         case .course: return "📚"
         case .event: return "🎉"
+        case .live: return "🟥"
         }
     }
 }

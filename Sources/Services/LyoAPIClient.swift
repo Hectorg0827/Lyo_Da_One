@@ -824,75 +824,261 @@ extension LyoAPIClient {
         ]
     }
     
-    // MARK: - Social API Methods
-    // Note: These methods are stubbed until backend social endpoints are available
-    
-    // Stories
+    // MARK: - Stories API
+
+    func fetchStories() async throws -> StoriesResponse {
+        // For development, return mock data
+        if AppConfig.allowMockFallbacks {
+            return StoriesResponse(
+                stories: mockStories(),
+                myStory: mockMyStory()
+            )
+        }
+        return try await request(path: "/api/v1/stories")
+    }
+
     func createStory(_ request: CreateStoryRequest) async throws -> Story {
         let body = try jsonEncoder.encode(request)
+
+        // For development, return mock story
+        if AppConfig.allowMockFallbacks {
+            return Story(
+                id: UUID().uuidString,
+                userId: "current_user",
+                userName: "You",
+                userAvatar: nil,
+                slides: [StorySlide(
+                    id: UUID().uuidString,
+                    type: request.mediaType,
+                    mediaURL: request.mediaURL,
+                    text: request.caption,
+                    duration: request.mediaType == .video ? 15.0 : 5.0
+                )],
+                isLive: request.isLive,
+                createdAt: Date(),
+                expiresAt: Date().addingTimeInterval(24 * 60 * 60), // 24 hours
+                isSeen: false,
+                linkedCourseId: request.linkedCourseId,
+                linkedGroupId: request.linkedGroupId,
+                tags: request.tags
+            )
+        }
+
         return try await self.request(method: "POST", path: "/api/v1/stories", body: body)
     }
-    
-    func fetchStories() async throws -> StoriesResponse {
-        return try await self.request(path: "/api/v1/stories")
+
+    // MARK: - Discovery API (Enhanced)
+
+    func fetchMyDiscoveries() async throws -> [Discovery] {
+        // For development, return mock data
+        if AppConfig.allowMockFallbacks {
+            return mockDiscoveries()
+        }
+        return try await request(path: "/api/v1/discoveries/my")
     }
-    
-    func deleteStory(storyId: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/stories/\(storyId)")
-    }
-    
-    func markStorySeen(storyId: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/stories/\(storyId)/seen")
-    }
-    
-    // Discoveries
+
     func createDiscovery(_ request: CreateDiscoveryRequest) async throws -> Discovery {
         let body = try jsonEncoder.encode(request)
+
+        // For development, return mock discovery
+        if AppConfig.allowMockFallbacks {
+            return Discovery(
+                id: UUID().uuidString,
+                userId: "current_user",
+                userName: "You",
+                title: request.title,
+                description: request.description,
+                thumbnailURL: request.thumbnailURL,
+                videoURL: request.videoURL,
+                likes: 0,
+                views: 0,
+                isLiked: false,
+                isSaved: false,
+                createdAt: Date()
+            )
+        }
+
         return try await self.request(method: "POST", path: "/api/v1/discoveries", body: body)
     }
-    
-    func fetchMyDiscoveries() async throws -> [Discovery] {
-        return try await self.request(path: "/api/v1/discoveries/me")
-    }
-    
+
     func fetchSavedDiscoveries() async throws -> [Discovery] {
-        return try await self.request(path: "/api/v1/discoveries/saved")
+        return try await request(path: "/api/v1/discoveries/saved")
     }
-    
+
     func saveDiscovery(discoveryId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/discoveries/\(discoveryId)/save")
     }
-    
+
     func unsaveDiscovery(discoveryId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/discoveries/\(discoveryId)/save")
     }
-    
+
     func fetchDiscoveriesFeed(limit: Int = 20, offset: Int = 0) async throws -> DiscoveriesResponse {
         return try await self.request(path: "/api/v1/discoveries/feed?limit=\(limit)&offset=\(offset)")
     }
-    
-    // Posts
+
+    // MARK: - Posts API (Enhanced)
+
     func createPost(_ request: CreatePostRequest) async throws -> Post {
         let body = try jsonEncoder.encode(request)
+
+        // For development, return mock post
+        if AppConfig.allowMockFallbacks {
+            return Post(
+                id: UUID().uuidString,
+                userId: "current_user",
+                userName: "You",
+                userAvatar: nil,
+                content: request.content,
+                mediaURLs: request.mediaURLs,
+                likes: 0,
+                comments: 0,
+                shares: 0,
+                isLiked: false,
+                createdAt: Date()
+            )
+        }
+
         return try await self.request(method: "POST", path: "/api/v1/posts", body: body)
     }
-    
+
     func fetchPostsFeed(limit: Int = 20, offset: Int = 0) async throws -> PostsResponse {
         return try await self.request(path: "/api/v1/posts/feed?limit=\(limit)&offset=\(offset)")
     }
-    
+
     func deletePost(postId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(postId)")
     }
-    
+
     func likePost(postId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/posts/\(postId)/like")
     }
-    
+
     func unlikePost(postId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(postId)/like")
+    }
+
+    func deleteStory(storyId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/stories/\(storyId)")
+    }
+
+    func markStorySeen(storyId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/stories/\(storyId)/seen")
+    }
+
+    // MARK: - Mock Data for Development
+
+    private func mockStories() -> [Story] {
+        let sampleSlide = StorySlide(
+            id: UUID().uuidString,
+            type: .image,
+            mediaURL: "https://via.placeholder.com/400x600",
+            text: "Sample story content",
+            duration: 5.0
+        )
+
+        return [
+            Story(
+                id: "story_1",
+                userId: "user_1",
+                userName: "Alice",
+                userAvatar: "https://via.placeholder.com/100",
+                slides: [sampleSlide],
+                isLive: false,
+                createdAt: Date().addingTimeInterval(-3600),
+                expiresAt: Date().addingTimeInterval(20 * 3600),
+                isSeen: false
+            )
+        ]
+    }
+
+    private func mockMyStory() -> Story? {
+        let slide = StorySlide(
+            id: UUID().uuidString,
+            type: .text,
+            mediaURL: nil,
+            text: "My learning progress today",
+            duration: 3.0
+        )
+
+        return Story(
+            id: "my_story",
+            userId: "current_user",
+            userName: "You",
+            userAvatar: nil,
+            slides: [slide],
+            isLive: false,
+            createdAt: Date().addingTimeInterval(-1800),
+            expiresAt: Date().addingTimeInterval(22 * 3600),
+            isSeen: false
+        )
+    }
+
+    private func mockDiscoveries() -> [Discovery] {
+        return [
+            Discovery(
+                id: "discovery_1",
+                userId: "current_user",
+                userName: "You",
+                title: "Learning Swift UI",
+                description: "My journey with SwiftUI development",
+                thumbnailURL: "https://via.placeholder.com/300x200",
+                videoURL: "https://sample-videos.com/zip/10/mp4/SampleVideo_640x360_1mb.mp4",
+                likes: 12,
+                views: 45,
+                isLiked: false,
+                isSaved: false,
+                createdAt: Date().addingTimeInterval(-7200)
+            )
+        ]
     }
 }
 
 // NOTE: Lyo2ChatService and Lyo2StreamingManager live in Lyo2ChatService.swift
 // Do NOT duplicate them here.
+
+// MARK: - Social Extensions
+extension LyoAPIClient {
+    
+    func fetchPost(id: String) async throws -> RepoPost {
+        return try await request(path: "/api/v1/posts/\(id)")
+    }
+    
+    func unlikePost(id: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(id)/reactions")
+    }
+    
+    func createComment(postId: String, content: String) async throws -> Comment {
+        // Backend expects post_id as Int if possible, but let's try strict Int conversion
+        // If IDs are UUIDs (strings), this Int conversion will fail.
+        // Identify if backend uses Int or String for IDs.
+        // routes.py says post_id: int.
+        // RepoPost says id: String.
+        // This implies likely Int IDs cast to String in RepoPost.
+        
+        guard let postIdInt = Int(postId) else {
+             // If we can't convert, maybe try sending as string if backend accepts it?
+             // But routes.py is explicit.
+             // For now, fail if not Int.
+            throw APIError.invalidURL 
+        }
+        
+        struct CreateCommentRequest: Codable {
+            let post_id: Int
+            let content: String
+        }
+        
+        // Use JSONEncoder from self? No, LyoAPIClient has private jsonEncoder property?
+        // It is private. createComment is in extension.
+        // I can instantiate a new one or make the property internal.
+        // Or duplicate the logic.
+        let encoder = JSONEncoder()
+        
+        let body = try encoder.encode(CreateCommentRequest(post_id: postIdInt, content: content))
+        return try await request(method: "POST", path: "/api/v1/comments", body: body)
+    }
+    
+    func fetchComments(postId: String) async throws -> [Comment] {
+        return try await self.request(path: "/api/v1/comments?post_id=\(postId)")
+    }
+}

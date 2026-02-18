@@ -168,6 +168,66 @@ final class CloudStorageService {
             mimeType: "image/jpeg"
         )
     }
+
+    // MARK: - Content Upload Methods
+
+    /// Upload image for content creation (stories, posts, etc.)
+    func uploadImage(_ image: UIImage, folder: String = "content") async throws -> String {
+        // Process image for content
+        let processedImage = resizeImage(image, maxDimension: 1080)
+
+        guard let imageData = processedImage.jpegData(compressionQuality: 0.8) else {
+            throw CloudStorageError.invalidFile
+        }
+
+        let filename = "image_\(UUID().uuidString).jpg"
+
+        // For development, return mock URL
+        if AppConfig.allowMockFallbacks {
+            // Simulate upload delay
+            try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            return "https://mock-storage.lyo.app/\(folder)/\(filename)"
+        }
+
+        let result = try await uploadFile(
+            data: imageData,
+            filename: filename,
+            contentType: "image/jpeg",
+            folder: folder
+        )
+        guard let url = result.publicURL else {
+            throw CloudStorageError.serverError("No public URL returned")
+        }
+        return url
+    }
+
+    /// Upload video for content creation (clips, reels, etc.)
+    func uploadVideo(_ videoURL: URL, folder: String = "content") async throws -> String {
+        guard let videoData = try? Data(contentsOf: videoURL) else {
+            throw CloudStorageError.invalidFile
+        }
+
+        let filename = "video_\(UUID().uuidString).mp4"
+
+        // For development, return mock URL
+        if AppConfig.allowMockFallbacks {
+            // Simulate upload delay based on file size
+            let uploadSeconds = min(Double(videoData.count) / 1_000_000, 5.0) // Max 5 seconds
+            try await Task.sleep(nanoseconds: UInt64(uploadSeconds * 1_000_000_000))
+            return "https://mock-storage.lyo.app/\(folder)/\(filename)"
+        }
+
+        let result = try await uploadFile(
+            data: videoData,
+            filename: filename,
+            contentType: "video/mp4",
+            folder: folder
+        )
+        guard let url = result.publicURL else {
+            throw CloudStorageError.serverError("No public URL returned")
+        }
+        return url
+    }
     
     /// Delete current user's avatar
     func deleteAvatar() async throws {

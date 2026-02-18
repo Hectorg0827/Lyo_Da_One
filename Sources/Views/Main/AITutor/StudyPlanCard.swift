@@ -108,7 +108,7 @@ struct StudyPlanCard: View {
         isProcessing = true
         Task {
             // Format for CalendarService
-            let studyPlan = StudyPlan(
+            let studyPlan = CalendarStudyPlan(
                 id: plan.planId,
                 title: plan.title,
                 testDate: plan.testDate,
