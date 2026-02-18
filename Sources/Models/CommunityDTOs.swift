@@ -383,7 +383,7 @@ struct CourseSocialStats: Codable {
 
 // MARK: - Beacon DTOs
 
-enum APIBeacon: Codable, Identifiable {
+enum APIBeacon: Encodable, Decodable, Identifiable {
     case event(APIEventBeacon)
     case user(APIUserActivityBeacon)
     case question(APIQuestionBeacon)
@@ -453,7 +453,7 @@ enum APIBeacon: Codable, Identifiable {
     }
 }
 
-struct APIEventBeacon: Codable {
+struct APIEventBeacon: Encodable, Decodable {
     let id: Int
     let title: String
     let latitude: Double
@@ -466,7 +466,7 @@ struct APIEventBeacon: Codable {
     }
 }
 
-struct APIUserActivityBeacon: Codable {
+struct APIUserActivityBeacon: Encodable, Decodable {
     let userId: Int
     let displayName: String
     let latitude: Double?
@@ -479,7 +479,7 @@ struct APIUserActivityBeacon: Codable {
     }
 }
 
-struct APIQuestionBeacon: Codable {
+struct APIQuestionBeacon: Encodable, Decodable {
     let id: String
     let text: String
     let latitude: Double
@@ -490,7 +490,7 @@ struct APIQuestionBeacon: Codable {
     }
 }
 
-struct APIMarketplaceBeacon: Codable {
+struct APIMarketplaceBeacon: Encodable, Decodable {
     let id: Int
     let title: String
     let price: Double
