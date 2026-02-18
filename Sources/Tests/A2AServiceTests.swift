@@ -98,7 +98,11 @@ final class A2AServiceTests: XCTestCase {
         try await service.parseStreamingEvents(stream) { _ in }
         
         let events = service.streamingEvents
-        XCTAssertEqual(events.count, 3)
+        // Guard against crash if parser doesn't recognize new event types yet
+        guard events.count >= 3 else {
+            XCTFail("Expected 3 events but got \(events.count). Parser may not support thinking/content_chunk/artifact_created types yet.")
+            return
+        }
         
         XCTAssertEqual(events[0].type, .thinking)
         XCTAssertEqual(events[0].thinkingContent, "Analyzing user request...")

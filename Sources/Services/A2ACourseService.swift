@@ -198,23 +198,18 @@ final class A2ACourseService: ObservableObject {
         userContext: [String: String]?,
         enableVisuals: Bool,
         enableVoice: Bool
-    ) async throws -> A2ACourseJobResponse {
+    ) async throws -> A2ACourseResponse {
         
-        let request = A2AGenerateRequest(
-            topic: topic,
-            qualityTier: qualityTier,
-            userContext: userContext,
-            enableQualityGates: true,
-            enableVisuals: enableVisuals,
-            enableVoice: enableVoice,
-            enableParallel: true
-        )
+        let request: [String: Any] = [
+            "topic": topic,
+            "quality_tier": qualityTier.rawValue,
+            "user_context": userContext ?? [:],
+            "enable_visuals": enableVisuals,
+            "enable_voice": enableVoice,
+            "enable_streaming": false
+        ]
         
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let bodyData = try encoder.encode(request)
-        
-        let endpoint = Endpoints.CourseGenerationV2.generate(body: DataWrapper(data: bodyData))
+        let endpoint = Endpoints.A2A.generate(topic: topic, options: request)
         
         return try await NetworkClient.shared.request(endpoint)
     }
@@ -254,7 +249,7 @@ final class A2ACourseService: ObservableObject {
         )
         
         await MainActor.run {
-            self.currentPipelineId = job.jobId
+            self.currentPipelineId = job.pipelineId
         }
         
         // Poll until complete
@@ -264,7 +259,7 @@ final class A2ACourseService: ObservableObject {
         while !isDone {
             if Task.isCancelled { throw A2AError.pipelineFailed("Cancelled") }
             
-            let status = try await getPipelineStatus(jobId: job.jobId)
+            let status = try await getPipelineStatus(jobId: job.pipelineId)
             
             await MainActor.run {
                 self.progress = status.progressPercent
@@ -272,7 +267,7 @@ final class A2ACourseService: ObservableObject {
             }
             
             if status.status == "completed" {
-                finalCourse = try await fetchFinalCourseResult(jobId: job.jobId)
+                finalCourse = try await fetchFinalCourseResult(jobId: job.pipelineId)
                 await MainActor.run {
                     self.generatedCourse = finalCourse
                     self.streamingState = .completed
@@ -361,7 +356,7 @@ final class A2ACourseService: ObservableObject {
     }
     
     internal func getPipelineStatus(jobId: String) async throws -> A2AStatusResponse {
-        let endpoint = Endpoints.CourseGenerationV2.status(jobId: jobId)
+        let endpoint = Endpoints.A2A.status(taskId: jobId)
         return try await NetworkClient.shared.request(endpoint)
     }
     
@@ -389,8 +384,10 @@ final class A2ACourseService: ObservableObject {
     }
     
     private func fetchFinalCourseResult(jobId: String) async throws -> A2AGeneratedCourse {
-        let endpoint = Endpoints.CourseGenerationV2.result(jobId: jobId)
+        let endpoint = Endpoints.A2A.result(taskId: jobId)
         
+        // Note: result might be APICourseResult OR A2ACourseResponse.
+        // Assuming backend returns APICourseResult structure for now.
         let apiResult: APICourseResult = try await NetworkClient.shared.request(endpoint)
         return convertApiResultToCourse(apiResult)
     }

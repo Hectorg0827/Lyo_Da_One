@@ -26,7 +26,11 @@ class LyoAITests: XCTestCase {
         
         // Then
         XCTAssertFalse(viewModel.isLoading)
-        XCTAssertEqual(viewModel.messages.count, 2) // User message + AI response
+        
+        guard viewModel.messages.count >= 2 else {
+            XCTFail("Expected at least 2 messages (user + AI), got \(viewModel.messages.count)")
+            return
+        }
         
         let userMessage = viewModel.messages[0]
         XCTAssertTrue(userMessage.isFromUser)

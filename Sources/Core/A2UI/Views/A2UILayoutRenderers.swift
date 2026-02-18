@@ -116,20 +116,13 @@ struct A2UICardRenderer: View {
         .padding()
         .background(backgroundColorFromProps())
         .cornerRadius(component.props.borderRadius ?? 12)
-        .shadow(
-            color: Color.black.opacity(0.1),
-            radius: component.props.shadowRadius ?? 4,
-            x: 0,
-            y: 2
-        )
-        .padding(.horizontal)
     }
 
     private func backgroundColorFromProps() -> Color {
         if let hex = component.props.backgroundColor {
             return Color(hex: hex)
         }
-        return Color(.systemBackground)
+        return Color.white.opacity(0.06) // subtle glass — avoids opaque inner bubble in chat
     }
 }
 
@@ -182,9 +175,8 @@ struct A2UIStudyPlanOverviewRenderer: View {
             }
         }
         .padding()
-        .background(Color(.systemBackground))
+        .background(Color.white.opacity(0.06))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 10)
     }
 
     private func isToday(_ date: Date) -> Bool {
@@ -227,7 +219,7 @@ struct A2UIStudySessionRenderer: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.06))
         .cornerRadius(12)
     }
 }
@@ -290,7 +282,7 @@ struct A2UILevelProgressRenderer: View {
                 .progressViewStyle(LinearProgressViewStyle(tint: .purple))
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color.white.opacity(0.06))
         .cornerRadius(12)
     }
 }
@@ -415,7 +407,7 @@ struct StudySessionCard: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(0.06))
         .cornerRadius(12)
     }
 }

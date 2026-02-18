@@ -212,7 +212,8 @@ struct EnhancedMessageBubble: View {
                                 let actionId = action.payload?["id"]?.stringValue ?? action.id
                                 handleA2UIAction(actionId)
                             })
-                            .padding(.horizontal, -8)
+                            .padding(.horizontal, -14) // fully negate parent padding so A2UI fills ~99% width
+                            .environment(\.colorScheme, .dark) // force dark so semantic colors blend with bubble bg
 
                         case .cinematic(let data):
                             // Render a "Trailer" card that invites the user to tap

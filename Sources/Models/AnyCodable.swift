@@ -62,7 +62,30 @@ public struct AnyCodable: Codable {
         }
     }
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        let data = try JSONSerialization.data(withJSONObject: value, options: [])
+        let data: Data
+        if JSONSerialization.isValidJSONObject(value) {
+            data = try JSONSerialization.data(withJSONObject: value, options: [])
+        } else if let encodable = value as? Encodable {
+            data = try JSONEncoder().encode(AnyEncodableWrapper(encodable))
+        } else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "AnyCodable value of type \(Swift.type(of: value)) cannot be serialized to JSON"
+                )
+            )
+        }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+}
+
+// MARK: - Helper to erase Encodable for re-serialization
+private struct AnyEncodableWrapper: Encodable {
+    private let _encode: (Encoder) throws -> Void
+    init(_ wrapped: Encodable) {
+        _encode = { encoder in try wrapped.encode(to: encoder) }
+    }
+    func encode(to encoder: Encoder) throws {
+        try _encode(encoder)
     }
 }

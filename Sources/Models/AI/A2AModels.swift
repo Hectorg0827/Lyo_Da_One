@@ -299,7 +299,7 @@ struct A2ACourseResponse: Codable {
     let error: String?
     
     enum CodingKeys: String, CodingKey {
-        case pipelineId = "pipeline_id"
+        case pipelineId = "task_id"
         case status, course, phases, metrics, error
     }
 }

@@ -144,37 +144,47 @@ class LyoAdapter {
     // MARK: - AI Director (Mood -> Experience)
     
     private static func renderCinematic(_ block: LyoBlock) -> A2UIContent {
-        // Map Lyo metadata to A2UI Cinematic payload
+        // Try to decode cinematic-specific payload first (kind: "cinematic")
+        if let cinematicPayload = try? block.content.decode(CinematicContentPayload.self),
+           cinematicPayload.kind == "cinematic" {
+            let mood = cinematicPayload.mood ?? block.mood ?? "neutral"
+            let (audioTrack, hapticPattern) = cinematicMoodMapping(mood)
+            let cinematicData = A2UICinematic(
+                title: cinematicPayload.title,
+                subtitle: cinematicPayload.subtitle ?? "Tap to explore",
+                mood: mood,
+                videoUrl: cinematicPayload.videoUrl,
+                audioTrack: audioTrack,
+                hapticPattern: hapticPattern
+            )
+            return A2UIContent(
+                type: .cinematic,
+                courseRoadmap: nil,
+                quiz: nil,
+                title: nil,
+                topics: nil,
+                cards: nil,
+                modules: nil,
+                totalModules: nil,
+                completedModules: nil,
+                suggestions: nil,
+                cinematic: cinematicData,
+                layout: .overlay
+            )
+        }
+        
+        // Fallback: Map Lyo metadata to A2UI Cinematic payload
         let title = (try? block.content.decode(ConceptPayload.self).keyTakeaway) ?? "Immersive Moment"
         
         // 🎬 AI Director: Mood Mapping
         let mood = block.mood ?? "neutral"
-        var audioTrack: String?
-        var hapticPattern: String?
-        
-        switch mood {
-        case "suspense":
-            audioTrack = "ambient_suspense"
-            hapticPattern = "medium"
-        case "celebration":
-            audioTrack = "upbeat_success"
-            hapticPattern = "success"
-        case "reflection":
-            audioTrack = "soft_piano"
-            hapticPattern = "soft"
-        case "urgent":
-            audioTrack = "ticking_clock"
-            hapticPattern = "warning"
-        default:
-            audioTrack = nil
-            hapticPattern = nil
-        }
+        let (audioTrack, hapticPattern) = cinematicMoodMapping(mood)
         
         let cinematicData = A2UICinematic(
             title: title,
             subtitle: "Tap to explore",
             mood: mood,
-            videoUrl: nil, // In a real app, map block.id to a generated video URL
+            videoUrl: nil,
             audioTrack: audioTrack,
             hapticPattern: hapticPattern
         )
@@ -193,6 +203,35 @@ class LyoAdapter {
             cinematic: cinematicData,
             layout: .overlay
         )
+    }
+    
+    private static func cinematicMoodMapping(_ mood: String) -> (audioTrack: String?, hapticPattern: String?) {
+        switch mood {
+        case "suspense":
+            return ("ambient_suspense", "medium")
+        case "celebration":
+            return ("upbeat_success", "success")
+        case "reflection":
+            return ("soft_piano", "soft")
+        case "urgent":
+            return ("ticking_clock", "warning")
+        default:
+            return (nil, nil)
+        }
+    }
+}
+
+/// Payload for cinematic content blocks (kind: "cinematic")
+private struct CinematicContentPayload: Codable {
+    let kind: String
+    let title: String
+    let subtitle: String?
+    let mood: String?
+    let videoUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case kind, title, subtitle, mood
+        case videoUrl = "video_url"
     }
 }
 

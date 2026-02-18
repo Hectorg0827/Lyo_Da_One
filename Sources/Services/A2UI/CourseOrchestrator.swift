@@ -57,24 +57,35 @@ final class CourseOrchestrator: ObservableObject {
         // 4. Hydrate with Real Intelligence (Background)
         Task {
             do {
-                // Call Backend via CinemaService to fill in the real content while user watches intro
-                // We map proposal to backend parameters
-                let realCourse = try await cinemaService.generateGraphCourse(
+                // Call Backend via A2ACourseService
+                let generatedCourse = try await A2ACourseService.shared.generateCourse(
                     topic: proposal.topic,
-                    level: proposal.level
+                    qualityTier: .standard,
+                    userContext: ["level": proposal.level],
+                    enableVisuals: true,
+                    enableVoice: true
+                )
+                
+                // Map A2A Course to GraphCourseItem (for compatibility)
+                let realCourse = GraphCourseItem(
+                    id: generatedCourse.id,
+                    title: generatedCourse.title,
+                    description: generatedCourse.description,
+                    subject: proposal.topic,
+                    gradeBand: generatedCourse.difficulty,
+                    entryNodeId: generatedCourse.modules.first?.lessons.first?.id,
+                    estimatedMinutes: generatedCourse.estimatedDuration,
+                    totalNodes: generatedCourse.modules.reduce(0) { $0 + $1.lessons.count },
+                    createdAt: Date()
                 )
                 
                 // Hot-swap the content
-                // Since our shell used a temp ID, we might need to update the UI to point to the real ID
-                // Or updates occur if we reused the ID (if we could pre-determine it)
-                
-                // For now, post update
                 NotificationCenter.default.post(name: .courseDataUpdated, object: nil, userInfo: ["id": realCourse.id])
                 
-                Log.a2ui.info("Orchestrator: Real content ready for \(realCourse.title)")
+                Log.a2ui.info("Orchestrator: Real A2A content ready for \(realCourse.title)")
                 
             } catch {
-                Log.a2ui.warning("Orchestrator: Live generation failed, falling back to template content.")
+                Log.a2ui.warning("Orchestrator: A2A generation failed: \(error.localizedDescription), falling back to template content.")
                 // We stay on the 'shell' course which is populated with template data
             }
             self.isProcessing = false

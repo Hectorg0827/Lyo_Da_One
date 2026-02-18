@@ -170,27 +170,15 @@ class LyoAIViewModel: ObservableObject {
             .assign(to: &$activeLiveWidget)
             
         // Handle Course Navigation from Unified Chat
+        // Note: triggerCourseNavigation() now calls executeOpenClassroom() directly,
+        // so this subscriber just clears navigation state after the fact.
         unifiedChat.$shouldNavigateToClassroom
             .receive(on: RunLoop.main)
             .sink { [weak self] shouldNavigate in
-                if shouldNavigate, let course = self?.unifiedChat.pendingCourse {
-                    Log.ai.info("ViewModel received navigation to course: \(course.title)")
-                    // Bridge properly to AICommandHandler to trigger the centralized navigation logic (Notification + State)
-                    let payload = CoursePayload(
-                        id: course.id,
-                        title: course.title,
-                        topic: course.topic,
-                        level: course.level,
-                        language: "English",
-                        duration: "\(course.modules.count) modules",
-                        objectives: course.modules.map { $0.title }
-                    )
-                    
-                    // CALL handleOpenClassroom instead of setting state variables directly.
-                    // This ensures the Notification is actually posted to move MainTabView.
-                    let commandPayload = AICommandPayload(stackItem: nil, course: payload)
-                    _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
-                    
+                if shouldNavigate {
+                    if let course = self?.unifiedChat.pendingCourse {
+                        Log.ai.info("ViewModel received navigation to course: \(course.title)")
+                    }
                     self?.unifiedChat.clearNavigation()
                 }
             }

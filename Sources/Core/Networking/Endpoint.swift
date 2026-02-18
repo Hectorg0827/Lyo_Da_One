@@ -803,6 +803,9 @@ enum Endpoints {
     // MARK: - A2A Protocol
     enum A2A: Endpoint {
         case stream(topic: String, qualityTier: String, userContext: [String: String]?)
+        case generate(topic: String, options: [String: Any])
+        case status(taskId: String)
+        case result(taskId: String)
         case discoverAgents
         case getAgentCard(name: String)
         case protocolDiscovery
@@ -810,6 +813,9 @@ enum Endpoints {
         var path: String {
             switch self {
             case .stream: return "/api/v2/courses/stream-a2a"
+            case .generate: return "/api/v2/courses/generate"
+            case .status(let taskId): return "/api/v2/courses/status/\(taskId)"
+            case .result(let taskId): return "/api/v2/courses/result/\(taskId)"
             case .discoverAgents: return "/api/v2/agents"
             case .getAgentCard(let name): return "/api/v2/agents/\(name)"
             case .protocolDiscovery: return "/.well-known/agent.json"
@@ -818,8 +824,8 @@ enum Endpoints {
         
         var method: HTTPMethod {
             switch self {
-            case .stream: return .post
-            case .discoverAgents, .getAgentCard, .protocolDiscovery: return .get
+            case .stream, .generate: return .post
+            case .discoverAgents, .getAgentCard, .protocolDiscovery, .status, .result: return .get
             }
         }
         
@@ -845,6 +851,21 @@ enum Endpoints {
                     request: topic,
                     quality_tier: qualityTier,
                     user_context: userContext
+                )
+            case .generate(let topic, _):
+                struct A2AGenerateRequest: Encodable {
+                    let topic: String
+                    let quality_tier: String
+                    let enable_visuals: Bool
+                    let enable_voice: Bool
+                    let enable_streaming: Bool
+                }
+                return A2AGenerateRequest(
+                    topic: topic,
+                    quality_tier: "standard",
+                    enable_visuals: true,
+                    enable_voice: true,
+                    enable_streaming: false
                 )
             default: return nil
             }

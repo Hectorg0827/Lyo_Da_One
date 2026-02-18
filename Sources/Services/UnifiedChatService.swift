@@ -1224,17 +1224,18 @@ final class UnifiedChatService: ObservableObject {
         guard let course = pendingCourse else { return }
         shouldNavigateToClassroom = true
         
-        // Post global notification for cinematic flow
-        NotificationCenter.default.post(
-            name: .openClassroom, 
-            object: nil, 
-            userInfo: [
-                "courseId": "GENERATE:\(course.topic)",
-                "courseTitle": course.title,
-                "lessonId": "intro_1",
-                "lessonTitle": "Introduction"
-            ]
+        // Route through AICommandHandler so course data is properly populated
+        // and navigation is centralized (populateGeneratedCourse + notifications)
+        let payload = CoursePayload(
+            id: course.id,
+            title: course.title,
+            topic: course.topic,
+            level: course.level,
+            language: "English",
+            duration: "\(course.modules.count) modules",
+            objectives: course.modules.map { $0.title }
         )
+        AICommandHandler.shared.executeOpenClassroom(for: payload)
     }
     
     /// Clear navigation flags
