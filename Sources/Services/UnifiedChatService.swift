@@ -169,7 +169,7 @@ final class UnifiedChatService: ObservableObject {
             await saveConversation()
             Log.ai.info("⚡ Instant response served on-device")
             
-        case .fastResponse(let text, let studyPlan, let latencyMs, let chips):
+        case .fastResponse(let text, let studyPlan, let latencyMs, let chips, let coursePayload):
             // Single-agent non-streaming response
             var contentTypes: [MessageContentType] = [.text]
             // Note: studyPlan is TestPrepData, but contentType expects StudyPlan.
@@ -181,6 +181,15 @@ final class UnifiedChatService: ObservableObject {
                     ])
                 }
                 contentTypes.append(.studyPlan(plan: StudyPlan(title: prep.title, description: nil, schedule: days)))
+            }
+            
+            // If backend returned OPEN_CLASSROOM with a CoursePayload, render as proposal card
+            if let coursePayload = coursePayload {
+                Log.ai.info("🏫 Fast path: rendering course proposal card for '\(coursePayload.title)'")
+                contentTypes.append(.courseProposal(payload: coursePayload))
+                _ = AICommandHandler.shared.handleOpenClassroom(
+                    AICommandPayload(stackItem: nil, course: coursePayload)
+                )
             }
             
             let fastMsg = LyoMessage(
@@ -1007,11 +1016,16 @@ final class UnifiedChatService: ObservableObject {
         return nil
     }
     
-    /// Try to decode an OPEN_CLASSROOM / CoursePayload from artifact content
+    /// Try to decode an OPEN_CLASSROOM / CoursePayload from artifact content.
+    ///
+    /// Supports three detection strategies (checked in order):
+    /// 1. Explicit `type: "OPEN_CLASSROOM"` marker in block content (legacy backend format)
+    /// 2. A2UI component tree with `intent: "open_classroom"` in root/child props (intent-based routing)
+    /// 3. Flat content fields containing `title` + `topic` (heuristic fallback)
     private func tryDecodeOpenClassroom(from block: Lyo2UIBlock) -> CoursePayload? {
         Log.ai.info("🏫 tryDecodeOpenClassroom — block keys: \(block.content.keys.sorted())")
         
-        // Check for "type": "OPEN_CLASSROOM" pattern
+        // ── Strategy 1: Explicit "type": "OPEN_CLASSROOM" marker ──
         if let typeStr = block.content["type"]?.value as? String,
            typeStr == "OPEN_CLASSROOM" {
             Log.ai.info("🏫 Found OPEN_CLASSROOM type marker")
@@ -1048,7 +1062,28 @@ final class UnifiedChatService: ObservableObject {
             }
         }
         
-        // Also check if the content itself looks like a course (has title + topic)
+        // ── Strategy 2: A2UI component tree with intent-based routing ──
+        // The backend may send: content: { "component": { type: "card", props: { intent: "open_classroom", title: "..." } } }
+        let componentKeys = ["component", "a2ui", "ui", "a2ui_component"]
+        for key in componentKeys {
+            guard let componentDict = block.content[key]?.value else { continue }
+            Log.ai.info("🏫 Found '\(key)' in content, attempting A2UI component decode")
+            do {
+                let data = try JSONSerialization.data(withJSONObject: componentDict)
+                let component = try JSONDecoder().decode(A2UIComponent.self, from: data)
+                
+                // Check for intent in the component tree (root or first-level children)
+                if let course = extractCourseFromComponent(component) {
+                    Log.ai.info("🏫 ✅ Extracted CoursePayload from A2UI component tree: \(course.title)")
+                    return course
+                }
+                Log.ai.info("🏫 A2UI component decoded but no classroom intent/course data found")
+            } catch {
+                Log.ai.warning("🏫 Failed to decode A2UIComponent from '\(key)': \(error)")
+            }
+        }
+        
+        // ── Strategy 3: Flat content fields (title + topic heuristic) ──
         if let title = block.content["title"]?.value as? String {
             let topic = (block.content["topic"]?.value as? String) ?? title
             let objectives = (block.content["objectives"]?.value as? [String])
@@ -1072,6 +1107,71 @@ final class UnifiedChatService: ObservableObject {
         }
         
         Log.ai.warning("🏫 ❌ Could not decode any CoursePayload from block")
+        return nil
+    }
+    
+    /// Extract CoursePayload from an A2UIComponent tree.
+    /// Walks the root component and its children looking for:
+    /// 1. `intent: "open_classroom"` in props → synthesize CoursePayload from props
+    /// 2. Props containing `title` + `subtitle` (treated as topic) → heuristic match
+    private func extractCourseFromComponent(_ component: A2UIComponent) -> CoursePayload? {
+        // Check root component props
+        if let course = coursePayloadFromProps(component.props) {
+            return course
+        }
+        
+        // Check first-level children
+        if let children = component.children {
+            for child in children {
+                if let course = coursePayloadFromProps(child.props) {
+                    return course
+                }
+                // Check second-level children (e.g. card > vstack > content)
+                if let grandchildren = child.children {
+                    for grandchild in grandchildren {
+                        if let course = coursePayloadFromProps(grandchild.props) {
+                            return course
+                        }
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    /// Try to build a CoursePayload from A2UI component props.
+    /// Returns non-nil if the props contain `intent == "open_classroom"` OR
+    /// have enough course-like fields (title + subtitle/hint with course keywords).
+    private func coursePayloadFromProps(_ props: A2UIProps) -> CoursePayload? {
+        let hasClassroomIntent = props.intent?.lowercased() == "open_classroom"
+        
+        // Must have at least a title (either from explicit intent or heuristic)
+        guard let title = props.title else {
+            // Even with intent, no title = can't create a course
+            if hasClassroomIntent {
+                Log.ai.warning("🏫 Found open_classroom intent but no title in props")
+            }
+            return nil
+        }
+        
+        if hasClassroomIntent {
+            // Intent-based: trust the backend's signal
+            let topic = props.subtitle ?? props.hint ?? title
+            let level = props.label ?? "Beginner"
+            Log.ai.info("🏫 Intent-based: building CoursePayload from props (intent=open_classroom)")
+            return CoursePayload(
+                id: nil,
+                title: title,
+                topic: topic,
+                level: level,
+                language: nil,
+                duration: nil,
+                objectives: []
+            )
+        }
+        
+        // No explicit intent — don't heuristically guess (avoids false positives)
         return nil
     }
     

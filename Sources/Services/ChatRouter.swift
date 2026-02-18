@@ -24,8 +24,8 @@ import os
 /// The result of routing a message through the appropriate pipeline
 enum ChatRouteResult {
     /// Fast path completed — single text response
-    /// Fast path completed — single text response with optional Study Plan + context chips
-    case fastResponse(text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?)
+    /// Fast path completed — single text response with optional Study Plan + context chips + course payload
+    case fastResponse(text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?, coursePayload: CoursePayload?)
     
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
@@ -150,7 +150,23 @@ final class ChatRouter: ObservableObject {
             recordLatency(latency, for: .fast)
             
             Log.ai.info("⚡ Fast path response in \(String(format: "%.0f", latency))ms")
-            return .fastResponse(text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency, suggestions: response.suggestions)
+            
+            // Extract course payload if backend returned OPEN_CLASSROOM type
+            let coursePayload: CoursePayload? = {
+                // 1. Check explicit type + payload
+                if response.type == "OPEN_CLASSROOM", let payload = response.payload {
+                    Log.ai.info("🏫 Fast path: OPEN_CLASSROOM type with payload detected")
+                    return payload.course
+                }
+                // 2. Check extractedUI (regex-based extraction from response text)
+                if let extracted = response.extractedUI {
+                    Log.ai.info("🏫 Fast path: extractedUI from response text")
+                    return extracted.course
+                }
+                return nil
+            }()
+            
+            return .fastResponse(text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency, suggestions: response.suggestions, coursePayload: coursePayload)
             
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")

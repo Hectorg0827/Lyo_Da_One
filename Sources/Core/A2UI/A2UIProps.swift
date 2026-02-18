@@ -13,6 +13,11 @@ import Foundation
 /// Universal props container - only relevant properties are used per element type
 struct A2UIProps: Codable, Equatable {
     
+    // MARK: - Intent & Routing
+    /// Backend-set intent signal for routing (e.g. "open_classroom", "quiz", "flashcards")
+    /// Used by the client to decide how to handle the component tree (trigger classroom, etc.)
+    var intent: String?
+    
     // MARK: - Content Properties
     var text: String?
     var title: String?
@@ -356,6 +361,7 @@ struct A2UIProps: Codable, Equatable {
     }
     
     enum CodingKeys: String, CodingKey {
+        case intent
         case text, title, subtitle, body, placeholder, value, label, hint
         case defaultValue = "default_value"
         case helperText = "helper_text"
