@@ -260,6 +260,12 @@ struct EnhancedMessageBubble: View {
                             }
                             .padding(.horizontal, -8)
 
+                        case .studyPlan(let plan):
+                            StudyPlanView(plan: plan)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .padding(.horizontal, -8)
+
                         case .notes(let title, let sections):
                             NotesView(notes: NotesPayload(title: title, sections: sections))
                                 .padding(.horizontal, -8)
