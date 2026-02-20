@@ -21,6 +21,7 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
     let conditions: A2UIConditions?
     let metadata: A2UIMetadata?
     
+    // MARK: - Memberwise init (unchanged)
     init(
         id: String = UUID().uuidString,
         type: A2UIElementType,
@@ -38,7 +39,39 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
         self.conditions = conditions
         self.metadata = metadata
     }
-    
+
+    // MARK: - Custom Codable
+
+    private enum CodingKeys: String, CodingKey {
+        case id, type, props, children, actions, conditions, metadata
+    }
+
+    /// Custom decoder so that a missing "id" field (which the backend sometimes omits)
+    /// falls back to a generated UUID instead of throwing a decoding error.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // id is optional on the wire — generate UUID when absent
+        id       = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? UUID().uuidString
+        type     = try c.decode(A2UIElementType.self, forKey: .type)
+        // props is optional on the wire — use empty props when absent
+        props    = (try? c.decodeIfPresent(A2UIProps.self, forKey: .props)) ?? A2UIProps()
+        children = try? c.decodeIfPresent([A2UIComponent].self, forKey: .children)
+        actions  = try? c.decodeIfPresent([A2UIAction].self, forKey: .actions)
+        conditions = try? c.decodeIfPresent(A2UIConditions.self, forKey: .conditions)
+        metadata   = try? c.decodeIfPresent(A2UIMetadata.self, forKey: .metadata)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(type, forKey: .type)
+        try c.encode(props, forKey: .props)
+        try c.encodeIfPresent(children, forKey: .children)
+        try c.encodeIfPresent(actions, forKey: .actions)
+        try c.encodeIfPresent(conditions, forKey: .conditions)
+        try c.encodeIfPresent(metadata, forKey: .metadata)
+    }
+
     static func == (lhs: A2UIComponent, rhs: A2UIComponent) -> Bool {
         lhs.id == rhs.id
         && lhs.type == rhs.type

@@ -51,7 +51,7 @@ struct DynamicComponent: Identifiable, Codable {
     let payload: ComponentPayload
 
     enum CodingKeys: String, CodingKey {
-        case id, type, props, children
+        case id, type, payload, props, children
     }
 
     init(from decoder: Decoder) throws {
@@ -59,29 +59,35 @@ struct DynamicComponent: Identifiable, Codable {
         id = try container.decode(String.self, forKey: .id)
         type = try container.decode(UIComponentType.self, forKey: .type)
 
+        // Descend into "payload" wrapper when present; fall back to root decoder
+        // for the legacy flat structure (backward compatibility).
+        let payloadDecoder: Decoder = container.contains(.payload)
+            ? (try container.superDecoder(forKey: .payload))
+            : decoder
+
         // Dynamic decoding based on type
         switch type {
-        case .vstack: payload = .vstack(try VStackPayload(from: decoder))
-        case .hstack: payload = .hstack(try HStackPayload(from: decoder))
-        case .grid: payload = .grid(try GridPayload(from: decoder))
-        case .card: payload = .card(try CardPayload(from: decoder))
-        case .text: payload = .text(try TextPayload(from: decoder))
-        case .button: payload = .button(try ButtonPayload(from: decoder))
-        case .image: payload = .image(try RecursiveImagePayload(from: decoder))
-        case .divider: payload = .divider(try DividerPayload(from: decoder))
-        case .spacer: payload = .spacer(try SpacerPayload(from: decoder))
-        case .quiz: payload = .quiz(try RecursiveQuizPayload(from: decoder))
-        case .courseRoadmap: payload = .courseRoadmap(try CourseRoadmapPayload(from: decoder))
-        case .coursePreview: payload = .coursePreview(try CoursePreviewPayload(from: decoder))
-        case .learningNode: payload = .learningNode(try LearningNodePayload(from: decoder))
-        case .progressTracker: payload = .progressTracker(try ProgressTrackerPayload(from: decoder))
-        case .interactiveLesson: payload = .interactiveLesson(try InteractiveLessonPayload(from: decoder))
-        case .lessonCard: payload = .lessonCard(try LessonCardPayload(from: decoder))
-        case .courseCard: payload = .courseCard(try A2UICourseCardPayload(from: decoder))
-        case .progressBar: payload = .progressBar(try ProgressBarPayload(from: decoder))
+        case .vstack: payload = .vstack(try VStackPayload(from: payloadDecoder))
+        case .hstack: payload = .hstack(try HStackPayload(from: payloadDecoder))
+        case .grid: payload = .grid(try GridPayload(from: payloadDecoder))
+        case .card: payload = .card(try CardPayload(from: payloadDecoder))
+        case .text: payload = .text(try TextPayload(from: payloadDecoder))
+        case .button: payload = .button(try ButtonPayload(from: payloadDecoder))
+        case .image: payload = .image(try RecursiveImagePayload(from: payloadDecoder))
+        case .divider: payload = .divider(try DividerPayload(from: payloadDecoder))
+        case .spacer: payload = .spacer(try SpacerPayload(from: payloadDecoder))
+        case .quiz: payload = .quiz(try RecursiveQuizPayload(from: payloadDecoder))
+        case .courseRoadmap: payload = .courseRoadmap(try CourseRoadmapPayload(from: payloadDecoder))
+        case .coursePreview: payload = .coursePreview(try CoursePreviewPayload(from: payloadDecoder))
+        case .learningNode: payload = .learningNode(try LearningNodePayload(from: payloadDecoder))
+        case .progressTracker: payload = .progressTracker(try ProgressTrackerPayload(from: payloadDecoder))
+        case .interactiveLesson: payload = .interactiveLesson(try InteractiveLessonPayload(from: payloadDecoder))
+        case .lessonCard: payload = .lessonCard(try LessonCardPayload(from: payloadDecoder))
+        case .courseCard: payload = .courseCard(try A2UICourseCardPayload(from: payloadDecoder))
+        case .progressBar: payload = .progressBar(try ProgressBarPayload(from: payloadDecoder))
         default:
             // Graceful fallback for hundreds of new components
-            payload = .placeholder(try PlaceholderPayload(from: decoder))
+            payload = .placeholder(try PlaceholderPayload(from: payloadDecoder))
         }
 
     }

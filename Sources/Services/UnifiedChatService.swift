@@ -107,6 +107,10 @@ final class UnifiedChatService: ObservableObject {
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
+
+        // Reset stale chips at the beginning of a new user turn.
+        // New suggestions (if any) are set from backend response/actions events.
+        suggestions = []
         
         // 1. Add user message to UI state
         let userMessage = LyoMessage(
@@ -186,10 +190,13 @@ final class UnifiedChatService: ObservableObject {
             // If backend returned OPEN_CLASSROOM with a CoursePayload, render as proposal card
             if let coursePayload = coursePayload {
                 Log.ai.info("🏫 Fast path: rendering course proposal card for '\(coursePayload.title)'")
-                contentTypes.append(.courseProposal(payload: coursePayload))
+                contentTypes = [.courseProposal(payload: coursePayload)]
                 _ = AICommandHandler.shared.handleOpenClassroom(
                     AICommandPayload(stackItem: nil, course: coursePayload)
                 )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
+                }
             }
             
             let fastMsg = LyoMessage(
@@ -209,8 +216,15 @@ final class UnifiedChatService: ObservableObject {
 
             // Update suggestion chips from backend response (context-aware follow-ups)
             if let backendChips = chips, !backendChips.isEmpty {
-                suggestions = backendChips
-                Log.ai.info("💡 Updated \(backendChips.count) suggestion chips from backend")
+                if shouldSuppressGenericSuggestions(for: trimmedText, chips: backendChips) {
+                    suggestions = []
+                    Log.ai.info("💡 Suppressed generic fallback chips for simple prompt")
+                } else {
+                    suggestions = backendChips
+                    Log.ai.info("💡 Updated \(backendChips.count) suggestion chips from backend")
+                }
+            } else {
+                suggestions = []
             }
             
             // Bridge: Scan for OPEN_CLASSROOM commands in fast responses too
@@ -547,6 +561,7 @@ final class UnifiedChatService: ObservableObject {
                     // Merge: keep existing content types and add the artifact
                     var mergedTypes = existingTypes.filter { if case .processing = $0 { return false } else { return true } }
                     mergedTypes.append(contentType)
+                    mergedTypes = normalizeContentTypes(mergedTypes)
                     let artifactMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
@@ -595,6 +610,7 @@ final class UnifiedChatService: ObservableObject {
                     currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
                     // Add new component
                     currentTypes.append(.a2ui(component: a2uiComponent))
+                    currentTypes = normalizeContentTypes(currentTypes)
                     
                     let a2uiMsg = LyoMessage(
                         id: aiMessageId,
@@ -625,12 +641,16 @@ final class UnifiedChatService: ObservableObject {
                 _ = AICommandHandler.shared.handleOpenClassroom(
                     AICommandPayload(stackItem: nil, course: coursePayload)
                 )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
+                }
                 // Replace the existing answer message to avoid duplicates
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
                     // Merge types
                     var currentTypes = messages[idx].contentTypes ?? []
                     currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
                     currentTypes.append(.courseProposal(payload: coursePayload))
+                    currentTypes = normalizeContentTypes(currentTypes)
                     
                     let proposalMsg = LyoMessage(
                         id: aiMessageId,
@@ -720,6 +740,8 @@ final class UnifiedChatService: ObservableObject {
             if !newSuggestions.isEmpty {
                 self.suggestions = newSuggestions
                 Log.ai.info("Set \(newSuggestions.count) suggestion chips")
+            } else {
+                self.suggestions = []
             }
 
         case .error(let message):
@@ -802,12 +824,16 @@ final class UnifiedChatService: ObservableObject {
                 _ = AICommandHandler.shared.handleOpenClassroom(
                     AICommandPayload(stackItem: nil, course: coursePayload)
                 )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
+                }
                 // Replace the existing answer message to avoid duplicates
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
                     // Merge types
                     var currentTypes = messages[idx].contentTypes ?? []
                     currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
                     currentTypes.append(.courseProposal(payload: coursePayload))
+                    currentTypes = normalizeContentTypes(currentTypes)
                     
                     let proposalMsg = LyoMessage(
                         id: aiMessageId,
@@ -837,6 +863,7 @@ final class UnifiedChatService: ObservableObject {
                     var currentTypes = messages[idx].contentTypes ?? []
                     currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
                     currentTypes.append(.a2ui(component: a2uiComponent))
+                    currentTypes = normalizeContentTypes(currentTypes)
                     
                     let a2uiMsg = LyoMessage(
                         id: aiMessageId,
@@ -954,6 +981,48 @@ final class UnifiedChatService: ObservableObject {
         }
     }
 
+    /// Remove plain `.text` content type whenever rich widgets are present.
+    /// This prevents duplicate rendering (text bubble + A2UI/course card) for a single AI turn.
+    private func normalizeContentTypes(_ types: [MessageContentType]) -> [MessageContentType] {
+        let hasRichContent = types.contains { contentType in
+            switch contentType {
+            case .a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .recursiveUI, .cinematic:
+                return true
+            default:
+                return false
+            }
+        }
+
+        guard hasRichContent else { return types }
+
+        return types.filter { contentType in
+            if case .text = contentType { return false }
+            return true
+        }
+    }
+
+    /// Suppress generic fallback chips for simple greeting/ack prompts.
+    /// This avoids always-on "Create / Quiz Me / Deep Dive" style overlays after trivial messages.
+    private func shouldSuppressGenericSuggestions(for userPrompt: String, chips: [SuggestionChip]) -> Bool {
+        let normalizedPrompt = userPrompt
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedChipTexts = chips.map {
+            $0.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let isSimplePrompt = normalizedPrompt.split(separator: " ").count <= 3
+        let simplePrompts: Set<String> = ["hi", "hello", "hey", "yo", "ok", "okay", "thanks", "thank you"]
+        let isGreetingOrAck = simplePrompts.contains(normalizedPrompt)
+
+        let genericChipKeywords: [String] = ["create", "course", "quiz", "deep dive", "deepdive"]
+        let genericCount = normalizedChipTexts.reduce(0) { partial, chipText in
+            partial + (genericChipKeywords.contains { chipText.contains($0) } ? 1 : 0)
+        }
+
+        return (isSimplePrompt || isGreetingOrAck) && genericCount >= 2
+    }
+
     // MARK: - A2UI / Course Bridge Helpers
     
     // MARK: - Lyo Protocol Helpers
@@ -986,33 +1055,49 @@ final class UnifiedChatService: ObservableObject {
         Log.ai.info("🎬 Revealed artifact message: \(id)")
     }
     
-    /// Try to decode an A2UIComponent from a Lyo2UIBlock's content dictionary
+    /// Try to decode an A2UIComponent from a Lyo2UIBlock's content dictionary.
+    ///
+    /// Sanitizes the raw `[String: Any]` dict produced by AnyCodable before calling
+    /// JSONSerialization — Swift Void `()` (decoded from JSON null) is not a valid
+    /// ObjC-bridgeable type and causes JSONSerialization.data(withJSONObject:) to throw,
+    /// which was the primary silent-failure path that fell back to plain text.
     private func tryDecodeA2UIComponent(from block: Lyo2UIBlock) -> A2UIComponent? {
-        // The backend may send an "a2ui" or "component" key with a full A2UI tree
-        let possibleKeys = ["a2ui", "component", "ui", "a2ui_component"]
+        // Expanded key list — backend may use any of these
+        let possibleKeys = ["a2ui", "component", "ui", "a2ui_component", "uiComponent", "ui_component", "a2ui_tree"]
         for key in possibleKeys {
-            if let componentDict = block.content[key]?.value {
-                do {
-                    let data = try JSONSerialization.data(withJSONObject: componentDict)
-                    let component = try JSONDecoder().decode(A2UIComponent.self, from: data)
+            if let rawVal = block.content[key]?.value {
+                // BUG-A FIX: sanitize Void (null) values so JSONSerialization succeeds
+                let sanitized = AnyCodable.sanitizeForJSON(rawVal)
+                if let data = try? JSONSerialization.data(withJSONObject: sanitized),
+                   let component = try? JSONDecoder().decode(A2UIComponent.self, from: data) {
+                    Log.ai.info("🎨 ✅ Decoded A2UIComponent from key '\(key)': type=\(component.type.rawValue)")
                     return component
-                } catch {
-                    Log.ai.warning("Failed to decode A2UIComponent from '\(key)': \(error)")
+                } else {
+                    // Log the actual decode error for diagnostics
+                    do {
+                        let s = AnyCodable.sanitizeForJSON(rawVal)
+                        let d = try JSONSerialization.data(withJSONObject: s)
+                        _ = try JSONDecoder().decode(A2UIComponent.self, from: d)
+                    } catch {
+                        Log.ai.warning("🎨 ⚠️ Decode failed for key '\(key)': \(error)")
+                    }
                 }
             }
         }
-        
-        // Also try decoding the entire content dict as an A2UIComponent
-        do {
-            let contentDict = block.content.mapValues { $0.value }
-            if contentDict["type"] != nil && contentDict["id"] != nil {
-                let data = try JSONSerialization.data(withJSONObject: contentDict)
-                return try JSONDecoder().decode(A2UIComponent.self, from: data)
+
+        // Fallback: try decoding the entire content dict directly as an A2UIComponent.
+        // The backend sometimes places component fields at the root of "content" without a wrapper key.
+        // BUG-B FIX: only require "type" (id is generated by A2UIComponent's custom decoder).
+        let rawContentDict = block.content.mapValues { $0.value }
+        if rawContentDict["type"] != nil {
+            let sanitized = AnyCodable.sanitizeForJSON(rawContentDict) as? [String: Any] ?? rawContentDict
+            if let data = try? JSONSerialization.data(withJSONObject: sanitized),
+               let component = try? JSONDecoder().decode(A2UIComponent.self, from: data) {
+                Log.ai.info("🎨 ✅ Decoded A2UIComponent from root content dict: type=\(component.type.rawValue)")
+                return component
             }
-        } catch {
-            // Not an A2UI component, that's fine
         }
-        
+
         return nil
     }
     
@@ -1084,7 +1169,22 @@ final class UnifiedChatService: ObservableObject {
         }
         
         // ── Strategy 3: Flat content fields (title + topic heuristic) ──
-        if let title = block.content["title"]?.value as? String {
+        // BUG-C FIX: Guard this strategy to ONLY fire for blocks that are explicitly
+        // identified as classroom-intent. Without this guard, any A2UI card/component
+        // that carries a "title" prop at the root of its content dict would be falsely
+        // captured here and routed to .courseProposal instead of .a2ui.
+        let hasExplicitClassroomIntent: Bool = {
+            if block.blockType == .openClassroomBlock { return true }
+            if let typeStr = block.content["type"]?.value as? String,
+               typeStr.uppercased() == "OPEN_CLASSROOM" { return true }
+            if let intent = block.content["intent"]?.value as? String,
+               intent.lowercased().contains("classroom") { return true }
+            if let action = block.content["action"]?.value as? String,
+               action.lowercased() == "open_classroom" { return true }
+            return false
+        }()
+
+        if hasExplicitClassroomIntent, let title = block.content["title"]?.value as? String {
             let topic = (block.content["topic"]?.value as? String) ?? title
             let objectives = (block.content["objectives"]?.value as? [String])
                 ?? (block.content["learning_objectives"]?.value as? [String])
@@ -1105,7 +1205,7 @@ final class UnifiedChatService: ObservableObject {
                 objectives: objectives
             )
         }
-        
+
         Log.ai.warning("🏫 ❌ Could not decode any CoursePayload from block")
         return nil
     }
@@ -1165,6 +1265,24 @@ final class UnifiedChatService: ObservableObject {
                 title: title,
                 topic: topic,
                 level: level,
+                language: nil,
+                duration: nil,
+                objectives: []
+            )
+        }
+        
+        // Strategy 4: Heuristic fallback (if intent is missing but content strongly suggests a course)
+        // Look for keywords in title/subtitle that strongly imply a generated course outline
+        let heuristicKeywords = ["course outline", "learning path", "curriculum", "modules", "syllabus"]
+        let combinedText = (title + " " + (props.subtitle ?? "")).lowercased()
+        
+        if heuristicKeywords.contains(where: { combinedText.contains($0) }) {
+            Log.ai.info("🏫 Heuristic-based: inferred CoursePayload from props (found keywords)")
+            return CoursePayload(
+                id: nil,
+                title: title,
+                topic: props.subtitle ?? title,
+                level: props.label ?? "Beginner",
                 language: nil,
                 duration: nil,
                 objectives: []

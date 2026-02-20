@@ -63,8 +63,9 @@ public struct AnyCodable: Codable {
     }
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
         let data: Data
-        if JSONSerialization.isValidJSONObject(value) {
-            data = try JSONSerialization.data(withJSONObject: value, options: [])
+        let sanitized = AnyCodable.sanitizeForJSON(value)
+        if JSONSerialization.isValidJSONObject(sanitized) {
+            data = try JSONSerialization.data(withJSONObject: sanitized, options: [])
         } else if let encodable = value as? Encodable {
             data = try JSONEncoder().encode(AnyEncodableWrapper(encodable))
         } else {
@@ -76,6 +77,35 @@ public struct AnyCodable: Codable {
             )
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    // MARK: - JSON Sanitization
+
+    /// Recursively sanitizes a value produced by AnyCodable for use with JSONSerialization.
+    /// Swift Void `()` (decoded from JSON null) is replaced with NSNull because Void is
+    /// not a valid ObjC-bridgeable type and causes JSONSerialization.data(withJSONObject:) to throw.
+    /// Keys whose values are Void are dropped (JSON omit-null semantics), which is correct
+    /// for Swift's `decodeIfPresent` / optional properties.
+    public static func sanitizeForJSON(_ val: Any) -> Any {
+        switch val {
+        case is Void:
+            // JSON null → drop (callers omit key entirely rather than emitting NSNull)
+            return NSNull()
+        case let arr as [Any]:
+            return arr.compactMap { item -> Any? in
+                let s = sanitizeForJSON(item)
+                return (s is NSNull) ? nil : s
+            }
+        case let dict as [String: Any]:
+            var out: [String: Any] = [:]
+            for (k, v) in dict {
+                let s = sanitizeForJSON(v)
+                if !(s is NSNull) { out[k] = s }
+            }
+            return out
+        default:
+            return val
+        }
     }
 }
 
