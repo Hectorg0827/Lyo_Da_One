@@ -113,9 +113,6 @@ struct LyoMessageBubbleView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.trailing, !message.isFromUser ? 32 : 0) // Leave room for speaker icon
                         }
-                        .padding(.horizontal, DesignTokens.Spacing.md)
-                        .padding(.vertical, DesignTokens.Spacing.md)
-                        .background(messageBackground)
                     }
                 
                 // ==== A2UI RICH CONTENT RENDERING ====
@@ -126,7 +123,7 @@ struct LyoMessageBubbleView: View {
                             renderContentType(contentType)
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, shouldRenderPlainText ? 8 : 0)
                 }
                 
                 // Mentor Mode Content (Legacy support)
@@ -183,6 +180,10 @@ struct LyoMessageBubbleView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 4)
             }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.vertical, DesignTokens.Spacing.md)
+            .background(messageBackground)
+            .environment(\.colorScheme, .dark)
             .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.995, alignment: message.isFromUser ? .trailing : .leading)
         }
         .padding(.horizontal, 4)
@@ -373,8 +374,6 @@ struct LyoMessageBubbleView: View {
             A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ component: A2UIComponent) in
                 onQuickChipTap?("a2ui-\(action.id)")
             })
-            .padding(.horizontal, -8)
-            .environment(\.colorScheme, .dark)
             
         default:
             EmptyView()
