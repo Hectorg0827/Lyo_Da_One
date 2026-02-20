@@ -96,7 +96,19 @@ struct A2UIRenderer: View {
     private func renderContent(_ comp: A2UIComponent) -> some View {
         switch comp.type {
         // MARK: - Core Display
-        case .text, .heading, .paragraph, .label, .caption:
+        // Route plain text components that contain block-level markdown
+        // (bullets, headers) to the full markdown renderer so they get
+        // proper VStack layout. Pure inline text stays in A2UITextRenderer.
+        case .text, .paragraph:
+            let body = comp.props.text ?? comp.props.body ?? ""
+            let hasBlockMarkdown = body.components(separatedBy: "\n")
+                .contains { $0.hasPrefix("* ") || $0.hasPrefix("- ") || $0.hasPrefix("# ") }
+            if hasBlockMarkdown {
+                AnyView(A2UIMarkdownRenderer(component: comp, context: context, onAction: handleAction))
+            } else {
+                AnyView(A2UITextRenderer(component: comp, context: context, onAction: handleAction))
+            }
+        case .heading, .label, .caption:
             AnyView(A2UITextRenderer(component: comp, context: context, onAction: handleAction))
         case .markdown, .richText:
             AnyView(A2UIMarkdownRenderer(component: comp, context: context, onAction: handleAction))
