@@ -22,6 +22,11 @@ struct LyoMessageBubbleView: View {
     /// True when contentTypes contains rich content (.a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards)
     /// — hides raw text so the rich component renders exclusively without duplication
     private var hasRichContent: Bool {
+        // Also treat non-chat response modes (like course/explainer) as rich content
+        if let mode = message.responseMode, mode != .chat {
+            return true
+        }
+        
         guard let types = message.contentTypes else { return false }
         return types.contains { contentType in
             switch contentType {
@@ -36,6 +41,16 @@ struct LyoMessageBubbleView: View {
             default: return false
             }
         }
+    }
+
+    private var shouldRenderPlainText: Bool {
+        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // If rich content is present, let that content handle the display exclusively
+        // to prevent the "Double Bubble" overlay issue.
+        if hasRichContent {
+            return false
+        }
+        return !trimmed.isEmpty
     }
     
     var body: some View {
@@ -88,18 +103,20 @@ struct LyoMessageBubbleView: View {
                 VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: DesignTokens.Spacing.xs) {
                     // Message content with premium styling
                     // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(message.content)
-                            .font(DesignTokens.Typography.bodyMedium)
-                            .foregroundColor(.white) // Force white text
-                            .fixedSize(horizontal: false, vertical: true) // Wrap text
-                            .lineSpacing(4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.trailing, !message.isFromUser ? 32 : 0) // Leave room for speaker icon
+                    if shouldRenderPlainText {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(message.content)
+                                .font(DesignTokens.Typography.bodyMedium)
+                                .foregroundColor(.white) // Force white text
+                                .fixedSize(horizontal: false, vertical: true) // Wrap text
+                                .lineSpacing(4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.trailing, !message.isFromUser ? 32 : 0) // Leave room for speaker icon
+                        }
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .padding(.vertical, DesignTokens.Spacing.md)
+                        .background(messageBackground)
                     }
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                    .padding(.vertical, DesignTokens.Spacing.md)
-                    .background(messageBackground)
                 
                 // ==== A2UI RICH CONTENT RENDERING ====
                 // This renders Course Roadmaps, Quizzes, Flashcards inline
@@ -141,7 +158,7 @@ struct LyoMessageBubbleView: View {
                 }
                 
                 // Action pills (Lyo messages only)
-                if !message.isFromUser, let actions = message.actions, !actions.isEmpty {
+                if !message.isFromUser, let actions = message.actions, !actions.isEmpty, !hasRichContent {
                     FlowLayout(spacing: DesignTokens.Spacing.xs) {
                         ForEach(actions) { action in
                             PremiumActionPillButton(action: action) {
@@ -357,6 +374,7 @@ struct LyoMessageBubbleView: View {
                 onQuickChipTap?("a2ui-\(action.id)")
             })
             .padding(.horizontal, -8)
+            .environment(\.colorScheme, .dark)
             
         default:
             EmptyView()

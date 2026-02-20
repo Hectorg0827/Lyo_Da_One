@@ -77,7 +77,7 @@ struct DiscoverView: View {
                 .environmentObject(lyoAIViewModel) // FIX: provide required EnvironmentObject
         }
         .sheet(item: $itemToShare) { item in
-            ActivityViewController(activityItems: [item.title, item.videoURL ?? item.thumbnailURL ?? URL(string: "https://lyo.app")!])
+            ActivityViewController(activityItems: viewModel.prepareShareItems(for: item))
         }
         // Present the context sheet using the selected item so the closure always returns a View
         .sheet(item: $viewModel.selectedContextItem) { item in

@@ -15,13 +15,13 @@ final class CourseShareService: ObservableObject {
     
     private init() {}
     
-    /// Share a course with a standardized link and message
+    /// Generate share items for a course (Deep Link + Text)
     /// - Parameters:
     ///   - courseId: The unique identifier of the course
     ///   - title: The title of the course
     ///   - description: Optional description of the course
-    ///   - from: The view controller to present the share sheet from
-    func shareCourse(courseId: String, title: String, description: String?, from viewController: UIViewController) {
+    /// - Returns: An array of items to share (Strings, URLs)
+    func getShareItems(courseId: String, title: String, description: String?) -> [Any] {
         let deepLink = "lyoapp://course/\(courseId)"
         let shareText = """
         Check out this course on Lyo: "\(title)"
@@ -30,8 +30,20 @@ final class CourseShareService: ObservableObject {
         
         Join here: \(deepLink)
         """
-        
-        let activityVC = UIActivityViewController(activityItems: [shareText], applicationActivities: nil)
+        // We can add the URL object too if needed, but text often suffices for general sharing
+        // Let's return just the text for now to match previous behavior, or [shareText, URL(string: deepLink)!]
+        return [shareText]
+    }
+
+    /// Share a course with a standardized link and message
+    /// - Parameters:
+    ///   - courseId: The unique identifier of the course
+    ///   - title: The title of the course
+    ///   - description: Optional description of the course
+    ///   - from: The view controller to present the share sheet from
+    func shareCourse(courseId: String, title: String, description: String?, from viewController: UIViewController) {
+        let items = getShareItems(courseId: courseId, title: title, description: description)
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
         
         // iPad support
         if let popover = activityVC.popoverPresentationController {

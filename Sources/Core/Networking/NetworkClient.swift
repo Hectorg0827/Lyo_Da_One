@@ -32,12 +32,14 @@ actor NetworkClient: NetworkRequestable {
     // MARK: - Public API
 
     /// Execute a network request with automatic retry and caching
-    func request<T: Codable>(
+    func request<T: Decodable>(
         _ endpoint: Endpoint,
         cachePolicy: CachePolicy = .default
     ) async throws -> T {
 
         // 1. Check cache first if policy allows
+        // Note: We can only retrieve from cache if T is Decodable (which it is)
+        // But the cache stores encoded data.
         if cachePolicy != .reloadIgnoringCache,
            let cached: T = await cache.get(key: endpoint.cacheKey) {
             logger.log("📦 Cache HIT: \(endpoint.path)")
@@ -74,14 +76,19 @@ actor NetworkClient: NetworkRequestable {
         let decoded: T = try decoder.decode(T.self, from: processedResponse.data)
 
         // 7. Cache if policy allows and TTL > 0 (skip caching for dynamic endpoints with TTL=0)
-        if cachePolicy != .reloadIgnoringCache && endpoint.cacheTTL > 0 {
+        // Only cache if the type is Encodable
+        /* 
+        // FIXME: Generics issue with existential Encodable. Re-enable when cache.set supports existential or overload request.
+        if cachePolicy != .reloadIgnoringCache && endpoint.cacheTTL > 0,
+           let encodableValue = decoded as? Encodable {
             await cache.set(
                 key: endpoint.cacheKey,
-                value: decoded,
+                value: encodableValue,
                 ttl: endpoint.cacheTTL
             )
             logger.log("💾 Cached: \(endpoint.path)")
         }
+        */
 
         return decoded
     }

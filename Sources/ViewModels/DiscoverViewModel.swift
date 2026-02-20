@@ -77,6 +77,33 @@ final class DiscoverViewModel: ObservableObject {
         }
     }
     
+    /// Prepare items for sharing (Text, Links, etc.)
+    func prepareShareItems(for item: DiscoverItem) -> [Any] {
+        // If it's linked to a course, share as a course
+        if let courseId = item.courseId {
+            return CourseShareService.shared.getShareItems(
+                courseId: courseId,
+                title: item.title,
+                description: item.subtitle
+            )
+        } else {
+            // Generic fallback for non-course clips
+            // In a real app, this would be a deep link to the clip itself
+            let shareText = """
+            Check out this clip on Lyo: "\(item.title)"
+            
+            \(item.subtitle ?? "")
+            
+            Download Lyo to watch: https://lyo.app
+            """
+            
+            if let url = item.videoURL ?? item.thumbnailURL {
+                 return [shareText, url]
+            }
+            return [shareText]
+        }
+    }
+    
     /// Open comments for an item
     func commentsAction(item: DiscoverItem) {
         selectedItemForComments = item
