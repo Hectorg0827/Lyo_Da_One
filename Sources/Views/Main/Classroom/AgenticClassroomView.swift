@@ -133,12 +133,33 @@ struct AgenticClassroomView: View {
     
     private var agentBlocksView: some View {
         VStack(spacing: 12) {
-            ForEach(viewModel.visibleBlocks) { block in
-                AgentBlockCard(block: block)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .opacity
-                    ))
+            // ── PREFERRED: A2UIRenderer for rich cinematic rendering ──────────
+            if let component = viewModel.currentComponent {
+                A2UIRenderer(
+                    component: component,
+                    context: A2UIRenderContext(),
+                    onAction: { action, _ in
+                        // Forward interaction actions back as a message
+                        if action.id.hasPrefix("quiz_answer_") {
+                            let answer = String(action.id.dropFirst("quiz_answer_".count))
+                            Task { await viewModel.sendMessage("My answer: \(answer)") }
+                        }
+                    }
+                )
+                .padding(.horizontal, 4)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                    removal: .opacity
+                ))
+            } else {
+                // ── FALLBACK: Text-card rendering if A2UI not yet synthesized ──
+                ForEach(viewModel.visibleBlocks) { block in
+                    AgentBlockCard(block: block)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                }
             }
             
             // Anchor for scrolling

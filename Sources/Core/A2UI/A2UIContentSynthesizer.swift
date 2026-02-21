@@ -374,6 +374,11 @@ final class A2UIContentSynthesizer {
         let content = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return nil }
         
+        // 🎯 QUIZ AGENT: parse into interactive quizMcq instead of a plain card
+        if block.agent == .quiz, let quizComp = tryParseQuizComponent(block: block, content: content) {
+            return quizComp
+        }
+        
         // Parse the content markdown first
         let innerBlocks = parseMarkdown(content)
         let innerComponents = innerBlocks.compactMap { blockToComponent($0, context: agentContext(for: block.agent)) }
@@ -402,6 +407,95 @@ final class A2UIContentSynthesizer {
                 expiresAt: nil,
                 priority: nil,
                 tags: [block.agent.rawValue, block.blockType.rawValue]
+            )
+        )
+    }
+    
+    // MARK: - Quiz Markdown Parser
+    
+    /// Attempt to parse an agent quiz block's markdown into an interactive quizMcq A2UI component.
+    /// Supports LLM output patterns like:
+    ///   "Question text?\n\nA) Option 1\nB) Option 2 ✓\nC) Option 3\nD) Option 4"
+    private func tryParseQuizComponent(block: AgentBlock, content: String) -> A2UIComponent? {
+        let lines = content.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        
+        // Detect option lines: starts with A) / B) / A. / B. / - A) etc.
+        let optionPattern = #"^[A-Ea-e][.)]\s+(.+)"#
+        guard let optionRegex = try? NSRegularExpression(pattern: optionPattern) else { return nil }
+        
+        var questionLines: [String] = []
+        var rawOptions: [(letter: Character, text: String)] = []
+        var correctLetter: Character?
+        
+        for line in lines {
+            let range = NSRange(line.startIndex..., in: line)
+            if let match = optionRegex.firstMatch(in: line, range: range),
+               let textRange = Range(match.range(at: 1), in: line) {
+                let letter = line.first!
+                var optionText = String(line[textRange])
+                
+                // Detect correct answer markers: ✓ or **text** or (correct)
+                let isCorrect = optionText.contains("✓") || optionText.lowercased().contains("(correct)") || optionText.hasSuffix("*")
+                if isCorrect {
+                    correctLetter = Character(letter.lowercased())
+                    optionText = optionText
+                        .replacingOccurrences(of: "✓", with: "")
+                        .replacingOccurrences(of: "(correct)", with: "", options: .caseInsensitive)
+                        .replacingOccurrences(of: "*", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                }
+                rawOptions.append((letter: Character(letter.lowercased()), text: optionText))
+            } else if rawOptions.isEmpty {
+                // Before any option line → question text
+                let cleanLine = line.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces)
+                if !cleanLine.isEmpty { questionLines.append(cleanLine) }
+            } else {
+                // After options → could be "correct answer is X"
+                let lower = line.lowercased()
+                if lower.contains("correct answer") || lower.contains("answer is") {
+                    for letter: Character in ["a", "b", "c", "d", "e"] {
+                        if lower.contains(String(letter)) {
+                            correctLetter = letter
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard !rawOptions.isEmpty, rawOptions.count >= 2 else { return nil }
+        
+        let question = questionLines.joined(separator: " ")
+        let options = rawOptions.map { opt in
+            A2UIQuizOption(
+                id: "opt_\(opt.letter)",
+                text: opt.text,
+                imageUrl: nil,
+                isCorrect: correctLetter != nil ? (opt.letter == correctLetter) : nil
+            )
+        }
+        
+        var quizProps = A2UIProps(
+            padding: A2UIEdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14),
+            borderColor: agentAccentColor(for: .quiz),
+            borderRadius: 16
+        )
+        quizProps.question = question.isEmpty ? "Which of the following is correct?" : question
+        quizProps.options = options
+        
+        return A2UIComponent(
+            id: "quiz_\(UUID().uuidString.prefix(8))",
+            type: .quizMcq,
+            props: quizProps,
+            metadata: A2UIMetadata(
+                analyticsId: nil,
+                testId: nil,
+                debugLabel: "quiz:\(block.blockType.rawValue)",
+                version: nil,
+                createdAt: block.timestamp,
+                expiresAt: nil,
+                priority: nil,
+                tags: ["quiz", "interactive"]
             )
         )
     }

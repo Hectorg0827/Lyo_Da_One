@@ -672,11 +672,13 @@ enum Endpoints {
 
         var path: String {
             switch self {
-            case .generate: return "/api/tts/generate"
-            case .batch: return "/api/tts/batch"
-            case .getAudio(let id): return "/api/tts/audio/\(id)"
-            case .getTimings(let id): return "/api/tts/timings/\(id)"
-            case .voices: return "/api/tts/voices"
+            // Backend: /api/v1/tts/synthesize (returns audio_base64)
+            case .generate: return "/api/v1/tts/synthesize"
+            // Batch synthesis — synthesize individually on backend
+            case .batch: return "/api/v1/tts/synthesize"
+            case .getAudio(let id): return "/api/v1/tts/audio/\(id)"
+            case .getTimings(let id): return "/api/v1/tts/timings/\(id)"
+            case .voices: return "/api/v1/tts/voices"
             }
         }
 
@@ -689,21 +691,39 @@ enum Endpoints {
 
         var body: Encodable? {
             switch self {
-            case .generate(let text, let voice, let speed, let withTimings):
-                struct TTSRequest: Encodable {
+            case .generate(let text, let voice, let speed, _):
+                // Backend schema: { text, voice, model, format, speed, content_type }
+                struct TTSSynthesizeRequest: Encodable {
                     let text: String
                     let voice: String
+                    let model: String
+                    let format: String
                     let speed: Double
-                    let with_timings: Bool
                 }
-                return TTSRequest(text: text, voice: voice.rawValue, speed: speed, with_timings: withTimings)
+                return TTSSynthesizeRequest(
+                    text: text,
+                    voice: voice.rawValue,
+                    model: "tts-1-hd",
+                    format: "mp3",
+                    speed: speed
+                )
 
             case .batch(let texts, let voice):
-                struct TTSBatchRequest: Encodable {
-                    let texts: [String]
+                // Return first text for batch — DefaultTTSRepository loops calls
+                struct TTSSynthesizeRequest: Encodable {
+                    let text: String
                     let voice: String
+                    let model: String
+                    let format: String
+                    let speed: Double
                 }
-                return TTSBatchRequest(texts: texts, voice: voice.rawValue)
+                return TTSSynthesizeRequest(
+                    text: texts.first ?? "",
+                    voice: voice.rawValue,
+                    model: "tts-1-hd",
+                    format: "mp3",
+                    speed: 1.0
+                )
 
             default:
                 return nil
@@ -716,6 +736,36 @@ enum Endpoints {
             case .getAudio, .getTimings: return 7200 // 2 hours
             default: return 0
             }
+        }
+    }
+
+    // MARK: - A2UI Server-Driven UI
+    /// Endpoints for fetching dynamic server-driven UI component trees.
+    /// Backend: /api/v1/a2ui/* (lyo_app/api/v1/a2ui_routes.py)
+    enum A2UI: Endpoint {
+        /// Fetch a pre-defined screen layout (dashboard, course, quiz, chat)
+        case screen(screenId: String)
+        /// Generate a classroom A2UI component tree for a specific session
+        case classroomScreen(sessionId: String)
+
+        var path: String {
+            switch self {
+            case .screen(let screenId): return "/api/v1/a2ui/screen/\(screenId)"
+            case .classroomScreen(let sessionId): return "/api/v1/a2ui/screen/classroom?session_id=\(sessionId)"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .screen: return .get
+            case .classroomScreen: return .get
+            }
+        }
+
+        var body: Encodable? { nil }
+
+        var cacheTTL: TimeInterval {
+            return 300 // 5 minute cache for server-driven layouts
         }
     }
 

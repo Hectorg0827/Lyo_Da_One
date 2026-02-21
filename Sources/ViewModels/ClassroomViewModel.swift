@@ -83,18 +83,28 @@ class ClassroomViewModel: NSObject, ObservableObject {
     }
     
     func loadA2UISession(sessionId: String) async {
-        // Attempt to fetch dynamic UI from backend
-        // In production, this would use A2UIBackendService
-        Log.classroom.info("Attempting to load A2UI session...")
+        // Attempt to fetch dynamic server-driven UI from backend
+        Log.classroom.info("🎨 Fetching A2UI session for: \(sessionId)")
         
-        // Use generic network client request if service wrapper unavailable
-        // Example fetch - assuming endpoint exists
-        // do {
-        //     let response: A2UIScreenResponse = try await LyoAPIClient.shared.request(path: "/api/v1/a2ui/screen/classroom/\(sessionId)")
-        //     self.a2uiComponent = response.component
-        // } catch {
-        //     print("⚠️ A2UI fetch failed (expected during migration): \(error)")
-        // }
+        do {
+            // Backend returns { screen_id, component: A2UIComponent, metadata: {...} }
+            struct A2UIScreenResponse: Codable {
+                let screen_id: String
+                let component: A2UIComponent
+            }
+            
+            let response: A2UIScreenResponse = try await NetworkClient.shared.request(
+                Endpoints.A2UI.classroomScreen(sessionId: sessionId)
+            )
+            
+            withAnimation(.easeIn(duration: 0.3)) {
+                self.a2uiComponent = response.component
+            }
+            Log.classroom.info("✅ A2UI classroom screen loaded — \(response.screen_id)")
+        } catch {
+            // Non-fatal: ClassroomView falls back to ModuleCardView slides
+            Log.classroom.info("ℹ️ A2UI screen not available — using slide view (\(error.localizedDescription))")
+        }
     }
     
     func retryLoadSession() async {

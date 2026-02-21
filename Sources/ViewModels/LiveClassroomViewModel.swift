@@ -436,6 +436,14 @@ final class LiveClassroomViewModel: ObservableObject {
                     await triggerMasteryCheck()
                 }
             }
+            
+            // 🔮 Personalization: fetch next recommended action after each block
+            Task {
+                await LyoAIViewModel.shared.fetchNextAction(
+                    lessonId: lesson.lessonId,
+                    currentSkill: lesson.title
+                )
+            }
         } else {
             // Lesson completed
             Task { await markLessonCompleted() }
@@ -490,6 +498,22 @@ final class LiveClassroomViewModel: ObservableObject {
             ]
         )
         LyoAIViewModel.shared.handleCinemaInteractionResult(result, nodeId: block.id)
+        
+        // 🧠 Trace knowledge mastery to personalization engine
+        Task {
+            if let learnerId = await TokenManager.shared.getUserId() {
+                let trace = KnowledgeTraceRequest(
+                    learnerId: learnerId,
+                    skillId: lesson?.lessonId ?? "unknown_skill",
+                    itemId: block.id,
+                    correct: isCorrect,
+                    timeTakenSeconds: 15.0, // TODO: measure actual time
+                    hintsUsed: showingExplanation ? 1 : 0,
+                    attemptNumber: 1
+                )
+                try? await PersonalizationService.shared.traceKnowledge(trace: trace)
+            }
+        }
         
         if isCorrect {
             HapticManager.shared.success()
