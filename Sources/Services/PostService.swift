@@ -154,6 +154,21 @@ class PostService: ObservableObject {
         return publicURL
     }
     
+    func uploadPostMedia(image: UIImage) async throws -> String {
+        guard let data = image.jpegData(compressionQuality: 0.8) else {
+            throw StoryError.uploadFailed // Reusing error or standard error
+        }
+        let filename = "\(UUID().uuidString).jpg"
+        let result = try await cloudStorage.uploadFile(
+            data: data,
+            filename: filename,
+            contentType: "image/jpeg",
+            folder: "posts"
+        )
+        guard let publicURL = result.publicURL else { throw CloudStorageError.uploadFailed }
+        return publicURL
+    }
+    
     func uploadPostVideo(videoURL: URL) async throws -> String {
         let data = try Data(contentsOf: videoURL)
         let filename = "\(UUID().uuidString).mp4"

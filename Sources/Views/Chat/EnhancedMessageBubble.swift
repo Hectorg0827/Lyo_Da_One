@@ -208,9 +208,9 @@ struct EnhancedMessageBubble: View {
                             .padding(.horizontal, -8)
 
                         case .a2ui(let component):
-                            A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ component: A2UIComponent) in
+                            A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ childComponent: A2UIComponent) in
                                 let actionId = action.payload?["id"]?.stringValue ?? action.id
-                                handleA2UIAction(actionId)
+                                handleA2UIAction(actionId, rootComponent: childComponent)
                             })
                             .padding(.horizontal, -14) // fully negate parent padding so A2UI fills ~99% width
                             .environment(\.colorScheme, .dark) // force dark so semantic colors blend with bubble bg
@@ -451,12 +451,33 @@ struct EnhancedMessageBubble: View {
 
     // MARK: - A2UI Action Handling
 
-    private func handleA2UIAction(_ actionId: String) {
+    private func handleA2UIAction(_ actionId: String, rootComponent: A2UIComponent? = nil) {
         Log.ai.info("A2UI Action triggered: \(actionId)")
         HapticManager.shared.light()
 
         // Parse action and route to appropriate handler
-        if actionId.hasPrefix("quiz_answer_") {
+        if actionId == "create_course_from_topic" {
+            // Extract title and topic from the root component if possible
+            var title = "AI Generated Course"
+            var topic = "AI Generated Course"
+            
+            if let root = rootComponent {
+                title = root.props.title ?? title
+                topic = root.props.subtitle ?? root.props.hint ?? title
+            }
+            
+            let payload = CoursePayload(
+                id: nil,
+                title: title,
+                topic: topic,
+                level: "Beginner",
+                language: nil,
+                duration: nil,
+                objectives: []
+            )
+            
+            AICommandHandler.shared.executeOpenClassroom(for: payload)
+        } else if actionId.hasPrefix("quiz_answer_") {
             if let indexString = actionId.components(separatedBy: "_").last,
                let index = Int(indexString) {
                 onQuizAnswer?(index)

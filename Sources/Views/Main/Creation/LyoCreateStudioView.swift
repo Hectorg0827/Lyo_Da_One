@@ -23,6 +23,9 @@ struct LyoCreateStudioView: View {
     @State private var showWelcomeBanner = true
     @State private var showPublishFlow = false
     @State private var recordingComplete = false
+    @State private var showClipsStudio = false
+    @State private var showStoriesStudio = false
+    @State private var showPostEditor = false
 
     // MARK: - Animation State
     @State private var recordButtonScale: CGFloat = 1.0
@@ -180,6 +183,15 @@ struct LyoCreateStudioView: View {
                     dismiss()
                 }
             )
+        }
+        .fullScreenCover(isPresented: $showClipsStudio) {
+            ClipsRecordingView(cameraManager: cameraManager)
+        }
+        .fullScreenCover(isPresented: $showStoriesStudio) {
+            StoriesRecordingView(cameraManager: cameraManager)
+        }
+        .fullScreenCover(isPresented: $showPostEditor) {
+            PostEditorView(isPresented: $showPostEditor)
         }
     }
 
@@ -434,7 +446,13 @@ struct LyoCreateStudioView: View {
             recordButtonScale = 0.85
         }
 
-        if selectedMode == .clip || selectedMode == .reel {
+        if selectedMode == .clip {
+            // Clips get their own dedicated recording studio
+            showClipsStudio = true
+        } else if selectedMode == .story {
+            // Stories use hands-free, interactive studio experience
+            showStoriesStudio = true
+        } else if selectedMode == .reel {
             if cameraManager.isRecording {
                 cameraManager.stopRecording()
                 modeSelectorOpacity = 1.0
@@ -442,10 +460,11 @@ struct LyoCreateStudioView: View {
                 cameraManager.startRecording()
                 modeSelectorOpacity = 0.3
             }
-        } else if selectedMode == .story {
-            cameraManager.capturePhoto()
+        } else if selectedMode == .post {
+            // Posts open the Camera Roll with caption editor
+            showPostEditor = true
         } else {
-            // For course, post, live modes - show detail view
+            // For course, live modes - show detail view
             showModeDetail = true
         }
 

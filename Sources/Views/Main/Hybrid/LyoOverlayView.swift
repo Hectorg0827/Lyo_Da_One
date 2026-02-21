@@ -41,6 +41,33 @@ struct LyoOverlayView: View {
         case active // Center screen
         case chatting // Small in chat
     }
+
+    private var hasAssistantPlaceholderBubble: Bool {
+        viewModel.messages.contains { message in
+            guard !message.isFromUser else { return false }
+            guard let contentTypes = message.contentTypes else { return false }
+
+            return contentTypes.contains { contentType in
+                switch contentType {
+                case .processing:
+                    return true
+                case .a2ui(let component):
+                    return containsThinkingIndicator(in: component)
+                default:
+                    return false
+                }
+            }
+        }
+    }
+
+    private func containsThinkingIndicator(in component: A2UIComponent) -> Bool {
+        switch component.type {
+        case .aiThinking, .aiTyping, .typingIndicator, .processingSpinner, .loading, .loadingSkeleton, .skeleton:
+            return true
+        default:
+            return (component.children ?? []).contains { containsThinkingIndicator(in: $0) }
+        }
+    }
     
     // ChatMessage struct removed, using LyoMessage from ViewModel
     
@@ -107,7 +134,7 @@ struct LyoOverlayView: View {
                                     }
                                     
                                     // Thinking indicator bubble
-                                    if isThinking {
+                                    if isThinking && !hasAssistantPlaceholderBubble {
                                         LyoUnifiedThinkingIndicator()
                                             .id("thinking")
                                     }

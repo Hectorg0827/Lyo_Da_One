@@ -115,7 +115,7 @@ struct A2ATaskResponse: Codable {
 final class A2ATaskManager: ObservableObject {
     static let shared = A2ATaskManager()
     
-    @Published private(set) var activeTasks: [String: A2ATask] = [:]
+    @Published internal(set) var activeTasks: [String: A2ATask] = [:]
     @Published private(set) var isProcessing = false
     
     private var currentSessionId: String?

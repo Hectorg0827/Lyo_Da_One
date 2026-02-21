@@ -316,13 +316,13 @@ struct A2UIButtonView: View {
             let actionType = props.actionType
             let displayTitle = props.title ?? props.label ?? "Button"
             
-            // Use action_title prop if available (legacy support)
-            let legacyActionTitle = props.actionTitle
+            // Use action_id or action_title prop if available
+            let explicitActionId = props.actionId ?? props.actionTitle
             
-            let finalId = actionType ?? legacyActionTitle ?? displayTitle
+            let finalId = explicitActionId ?? actionType ?? displayTitle
             
             let action = A2UIAction(
-                id: UUID().uuidString,
+                id: finalId,
                 trigger: .tap,
                 type: .deepLink,
                 payload: [

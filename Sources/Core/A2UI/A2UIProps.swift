@@ -98,6 +98,9 @@ struct A2UIProps: Codable, Equatable {
     
     // MARK: - Interactive Properties
     var isEnabled: Bool?
+    var isDisabled: Bool?
+    var actionId: String?
+    var variant: String?
     var isSelected: Bool?
     var isLoading: Bool?
     var isRequired: Bool?
@@ -408,6 +411,9 @@ struct A2UIProps: Codable, Equatable {
         case iconColor = "icon_color"
         case sfSymbol = "sf_symbol"
         case isEnabled = "is_enabled"
+        case isDisabled = "is_disabled"
+        case actionId = "action_id"
+        case variant
         case isSelected = "is_selected"
         case isLoading = "is_loading"
         case isRequired = "is_required"
