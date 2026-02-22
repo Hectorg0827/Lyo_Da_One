@@ -1307,15 +1307,10 @@ final class LiveClassroomViewModel: ObservableObject {
         fullA2UIComponent = nil
         
         do {
-            let component = try await fetchLessonUIFromBackend(lessonId)
-            self.a2uiComponent = component
-            
-            // Also try to decode as full A2UIComponent for the upgraded renderer
-            if let data = try? JSONEncoder().encode(component),
-               let fullComponent = try? JSONDecoder().decode(A2UIComponent.self, from: data) {
-                self.fullA2UIComponent = fullComponent
-                Log.classroom.info("🎨 Full A2UIComponent decoded from DynamicComponent")
-            }
+            // Try to decode directly as A2UIComponent first (preferred path)
+            let fullComponent = try await fetchLessonUIAsA2UIComponent(lessonId)
+            self.fullA2UIComponent = fullComponent
+            Log.classroom.info("🎨 A2UI lesson loaded directly: \(fullComponent.type.rawValue)")
             
             if !hadLesson {
                 self.isLoading = false
@@ -1326,7 +1321,7 @@ final class LiveClassroomViewModel: ObservableObject {
                 self.errorMessage = "Failed to load lesson: \(error.localizedDescription)"
                 self.isLoading = false
             }
-            Log.classroom.warning("A2UI upgrade not available: \(error.localizedDescription)")
+            Log.classroom.warning("⚠️ A2UI not available for lesson \(lessonId): \(error.localizedDescription)")
         }
     }
     
@@ -1357,26 +1352,30 @@ final class LiveClassroomViewModel: ObservableObject {
         }
     }
     
-    /// Fetch lesson UI from backend endpoint
-    private func fetchLessonUIFromBackend(_ lessonId: String) async throws -> DynamicComponent {
+    /// Fetch lesson UI from backend and decode as A2UIComponent directly
+    private func fetchLessonUIAsA2UIComponent(_ lessonId: String) async throws -> A2UIComponent {
         // Use typed endpoint for proper SaaS headers (X-API-Key, X-Tenant-Id, Authorization)
         let endpoint = Endpoints.Classroom.getLessonUI(lessonId: lessonId)
         
-        // Parse response
+        // The backend returns { "lessonId": "...", "a2ui": { ... A2UIComponent ... }, "metadata": { ... } }
+        // We decode a2ui directly as A2UIComponent for the full renderer
         struct LessonUIResponse: Codable {
             let lessonId: String
-            let a2ui: DynamicComponent
-            let metadata: Metadata?
+            let a2ui: A2UIComponent
+            let metadata: LessonUIMetadata?
             
-            struct Metadata: Codable {
+            struct LessonUIMetadata: Codable {
                 let estimatedDuration: Int?
                 let difficulty: String?
+                let nodeType: String?
+                let courseId: String?
+                let courseTitle: String?
             }
         }
         
         let response: LessonUIResponse = try await NetworkClient.shared.request(endpoint)
         
-        Log.classroom.info("Loaded A2UI for lesson: \(response.lessonId)")
+        Log.classroom.info("🎨 Loaded A2UI for lesson: \(response.lessonId) (type: \(response.a2ui.type.rawValue))")
         return response.a2ui
     }
     

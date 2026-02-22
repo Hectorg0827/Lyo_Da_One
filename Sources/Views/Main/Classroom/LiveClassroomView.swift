@@ -68,9 +68,10 @@ struct LiveClassroomView: View {
         .navigationBarHidden(true)
         .statusBar(hidden: true)
         .task {
-            await viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
-            // Attempt to upgrade to A2UI experience
-            await viewModel.loadLessonUI(lessonId)
+            // Load both in parallel — block content + A2UI rendering
+            async let blockLoad: () = viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
+            async let a2uiLoad: () = viewModel.loadLessonUI(lessonId)
+            _ = await (blockLoad, a2uiLoad)
         }
         .sheet(isPresented: $viewModel.showTranscriptSheet) {
             TranscriptSheet(transcript: viewModel.transcript)
@@ -242,16 +243,8 @@ struct LiveClassroomView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 .padding()
-            } else if let block = viewModel.currentBlock {
-                // Block-based rendering (PRIMARY — the proven workhorse with 27+ block types)
-                blockContentView(block: block)
-                    .id(block.id)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
-                        removal: .opacity.combined(with: .scale(scale: 1.1))
-                    ))
             } else if let a2uiComp = viewModel.fullA2UIComponent {
-                // Full A2UI Rendering (upgrade path — uses the full 120+ component renderer)
+                // Full A2UI Rendering (PRIMARY — server-driven UI with 120+ component types)
                 ScrollView {
                     A2UIRenderer(
                         component: a2uiComp,
@@ -265,6 +258,14 @@ struct LiveClassroomView: View {
                     .padding(.bottom, 120)
                 }
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+            } else if let block = viewModel.currentBlock {
+                // Block-based rendering (FALLBACK — the proven workhorse with 27+ block types)
+                blockContentView(block: block)
+                    .id(block.id)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                        removal: .opacity.combined(with: .scale(scale: 1.1))
+                    ))
             } else if let lesson = viewModel.lesson, lesson.blocks.isEmpty {
                 // Course is generating content
                 VStack(spacing: 16) {
@@ -281,13 +282,6 @@ struct LiveClassroomView: View {
                         .padding(.horizontal)
                 }
                 .padding()
-            } else if let block = viewModel.currentBlock {
-                blockContentView(block: block)
-                    .id(block.id) // Ensure unique ID for transitions
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
-                        removal: .opacity.combined(with: .scale(scale: 1.1))
-                    ))
             } else {
                 // Fallback - no content available
                 VStack(spacing: 20) {
