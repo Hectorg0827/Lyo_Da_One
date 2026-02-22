@@ -59,7 +59,12 @@ struct ImagePickerView: View {
 
             await MainActor.run {
                 if hasPermission {
-                    showingCamera = true
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        showingCamera = true
+                    } else {
+                        permissionMessage = "Camera is not available on this device."
+                        showingPermissionAlert = true
+                    }
                 } else {
                     permissionMessage = "Lyo needs camera access to scan images. Please enable it in Settings."
                     showingPermissionAlert = true
@@ -105,7 +110,12 @@ struct CameraView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = .camera
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .camera
+        } else {
+            // Fallback gracefully if camera is unavailable (e.g., Simulator)
+            picker.sourceType = .photoLibrary
+        }
         picker.delegate = context.coordinator
         return picker
     }

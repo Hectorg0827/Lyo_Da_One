@@ -97,6 +97,9 @@ class LyoAIViewModel: ObservableObject {
     @Published var currentOutline: CourseOutline?
     @Published var isGeneratingCourse: Bool = false
     
+    // Persistence
+    private let messagesPersistKey = "lyo_ai_messages_v1"
+
     init(uiState: AppUIState? = nil) {
         self.uiState = uiState
         loadInitialSuggestions()
@@ -104,6 +107,8 @@ class LyoAIViewModel: ObservableObject {
         Task {
             await loadSocialData()
             await loadCourseCards()
+            // Restore after the initial Combine emit has already set messages = []
+            await restorePersistedMessages()
         }
     }
     
@@ -201,8 +206,79 @@ class LyoAIViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        // Persist messages any time the list changes (debounced 2 s)
+        $messages
+            .debounce(for: .seconds(2), scheduler: RunLoop.main)
+            .sink { [weak self] msgs in
+                self?.persistMessages(msgs)
+            }
+            .store(in: &cancellables)
     }
-    
+
+    // MARK: - Chat Persistence
+
+    /// Encode the current AI message list to UserDefaults so it survives app restarts.
+    private func persistMessages(_ messages: [LyoMessage]) {
+        // Only save the last 80 messages to bound storage size
+        let toSave = Array(messages.suffix(80))
+        guard let data = try? JSONEncoder().encode(toSave) else { return }
+        UserDefaults.standard.set(data, forKey: messagesPersistKey)
+        Log.ai.debug("💾 Persisted \(toSave.count) AI messages")
+    }
+
+    /// Decode and restore the saved message list. Only runs when unifiedChat
+    /// has no messages (i.e. fresh session), so we never overwrite live data.
+    private func restorePersistedMessages() async {
+        guard unifiedChat.messages.isEmpty,
+              let data = UserDefaults.standard.data(forKey: messagesPersistKey),
+              let saved = try? JSONDecoder().decode([LyoMessage].self, from: data),
+              !saved.isEmpty
+        else { return }
+        // Replay saved messages so Combine picks them up
+        messages = saved
+        Log.ai.info("📂 Restored \(saved.count) persisted AI messages")
+    }
+
+    /// Wipe the persisted history (e.g. on user sign-out or manual clear).
+    func clearPersistedMessages() {
+        UserDefaults.standard.removeObject(forKey: messagesPersistKey)
+        messages = []
+        Log.ai.info("🗑️ Cleared persisted AI messages")
+    }
+
+    // MARK: - Gamification
+
+    /// Push a `completionBadge` A2UI component into the Artifact Pane.
+    /// Call this after course start, lesson finish, or quiz perfection.
+    func pushCompletionBadge(title: String, subtitle: String, xp: Int) {
+        var props = A2UIProps()
+        props.title = title
+        props.subtitle = subtitle
+        props.text = "+\(xp) XP"
+        props.sfSymbol = "trophy.fill"
+        props.foregroundColor = "#FFD700"
+        let badge = A2UIComponent(
+            id: "badge_\(UUID().uuidString.prefix(6))",
+            type: .completionBadge,
+            props: props
+        )
+        activeArtifact = badge
+        GamificationService.shared.awardXP(amount: xp, reason: title)
+        Log.ai.info("🏆 Completion badge shown: \(title) +\(xp) XP")
+    }
+
+    /// Award XP for answering a quiz question.
+    func awardQuizAnswerXP(isCorrect: Bool) {
+        let amount = isCorrect ? 25 : 5
+        let reason = isCorrect ? "Correct quiz answer" : "Quiz attempt"
+        GamificationService.shared.awardXP(amount: amount, reason: reason)
+        if isCorrect {
+            // Brief badge for correct answers
+            pushCompletionBadge(title: "Correct! ✓", subtitle: "Keep going", xp: amount)
+        }
+    }
+
     // MARK: - Voice Control
     
     func toggleVoiceMode() {

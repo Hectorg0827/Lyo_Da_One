@@ -37,26 +37,40 @@ struct LyoCreateStudioView: View {
         GeometryReader { geometry in
             ZStack {
                 // MARK: - Full Screen Camera Preview
-                StudioCameraPreviewLayer(
-                    session: cameraManager.session,
-                    focusPoint: $cameraManager.focusPoint
-                )
-                .ignoresSafeArea(.all)
-                .onTapGesture { location in
-                    let point = CGPoint(
-                        x: location.x / geometry.size.width,
-                        y: location.y / geometry.size.height
+                if selectedMode.requiresCamera {
+                    StudioCameraPreviewLayer(
+                        session: cameraManager.session,
+                        focusPoint: $cameraManager.focusPoint
                     )
-                    cameraManager.setFocus(at: point)
-                    haptics.light()
+                    .ignoresSafeArea(.all)
+                    .onTapGesture { location in
+                        let point = CGPoint(
+                            x: location.x / geometry.size.width,
+                            y: location.y / geometry.size.height
+                        )
+                        cameraManager.setFocus(at: point)
+                        haptics.light()
+                    }
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let newZoom = max(1.0, min(cameraManager.zoomFactor * value, 10.0))
+                                cameraManager.setZoom(newZoom)
+                            }
+                    )
+                } else {
+                    // Non-camera dynamic background
+                    selectedMode.gradient
+                        .ignoresSafeArea(.all)
+                        .transition(.opacity)
+                    
+                    // Subtle glowing ambient shapes for Course/Event/Post
+                    Circle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: geometry.size.width * 1.5, height: geometry.size.width * 1.5)
+                        .blur(radius: 80)
+                        .offset(x: UIScreen.main.bounds.width * 0.5, y: -UIScreen.main.bounds.height * 0.2)
                 }
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            let newZoom = max(1.0, min(cameraManager.zoomFactor * value, 10.0))
-                            cameraManager.setZoom(newZoom)
-                        }
-                )
 
                 // MARK: - Cinematic Vignette
                 LinearGradient(
@@ -85,26 +99,42 @@ struct LyoCreateStudioView: View {
                     // Top Controls
                     topControlsBar
 
-                    Spacer()
-
-                    // Center Content Area
-                    HStack {
-                        // Gallery Quick Access
-                        VStack(spacing: 16) {
-                            galleryThumbnails
-                            Spacer()
-                        }
-
+                    if selectedMode.requiresCamera {
                         Spacer()
-
-                        // Right Side Tool Panel
-                        rightSideToolPanel
                     }
-                    .padding(.horizontal, 16)
-                    .opacity(cameraManager.isRecording ? 0.3 : 1.0)
-                    .animation(.easeInOut(duration: 0.3), value: cameraManager.isRecording)
 
-                    Spacer()
+                    ZStack {
+                        // Center Content Area (Camera overlays)
+                        HStack {
+                            // Gallery Quick Access
+                            if selectedMode != .course && selectedMode != .event {
+                                VStack(spacing: 16) {
+                                    galleryThumbnails
+                                    Spacer()
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            // Right Side Tool Panel
+                            if selectedMode.requiresCamera {
+                                rightSideToolPanel
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .opacity(cameraManager.isRecording ? 0.3 : 1.0)
+                        
+                        // Mode Specific Forms for non-camera modes
+                        if !selectedMode.requiresCamera {
+                            modeSpecificContent
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.3), value: cameraManager.isRecording)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: selectedMode)
+
+                    if selectedMode.requiresCamera {
+                        Spacer()
+                    }
 
                     // Bottom Controls
                     bottomControlsSection
@@ -301,6 +331,70 @@ struct LyoCreateStudioView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Mode Specific Content (For Non-Camera Modes)
+    
+    @ViewBuilder
+    private var modeSpecificContent: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Label(modeTitle, systemImage: modeIcon)
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundColor(.white.opacity(0.8))
+                    .tracking(2)
+                
+                Text(modeSubtitle)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                Text("Tap the button below to get started.")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.top, 8)
+            }
+            .padding(32)
+            .background(.ultraThinMaterial)
+            .cornerRadius(32)
+            .overlay(
+                RoundedRectangle(cornerRadius: 32)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.2), radius: 20)
+            .padding(.horizontal, 24)
+            
+            Spacer()
+        }
+    }
+    
+    private var modeTitle: String {
+        switch selectedMode {
+        case .post: return "NEW POST"
+        case .course: return "AI COURSE BUILDER"
+        case .event: return "COMMUNITY EVENT"
+        default: return ""
+        }
+    }
+    
+    private var modeIcon: String {
+        switch selectedMode {
+        case .post: return "square.and.pencil"
+        case .course: return "sparkles"
+        case .event: return "calendar"
+        default: return ""
+        }
+    }
+    
+    private var modeSubtitle: String {
+        switch selectedMode {
+        case .post: return "Share what's on your mind with the community."
+        case .course: return "What would you like to master today?"
+        case .event: return "Organize a meetup or study group."
+        default: return ""
         }
     }
 

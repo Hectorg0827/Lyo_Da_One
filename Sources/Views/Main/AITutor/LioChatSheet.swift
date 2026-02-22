@@ -329,6 +329,32 @@ struct LioChatSheet: View {
     /// Routes action semantics back to the chat or triggers navigation.
     private func handleArtifactAction(_ action: A2UIAction) {
         Log.ai.info("🎨 Artifact action tapped: \(action.type.rawValue)")
+
+        // ── COURSE LAUNCH ─────────────────────────────────────────────────────
+        // When the user taps "Start Learning" in CourseArtifactView, fire the
+        // classroom directly instead of routing back through chat.
+        if action.type == .startStudy,
+           let props = viewModel.activeArtifact?.props {
+            let courseTitle = props.title ?? props.courseName ?? "Course"
+            let coursePayload = CoursePayload(
+                id: nil,
+                title: courseTitle,
+                topic: props.courseName ?? props.title ?? courseTitle,
+                level: props.level ?? "beginner",
+                language: nil,
+                duration: props.estimatedDuration.map { "\($0) min" },
+                objectives: props.objectives ?? []
+            )
+            AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
+            // Award XP + show badge on the way out
+            viewModel.pushCompletionBadge(
+                title: "Course Started! 🚀",
+                subtitle: courseTitle,
+                xp: 50
+            )
+            return
+        }
+
         let messageText: String? = {
             if let payload = action.payload {
                 if let text = payload["message"]?.value as? String { return text }
@@ -337,6 +363,16 @@ struct LioChatSheet: View {
             }
             return nil
         }()
+
+        // ── QUIZ ANSWER ───────────────────────────────────────────────────────
+        // When the user picks a quiz option, award XP before sending to chat.
+        if action.type == .sendMessage,
+           let id = action.payload?["id"]?.value as? String,
+           id.hasPrefix("quiz_") {
+            let isCorrect = action.payload?["is_correct"]?.value as? Bool ?? false
+            viewModel.awardQuizAnswerXP(isCorrect: isCorrect)
+        }
+
         switch action.type {
         case .sendMessage, .askAI, .requestHint, .requestExplanation:
             if let text = messageText, !text.isEmpty {

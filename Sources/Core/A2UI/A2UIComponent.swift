@@ -8,6 +8,25 @@
 
 import Foundation
 
+// MARK: - Safe Decoding Wrapper
+
+/// A wrapper that attempts to decode a value, but if it fails, it catches the error
+/// and returns nil instead of failing the entire array decoding.
+struct SafeDecodable<T: Decodable>: Decodable {
+    let value: T?
+    
+    init(from decoder: Decoder) throws {
+        do {
+            let container = try decoder.singleValueContainer()
+            self.value = try container.decode(T.self)
+        } catch {
+            // Log the specific decoding error for debugging, but don't throw
+            print("⚠️ SafeDecodable caught error decoding \(T.self): \(error)")
+            self.value = nil
+        }
+    }
+}
+
 // MARK: - A2UI Component
 
 /// Main component structure sent from backend
@@ -55,7 +74,14 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
         type     = try c.decode(A2UIElementType.self, forKey: .type)
         // props is optional on the wire — use empty props when absent
         props    = (try? c.decodeIfPresent(A2UIProps.self, forKey: .props)) ?? A2UIProps()
-        children = try? c.decodeIfPresent([A2UIComponent].self, forKey: .children)
+        
+        // Safely decode children: if one child fails, drop it instead of failing the whole array
+        if let childrenContainer = try? c.decodeIfPresent([SafeDecodable<A2UIComponent>].self, forKey: .children) {
+            children = childrenContainer.compactMap { $0.value }
+        } else {
+            children = nil
+        }
+        
         actions  = try? c.decodeIfPresent([A2UIAction].self, forKey: .actions)
         conditions = try? c.decodeIfPresent(A2UIConditions.self, forKey: .conditions)
         metadata   = try? c.decodeIfPresent(A2UIMetadata.self, forKey: .metadata)
