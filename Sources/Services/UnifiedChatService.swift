@@ -466,10 +466,15 @@ final class UnifiedChatService: ObservableObject {
                 // Update the skeleton/placeholder message with the real answer
                 // 🎬 shouldAnimate = true → triggers typewriter in the message bubble
                 
-                // Merge .text into existing types if not present
-                var finalTypes = messages[idx].contentTypes ?? []
+                // Strip the loading skeleton marker — an answer has arrived.
+                // If .processing is left in, the .done handler mistakes this message
+                // as "orphaned" and overwrites it with the error fallback.
+                var finalTypes = (messages[idx].contentTypes ?? []).filter {
+                    if case .processing = $0 { return false }
+                    return true
+                }
                 if !finalTypes.contains(.text) {
-                     finalTypes.append(.text)
+                    finalTypes.append(.text)
                 }
 
                 let updatedMessage = LyoMessage(
