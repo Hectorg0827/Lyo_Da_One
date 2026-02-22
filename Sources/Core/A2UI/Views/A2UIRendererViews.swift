@@ -249,13 +249,24 @@ struct A2UIImageRenderer: View {
     var body: some View {
         Group {
             if let imageUrl = component.props.imageUrl, let url = URL(string: imageUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    ProgressView()
-                        .frame(width: 100, height: 100)
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        // Loading skeleton
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(.systemGray5))
+                            .overlay(ProgressView())
+                            .frame(minHeight: 80)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    case .failure:
+                        // Shadow state: image unavailable
+                        imageShadowState
+                    @unknown default:
+                        imageShadowState
+                    }
                 }
             } else if let assetName = component.props.imageAsset {
                 Image(assetName)
@@ -270,6 +281,27 @@ struct A2UIImageRenderer: View {
         .frame(maxWidth: dimensionToCGFloat(component.props.maxWidth),
                maxHeight: dimensionToCGFloat(component.props.maxHeight))
         .cornerRadius(component.props.borderRadius ?? 0)
+    }
+
+    /// Shadow state shown when an image URL 404s or fails to load
+    private var imageShadowState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "photo.badge.exclamationmark")
+                .font(.system(size: 32))
+                .foregroundColor(Color(.systemGray3))
+            Text(component.props.altText
+                 ?? component.props.title
+                 ?? component.props.text
+                 ?? "Image unavailable")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 80)
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 
     private func dimensionToCGFloat(_ dimension: A2UIDimension?) -> CGFloat? {

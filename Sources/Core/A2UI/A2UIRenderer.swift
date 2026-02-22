@@ -156,8 +156,10 @@ struct A2UIRenderer: View {
             AnyView(A2UICourseCardRenderer(component: comp, context: context, onAction: handleAction))
         case .lessonBlock:
             AnyView(A2UILessonCardRenderer(component: comp, context: context, onAction: handleAction))
-        case .moduleHeader, .chapterNav:
+        case .moduleHeader, .chapterNav, .lessonList, .courseOutline:
             AnyView(A2UIModuleListRenderer(component: comp, context: context, onAction: handleAction))
+        case .courseHeader:
+            AnyView(A2UICourseCardRenderer(component: comp, context: context, onAction: handleAction))
         case .completionBadge, .prerequisiteCheck, .learningPath, .skillTree:
             AnyView(A2UICourseGenericRenderer(component: comp, context: context, onAction: handleAction))
             

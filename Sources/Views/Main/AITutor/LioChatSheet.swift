@@ -294,56 +294,72 @@ struct LioChatSheet: View {
 
             // Expanded content area
             if isArtifactExpanded {
-                ScrollView {
-                    A2UIRenderer(
-                        component: component,
-                        onAction: { action, _ in
-                            Log.ai.info("🎨 Artifact action tapped: \(action.type.rawValue)")
-                            // Route A2UI actions back into the chat input so the AI can respond
-                            let messageText: String? = {
-                                if let payload = action.payload {
-                                    if let text = payload["message"]?.value as? String { return text }
-                                    if let text = payload["label"]?.value as? String { return text }
-                                    if let text = payload["query"]?.value as? String { return text }
-                                }
-                                return nil
-                            }()
-                            switch action.type {
-                            case .sendMessage, .askAI, .requestHint, .requestExplanation:
-                                if let text = messageText, !text.isEmpty {
-                                    viewModel.inputText = text
-                                    Task { await viewModel.sendMessage() }
-                                }
-                            case .startStudy, .navigate:
-                                // If payload contains a text label, send as a follow-up message
-                                if let text = messageText, !text.isEmpty {
-                                    viewModel.inputText = text
-                                    Task { await viewModel.sendMessage() }
-                                } else if let courseId = action.payload?["course_id"]?.value as? String {
-                                    // Navigate to an existing course by notifying the global state
-                                    Log.ai.info("🎨 Artifact: navigate to course \(courseId)")
-                                    NotificationCenter.default.post(
-                                        name: .init("OpenClassroomById"),
-                                        object: nil,
-                                        userInfo: ["courseId": courseId]
-                                    )
-                                }
-                            default:
-                                if let text = messageText {
-                                    viewModel.inputText = text
-                                    Task { await viewModel.sendMessage() }
-                                }
+                Group {
+                    if component.type.isCourseArtifact {
+                        // Rich course-specific artifact view
+                        CourseArtifactView(
+                            component: component,
+                            onAction: { action in
+                                handleArtifactAction(action)
                             }
+                        )
+                        .padding(.horizontal, 4)
+                    } else {
+                        ScrollView {
+                            A2UIRenderer(
+                                component: component,
+                                onAction: { action, _ in
+                                    handleArtifactAction(action)
+                                }
+                            )
+                            .padding(12)
                         }
-                    )
-                    .padding(12)
+                    }
                 }
-                .frame(maxHeight: 280)
+                .frame(maxHeight: 320)
                 .background(Color(white: 0.08))
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             Divider().background(Color.white.opacity(0.12))
+        }
+    }
+
+    /// Shared handler for A2UI actions fired from the Artifact Pane.
+    /// Routes action semantics back to the chat or triggers navigation.
+    private func handleArtifactAction(_ action: A2UIAction) {
+        Log.ai.info("🎨 Artifact action tapped: \(action.type.rawValue)")
+        let messageText: String? = {
+            if let payload = action.payload {
+                if let text = payload["message"]?.value as? String { return text }
+                if let text = payload["label"]?.value as? String { return text }
+                if let text = payload["query"]?.value as? String { return text }
+            }
+            return nil
+        }()
+        switch action.type {
+        case .sendMessage, .askAI, .requestHint, .requestExplanation:
+            if let text = messageText, !text.isEmpty {
+                viewModel.inputText = text
+                Task { await viewModel.sendMessage() }
+            }
+        case .startStudy, .navigate:
+            if let text = messageText, !text.isEmpty {
+                viewModel.inputText = text
+                Task { await viewModel.sendMessage() }
+            } else if let courseId = action.payload?["course_id"]?.value as? String {
+                Log.ai.info("🎨 Artifact: navigate to course \(courseId)")
+                NotificationCenter.default.post(
+                    name: .init("OpenClassroomById"),
+                    object: nil,
+                    userInfo: ["courseId": courseId]
+                )
+            }
+        default:
+            if let text = messageText {
+                viewModel.inputText = text
+                Task { await viewModel.sendMessage() }
+            }
         }
     }
 

@@ -192,6 +192,9 @@ enum A2UIElementType: String, Codable, CaseIterable {
     case prerequisiteCheck
     case learningPath
     case skillTree
+    case lessonList        // ordered list of lessons for a course
+    case courseHeader      // hero / title + meta row at top of a course
+    case courseOutline     // full structural outline (modules → lessons)
     
     // MARK: - Layout & Container Elements
     case container
@@ -324,7 +327,7 @@ enum A2UIElementType: String, Codable, CaseIterable {
             return .homework
         case .documentViewer, .pdfViewer, .noteCard, .noteEditor, .highlightedText, .annotation, .flashcard, .flashcardDeck, .summary, .outline, .keyPoints, .definition, .vocabulary, .citation:
             return .documents
-        case .courseCard, .courseRoadmap, .lessonBlock, .moduleHeader, .chapterNav, .progressBar, .completionBadge, .prerequisiteCheck, .learningPath, .skillTree:
+        case .courseCard, .courseRoadmap, .lessonBlock, .moduleHeader, .chapterNav, .progressBar, .completionBadge, .prerequisiteCheck, .learningPath, .skillTree, .lessonList, .courseHeader, .courseOutline:
             return .course
         case .container, .stack, .hStack, .vStack, .zStack, .grid, .scrollView, .lazyVStack, .carousel, .tabs, .accordion, .collapsible, .modal, .sheet, .popover, .tooltip, .divider, .spacer, .card, .section, .group:
             return .layout
