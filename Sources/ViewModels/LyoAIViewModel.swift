@@ -54,6 +54,11 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Quiz State
     @Published var activeQuiz: Quiz?
     @Published var isQuizActive: Bool = false
+
+    // MARK: - Artifact Pane State
+    /// The most recently received A2UI component — shown pinned in the Artifact Pane.
+    /// Automatically extracted from the messages stream whenever a new .a2ui message arrives.
+    @Published var activeArtifact: A2UIComponent? = nil
     
     // MARK: - Personalization (NEXR)
     @Published var nextAction: NextActionResponse?
@@ -131,7 +136,20 @@ class LyoAIViewModel: ObservableObject {
         unifiedChat.$messages
             .receive(on: RunLoop.main)
             .assign(to: &$messages)
-            
+
+        // Track the latest A2UI component for the pinned Artifact Pane
+        unifiedChat.$messages
+            .receive(on: RunLoop.main)
+            .map { msgs -> A2UIComponent? in
+                msgs.reversed().lazy.compactMap { msg -> A2UIComponent? in
+                    msg.contentTypes?.compactMap { ct -> A2UIComponent? in
+                        if case .a2ui(let c) = ct { return c }
+                        return nil
+                    }.first
+                }.first
+            }
+            .assign(to: &$activeArtifact)
+
         unifiedChat.$isLoading
             .receive(on: RunLoop.main)
             .assign(to: &$isLoading)

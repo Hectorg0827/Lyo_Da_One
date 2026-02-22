@@ -11,6 +11,10 @@ struct LioChatSheet: View {
     @State private var errorMessage: String?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showMasteryProfile = false
+    @State private var isArtifactExpanded: Bool = true
+    /// Tracks the ID of the artifact the user explicitly dismissed, so Combine re-firing
+    /// the same component doesn't immediately re-show the pane.
+    @State private var dismissedArtifactId: String? = nil
     
     // Current mode for display
     private var currentModeName: String {
@@ -42,7 +46,21 @@ struct LioChatSheet: View {
                 VStack(spacing: 0) {
                     // Custom Header
                     headerView
-                    
+
+                    // ── Artifact Pane (pinned, collapsible) ─────────────────────
+                    if let artifact = viewModel.activeArtifact, artifact.id != dismissedArtifactId {
+                        artifactPane(component: artifact)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isArtifactExpanded)
+                            // Reset dismiss state whenever a brand-new artifact arrives
+                            .onChange(of: artifact.id) { _, newId in
+                                if newId != dismissedArtifactId {
+                                    dismissedArtifactId = nil
+                                    isArtifactExpanded = true
+                                }
+                            }
+                    }
+
                     // Messages area
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -227,7 +245,108 @@ struct LioChatSheet: View {
         .padding(.bottom, 8)
         .background(Material.thinMaterial)
     }
-    
+
+    // MARK: - Artifact Pane
+
+    /// Pinned "Claw"-style artifact pane — shows the active A2UI component above the chat stream.
+    /// The user can collapse it to a compact handle or dismiss it entirely.
+    @ViewBuilder
+    private func artifactPane(component: A2UIComponent) -> some View {
+        VStack(spacing: 0) {
+            // Drag handle / collapse row
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(.blue)
+                Text("Artifact")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isArtifactExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: isArtifactExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .padding(6)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                // Dismiss / clear artifact for this session
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        dismissedArtifactId = component.id
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .padding(6)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(white: 0.1))
+
+            // Expanded content area
+            if isArtifactExpanded {
+                ScrollView {
+                    A2UIRenderer(
+                        component: component,
+                        onAction: { action, _ in
+                            Log.ai.info("🎨 Artifact action tapped: \(action.type.rawValue)")
+                            // Route A2UI actions back into the chat input so the AI can respond
+                            let messageText: String? = {
+                                if let payload = action.payload {
+                                    if let text = payload["message"]?.value as? String { return text }
+                                    if let text = payload["label"]?.value as? String { return text }
+                                    if let text = payload["query"]?.value as? String { return text }
+                                }
+                                return nil
+                            }()
+                            switch action.type {
+                            case .sendMessage, .askAI, .requestHint, .requestExplanation:
+                                if let text = messageText, !text.isEmpty {
+                                    viewModel.inputText = text
+                                    Task { await viewModel.sendMessage() }
+                                }
+                            case .startStudy, .navigate:
+                                // If payload contains a text label, send as a follow-up message
+                                if let text = messageText, !text.isEmpty {
+                                    viewModel.inputText = text
+                                    Task { await viewModel.sendMessage() }
+                                } else if let courseId = action.payload?["course_id"]?.value as? String {
+                                    // Navigate to an existing course by notifying the global state
+                                    Log.ai.info("🎨 Artifact: navigate to course \(courseId)")
+                                    NotificationCenter.default.post(
+                                        name: .init("OpenClassroomById"),
+                                        object: nil,
+                                        userInfo: ["courseId": courseId]
+                                    )
+                                }
+                            default:
+                                if let text = messageText {
+                                    viewModel.inputText = text
+                                    Task { await viewModel.sendMessage() }
+                                }
+                            }
+                        }
+                    )
+                    .padding(12)
+                }
+                .frame(maxHeight: 280)
+                .background(Color(white: 0.08))
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            Divider().background(Color.white.opacity(0.12))
+        }
+    }
+
     private var modeIndicator: some View {
         HStack(spacing: 6) {
             Circle()
