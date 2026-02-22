@@ -818,74 +818,78 @@ final class UnifiedChatService: ObservableObject {
             
         case .a2ui(let block):
             Log.ai.info("🎨 A2UI stream event received!")
-            // Check if this is a course-like A2UI → render as course proposal card
-            if let coursePayload = tryDecodeOpenClassroom(from: block) {
-                Log.ai.info("📋 A2UI contains course data — rendering proposal card instead")
-                _ = AICommandHandler.shared.handleOpenClassroom(
-                    AICommandPayload(stackItem: nil, course: coursePayload)
-                )
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
-                }
-                // Replace the existing answer message to avoid duplicates
-                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    // Merge types
-                    var currentTypes = messages[idx].contentTypes ?? []
-                    currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
-                    currentTypes.append(.courseProposal(payload: coursePayload))
-                    currentTypes = normalizeContentTypes(currentTypes)
-                    
-                    let proposalMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: messages[idx].sessionId,
-                        content: messages[idx].content, // Keep text
-                        isFromUser: false,
-                        timestamp: messages[idx].timestamp,
-                        contentTypes: currentTypes
+            // Decode the A2UI component first — this IS an A2UI event.
+            // Only check for classroom intent if the decoded component signals it
+            // (open_classroom arrives as a SEPARATE SSE event type handled by .openClassroom above).
+            if let a2uiComponent = tryDecodeA2UIComponent(from: block) {
+                // Check if this A2UI component carries an open_classroom intent
+                if let coursePayload = extractCourseFromComponent(a2uiComponent) {
+                    Log.ai.info("📋 A2UI component has classroom intent — rendering proposal card")
+                    _ = AICommandHandler.shared.handleOpenClassroom(
+                        AICommandPayload(stackItem: nil, course: coursePayload)
                     )
-                    messages[idx] = proposalMsg
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
+                    }
+                    if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                        var currentTypes = messages[idx].contentTypes ?? []
+                        currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
+                        currentTypes.append(.courseProposal(payload: coursePayload))
+                        currentTypes = normalizeContentTypes(currentTypes)
+                        
+                        let proposalMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: messages[idx].sessionId,
+                            content: messages[idx].content,
+                            isFromUser: false,
+                            timestamp: messages[idx].timestamp,
+                            contentTypes: currentTypes
+                        )
+                        messages[idx] = proposalMsg
+                    } else {
+                        let proposalMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: currentConversationId,
+                            content: "",
+                            isFromUser: false,
+                            timestamp: Date(),
+                            contentTypes: [.courseProposal(payload: coursePayload)]
+                        )
+                        messages.append(proposalMsg)
+                    }
                 } else {
-                    let proposalMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: currentConversationId,
-                        content: "",
-                        isFromUser: false,
-                        timestamp: Date(),
-                        contentTypes: [.courseProposal(payload: coursePayload)]
-                    )
-                    messages.append(proposalMsg)
+                    // Regular A2UI component (card, quiz, flashcard, etc.)
+                    Log.ai.info("🎨 Rendering A2UI component: type=\(a2uiComponent.type)")
+                    if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                        var currentTypes = messages[idx].contentTypes ?? []
+                        currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
+                        currentTypes.append(.a2ui(component: a2uiComponent))
+                        currentTypes = normalizeContentTypes(currentTypes)
+                        
+                        let a2uiMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: messages[idx].sessionId,
+                            content: messages[idx].content,
+                            isFromUser: false,
+                            timestamp: messages[idx].timestamp,
+                            contentTypes: currentTypes
+                        )
+                        messages[idx] = a2uiMsg
+                    } else {
+                        let a2uiMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: currentConversationId,
+                            content: "",
+                            isFromUser: false,
+                            timestamp: Date(),
+                            contentTypes: [.a2ui(component: a2uiComponent)]
+                        )
+                        messages.append(a2uiMsg)
+                    }
                 }
                 Task { await saveConversation() }
-            } else if let a2uiComponent = tryDecodeA2UIComponent(from: block) {
-                // Non-course A2UI (quiz, flashcard, etc.) — replace existing answer to avoid duplicates
-                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    // Merge types
-                    var currentTypes = messages[idx].contentTypes ?? []
-                    currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }
-                    currentTypes.append(.a2ui(component: a2uiComponent))
-                    currentTypes = normalizeContentTypes(currentTypes)
-                    
-                    let a2uiMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: messages[idx].sessionId,
-                        content: messages[idx].content, // Keep text
-                        isFromUser: false,
-                        timestamp: messages[idx].timestamp,
-                        contentTypes: currentTypes
-                    )
-                    messages[idx] = a2uiMsg
-                } else {
-                    let a2uiMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: currentConversationId,
-                        content: "",
-                        isFromUser: false,
-                        timestamp: Date(),
-                        contentTypes: [.a2ui(component: a2uiComponent)]
-                    )
-                    messages.append(a2uiMsg)
-                }
-                Task { await saveConversation() }
+            } else {
+                Log.ai.warning("🎨 ⚠️ Could not decode A2UI component from block")
             }
             
         case .done:
