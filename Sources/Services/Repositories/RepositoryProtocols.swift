@@ -156,6 +156,7 @@ struct ChatResponse: Codable {
     
     // A2UI Content
     let contentTypes: [A2UIContent]?
+    let uiComponent: [A2UIContent]?
     
     init(
         response: String,
@@ -169,7 +170,8 @@ struct ChatResponse: Codable {
         conversationHistory: [ChatMessageDTO]? = nil,
         type: String? = nil,
         openClassroomPayload: OpenClassroomPayload? = nil,
-        contentTypes: [A2UIContent]? = nil
+        contentTypes: [A2UIContent]? = nil,
+        uiComponent: [A2UIContent]? = nil
     ) {
         self.response = response
         self.provider = provider
@@ -183,6 +185,7 @@ struct ChatResponse: Codable {
         self.type = type
         self.openClassroomPayload = openClassroomPayload
         self.contentTypes = contentTypes
+        self.uiComponent = uiComponent
     }
     
     // Handle both "response" and "content" from different backend endpoints
@@ -208,6 +211,8 @@ struct ChatResponse: Codable {
         case cacheHitCamel = "cacheHit"
         case conversationHistory = "conversation_history"
         case conversationHistoryCamel = "conversationHistory"
+        case uiComponent = "uiComponent"
+        case uiComponentSnake = "ui_component"
         
         // Open Classroom
         case type
@@ -227,7 +232,11 @@ struct ChatResponse: Codable {
         }
         
         // A2UI Content
-        contentTypes = try? container.decode([A2UIContent].self, forKey: .contentTypes)
+        contentTypes = (try? container.decode([A2UIContent].self, forKey: .contentTypes))
+            ?? (try? container.decode([A2UIContent].self, forKey: .uiComponent))
+            ?? (try? container.decode([A2UIContent].self, forKey: .uiComponentSnake))
+        uiComponent = (try? container.decode([A2UIContent].self, forKey: .uiComponent))
+            ?? (try? container.decode([A2UIContent].self, forKey: .uiComponentSnake))
         
         // Provider/cost/tokens are optional across endpoints
         if let providerValue = try? container.decode(String.self, forKey: .provider) {
@@ -291,6 +300,7 @@ struct ChatResponse: Codable {
         try container.encodeIfPresent(conversationHistory, forKey: .conversationHistory)
         try container.encodeIfPresent(type, forKey: .type)
         try container.encodeIfPresent(openClassroomPayload, forKey: .payload)
+        try container.encodeIfPresent(contentTypes, forKey: .contentTypes)
     }
     
 
@@ -329,6 +339,7 @@ struct Quiz: Codable {
     let questions: [QuizQuestion]
     let difficulty: String
     let estimatedTime: Int?
+    let timeLimit: TimeInterval?
 
     struct QuizQuestion: Codable {
         let id: String
@@ -430,6 +441,7 @@ struct RepoPost: Codable, Identifiable {
     var comments: Int
     var isLiked: Bool
     let createdAt: Date
+    let postType: String?
 }
 
 struct UserDTO: Codable {

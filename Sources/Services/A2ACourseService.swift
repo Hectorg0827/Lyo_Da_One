@@ -7,6 +7,8 @@
 //
 
 import Foundation
+import Combine
+import os
 
 // MARK: - A2A Course Service
 
@@ -36,20 +38,16 @@ final class A2ACourseService: ObservableObject {
     private let tokenManager = TokenManager.shared
     
     private init() {
-        print("🤖 A2ACourseService initialized - Multi-agent pipeline ready")
+        Log.ai.info("A2ACourseService initialized - Multi-agent pipeline ready")
     }
     
     // MARK: - Agent Discovery
     
     /// Fetch all available A2A agents
     func discoverAgents() async throws -> [A2AAgentCard] {
-        print("🔍 Discovering A2A agents...")
+        Log.ai.debug("Discovering A2A agents...")
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/agents",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.A2A.discoverAgents
         
         let response: [A2AAgentCard] = try await NetworkClient.shared.request(endpoint)
         
@@ -57,42 +55,38 @@ final class A2ACourseService: ObservableObject {
             self.agents = response
         }
         
-        print("✅ Discovered \(response.count) agents")
+        Log.ai.info("Discovered \(response.count) agents")
         return response
     }
     
     /// Get specific agent card
     func getAgentCard(name: String) async throws -> A2AAgentCard {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/agents/\(name)",
-            method: .get,
-            requiresAuth: true
-        )
+        let endpoint = Endpoints.A2A.getAgentCard(name: name)
         
         return try await NetworkClient.shared.request(endpoint)
     }
     
     /// Fetch A2A protocol discovery document
     func fetchProtocolDiscovery() async throws -> A2AAgentDiscovery {
-        let endpoint = DynamicEndpoint(
-            urlString: "/.well-known/agent.json",
-            method: .get,
-            requiresAuth: false
-        )
+        let endpoint = Endpoints.A2A.protocolDiscovery
         
         return try await NetworkClient.shared.request(endpoint)
     }
     
     // MARK: - Course Generation (Streaming)
     
-    /// Generate a course using streaming SSE
+    // MARK: - Course Generation (Polling Based)
+    
+    // MARK: - Course Generation (True Streaming)
+    
+    /// Generate course with real-time SSE updates
     func generateCourseStreaming(
         topic: String,
         qualityTier: CourseQualityTier = .standard,
         userContext: [String: String]? = nil,
         enableVisuals: Bool = true,
         enableVoice: Bool = true,
-        onEvent: @escaping (A2AStreamingEvent) -> Void
+        onEvent: @escaping (A2AStreamingEvent) -> Void = { _ in }
     ) {
         // Cancel any existing generation
         cancelGeneration()
@@ -107,18 +101,60 @@ final class A2ACourseService: ObservableObject {
         errorMessage = nil
         streamingState = .connecting
         
-        print("🚀 Starting A2A streaming course generation for: \(topic)")
+        Log.ai.info("Starting A2A course generation (True Stream) for: \(topic)")
         
         streamingTask = Task {
             do {
-                try await performStreamingGeneration(
+                let endpoint = Endpoints.A2A.stream(
                     topic: topic,
-                    qualityTier: qualityTier,
-                    userContext: userContext,
-                    enableVisuals: enableVisuals,
-                    enableVoice: enableVoice,
-                    onEvent: onEvent
+                    qualityTier: qualityTier.rawValue,
+                    userContext: userContext
                 )
+                
+                let (bytes, response) = try await NetworkClient.shared.stream(endpoint)
+                
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    throw LyoError.network(.invalidResponse)
+                }
+                
+                await MainActor.run {
+                    self.streamingState = .streaming
+                }
+                
+                // Process lines from stream
+                let lines = bytes.lines
+                for try await line in lines {
+                    guard !Task.isCancelled else { break }
+                    
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard trimmed.hasPrefix("data: ") else { continue }
+                    
+                    let jsonString = String(trimmed.dropFirst(6))
+                    guard let data = jsonString.data(using: .utf8) else { continue }
+                    
+                    do {
+                        let decoder = JSONDecoder.lyoDecoder
+                        let event = try decoder.decode(A2AStreamingEvent.self, from: data)
+                        
+                        await MainActor.run {
+                            handleStreamingEvent(event, onEvent: onEvent)
+                        }
+                        
+                        if event.type == .pipelineCompleted {
+                            break
+                        }
+                    } catch {
+                        Log.ai.warning("Failed to decode streaming event: \(error)")
+                        Log.ai.info("Raw data: \(jsonString)")
+                    }
+                }
+                
+                await MainActor.run {
+                    self.isGenerating = false
+                    self.streamingState = .idle
+                }
+                
             } catch {
                 await MainActor.run {
                     self.errorMessage = error.localizedDescription
@@ -128,165 +164,61 @@ final class A2ACourseService: ObservableObject {
             }
         }
     }
-    
-    private func performStreamingGeneration(
-        topic: String,
-        qualityTier: CourseQualityTier,
-        userContext: [String: String]?,
-        enableVisuals: Bool,
-        enableVoice: Bool,
-        onEvent: @escaping (A2AStreamingEvent) -> Void
-    ) async throws {
-        
-        // Build request
-        let request = A2AGenerateRequest(
-            topic: topic,
-            qualityTier: qualityTier,
-            userContext: userContext,
-            enableQualityGates: true,
-            enableVisuals: enableVisuals,
-            enableVoice: enableVoice,
-            enableParallel: true
-        )
-        
-        // Encode request body
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let bodyData = try encoder.encode(request)
-        
-        // Create endpoint
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/courses/stream-a2a",
-            method: .post,
-            body: DataWrapper(data: bodyData),
-            requiresAuth: true
-        )
-        
-        // Start streaming
-        let (bytes, response) = try await NetworkClient.shared.stream(endpoint)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw A2AError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            throw A2AError.serverError(httpResponse.statusCode)
-        }
-        
-        await MainActor.run {
-            self.streamingState = .streaming
-        }
-        
-        // Parse SSE stream
-        // Use Type Erasure or Generic to allow testing
-        try await parseStreamingEvents(bytes.lines, onEvent: onEvent)
-        
-        // If streaming completed without explicit completion event, fetch final result
-        if streamingState == .streaming {
-            await MainActor.run {
-                self.streamingState = .completed
-                self.isGenerating = false
-            }
-        }
-        
-        // Fetch final course if we have a pipeline ID
-        if let pipelineId = currentPipelineId {
-            await fetchFinalCourse(pipelineId: pipelineId)
-        }
-        
-        print("✅ A2A streaming completed")
-    }
-    
-    /// Parse SSE events from a line sequence
-    /// Generic to support both URLSession.AsyncBytes.Lines and Test Streams
+
+    // MARK: - Streaming Event Parsing (Test/Utility)
+
+    /// Parse SSE lines into streaming events and update service state.
+    @MainActor
     func parseStreamingEvents<S: AsyncSequence>(
         _ lines: S,
         onEvent: @escaping (A2AStreamingEvent) -> Void
     ) async throws where S.Element == String {
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        decoder.dateDecodingStrategy = .iso8601
-        
         for try await line in lines {
-            if Task.isCancelled { break }
-            
-            // SSE format: "data: {json}"
-            if line.hasPrefix("data: ") {
-                let jsonString = String(line.dropFirst(6))
-                
-                if jsonString.isEmpty || jsonString.hasPrefix(":") {
-                    continue
-                }
-                
-                if let data = jsonString.data(using: .utf8) {
-                    do {
-                        let event = try decoder.decode(A2AStreamingEvent.self, from: data)
-                        
-                        print("📥 A2A Event: \(event.type.rawValue) - \(event.message) (\(event.progress)%)")
-                        
-                        await MainActor.run {
-                            self.streamingEvents.append(event)
-                            self.progress = event.progress
-                            self.currentPipelineId = event.pipelineId
-                            
-                            if let phase = event.phase {
-                                self.currentPhase = phase
-                            }
-                            
-                            // Handle specific event types
-                            switch event.type {
-                            case .phaseCompleted:
-                                if let phase = event.phase {
-                                    self.updatePhaseStatus(phase: phase, status: .completed)
-                                }
-                                
-                            case .phaseStarted:
-                                if let phase = event.phase {
-                                    self.updatePhaseStatus(phase: phase, status: .running)
-                                }
-                                
-                            case .phaseFailed:
-                                if let phase = event.phase {
-                                    self.updatePhaseStatus(phase: phase, status: .failed)
-                                }
-                                
-                            case .pipelineCompleted:
-                                self.streamingState = .completed
-                                self.isGenerating = false
-                                
-                            case .error:
-                                self.errorMessage = event.data?.error ?? event.message
-                                self.streamingState = .failed(A2AError.pipelineFailed(event.message))
-                                self.isGenerating = false
-                                
-                            default:
-                                break
-                            }
-                        }
-                        
-                        // Call event handler
-                        onEvent(event)
-                        
-                        // Break on terminal events
-                        if event.type == .pipelineCompleted || event.type == .error {
-                            break
-                        }
-                        
-                    } catch {
-                        print("⚠️ Failed to decode A2A event: \(error)")
-                        // Don't throw, just skip bad frame
-                    }
-                }
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("data: ") else { continue }
+
+            let jsonString = String(trimmed.dropFirst(6))
+            guard let data = jsonString.data(using: .utf8) else { continue }
+
+            do {
+                let decoder = JSONDecoder.lyoDecoder
+                let event = try decoder.decode(A2AStreamingEvent.self, from: data)
+                handleStreamingEvent(event, onEvent: onEvent)
+            } catch {
+                Log.ai.warning("Failed to decode streaming event: \(error)")
+                Log.ai.info("Raw data: \(jsonString)")
             }
         }
+    }
+    
+    /// Start the generation job on the backend
+    private func startJob(
+        topic: String,
+        qualityTier: CourseQualityTier,
+        userContext: [String: String]?,
+        enableVisuals: Bool,
+        enableVoice: Bool
+    ) async throws -> A2ACourseResponse {
+        
+        let request: [String: Any] = [
+            "topic": topic,
+            "quality_tier": qualityTier.rawValue,
+            "user_context": userContext ?? [:],
+            "enable_visuals": enableVisuals,
+            "enable_voice": enableVoice,
+            "enable_streaming": false
+        ]
+        
+        let endpoint = Endpoints.A2A.generate(topic: topic, options: request)
+        
+        return try await NetworkClient.shared.request(endpoint)
     }
         
 
     
     // MARK: - Course Generation (Synchronous)
     
-    /// Generate a course synchronously (non-streaming)
+    /// Generate a course synchronously (polls until completion)
     func generateCourse(
         topic: String,
         qualityTier: CourseQualityTier = .standard,
@@ -306,196 +238,191 @@ final class A2ACourseService: ObservableObject {
             }
         }
         
-        print("🚀 Starting A2A synchronous course generation for: \(topic)")
+        Log.ai.info("Starting A2A synchronous course generation for: \(topic)")
         
-        let request = A2AGenerateRequest(
+        let job = try await startJob(
             topic: topic,
             qualityTier: qualityTier,
             userContext: userContext,
-            enableQualityGates: true,
             enableVisuals: enableVisuals,
-            enableVoice: enableVoice,
-            enableParallel: true
+            enableVoice: enableVoice
         )
         
-        // Encode request body
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let bodyData = try encoder.encode(request)
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/courses/generate-a2a",
-            method: .post,
-            body: DataWrapper(data: bodyData),
-            requiresAuth: true
-        )
-        
-        let response: A2ACourseResponse = try await NetworkClient.shared.request(endpoint)
-        
-        if let error = response.error {
-            throw A2AError.pipelineFailed(error)
+        await MainActor.run {
+            self.currentPipelineId = job.pipelineId
         }
         
-        guard let course = response.course else {
+        // Poll until complete
+        var isDone = false
+        var finalCourse: A2AGeneratedCourse?
+        
+        while !isDone {
+            if Task.isCancelled { throw A2AError.pipelineFailed("Cancelled") }
+            
+            let status = try await getPipelineStatus(jobId: job.pipelineId)
+            
+            await MainActor.run {
+                self.progress = status.progressPercent
+                self.mapStatusToPhases(status)
+            }
+            
+            if status.status == "completed" {
+                finalCourse = try await fetchFinalCourseResult(jobId: job.pipelineId)
+                await MainActor.run {
+                    self.generatedCourse = finalCourse
+                    self.streamingState = .completed
+                }
+                isDone = true
+                Log.ai.info("A2A course generated successfully")
+                
+            } else if status.status == "failed" {
+                throw A2AError.pipelineFailed(status.error ?? "Unknown A2A error")
+            } else {
+                try await Task.sleep(nanoseconds: 2 * 1_000_000_000)
+            }
+        }
+        
+        guard let course = finalCourse else {
             throw A2AError.noCourseGenerated
         }
         
-        await MainActor.run {
-            self.generatedCourse = course
-            self.phases = response.phases
-            self.currentPipelineId = response.pipelineId
-            self.progress = 100
-        }
-        
-        print("✅ A2A course generated: \(course.title)")
         return course
     }
     
-    // MARK: - Pipeline Status
+    // MARK: - Pipeline Control
     
-    /// Poll for pipeline status
-    func getPipelineStatus(pipelineId: String) async throws -> A2APipelineStatus {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/courses/status/\(pipelineId)",
-            method: .get,
-            requiresAuth: true
-        )
-        
-        return try await NetworkClient.shared.request(endpoint)
+    /// Cancel the current generation job
+    func cancelGeneration() {
+        Log.ai.error("Cancelling generation...")
+        isGenerating = false
+        streamingTask?.cancel()
+        pollingTask?.cancel()
+        streamingState = .idle
     }
     
-    /// Start polling for pipeline status
-    func startPolling(pipelineId: String, interval: TimeInterval = 2.0, onUpdate: @escaping (A2APipelineStatus) -> Void) {
-        stopPolling()
+    /// Force a stalled job to complete using fallback content
+    func forceCompleteJob(jobId: String) async throws -> String {
+        Log.ai.info("Force-completing job: \(jobId)")
         
+        let endpoint = Endpoints.CourseGenerationV2.forceComplete(jobId: jobId)
+        
+        let response: [String: String] = try await NetworkClient.shared.request(endpoint)
+        
+        await MainActor.run {
+            self.isGenerating = false
+            self.streamingState = .idle
+        }
+        
+        return response["status"] ?? "unknown"
+    }
+    
+    /// Poll pipeline status
+    func startPolling(jobId: String, onUpdate: @escaping (A2AStatusResponse) -> Void) {
+        pollingTask?.cancel()
         pollingTask = Task {
-            while !Task.isCancelled {
+            var isFinished = false
+            while !isFinished && !Task.isCancelled {
                 do {
-                    let status = try await getPipelineStatus(pipelineId: pipelineId)
+                    let status = try await getPipelineStatus(jobId: jobId)
                     
                     await MainActor.run {
-                        self.progress = status.progress
-                        self.currentPhase = status.currentPhase
-                        self.phases = status.phases
-                        
-                        if let course = status.course {
-                            self.generatedCourse = course
-                        }
+                        self.progress = status.progressPercent
+                        self.mapStatusToPhases(status)
+                        onUpdate(status)
                     }
                     
-                    onUpdate(status)
-                    
-                    // Stop polling if pipeline is done
-                    if status.status == "completed" || status.status == "failed" {
+                    if status.status == "completed" {
+                        isFinished = true
+                        await fetchFinalCourse(jobId: jobId)
                         await MainActor.run {
+                            self.streamingState = .completed
                             self.isGenerating = false
                         }
-                        break
+                    } else if status.status == "failed" {
+                        isFinished = true
+                        await MainActor.run {
+                            self.streamingState = .failed(A2AError.pipelineFailed(status.error ?? "Unknown"))
+                            self.isGenerating = false
+                        }
                     }
                     
-                    try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                    
+                    try await Task.sleep(nanoseconds: 2 * 1_000_000_000) // Poll every 2s
                 } catch {
-                    print("⚠️ Polling error: \(error)")
-                    try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                    Log.ai.warning("Polling error: \(error)")
+                    try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
                 }
             }
         }
     }
     
-    func stopPolling() {
-        pollingTask?.cancel()
-        pollingTask = nil
-    }
-    
-    // MARK: - Direct Agent Execution
-    
-    /// Execute a specific agent directly
-    func executeAgent(
-        name: String,
-        taskId: String,
-        prompt: String,
-        context: [String: String]? = nil,
-        artifacts: [String]? = nil
-    ) async throws -> A2ATaskOutput {
-        
-        let taskInput = A2ATaskInput(
-            taskId: taskId,
-            prompt: prompt,
-            context: context,
-            artifacts: artifacts
-        )
-        
-        let request = A2AAgentExecuteRequest(taskInput: taskInput)
-        
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        let bodyData = try encoder.encode(request)
-        
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v2/agents/\(name)/execute",
-            method: .post,
-            body: DataWrapper(data: bodyData),
-            requiresAuth: true
-        )
-        
+    internal func getPipelineStatus(jobId: String) async throws -> A2AStatusResponse {
+        let endpoint = Endpoints.A2A.status(taskId: jobId)
         return try await NetworkClient.shared.request(endpoint)
     }
     
-    // MARK: - Cancellation
-    
-    func cancelGeneration() {
-        streamingTask?.cancel()
-        streamingTask = nil
-        stopPolling()
-        
-        if streamingState.isActive {
-            streamingState = .cancelled
+    private func mapStatusToPhases(_ status: A2AStatusResponse) {
+        // Simple mapping for demo
+        // In a real app, 'steps_completed' from backend would map to phases
+        if status.currentStep != nil {
+            // Update UI if needed
         }
-        isGenerating = false
     }
     
     // MARK: - Private Helpers
     
-    private func updatePhaseStatus(phase: A2APipelinePhase, status: A2APhaseStatus) {
-        if let index = phases.firstIndex(where: { $0.phase == phase }) {
-            // Update existing
-            let updated = phases[index]
-            phases[index] = A2APhaseProgress(
-                phase: updated.phase,
-                status: status,
-                startedAt: status == .running ? Date() : updated.startedAt,
-                completedAt: status == .completed ? Date() : updated.completedAt,
-                durationMs: updated.durationMs,
-                error: updated.error
-            )
-        } else {
-            // Add new
-            phases.append(A2APhaseProgress(
-                phase: phase,
-                status: status,
-                startedAt: status == .running ? Date() : nil,
-                completedAt: status == .completed ? Date() : nil,
-                durationMs: nil,
-                error: nil
-            ))
+    private func fetchFinalCourse(jobId: String) async {
+        do {
+            let course = try await fetchFinalCourseResult(jobId: jobId)
+            
+            await MainActor.run {
+                self.generatedCourse = course
+            }
+            Log.ai.info("Final course fetched: \(course.title)")
+        } catch {
+            Log.ai.warning("Could not fetch final course: \(error)")
         }
     }
     
-    private func fetchFinalCourse(pipelineId: String) async {
-        do {
-            let status = try await getPipelineStatus(pipelineId: pipelineId)
-            
-            if let course = status.course {
-                await MainActor.run {
-                    self.generatedCourse = course
-                    self.phases = status.phases
-                }
-                print("✅ Final course fetched: \(course.title)")
-            }
-        } catch {
-            print("⚠️ Could not fetch final course: \(error)")
+    private func fetchFinalCourseResult(jobId: String) async throws -> A2AGeneratedCourse {
+        let endpoint = Endpoints.A2A.result(taskId: jobId)
+        
+        // Note: result might be APICourseResult OR A2ACourseResponse.
+        // Assuming backend returns APICourseResult structure for now.
+        let apiResult: APICourseResult = try await NetworkClient.shared.request(endpoint)
+        return convertApiResultToCourse(apiResult)
+    }
+    
+    private func convertApiResultToCourse(_ result: APICourseResult) -> A2AGeneratedCourse {
+        let modules = result.modules.enumerated().map { (index, mod) in
+            A2ACourseModule(
+                id: mod.id,
+                title: mod.title,
+                description: mod.description,
+                lessons: mod.lessons.enumerated().map { (lIndex, lesson) in
+                    A2ACourseLesson(
+                        id: lesson.id,
+                        title: lesson.title,
+                        content: lesson.content,
+                        durationMinutes: lesson.durationMinutes,
+                        order: lIndex,
+                        scenes: nil
+                    )
+                },
+                order: index
+            )
         }
+        
+        return A2AGeneratedCourse(
+            id: result.courseId,
+            title: result.title,
+            description: result.description,
+            modules: modules,
+            learningObjectives: [],
+            estimatedDuration: result.estimatedDuration,
+            difficulty: result.difficulty,
+            visualAssets: nil,
+            voiceAssets: nil
+        )
     }
 }
 
@@ -559,4 +486,81 @@ extension A2ACourseService {
             difficulty: a2aCourse.difficulty
         )
     }
+    
+    // MARK: - Event Handling
+    
+    @MainActor
+    private func handleStreamingEvent(_ event: A2AStreamingEvent, onEvent: @escaping (A2AStreamingEvent) -> Void) {
+        self.streamingEvents.append(event)
+        self.progress = event.progress
+        
+        if let phase = event.phase {
+            self.currentPhase = phase
+            
+            // Update phases list
+            if event.type == .phaseStarted {
+                let newPhase = A2APhaseProgress(
+                    phase: phase,
+                    status: .running,
+                    startedAt: event.timestamp,
+                    completedAt: nil,
+                    durationMs: nil,
+                    error: nil
+                )
+                if !self.phases.contains(where: { $0.phase == phase }) {
+                    self.phases.append(newPhase)
+                }
+            } else if event.type == .phaseCompleted {
+                if let index = self.phases.firstIndex(where: { $0.phase == phase }) {
+                    let existing = self.phases[index]
+                    self.phases[index] = A2APhaseProgress(
+                        phase: phase,
+                        status: .completed,
+                        startedAt: existing.startedAt,
+                        completedAt: event.timestamp,
+                        durationMs: event.data?.totalDurationMs,
+                        error: nil
+                    )
+                }
+            } else if event.type == .phaseFailed {
+                if let index = self.phases.firstIndex(where: { $0.phase == phase }) {
+                    let existing = self.phases[index]
+                    self.phases[index] = A2APhaseProgress(
+                        phase: phase,
+                        status: .failed,
+                        startedAt: existing.startedAt,
+                        completedAt: event.timestamp,
+                        durationMs: nil,
+                        error: event.data?.error ?? event.message
+                    )
+                }
+            }
+        }
+        
+        if event.type == .pipelineCompleted {
+            Log.ai.info("✨ Pipeline Completed Successfully: \(event.pipelineId)")
+        } else if event.type == .error {
+            self.errorMessage = event.message
+            self.streamingState = .failed(LyoError.network(.serverError(500)))
+        } else if event.type == .contentChunk {
+            // Can be used to stream partial text to UI if needed
+             Log.ai.debug("📝 Chunk: \(event.chunkContent?.prefix(20) ?? "")")
+        } else if event.type == .thinking {
+             Log.ai.debug("🤔 Thinking: \(event.thinkingContent?.prefix(50) ?? "")")
+        } else if event.type == .artifactCreated {
+            Log.ai.info("🎨 Artifact Created: \(event.artifact?.name ?? "Unknown")")
+            // Here we could append to a list of artifacts or notify UI
+        }
+        
+        onEvent(event)
+    }
+}
+
+// MARK: - A2A Status Response
+struct A2AStatusResponse: Codable {
+    let jobId: String
+    let status: String
+    let progressPercent: Int
+    let currentStep: String?
+    let error: String?
 }

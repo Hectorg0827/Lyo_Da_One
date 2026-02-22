@@ -4,6 +4,11 @@ struct StackDrawerView: View {
     @EnvironmentObject var stackService: StackService
     @Binding var isPresented: Bool
     
+    // Story State
+    @State private var selectedStoryId: String?
+    @State private var isStoryViewerPresented = false
+    @State private var isCreateStoryPresented = false
+    
     var body: some View {
         ZStack(alignment: .trailing) {
             if isPresented {
@@ -34,6 +39,18 @@ struct StackDrawerView: View {
                     }
                     .padding()
                     
+                    // Stories Rail
+                    StoriesRailView(
+                        onStorySelect: { story in
+                            selectedStoryId = story.id
+                            isStoryViewerPresented = true
+                        },
+                        onAddStory: {
+                            isCreateStoryPresented = true
+                        }
+                    )
+                    .padding(.bottom)
+                    
                     if stackService.isLoading {
                         ProgressView()
                             .tint(.white)
@@ -57,6 +74,14 @@ struct StackDrawerView: View {
                 .background(.ultraThinMaterial)
                 .transition(.move(edge: .trailing))
             }
+        }
+        .fullScreenCover(isPresented: $isStoryViewerPresented) {
+            if let startId = selectedStoryId {
+                StoryViewer(isPresented: $isStoryViewerPresented, startingStoryId: startId)
+            }
+        }
+        .fullScreenCover(isPresented: $isCreateStoryPresented) {
+            CreateFlowEntry(initialMode: .story) { isCreateStoryPresented = false }
         }
     }
 }
@@ -106,3 +131,52 @@ struct StackItemRow: View {
         }
     }
 }
+// Helper view to unify creation flow presentation
+
+struct CreateFlowEntry: View {
+    let initialMode: CreateMode
+    let onFinish: () -> Void
+    
+    var body: some View {
+        // If CreateHubView is available, use it; otherwise fallback to minimal CreateView
+        if isCreateHubViewAvailable() {
+            CreateHubView(initialMode: initialMode, onPublish: { _ in
+                onFinish()
+            })
+        } else {
+            CreateViewWrapper(initialMode: initialMode, onFinish: onFinish)
+        }
+    }
+    
+    // A runtime check if CreateHubView exists is not possible in Swift,
+    // so you can toggle this manually if needed.
+    private func isCreateHubViewAvailable() -> Bool {
+        // Change to `false` if CreateHubView is not present in the project
+        true
+    }
+}
+
+private struct CreateViewWrapper: View {
+    let initialMode: CreateMode
+    let onFinish: () -> Void
+    
+    @StateObject private var viewModel = CreateViewModel()
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Create new \(initialMode == .story ? "Story" : "Item")")
+                    .font(.title)
+                    .padding()
+                Spacer()
+            }
+            .navigationBarTitle("Create", displayMode: .inline)
+            .navigationBarItems(trailing: Button("Close") {
+                onFinish()
+            })
+        }
+        .environmentObject(viewModel)
+    }
+}
+
+

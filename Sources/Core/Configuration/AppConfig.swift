@@ -25,6 +25,8 @@ struct AppConfig {
     static var baseURL: String {
         switch Environment.current {
         case .development:
+            // Default: Cloud Run backend (stable, always reachable)
+            // Set LYO_USE_LOCALHOST=1 in Xcode scheme env vars to use local backend
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "http://localhost:8000"
             }

@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Transcript Sheet
 
 struct TranscriptSheet: View {
-    let transcript: [ChatTurn]
+    let transcript: [TranscriptMessage]
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -48,7 +48,7 @@ struct TranscriptSheet: View {
 // MARK: - Transcript Bubble
 
 struct TranscriptBubble: View {
-    let turn: ChatTurn
+    let turn: TranscriptMessage
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -126,6 +126,7 @@ struct AskQuestionSheet: View {
     
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isFocused: Bool
+    @StateObject private var voiceService = VoiceInputService.shared
     
     var body: some View {
         NavigationView {
@@ -141,11 +142,22 @@ struct AskQuestionSheet: View {
                                 endPoint: .bottomTrailing
                             )
                         )
+                        .overlay(
+                            Group {
+                                if voiceService.isRecording {
+                                    Circle()
+                                        .stroke(Color.red, lineWidth: 2)
+                                        .frame(width: 58, height: 58)
+                                        .scaleEffect(1.0 + CGFloat(voiceService.audioLevel) * 0.2)
+                                        .animation(.easeInOut(duration: 0.1), value: voiceService.audioLevel)
+                                }
+                            }
+                        )
                     
-                    Text("Ask Lio")
+                    Text(voiceService.isRecording ? "Listening..." : "Ask Lio")
                         .font(.title2.bold())
                     
-                    Text("Type your question about the lesson")
+                    Text(voiceService.isRecording ? "Speak your question clearly" : "Type or say your question")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -153,40 +165,84 @@ struct AskQuestionSheet: View {
                 
                 // Text input
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Your Question")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    HStack {
+                        Text("Your Question")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        // Mic Button
+                        Button(action: {
+                            Task {
+                                if voiceService.isRecording {
+                                    voiceService.stopRecording()
+                                } else {
+                                    try? await voiceService.startRecording()
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: voiceService.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                                Text(voiceService.isRecording ? "Stop" : "Speak")
+                            }
+                            .font(.caption.bold())
+                            .foregroundColor(voiceService.isRecording ? .red : DesignSystem.Colors.fallbackPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                (voiceService.isRecording ? Color.red : DesignSystem.Colors.fallbackPrimary).opacity(0.1)
+                            )
+                            .clipShape(Capsule())
+                        }
+                    }
                     
-                    TextEditor(text: $question)
-                        .font(.body)
-                        .frame(minHeight: 120)
-                        .padding(12)
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .focused($isFocused)
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $question)
+                            .font(.body)
+                            .frame(minHeight: 120)
+                            .padding(12)
+                            .background(Color(.systemGray6))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .focused($isFocused)
+                        
+                        if voiceService.isRecording && question.isEmpty {
+                            Text("Listening...")
+                                .foregroundColor(.gray)
+                                .padding(.top, 20)
+                                .padding(.leading, 16)
+                        }
+                    }
                 }
                 .padding(.horizontal)
+                .onChange(of: voiceService.transcript) { newValue in
+                    if !newValue.isEmpty {
+                        question = newValue
+                    }
+                }
                 
                 // Suggestion chips
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Quick prompts")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            QuickPromptChip(text: "Can you explain that again?") {
-                                question = "Can you explain that again?"
+                if !voiceService.isRecording {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Quick prompts")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                QuickPromptChip(text: "Can you explain that again?") {
+                                    question = "Can you explain that again?"
+                                }
+                                QuickPromptChip(text: "Give me an example") {
+                                    question = "Can you give me a real-world example?"
+                                }
+                                QuickPromptChip(text: "Why is this important?") {
+                                    question = "Why is this concept important?"
+                                }
                             }
-                            QuickPromptChip(text: "Give me an example") {
-                                question = "Can you give me a real-world example?"
-                            }
-                            QuickPromptChip(text: "Why is this important?") {
-                                question = "Why is this concept important?"
-                            }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     }
                 }
                 
@@ -194,6 +250,9 @@ struct AskQuestionSheet: View {
                 
                 // Submit button
                 Button(action: {
+                    if voiceService.isRecording {
+                        voiceService.stopRecording()
+                    }
                     onSubmit(question)
                 }) {
                     HStack {
@@ -224,12 +283,20 @@ struct AskQuestionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
+                        if voiceService.isRecording {
+                            voiceService.cancelRecording()
+                        }
                         dismiss()
                     }
                 }
             }
             .onAppear {
                 isFocused = true
+            }
+            .onDisappear {
+                if voiceService.isRecording {
+                    voiceService.cancelRecording()
+                }
             }
         }
     }
@@ -258,11 +325,11 @@ struct QuickPromptChip: View {
 
 #Preview("Transcript Sheet") {
     TranscriptSheet(transcript: [
-        ChatTurn(isUser: false, text: "Welcome to this lesson! Today we'll explore the fundamentals."),
-        ChatTurn(isUser: true, text: "Sounds good!"),
-        ChatTurn(isUser: false, text: "Great! Let's start with the basics..."),
-        ChatTurn(isUser: true, text: "I'm confused"),
-        ChatTurn(isUser: false, text: "No worries! Let me explain that differently...")
+        TranscriptMessage(isUser: false, text: "Welcome to this lesson! Today we'll explore the fundamentals."),
+        TranscriptMessage(isUser: true, text: "Sounds good!"),
+        TranscriptMessage(isUser: false, text: "Great! Let's start with the basics..."),
+        TranscriptMessage(isUser: true, text: "I'm confused"),
+        TranscriptMessage(isUser: false, text: "No worries! Let me explain that differently...")
     ])
 }
 

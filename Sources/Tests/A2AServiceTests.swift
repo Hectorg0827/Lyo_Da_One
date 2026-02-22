@@ -66,4 +66,51 @@ final class A2AServiceTests: XCTestCase {
         XCTAssertEqual(service.phases.first?.phase.rawValue, "pedagogy")
         XCTAssertEqual(service.phases.first?.status, .running)
     }
+
+    @MainActor
+    func testNewA2AEventTypes() async throws {
+        let service = A2ACourseService.shared
+        service.streamingEvents = []
+
+        // Test Thinking Event
+        let thinkingEvent = """
+        data: {"type": "thinking", "pipeline_id": "p1", "timestamp": "2026-01-11T12:00:00Z", "progress": 10, "thinking_content": "Analyzing user request...", "message": "Thinking"}
+        """
+        
+        // Test Content Chunk Event
+        let chunkEvent = """
+        data: {"type": "content_chunk", "pipeline_id": "p1", "timestamp": "2026-01-11T12:00:01Z", "progress": 20, "chunk_content": "Here is the first part...", "message": "Streaming"}
+        """
+        
+        // Test Artifact Created Event
+        let artifactEvent = """
+        data: {"type": "artifact_created", "pipeline_id": "p1", "timestamp": "2026-01-11T12:00:02Z", "progress": 30, "message": "Artifact ready", "artifact": {"id": "a1", "type": "course_module", "name": "Mod 1", "created_by": "pedagogy_agent"}}
+        """
+        
+        let stream = AsyncStream<String> { continuation in
+            continuation.yield(thinkingEvent)
+            continuation.yield(chunkEvent)
+            continuation.yield(artifactEvent)
+            continuation.finish()
+        }
+        
+        // Execute parsing
+        try await service.parseStreamingEvents(stream) { _ in }
+        
+        let events = service.streamingEvents
+        // Guard against crash if parser doesn't recognize new event types yet
+        guard events.count >= 3 else {
+            XCTFail("Expected 3 events but got \(events.count). Parser may not support thinking/content_chunk/artifact_created types yet.")
+            return
+        }
+        
+        XCTAssertEqual(events[0].type, .thinking)
+        XCTAssertEqual(events[0].thinkingContent, "Analyzing user request...")
+        
+        XCTAssertEqual(events[1].type, .contentChunk)
+        XCTAssertEqual(events[1].chunkContent, "Here is the first part...")
+        
+        XCTAssertEqual(events[2].type, .artifactCreated)
+        XCTAssertEqual(events[2].artifact?.name, "Mod 1")
+    }
 }

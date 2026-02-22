@@ -34,10 +34,13 @@ enum LyoError: Error, Identifiable {
 // MARK: - Network Error Types
 enum NetworkErrorType {
     case invalidURL
+    case invalidRequest
     case invalidResponse
     case unauthorized
+    case forbidden
     case badRequest
     case notFound
+    case methodNotAllowed
     case serverError(Int)
     case connectionFailed(String)
     case timeout
@@ -327,14 +330,20 @@ extension NetworkErrorType {
         switch self {
         case .invalidURL:
             return "Invalid URL"
+        case .invalidRequest:
+            return "Invalid request"
         case .invalidResponse:
             return "Invalid server response"
         case .unauthorized:
             return "Authentication required"
+        case .forbidden:
+            return "Access denied"
         case .badRequest:
             return "Invalid request"
         case .notFound:
             return "Resource not found"
+        case .methodNotAllowed:
+            return "Method not allowed"
         case .serverError:
             return "Server error"
         case .connectionFailed:
@@ -354,14 +363,20 @@ extension NetworkErrorType {
         switch self {
         case .invalidURL:
             return "The URL provided was malformed or invalid."
+        case .invalidRequest:
+            return "The request was invalid."
         case .invalidResponse:
             return "The server returned an unexpected response format."
         case .unauthorized:
             return "Authentication token is missing or invalid."
+        case .forbidden:
+            return "You do not have permission to access this resource."
         case .badRequest:
             return "The request parameters were invalid."
         case .notFound:
             return "The requested resource was not found on the server."
+        case .methodNotAllowed:
+            return "The HTTP method is not allowed for this resource."
         case .serverError(let code):
             return "The server encountered an error (HTTP \(code))."
         case .connectionFailed(let reason):

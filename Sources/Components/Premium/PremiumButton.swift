@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 // MARK: - Premium Button Style
 enum PremiumButtonStyle {
@@ -281,23 +282,23 @@ struct FloatingActionButton: View {
         
         VStack(spacing: 20) {
             PremiumButton("Get Started", icon: "arrow.right") {
-                print("Tapped")
+                Log.general.info("Tapped")
             }
             
             PremiumButton("Secondary", style: .secondary) {
-                print("Tapped")
+                Log.general.info("Tapped")
             }
             
             PremiumButton("Custom Gradient", style: .gradient([.orange, .pink])) {
-                print("Tapped")
+                Log.general.info("Tapped")
             }
             
             PremiumButton("Outline", style: .outline) {
-                print("Tapped")
+                Log.general.info("Tapped")
             }
             
             PremiumButton("Loading...", isLoading: true) {
-                print("Tapped")
+                Log.general.info("Tapped")
             }
             
             HStack(spacing: 20) {

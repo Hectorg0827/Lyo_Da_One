@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct GlobalSearchView: View {
     @Environment(\.dismiss) var dismiss
@@ -44,7 +45,7 @@ struct GlobalSearchView: View {
                         ForEach(searchResults, id: \.self) { result in
                             Button(action: {
                                 // Simulate navigation
-                                print("Selected: \(result)")
+                                Log.ui.info("Selected: \(result)")
                                 dismiss()
                             }) {
                                 HStack {
@@ -92,7 +93,7 @@ struct GlobalSearchView: View {
                     self.searchResults = results.map { $0.title }
                 }
             } catch {
-                print("Search error: \(error)")
+                Log.ui.error("Search error: \(error)")
                 // Fallback to mock if failure
                 await MainActor.run {
                     searchResults = ["Failed to connect: \(error.localizedDescription)"]

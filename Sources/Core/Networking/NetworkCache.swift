@@ -27,7 +27,8 @@ actor NetworkCache {
     // MARK: - Initialization
     private init() {
         // Setup cache directory
-        let cacheDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let cacheDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         self.cacheDirectory = cacheDir.appendingPathComponent("NetworkCache")
 
         // Create directory if needed
@@ -52,7 +53,7 @@ actor NetworkCache {
                 let decoded = try JSONDecoder.lyoDecoder.decode(T.self, from: entry.data)
                 return decoded
             } catch {
-                print("❌ Failed to decode from memory cache: \(error)")
+                Log.net.error("Failed to decode from memory cache: \(error)")
                 memoryCache.removeValue(forKey: key)
             }
         }
@@ -82,7 +83,7 @@ actor NetworkCache {
             return decoded
 
         } catch {
-            print("❌ Failed to read from disk cache: \(error)")
+            Log.net.error("Failed to read from disk cache: \(error)")
             try? fileManager.removeItem(at: fileURL)
             return nil
         }
@@ -117,7 +118,7 @@ actor NetworkCache {
             await maintainDiskCacheSize()
 
         } catch {
-            print("❌ Failed to cache value: \(error)")
+            Log.net.error("Failed to cache value: \(error)")
         }
     }
 
@@ -131,7 +132,7 @@ actor NetworkCache {
                 try? fileManager.removeItem(at: file)
             }
         } catch {
-            print("❌ Failed to clear disk cache: \(error)")
+            Log.net.error("Failed to clear disk cache: \(error)")
         }
     }
 
@@ -159,7 +160,7 @@ actor NetworkCache {
                 }
             }
         } catch {
-            print("❌ Failed to clean expired cache: \(error)")
+            Log.net.error("Failed to clean expired cache: \(error)")
         }
     }
 
@@ -206,7 +207,7 @@ actor NetworkCache {
                 }
             }
         } catch {
-            print("❌ Failed to maintain disk cache size: \(error)")
+            Log.net.error("Failed to maintain disk cache size: \(error)")
         }
     }
 }
@@ -214,6 +215,7 @@ actor NetworkCache {
 // MARK: - String Extension for MD5
 
 import CryptoKit
+import os
 
 extension String {
     var md5Hash: String {

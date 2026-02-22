@@ -1,12 +1,17 @@
 import SwiftUI
+import PhotosUI
+import UIKit
+import os
 
 // MARK: - Chat View
 struct ChatView: View {
 
     @StateObject private var viewModel = ChatViewModel()
+    var recipient: APIUserPreview? = nil
+    @State private var showNewConversation = false
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 // Search Bar
                 HStack {
@@ -48,6 +53,9 @@ struct ChatView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .refreshable {
+                        await viewModel.loadConversations()
+                    }
                 }
             }
             .navigationTitle("Messages")
@@ -59,17 +67,22 @@ struct ChatView: View {
                         Circle()
                             .fill(viewModel.isConnected ? Color.green : Color.red)
                             .frame(width: 8, height: 8)
+                            .accessibilityLabel(viewModel.isConnected ? "Connected" : "Disconnected")
 
                         // New conversation button
                         Button {
-                            // TODO: Show new conversation sheet
+                            showNewConversation = true
                         } label: {
                             Image(systemName: "square.and.pencil")
                         }
+                        .accessibilityLabel("New conversation")
                     }
                 }
             }
-            .alert("Error", isPresented: .constant(viewModel.error != nil)) {
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
                 Button("OK") {
                     viewModel.error = nil
                 }
@@ -80,10 +93,30 @@ struct ChatView: View {
             }
             .task {
                 await viewModel.loadConversations()
+                if let recipient = recipient {
+                    // Convert APIUserPreview to User
+                    let user = User(
+                        id: recipient.id,
+                        email: "",
+                        name: recipient.name,
+                        avatarURL: recipient.avatar,
+                        createdAt: Date(),
+                        level: 0, 
+                        xp: 0, 
+                        streak: 0, 
+                        totalLessonsCompleted: 0, 
+                        achievements: []
+                    )
+                    await viewModel.startDirectMessage(with: user)
+                }
             }
             .onDisappear {
                 viewModel.disconnect()
             }
+            .sheet(isPresented: $showNewConversation) {
+                NewConversationSheet(viewModel: viewModel)
+            }
+
         }
     }
 }
@@ -108,12 +141,12 @@ struct ConversationRowView: View {
                 .clipShape(Circle())
             } else {
                 Circle()
-                    .fill(Color.blue.opacity(0.2))
+                    .fill(Color.accentColor.opacity(0.2))
                     .frame(width: 50, height: 50)
                     .overlay(
                         Text(String(conversation.displayName.prefix(1)))
                             .font(.title3)
-                            .foregroundColor(.blue)
+                            .foregroundColor(.accentColor)
                     )
             }
 
@@ -147,14 +180,21 @@ struct ConversationRowView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                             .padding(6)
-                            .background(Color.blue)
+                            .background(Color.accentColor)
                             .clipShape(Circle())
+                            .contentTransition(.numericText())
                     }
                 }
             }
         }
         .padding(.vertical, 4)
     }
+
+    private static let shortDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .short
+        return f
+    }()
 
     private func timeAgo(from date: Date) -> String {
         let now = Date()
@@ -172,9 +212,7 @@ struct ConversationRowView: View {
             let days = seconds / 86400
             return "\(days)d"
         } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            return formatter.string(from: date)
+            return Self.shortDateFormatter.string(from: date)
         }
     }
 }
@@ -209,12 +247,17 @@ struct ConversationView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var showAttachmentPicker = false
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ForEach(viewModel.messageGroups) { group in
+                    ForEach(Array(viewModel.messageGroups.enumerated()), id: \.element.id) { index, group in
+                        // Date separator
+                        if index == 0 || !Calendar.current.isDate(group.timestamp, inSameDayAs: viewModel.messageGroups[index - 1].timestamp) {
+                            dateSeparator(for: group.timestamp)
+                        }
                         MessageGroupView(group: group)
                             .id(group.id)
                     }
@@ -230,6 +273,7 @@ struct ConversationView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .onAppear {
                 scrollProxy = proxy
                 scrollToBottom()
@@ -246,12 +290,13 @@ struct ConversationView: View {
                 HStack(spacing: 12) {
                     // Attachment button
                     Button {
-                        // TODO: Show attachment picker
+                        showAttachmentPicker = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 28))
-                            .foregroundColor(.blue)
+                            .foregroundColor(.accentColor)
                     }
+                    .accessibilityLabel("Attach file")
 
                     // Text input
                     TextField("Message...", text: $viewModel.newMessageText, axis: .vertical)
@@ -267,15 +312,17 @@ struct ConversationView: View {
 
                     // Send button
                     Button {
+                        HapticManager.shared.light()
                         Task {
                             await viewModel.sendMessage()
                         }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 28))
-                            .foregroundColor(viewModel.newMessageText.isEmpty ? .gray : .blue)
+                            .foregroundColor(viewModel.newMessageText.isEmpty ? .gray : .accentColor)
                     }
                     .disabled(viewModel.newMessageText.isEmpty)
+                    .accessibilityLabel("Send message")
                 }
                 .padding()
                 .background(Color(UIColor.systemBackground))
@@ -285,6 +332,14 @@ struct ConversationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.selectConversation(conversation)
+        }
+        .sheet(isPresented: $showAttachmentPicker) {
+            ChatAttachmentPicker { selectedURL in
+                showAttachmentPicker = false
+                if let url = selectedURL {
+                    Log.social.info("📎 Attachment selected: \(url.lastPathComponent)")
+                }
+            }
         }
     }
 
@@ -301,63 +356,65 @@ struct MessageGroupView: View {
     let group: MessageGroup
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        VStack(alignment: group.isFromCurrentUser ? .trailing : .leading, spacing: 4) {
             if !group.isFromCurrentUser {
-                // Avatar for other users
-                if let avatarURL = group.sender.avatarURL {
-                    AsyncImage(url: URL(string: avatarURL)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                // Sender Info ABOVE the bubble
+                HStack(spacing: 8) {
+                    if let avatarURL = group.sender.avatarURL {
+                        AsyncImage(url: URL(string: avatarURL)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                        }
+                        .frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                    } else {
                         Circle()
-                            .fill(Color.gray.opacity(0.3))
+                            .fill(Color.accentColor.opacity(0.2))
+                            .frame(width: 24, height: 24)
+                            .overlay(
+                                Text(String(group.sender.name.prefix(1)))
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.accentColor)
+                            )
                     }
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
-                } else {
-                    Circle()
-                        .fill(Color.blue.opacity(0.2))
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Text(String(group.sender.name.prefix(1)))
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                        )
+                    
+                    Text(group.sender.name)
+                        .font(.caption.bold())
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
                 }
-            } else {
-                Spacer()
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
             }
 
             VStack(alignment: group.isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                if !group.isFromCurrentUser {
-                    Text(group.sender.name)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 12)
-                }
-
                 ForEach(group.messages) { message in
                     MessageBubbleView(message: message, isFromCurrentUser: group.isFromCurrentUser)
                 }
 
                 Text(formatTime(group.timestamp))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.8))
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
             }
-
-            if group.isFromCurrentUser {
-                // Empty space for current user messages
-                Color.clear.frame(width: 32, height: 32)
-            }
+            .frame(maxWidth: group.isFromCurrentUser ? UIScreen.main.bounds.width * 0.85 : UIScreen.main.bounds.width * 0.98, alignment: group.isFromCurrentUser ? .trailing : .leading)
         }
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+
     private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        Self.timeFormatter.string(from: date)
     }
 }
 
@@ -372,15 +429,18 @@ struct MessageBubbleView: View {
                 .font(.body)
                 .foregroundColor(isFromCurrentUser ? .white : .primary)
                 .padding(12)
-                .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                .background(isFromCurrentUser ? Color.accentColor : Color(.systemGray5))
                 .cornerRadius(16)
+                .onTapGesture {
+                    handleTap()
+                }
 
             // Read receipt for current user messages
             if isFromCurrentUser && message.readBy.count > 1 {
                 HStack(spacing: 2) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption2)
-                        .foregroundColor(.blue)
+                        .foregroundColor(.accentColor)
                     Text("Read")
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -389,9 +449,144 @@ struct MessageBubbleView: View {
             }
         }
     }
+    
+    private func handleTap() {
+        guard !isFromCurrentUser else { return }
+        
+        let parsed = AICommandParser.parse(message.content)
+        if case .command(let command) = parsed, command.type == .openClassroom {
+            _ = AICommandHandler.shared.handleOpenClassroom(command.payload)
+        }
+    }
 }
 
-// MARK: - Typing Indicator View
+// MARK: - New Conversation Sheet
+struct NewConversationSheet: View {
+    @ObservedObject var viewModel: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                TextField("Search users...", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .padding()
+
+                if searchText.isEmpty {
+                    ContentUnavailableView(
+                        "Start a Conversation",
+                        systemImage: "magnifyingglass",
+                        description: Text("Search for a user to start chatting")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "Search Results",
+                        systemImage: "person.crop.circle",
+                        description: Text("User search coming in a future update")
+                    )
+                }
+
+                Spacer()
+            }
+            .navigationTitle("New Conversation")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Attachment Picker (Functional)
+struct ChatAttachmentPicker: View {
+    let onComplete: (URL?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var showDocumentPicker = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Photo Library — real PhotosPicker
+                PhotosPicker(
+                    selection: $selectedPhotoItems,
+                    maxSelectionCount: 1,
+                    matching: .any(of: [.images, .videos])
+                ) {
+                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                }
+                .onChange(of: selectedPhotoItems) { _, items in
+                    guard let item = items.first else { return }
+                    Task {
+                        if let data = try? await item.loadTransferable(type: Data.self) {
+                            // Write to temp file for consistent URL-based flow
+                            let tempURL = FileManager.default.temporaryDirectory
+                                .appendingPathComponent(UUID().uuidString)
+                                .appendingPathExtension("jpg")
+                            try? data.write(to: tempURL)
+                            onComplete(tempURL)
+                        }
+                    }
+                }
+
+                // Document picker
+                Button {
+                    showDocumentPicker = true
+                } label: {
+                    Label("Document", systemImage: "doc")
+                }
+            }
+            .navigationTitle("Attach")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onComplete(nil)
+                        dismiss()
+                    }
+                }
+            }
+            .sheet(isPresented: $showDocumentPicker) {
+                DocumentPickerView { url in
+                    onComplete(url)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Date Separator
+extension ConversationView {
+    func dateSeparator(for date: Date) -> some View {
+        let text: String = {
+            if Calendar.current.isDateInToday(date) {
+                return "Today"
+            } else if Calendar.current.isDateInYesterday(date) {
+                return "Yesterday"
+            } else {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                formatter.timeStyle = .none
+                return formatter.string(from: date)
+            }
+        }()
+
+        return HStack {
+            VStack { Divider() }
+            Text(text)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+            VStack { Divider() }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
 // MARK: - End of ChatView
 // Note: TypingIndicatorView is defined in SuggestionChipsView.swift
 

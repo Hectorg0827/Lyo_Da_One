@@ -65,91 +65,6 @@ final class ChatIntentClassifier: ObservableObject {
     
     private init() {}
     
-    // MARK: - Course Creation Keywords (Trigger full course flow)
-    
-    private let courseCreationKeywords: Set<String> = [
-        "create a course",
-        "make a course",
-        "build a course",
-        "design a course",
-        "generate a course",
-        "full course",
-        "full corse",           // Common typo
-        "complete course",
-        "teach me everything",
-        "i want to learn",
-        "want to learn",        // Without "I"
-        "i want to master",
-        "want to master",       // Without "I"
-        "comprehensive guide",
-        "full guide",
-        "complete guide",
-        "step by step course",
-        "structured course",
-        "learning path",
-        "curriculum",
-        "syllabus",
-        "class on",
-        "class about",
-        "make me a course",
-        "create me a course",
-        "build me a course",
-        "do the course",        // Follow-up intent
-        "start the course",     // Follow-up intent
-        "generate the course",
-        "go ahead and create",
-        "yes create",
-        "yes make"
-    ]
-    
-    private let courseCreationPatterns: [String] = [
-        "create .* course",
-        "make .* course",
-        "build .* course",
-        "teach me .* from scratch",
-        "learn .* completely",
-        "master .*",
-        "full .* course",
-        "complete .* tutorial",
-        "course on .*",
-        "course about .*",
-        "course for .*",
-        "start a course",
-        "begin a course",
-        "study plan for",
-        "learn .* step by step",
-        ".* for beginners",
-        ".* 101",
-        ".* basics",
-        "introduction to .*",
-        "intro to .*",
-        ".* crash course"
-    ]
-    
-    // MARK: - Quick Explanation Keywords (Stay in chat)
-    
-    private let quickExplanationKeywords: Set<String> = [
-        "what is",
-        "what are",
-        "what's",
-        "explain",
-        "define",
-        "tell me about",
-        "describe",
-        "how does",
-        "how do",
-        "why is",
-        "why does",
-        "quick",
-        "briefly",
-        "summary",
-        "overview",
-        "in short",
-        "simple explanation",
-        "eli5",
-        "explain like"
-    ]
-    
     // MARK: - Classify Intent
     
     func classifyIntent(_ message: String) -> UserIntent {
@@ -162,114 +77,12 @@ final class ChatIntentClassifier: ObservableObject {
             }
         }
         
-        // Check for explicit course creation intent
-        if isCourseCreationIntent(lowercased) {
-            let topic = extractTopic(from: lowercased, forCourse: true)
-            return .courseCreation(topic: topic)
-        }
+        // 🎯 LYO BULLETPROOF FLOW: 
+        // We no longer perform local intent detection for course creation.
+        // All messages are sent to the backend, and the backend dictates the intent.
         
-        // Check for quick explanation intent
-        if isQuickExplanationIntent(lowercased) {
-            let topic = extractTopic(from: lowercased, forCourse: false)
-            return .quickExplanation(topic: topic)
-        }
-        
-        // Default: If message is long or complex, likely wants explanation
-        // If short and contains learning-related words, might want course
-        if containsLearningIntent(lowercased) && !isSimpleQuestion(lowercased) {
-            let topic = extractTopic(from: lowercased, forCourse: true)
-            return .courseCreation(topic: topic)
-        }
-        
-        // Default to general chat (will be handled as quick explanation)
+        // Default to general chat
         return .generalChat(message: message)
-    }
-    
-    // MARK: - Course Creation Detection
-    
-    private func isCourseCreationIntent(_ message: String) -> Bool {
-        // Check exact phrase matches
-        for keyword in courseCreationKeywords {
-            if message.contains(keyword) {
-                return true
-            }
-        }
-        
-        // Check regex patterns
-        for pattern in courseCreationPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-                let range = NSRange(message.startIndex..., in: message)
-                if regex.firstMatch(in: message, options: [], range: range) != nil {
-                    return true
-                }
-            }
-        }
-        
-        return false
-    }
-    
-    // MARK: - Quick Explanation Detection
-    
-    private func isQuickExplanationIntent(_ message: String) -> Bool {
-        for keyword in quickExplanationKeywords {
-            if message.hasPrefix(keyword) || message.contains(" \(keyword) ") {
-                return true
-            }
-        }
-        return false
-    }
-    
-    // MARK: - Learning Intent Detection
-    
-    private func containsLearningIntent(_ message: String) -> Bool {
-        let learningWords = ["learn", "study", "understand", "know", "teach", "education", "tutorial", "roadmap", "curriculum", "syllabus"]
-        return learningWords.contains { message.contains($0) }
-    }
-    
-    private func isSimpleQuestion(_ message: String) -> Bool {
-        // Simple questions are typically short and start with question words
-        let questionStarters = ["what", "why", "how", "when", "where", "who", "is", "are", "can", "does", "do"]
-        let words = message.split(separator: " ")
-        
-        return words.count < 10 && questionStarters.contains { message.hasPrefix($0) }
-    }
-    
-    // MARK: - Topic Extraction
-    
-    private func extractTopic(from message: String, forCourse: Bool) -> String {
-        var cleaned = message
-        
-        // Remove course-related prefixes
-        let prefixesToRemove = [
-            "create a course on", "create a course about", "create a course for",
-            "make a course on", "make a course about", "make a course for",
-            "build a course on", "build a course about",
-            "teach me everything about", "teach me about", "teach me",
-            "i want to learn about", "i want to learn", "i want to master",
-            "full course on", "complete course on",
-            "what is", "what are", "what's",
-            "explain", "define", "tell me about", "describe",
-            "how does", "how do", "how to",
-            "learn about", "learn"
-        ]
-        
-        for prefix in prefixesToRemove {
-            if cleaned.lowercased().hasPrefix(prefix) {
-                cleaned = String(cleaned.dropFirst(prefix.count))
-                break
-            }
-        }
-        
-        // Clean up
-        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-        cleaned = cleaned.trimmingCharacters(in: CharacterSet(charactersIn: "?!.,"))
-        
-        // Capitalize first letter
-        if let first = cleaned.first {
-            cleaned = first.uppercased() + cleaned.dropFirst()
-        }
-        
-        return cleaned.isEmpty ? "this topic" : cleaned
     }
     
     // MARK: - Wizard Action Parsing
@@ -301,11 +114,6 @@ final class ChatIntentClassifier: ObservableObject {
         // Check for cancellation
         if ["cancel", "stop", "nevermind", "never mind", "no thanks", "exit", "quit"].contains(where: { message.contains($0) }) {
             return .cancel
-        }
-        
-        // Check for edit requests
-        if message.contains("change") || message.contains("edit") || message.contains("modify") || message.contains("different") {
-            return .editOutline(message)
         }
         
         return nil

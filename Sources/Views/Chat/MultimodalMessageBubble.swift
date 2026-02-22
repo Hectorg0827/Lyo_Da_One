@@ -31,30 +31,54 @@ struct MultimodalMessageBubble: View {
     }
     
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 0) {
             if message.role == .assistant {
-                avatarView
+                // AI Header: Mascot & Speaker ABOVE
+                HStack(alignment: .center, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image("Mascot_Standing")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
+                        
+                        Text("Lyo")
+                            .font(.caption.bold())
+                            .foregroundColor(.primary.opacity(0.8))
+                    }
+                    
+                    Spacer()
+                    
+                    // TTS button moved to header
+                    ttsButton
+                        .scaleEffect(0.85)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
             }
             
-            if message.role == .user {
-                Spacer(minLength: 60)
-            }
-            
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
-                // Main content
-                bubbleContent
-                
-                // Attachments
-                if !message.attachments.isEmpty {
-                    attachmentsGrid(message.attachments)
+            HStack(alignment: .bottom, spacing: 8) {
+                if message.role == .user {
+                    Spacer(minLength: 40)
                 }
                 
-                // Metadata footer
-                messageFooter
-            }
-            
-            if message.role == .assistant {
-                Spacer(minLength: 60)
+                VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
+                    // Main content
+                    bubbleContent
+                    
+                    // Attachments
+                    if !message.attachments.isEmpty {
+                        attachmentsGrid(message.attachments)
+                    }
+                    
+                    // Metadata footer
+                    messageFooter
+                }
+                .frame(maxWidth: message.role == .user ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.995, alignment: message.role == .user ? .trailing : .leading)
+                
+                if message.role == .assistant {
+                    Spacer(minLength: 0)
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -66,42 +90,72 @@ struct MultimodalMessageBubble: View {
         }
     }
     
-    // MARK: - Avatar
+    // MARK: - Avatar (No longer used on side)
     
     private var avatarView: some View {
-        Image("LyoAvatar")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 32, height: 32)
-            .clipShape(Circle())
+        EmptyView()
     }
     
     // MARK: - Bubble Content
     
     @ViewBuilder
     private var bubbleContent: some View {
-        // Default to text bubble
-        textBubble
+        VStack(alignment: .leading, spacing: 12) {
+            // Default text
+            if !message.content.isEmpty {
+                textBubble
+            }
+            
+            // Rich Content
+            if !message.contentTypes.isEmpty {
+                VStack(spacing: 12) {
+                    ForEach(Array(message.contentTypes.enumerated()), id: \.offset) { _, contentType in
+                        renderContentType(contentType)
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func renderContentType(_ contentType: MessageContentType) -> some View {
+        switch contentType {
+        case .quiz(let question, let options, let correctIndex, let explanation):
+            PremiumQuizView(
+                question: question,
+                options: options,
+                correctIndex: correctIndex,
+                explanation: explanation,
+                onAnswerSubmitted: { index, _ in
+                    onQuizAnswer?(index)
+                }
+            )
+            .padding(.horizontal, -8)
+            
+        case .flashcards(let title, let cards):
+            FlashcardCarouselBubbleView(title: title, cards: cards)
+            .padding(.horizontal, -8)
+            
+        case .notes(let title, let sections):
+            NotesView(notes: NotesPayload(title: title, sections: sections))
+            .padding(.horizontal, -8)
+            
+        default:
+            EmptyView()
+        }
     }
     
     // MARK: - Text Bubble
     
     private var textBubble: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Text(LocalizedStringKey(message.content))
-                .font(.body)
-                .foregroundColor(message.role == .user ? .white : .primary)
-                .textSelection(.enabled)
-            
-            // TTS button for assistant messages
-            if message.role == .assistant {
-                ttsButton
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(bubbleBackground)
-        .clipShape(ChatBubbleShape(isFromUser: message.role == .user))
+        Text(LocalizedStringKey(message.content))
+            .font(.body)
+            .foregroundColor(message.role == .user ? .white : .primary)
+            .textSelection(.enabled)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(bubbleBackground)
+            .clipShape(ChatBubbleShape(isFromUser: message.role == .user))
     }
     
     // MARK: - TTS Button

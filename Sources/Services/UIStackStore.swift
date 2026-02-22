@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 // MARK: - Stack Store
 
@@ -176,10 +177,17 @@ final class UIStackStore: ObservableObject {
     /// Sync course progress to backend (called automatically on updateCourseProgress)
     private func syncCourseProgressToBackend(courseId: String, progress: Double) async {
         do {
-            let _ = try await repository.getCourseProgress(courseId: courseId)
-            print("✅ UIStackStore: Synced course progress to backend (\(Int(progress * 100))%)")
+            let _: EmptyResponse = try await NetworkClient.shared.request(
+                Endpoints.Analytics.trackLearningProgress(
+                    contentId: courseId,
+                    progress: progress,
+                    timeSpent: 0,
+                    sessionId: nil
+                )
+            )
+            Log.net.info("UIStackStore: Synced course progress to backend (\(Int(progress * 100))%)")
         } catch {
-            print("⚠️ UIStackStore: Failed to sync course progress: \(error.localizedDescription)")
+            Log.net.warning("UIStackStore: Failed to sync course progress: \(error.localizedDescription)")
             // Don't block user - local tracking continues
         }
     }
@@ -195,7 +203,7 @@ final class UIStackStore: ObservableObject {
             let data = try JSONEncoder().encode(items)
             UserDefaults.standard.set(data, forKey: userDefaultsKey)
         } catch {
-            print("UIStackStore: Failed to save to disk: \(error)")
+            Log.net.error("UIStackStore: Failed to save to disk: \(error)")
         }
     }
     
@@ -208,7 +216,7 @@ final class UIStackStore: ObservableObject {
             items = try JSONDecoder().decode([UIStackItem].self, from: data)
             sortByRecency()
         } catch {
-            print("UIStackStore: Failed to load from disk: \(error)")
+            Log.net.error("UIStackStore: Failed to load from disk: \(error)")
         }
     }
 }

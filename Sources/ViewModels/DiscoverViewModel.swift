@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 // MARK: - Discover ViewModel
 
@@ -16,6 +17,7 @@ final class DiscoverViewModel: ObservableObject {
     // UI State for Context Sheet
     @Published var showVideoContextSheet: Bool = false
     @Published var selectedContextItem: DiscoverItem?
+    @Published var selectedItemForComments: DiscoverItem? // For CommentsSheet
     
     // MARK: - Dependencies
     
@@ -50,7 +52,7 @@ final class DiscoverViewModel: ObservableObject {
         HapticManager.shared.success()
         
         switch item.type {
-        case .courseSuggestion, .videoSnippet:
+        case .courseSuggestion, .videoSnippet, .userClip:
             if let courseId = item.courseId {
                 stackStore.upsertCourse(
                     courseId: courseId,
@@ -75,6 +77,38 @@ final class DiscoverViewModel: ObservableObject {
         }
     }
     
+    /// Prepare items for sharing (Text, Links, etc.)
+    func prepareShareItems(for item: DiscoverItem) -> [Any] {
+        // If it's linked to a course, share as a course
+        if let courseId = item.courseId {
+            return CourseShareService.shared.getShareItems(
+                courseId: courseId,
+                title: item.title,
+                description: item.subtitle
+            )
+        } else {
+            // Generic fallback for non-course clips
+            // In a real app, this would be a deep link to the clip itself
+            let shareText = """
+            Check out this clip on Lyo: "\(item.title)"
+            
+            \(item.subtitle ?? "")
+            
+            Download Lyo to watch: https://lyo.app
+            """
+            
+            if let url = item.videoURL ?? item.thumbnailURL {
+                 return [shareText, url]
+            }
+            return [shareText]
+        }
+    }
+    
+    /// Open comments for an item
+    func commentsAction(item: DiscoverItem) {
+        selectedItemForComments = item
+    }
+    
     /// Toggle like status for an item
     func toggleLike(for item: DiscoverItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
@@ -95,7 +129,24 @@ final class DiscoverViewModel: ObservableObject {
         
         // Fire and forget backend request
         Task { 
-            // await api.likeDiscoverItem(id: item.id, like: updatedItem.isLiked) 
+            do {
+                if updatedItem.isLiked {
+                    try await DiscoveryService.shared.likeDiscovery(discoveryId: item.id)
+                } else {
+                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
+                }
+            } catch {
+                print("Failed to toggle like: \(error)")
+                // Revert
+                await MainActor.run {
+                    if let revertIndex = items.firstIndex(where: { $0.id == item.id }) {
+                        items[revertIndex].isLiked.toggle()
+                        // Re-adjust count? Maybe complex if user spammed. Just toggle back.
+                        if items[revertIndex].isLiked { items[revertIndex].likeCount += 1 }
+                        else { items[revertIndex].likeCount = max(0, items[revertIndex].likeCount - 1) }
+                    }
+                }
+            }
         }
     }
     
@@ -155,9 +206,25 @@ final class DiscoverViewModel: ObservableObject {
     /// Trigger generation of a mini-course from this reel
     func convertToCourse(item: DiscoverItem) {
         HapticManager.shared.success()
-        print("🤖 Generating mini-course for: \(item.title)")
-        // TODO: Call CourseGenerationService
-        // Toast logic would go here
+        Log.ui.info("Generating mini-course for: \(item.title)")
+        
+        Task {
+            do {
+                let topic = item.topic ?? item.title
+                let level = item.level.rawValue
+                _ = try await CourseGenerationService.shared.generateCourse(
+                    topic: topic,
+                    level: level,
+                    outcomes: item.keyPoints.isEmpty ? nil : item.keyPoints
+                )
+                Log.ui.info("Mini-course generated for: \(item.title)")
+            } catch {
+                Log.ui.warning("Failed to generate mini-course: \(error.localizedDescription)")
+                await MainActor.run {
+                    errorMessage = "Failed to generate course: \(error.localizedDescription)"
+                }
+            }
+        }
     }
     
     /// Load items from backend or demo data
@@ -167,15 +234,15 @@ final class DiscoverViewModel: ObservableObject {
         
         // Use DataService for unified data fetching
         // Note: DataService internally handles some fallbacks, but we should be aware of the auth state
-        items = await DataService.shared.fetchDiscoverFeed()
+        self.items = await DataService.shared.fetchDiscoverFeed()
         
         if AuthService.shared.isDemoMode {
-            print("📱 DiscoverViewModel: Loaded \(items.count) items (Demo Mode)")
+            Log.ui.info("DiscoverViewModel: Loaded \(self.items.count) items (Demo Mode)")
         } else {
-            if items.isEmpty {
-                 print("⚠️ DiscoverViewModel: Loaded 0 items from backend. This might indicate an issue if not expected.")
+            if self.items.isEmpty {
+                 Log.ui.warning("DiscoverViewModel: Loaded 0 items from backend. This might indicate an issue if not expected.")
             } else {
-                print("🌐 DiscoverViewModel: Loaded \(items.count) items from backend")
+                Log.ui.info("DiscoverViewModel: Loaded \\(self.items.count) items from backend")
             }
         }
         

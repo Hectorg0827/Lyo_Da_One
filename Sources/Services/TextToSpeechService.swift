@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os
 
 class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     static let shared = TextToSpeechService()
@@ -18,16 +19,36 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [.duckOthers, .allowBluetoothHFP, .defaultToSpeaker])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to configure audio session: \(error)")
+            Log.audio.error("Failed to configure audio session: \(error)")
         }
     }
     
+    // MARK: - Queue Management
+    
+    private var speechQueue: [String] = []
+    
+    /// Speak text immediately (clears queue)
     func speak(text: String) {
-        // Stop any current speech
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
+        stop()
+        enqueue(text)
+    }
+    
+    /// Add text to the speech queue
+    func enqueue(_ text: String) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
+        speechQueue.append(text)
+        
+        // If not currently speaking, start the queue
+        if !synthesizer.isSpeaking {
+            playNextInQueue()
+        }
+    }
+    
+    private func playNextInQueue() {
+        guard !speechQueue.isEmpty else { return }
+        
+        let text = speechQueue.removeFirst()
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
@@ -38,6 +59,7 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     }
     
     func stop() {
+        speechQueue.removeAll()
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
@@ -53,15 +75,21 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         DispatchQueue.main.async {
-            self.isSpeaking = false
-            self.onSpeechFinished?()
+            // Check if queue is empty to update state
+            if self.speechQueue.isEmpty {
+                self.isSpeaking = false
+                self.onSpeechFinished?()
+            } else {
+                // Continue queue
+                self.playNextInQueue()
+            }
         }
     }
     
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         DispatchQueue.main.async {
             self.isSpeaking = false
-            // We don't call onSpeechFinished here because it was interrupted
+            self.speechQueue.removeAll()
         }
     }
 }

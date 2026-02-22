@@ -98,8 +98,7 @@ struct PremiumHomeView: View {
     
     private var profileAvatar: some View {
         Button {
-            // TODO: Navigate to profile
-            // uiState.currentTab = .profile
+            uiState.currentTab = .profile
         } label: {
             ZStack {
                 Circle()
@@ -196,8 +195,7 @@ struct PremiumHomeView: View {
                     subtitle: "Earn rewards",
                     gradient: [.orange, .yellow]
                 ) {
-                    // TODO: Navigate to challenges/profile
-                    // uiState.currentTab = .profile
+                    uiState.currentTab = .profile
                 }
             }
         }

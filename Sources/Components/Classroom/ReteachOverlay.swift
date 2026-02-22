@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct ReteachOverlay: View {
     @ObservedObject var viewModel: ClassroomViewModel
@@ -286,13 +287,21 @@ struct ReteachOverlay: View {
             textToRead += "Another way to think about it: " + alternative + ". "
         }
         
-        // TODO: Use TTS to read the content
-        // This would integrate with ClassroomViewModel's TTS system
+        // Use the ClassroomViewModel's speech synthesizer for consistent TTS
         isReadingAloud = true
+        let utterance = AVSpeechUtterance(string: textToRead)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = viewModel.settings.playbackSpeed * 0.45
+        utterance.pitchMultiplier = 1.05
         
-        // Simulate reading for 20-30 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 25) {
-            isReadingAloud = false
+        let synthesizer = AVSpeechSynthesizer()
+        synthesizer.speak(utterance)
+        
+        // Track completion via estimated duration
+        let estimatedDuration = Double(textToRead.count) / 15.0 // ~15 chars/sec at normal speed
+        let adjustedDuration = estimatedDuration / Double(viewModel.settings.playbackSpeed)
+        DispatchQueue.main.asyncAfter(deadline: .now() + adjustedDuration) {
+            self.isReadingAloud = false
         }
     }
 }

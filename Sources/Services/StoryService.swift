@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Story Error
 enum StoryError: LocalizedError {
@@ -45,12 +46,12 @@ class StoryService: ObservableObject {
             let response = try await apiClient.fetchStories()
             stories = response.stories
             myStory = response.myStory
-            print("✅ Loaded \(stories.count) stories from backend")
+            Log.net.info("Loaded \(self.stories.count) stories from backend")
         } catch {
-            print("❌ Failed to load stories: \(error.localizedDescription)")
+            Log.net.error("Failed to load stories: \(error.localizedDescription)")
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockStories()
+            // Production: Do not fallback to mocks automatically to ensure we see backend issues
+            // loadMockStories() 
         }
         
         isLoading = false
@@ -58,7 +59,7 @@ class StoryService: ObservableObject {
     
     // MARK: - Create Story
     
-    func addStory(mediaURL: String, mediaType: Story.MediaType = .video, isLive: Bool = false) async throws {
+    func addStory(mediaURL: String, mediaType: Story.MediaType = .video, caption: String? = nil, isLive: Bool = false) async throws {
         isLoading = true
         error = nil
         
@@ -66,7 +67,11 @@ class StoryService: ObservableObject {
             let request = CreateStoryRequest(
                 mediaURL: mediaURL,
                 mediaType: mediaType,
-                isLive: isLive
+                isLive: isLive,
+                caption: caption,
+                linkedCourseId: nil,
+                linkedGroupId: nil,
+                tags: []
             )
             
             let newStory = try await apiClient.createStory(request)
@@ -75,9 +80,9 @@ class StoryService: ObservableObject {
             myStory = newStory
             await loadStories() // Refresh all stories
             
-            print("✅ Story created successfully")
+            Log.net.info("Story created successfully")
         } catch {
-            print("❌ Failed to create story: \(error.localizedDescription)")
+            Log.net.error("Failed to create story: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -98,9 +103,9 @@ class StoryService: ObservableObject {
             }
             stories.removeAll { $0.id == storyId }
             
-            print("✅ Story deleted successfully")
+            Log.net.info("Story deleted successfully")
         } catch {
-            print("❌ Failed to delete story: \(error.localizedDescription)")
+            Log.net.error("Failed to delete story: \(error.localizedDescription)")
             throw error
         }
     }
@@ -117,7 +122,7 @@ class StoryService: ObservableObject {
         do {
             try await apiClient.markStorySeen(storyId: storyId)
         } catch {
-            print("❌ Failed to mark story as seen: \(error.localizedDescription)")
+            Log.net.error("Failed to mark story as seen: \(error.localizedDescription)")
         }
     }
     
@@ -131,6 +136,40 @@ class StoryService: ObservableObject {
             data: data,
             filename: filename,
             contentType: "video/mp4",
+            folder: "stories"
+        )
+        guard let publicURL = result.publicURL else {
+            throw StoryError.uploadFailed
+        }
+        return publicURL
+    }
+    
+    func uploadStoryMedia(imageURL: URL) async throws -> String {
+        // Upload image to cloud storage
+        let filename = "\(UUID().uuidString).jpg"
+        let data = try Data(contentsOf: imageURL)
+        let result = try await cloudStorage.uploadFile(
+            data: data,
+            filename: filename,
+            contentType: "image/jpeg",
+            folder: "stories"
+        )
+        guard let publicURL = result.publicURL else {
+            throw StoryError.uploadFailed
+        }
+        return publicURL
+    }
+    
+    func uploadStoryMedia(image: UIImage) async throws -> String {
+        // Compress and upload image to cloud storage
+        guard let data = image.jpegData(compressionQuality: 0.8) else {
+            throw StoryError.uploadFailed
+        }
+        let filename = "\(UUID().uuidString).jpg"
+        let result = try await cloudStorage.uploadFile(
+            data: data,
+            filename: filename,
+            contentType: "image/jpeg",
             folder: "stories"
         )
         guard let publicURL = result.publicURL else {

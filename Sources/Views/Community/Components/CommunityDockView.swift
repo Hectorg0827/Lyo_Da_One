@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct CommunityDockView: View {
     @ObservedObject var viewModel: CommunityViewModel
@@ -148,7 +149,7 @@ struct CommunityDockView: View {
         }
     }
     
-    private func cardView(for pin: MapPin) -> some View {
+    private func cardView(for pin: CommunityBeacon) -> some View {
         CommunityCardView(
             pin: pin,
             isSelected: viewModel.selectedPin?.id == pin.id,
@@ -161,37 +162,32 @@ struct CommunityDockView: View {
         }
     }
     
-    private func handleJoin(pin: MapPin) {
+    private func handleJoin(pin: CommunityBeacon) {
         Task {
             do {
-                if case .studyGroup(let group) = pin.type {
-                    try await viewModel.joinStudyGroup(id: group.id)
-                } else if case .event(let event) = pin.type {
-                    try await viewModel.registerForEvent(id: event.id)
+                if pin.type == .group {
+                    try await viewModel.joinStudyGroup(id: pin.id)
+                } else if pin.type == .event {
+                    try await viewModel.registerForEvent(id: pin.id)
                 }
             } catch {
-                print("❌ Failed to join: \(error.localizedDescription)")
+                Log.social.error("Failed to join: \(error.localizedDescription)")
             }
         }
     }
     
     // MARK: - Logic
     
-    private var currentItems: [MapPin] {
-        // Filter `viewModel.mapPins` based on `selectedTab`
-        // Ideally the VM should handle this, but we can do client-side filtering here for the UI
+    private var currentItems: [CommunityBeacon] {
+        // Filter `viewModel.beacons` based on `selectedTab`
         switch selectedTab {
         case .nearby:
-            return viewModel.mapPins.sorted { ($0.distance ?? 999) < ($1.distance ?? 999) }
+            // Sorting by distance requires user location, skipping for now
+            return viewModel.beacons
         case .forYou:
-            // Mock recommendation logic: just shuffle or picking top 5
-            return Array(viewModel.mapPins.prefix(5))
+            return Array(viewModel.beacons.prefix(5))
         case .myGroups:
-            // Filter pins where user is member (Need logic in VM really, but we'll mock it by type)
-            return viewModel.mapPins.filter {
-                if case .studyGroup = $0.type { return true }
-                return false
-            }
+            return viewModel.beacons.filter { $0.type == .group }
         }
     }
     

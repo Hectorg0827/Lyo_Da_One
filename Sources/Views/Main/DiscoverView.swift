@@ -7,8 +7,8 @@ struct DiscoverView: View {
     @EnvironmentObject var uiStackStore: UIStackStore
     
     @StateObject private var viewModel = DiscoverViewModel()
-    // Inject Lyo AI ViewModel for LioChatSheet to prevent missing EnvironmentObject crash
-    @StateObject private var lyoAIViewModel = LyoAIViewModel()
+    // Unified AI ViewModel from MainTabView environment
+    @EnvironmentObject var lyoAIViewModel: LyoAIViewModel
     
     // Navigation state
     @State private var selectedCourse: (id: String, lessonId: String?, title: String)?
@@ -77,7 +77,7 @@ struct DiscoverView: View {
                 .environmentObject(lyoAIViewModel) // FIX: provide required EnvironmentObject
         }
         .sheet(item: $itemToShare) { item in
-            ActivityViewController(activityItems: [item.title, item.videoURL ?? item.thumbnailURL ?? URL(string: "https://lyo.app")!])
+            ActivityViewController(activityItems: viewModel.prepareShareItems(for: item))
         }
         // Present the context sheet using the selected item so the closure always returns a View
         .sheet(item: $viewModel.selectedContextItem) { item in
@@ -94,6 +94,14 @@ struct DiscoverView: View {
             .presentationDetents([.medium, .fraction(0.4)])
             .presentationDragIndicator(.visible)
             .applyPresentationBackgroundIfAvailable()
+        }
+        .sheet(item: $viewModel.selectedItemForComments) { item in
+            CommentsSheet(item: item, isPresented: Binding(
+                get: { viewModel.selectedItemForComments != nil },
+                set: { if !$0 { viewModel.selectedItemForComments = nil } }
+            ))
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
     
@@ -167,15 +175,17 @@ struct DiscoverView: View {
     // MARK: - Feed Content
     
     private var feedContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 0) {
+        GeometryReader { geometry in
+            TabView {
                 ForEach(viewModel.filteredItems) { item in
                     DiscoverReelView(
                         item: item,
                         onLike: { 
                             viewModel.toggleLike(for: item)
                         },
-                        onComment: { /* Handle comment */ },
+                        onComment: { 
+                            viewModel.commentsAction(item: item)
+                        },
                         onShare: { 
                             itemToShare = item
                         },
@@ -186,9 +196,11 @@ struct DiscoverView: View {
                         onStart: { startAction(for: item) },
                         onConvertToCourse: { viewModel.convertToCourse(item: item) }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
         }
         .ignoresSafeArea()
     }

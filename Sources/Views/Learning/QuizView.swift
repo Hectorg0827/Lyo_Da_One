@@ -38,7 +38,10 @@ struct QuizView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: .constant(viewModel.error != nil)) {
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
                 Button("OK") {
                     viewModel.error = nil
                 }
@@ -513,6 +516,7 @@ struct AnswerOptionView: View {
 // MARK: - Quiz Results View
 struct QuizResultsView: View {
     @ObservedObject var viewModel: QuizViewModel
+    @State private var showReviewSheet = false
 
     var body: some View {
         ScrollView {
@@ -593,7 +597,7 @@ struct QuizResultsView: View {
                     }
 
                     Button {
-                        // TODO: Review answers
+                        showReviewSheet = true
                     } label: {
                         HStack {
                             Image(systemName: "doc.text.magnifyingglass")
@@ -605,6 +609,9 @@ struct QuizResultsView: View {
                         .padding()
                         .background(Color.blue.opacity(0.1))
                         .cornerRadius(12)
+                    }
+                    .sheet(isPresented: $showReviewSheet) {
+                        QuizReviewSheet(viewModel: viewModel)
                     }
                 }
                 .padding(.horizontal)
@@ -644,5 +651,85 @@ struct StatRow: View {
 struct QuizView_Previews: PreviewProvider {
     static var previews: some View {
         QuizView()
+    }
+}
+
+// MARK: - Quiz Review Sheet
+struct QuizReviewSheet: View {
+    @ObservedObject var viewModel: QuizViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    if let quiz = viewModel.currentQuiz {
+                        ForEach(Array(quiz.questions.enumerated()), id: \.offset) { index, question in
+                            VStack(alignment: .leading, spacing: 12) {
+                                // Question header
+                                HStack {
+                                    Text("Q\(index + 1)")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(viewModel.questionResults[index] == true ? Color.green : Color.red)
+                                        .cornerRadius(6)
+
+                                    Text(question.question)
+                                        .font(.subheadline.weight(.semibold))
+
+                                    Spacer()
+
+                                    Image(systemName: viewModel.questionResults[index] == true ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(viewModel.questionResults[index] == true ? .green : .red)
+                                }
+
+                                // User's answer
+                                if let userAnswer = viewModel.userAnswers[index] {
+                                    HStack(spacing: 6) {
+                                        Text("Your answer:")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Text(userAnswer)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundColor(viewModel.questionResults[index] == true ? .green : .red)
+                                    }
+                                }
+
+                                // Correct answer
+                                HStack(spacing: 6) {
+                                    Text("Correct:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text(question.correctAnswer)
+                                        .font(.caption.weight(.medium))
+                                        .foregroundColor(.green)
+                                }
+
+                                // AI explanation
+                                if let verification = viewModel.verificationResults[index] {
+                                    Text(verification.explanation)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.top, 4)
+                                }
+                            }
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Review Answers")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }

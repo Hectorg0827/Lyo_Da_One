@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import os
 
 // MARK: - Course Social Service
 
@@ -41,7 +42,10 @@ final class CourseSocialService: ObservableObject {
             let response = try await repository.likeCourse(courseId: courseId)
             courseLikes[courseId] = response.totalLikes
             saveToCache()
-            print("✅ Liked course: \(courseId) (total: \(response.totalLikes))")
+            Log.social.info("Liked course: \(courseId) (total: \(response.totalLikes))")
+            
+            // 🏆 Award XP for social engagement
+            // _ = try? await repository.awardXP(amount: 10, category: "social")
         } catch {
             // Rollback on error
             userLikedCourses.remove(courseId)
@@ -61,7 +65,7 @@ final class CourseSocialService: ObservableObject {
         // Backend sync
         do {
             try await repository.unlikeCourse(courseId: courseId)
-            print("✅ Unliked course: \(courseId)")
+            Log.social.info("Unliked course: \(courseId)")
         } catch {
             // Rollback on error
             userLikedCourses.insert(courseId)
@@ -109,7 +113,11 @@ final class CourseSocialService: ObservableObject {
             courseRatings[courseId] = response.averageRating
             saveToCache()
             
-            print("✅ Rated course \(courseId): \(rating) stars (avg: \(response.averageRating))")
+            saveToCache()
+            Log.social.info("Rated course \(courseId): \(rating) stars (avg: \(response.averageRating))")
+            
+            // 🏆 Award XP for social engagement
+            _ = try? await repository.awardXP(amount: 25, category: "social")
         } catch {
             // Rollback on error
             if let prev = previousRating {
@@ -214,20 +222,3 @@ enum CourseSocialError: LocalizedError {
         }
     }
 }
-
-// MARK: - Backend API Extension (TODO)
-
-extension LyoRepository {
-    // TODO: Add these backend endpoints:
-    
-    // func likeCourse(courseId: String) async throws -> LikeResponse
-    // func unlikeCourse(courseId: String) async throws
-    // func rateCourse(courseId: String, rating: Int) async throws -> RatingResponse
-    // func getCourseSocialStats(courseId: String) async throws -> CourseSocialStats
-    // func getBulkCourseSocialStats(courseIds: [String]) async throws -> [String: CourseSocialStats]
-}
-
-// Response models (TODO: Add to Models/)
-// struct LikeResponse: Codable { let totalLikes: Int }
-// struct RatingResponse: Codable { let averageRating: Double, totalRatings: Int }
-// struct CourseSocialStats: Codable { let likes: Int, rating: Double, ratingCount: Int }

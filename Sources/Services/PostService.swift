@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Post Service
 @MainActor
@@ -44,14 +45,18 @@ class PostService: ObservableObject {
             
             currentOffset += response.posts.count
             
-            print("✅ Loaded \(response.posts.count) posts from backend")
+            Log.social.info("Loaded \(response.posts.count) posts from backend")
         } catch {
-            print("❌ Failed to load posts: \(error.localizedDescription)")
+            Log.social.error("Failed to load posts: \(error.localizedDescription)")
             self.error = error.localizedDescription
             
-            // Fallback to mock data only on first load
-            if postsFeed.isEmpty {
+            // Fallback to mock data only if explicitly allowed and on first load
+            if postsFeed.isEmpty && AppConfig.allowMockFallbacks {
+                Log.social.warning("Using mock posts as fallback (AppConfig.allowMockFallbacks = true)")
                 loadMockPosts()
+            } else if postsFeed.isEmpty {
+                // Propagate error if mocks are not allowed
+                self.error = error.localizedDescription
             }
         }
         
@@ -76,9 +81,9 @@ class PostService: ObservableObject {
             // Insert at the beginning of the feed
             postsFeed.insert(newPost, at: 0)
             
-            print("✅ Post created successfully")
+            Log.social.info("Post created successfully")
         } catch {
-            print("❌ Failed to create post: \(error.localizedDescription)")
+            Log.social.error("Failed to create post: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -96,9 +101,9 @@ class PostService: ObservableObject {
             // Remove from local state
             postsFeed.removeAll { $0.id == postId }
             
-            print("✅ Post deleted successfully")
+            Log.social.info("Post deleted successfully")
         } catch {
-            print("❌ Failed to delete post: \(error.localizedDescription)")
+            Log.social.error("Failed to delete post: \(error.localizedDescription)")
             throw error
         }
     }
@@ -116,7 +121,7 @@ class PostService: ObservableObject {
         do {
             try await apiClient.likePost(postId: postId)
         } catch {
-            print("❌ Failed to like post: \(error.localizedDescription)")
+            Log.social.error("Failed to like post: \(error.localizedDescription)")
         }
     }
     
@@ -130,7 +135,7 @@ class PostService: ObservableObject {
         do {
             try await apiClient.unlikePost(postId: postId)
         } catch {
-            print("❌ Failed to unlike post: \(error.localizedDescription)")
+            Log.social.error("Failed to unlike post: \(error.localizedDescription)")
         }
     }
     
@@ -138,6 +143,21 @@ class PostService: ObservableObject {
     
     func uploadPostMedia(imageURL: URL) async throws -> String {
         let data = try Data(contentsOf: imageURL)
+        let filename = "\(UUID().uuidString).jpg"
+        let result = try await cloudStorage.uploadFile(
+            data: data,
+            filename: filename,
+            contentType: "image/jpeg",
+            folder: "posts"
+        )
+        guard let publicURL = result.publicURL else { throw CloudStorageError.uploadFailed }
+        return publicURL
+    }
+    
+    func uploadPostMedia(image: UIImage) async throws -> String {
+        guard let data = image.jpegData(compressionQuality: 0.8) else {
+            throw StoryError.uploadFailed // Reusing error or standard error
+        }
         let filename = "\(UUID().uuidString).jpg"
         let result = try await cloudStorage.uploadFile(
             data: data,

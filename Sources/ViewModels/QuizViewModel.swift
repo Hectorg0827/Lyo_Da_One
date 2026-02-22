@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Type Aliases
 typealias Question = Quiz.QuizQuestion
@@ -164,29 +165,27 @@ class QuizViewModel: ObservableObject {
 
         if newDifficulty != selectedDifficulty {
             selectedDifficulty = newDifficulty
-            print("Difficulty adjusted to: \(newDifficulty.rawValue)")
+            Log.ui.info("Difficulty adjusted to: \(newDifficulty.rawValue)")
         }
     }
 
     // MARK: - Timer
-    // TODO: Timer functionality requires timeLimit property in Quiz model
 
     private func startTimer() {
-        // Timer functionality disabled - Quiz model doesn't have timeLimit property
-        // guard let quiz = currentQuiz, quiz.timeLimit > 0 else { return }
-        //
-        // timeRemaining = quiz.timeLimit
-        // timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-        //     Task { @MainActor in
-        //         guard let self = self else { return }
-        //         self.timeRemaining -= 1
-        //
-        //         if self.timeRemaining <= 0 {
-        //             self.stopTimer()
-        //             await self.handleTimeUp()
-        //         }
-        //     }
-        // }
+        guard let quiz = currentQuiz, let limit = quiz.timeLimit, limit > 0 else { return }
+
+        timeRemaining = limit
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.timeRemaining -= 1
+
+                if self.timeRemaining <= 0 {
+                    self.stopTimer()
+                    await self.handleTimeUp()
+                }
+            }
+        }
     }
 
     nonisolated private func stopTimer() {

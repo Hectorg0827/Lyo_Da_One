@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import os
 
 // MARK: - Root View Model
 /// App-level state management for authentication and user session
@@ -30,6 +31,13 @@ class RootViewModel: ObservableObject {
     init(authRepository: AuthRepository = DefaultAuthRepository()) {
         self.authRepository = authRepository
         loadColorScheme()
+
+        // Sync current user with UserSessionManager
+        $currentUser
+            .sink { user in
+                UserSessionManager.shared.setCurrentUser(user)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Authentication Check
@@ -42,7 +50,7 @@ class RootViewModel: ObservableObject {
             Task {
                 try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
                 if isLoading {
-                    print("⚠️ Auth check timed out, forcing UI to load")
+                    Log.auth.warning("Auth check timed out, forcing UI to load")
                     isLoading = false
                 }
             }
@@ -101,7 +109,7 @@ class RootViewModel: ObservableObject {
             
             // Fallback: If backend is down/unreachable (network error, timeout, etc.)
             // But NOT for credential/validation errors
-            print("⚠️ Backend login failed, using fallback mode: \(error.localizedDescription)")
+            Log.auth.warning("Backend login failed, using fallback mode: \(error.localizedDescription)")
             currentUser = createFallbackUser(email: email)
             isAuthenticated = true
             self.error = nil  // Clear error so UI doesn't show backend messages
@@ -140,7 +148,7 @@ class RootViewModel: ObservableObject {
             }
             
             // Fallback: If backend is down/unreachable, use local mock user
-            print("⚠️ Backend registration failed, using fallback mode: \(error.localizedDescription)")
+            Log.auth.warning("Backend registration failed, using fallback mode: \(error.localizedDescription)")
             currentUser = createFallbackUser(email: email, name: name)
             isAuthenticated = true
             self.error = nil  // Clear error so UI doesn't show backend messages
@@ -155,7 +163,7 @@ class RootViewModel: ObservableObject {
     
     /// Called after successful authentication to initialize services
     private func onUserAuthenticated() async {
-        print("🔐 User authenticated - initializing services...")
+        Log.auth.info("🔐 User authenticated - initializing services...")
         
         // 1. Register device for push notifications
         PushNotificationService.shared.onUserLogin()
@@ -167,12 +175,16 @@ class RootViewModel: ObservableObject {
         PushNotificationService.shared.checkPermissionStatus { status in
             if status == .notDetermined {
                 PushNotificationService.shared.requestPermission { granted, _ in
-                    print(granted ? "✅ Push notifications enabled" : "❌ Push notifications denied")
+                    if granted {
+                        Log.push.info("Push notifications enabled")
+                    } else {
+                        Log.push.info("Push notifications denied")
+                    }
                 }
             }
         }
         
-        print("✅ Post-authentication services initialized")
+        Log.auth.info("Post-authentication services initialized")
     }
 
     // MARK: - Fallback Authentication
@@ -209,7 +221,7 @@ class RootViewModel: ObservableObject {
         isAuthenticated = false
         await tokenManager.clearTokens()
         
-        print("✅ User logged out - services cleaned up")
+        Log.auth.info("User logged out - services cleaned up")
     }
 
     // MARK: - User Update
@@ -300,8 +312,31 @@ class RootViewModel: ObservableObject {
 extension TokenManager {
     func hasValidToken() async -> Bool {
         guard let token = await getToken() else { return false }
-        // TODO: Add token expiry check if backend provides exp claim
-        return !token.isEmpty
+        guard !token.isEmpty else { return false }
+        
+        // Decode JWT exp claim (JWT = header.payload.signature, base64url-encoded)
+        let segments = token.split(separator: ".")
+        guard segments.count >= 2 else { return true } // Not a JWT, trust it
+        
+        var base64 = String(segments[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        // Pad to multiple of 4
+        while base64.count % 4 != 0 { base64.append("=") }
+        
+        guard let payloadData = Data(base64Encoded: base64),
+              let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+              let exp = json["exp"] as? TimeInterval else {
+            return true // Can't parse expiry — assume valid
+        }
+        
+        let expiryDate = Date(timeIntervalSince1970: exp)
+        let isValid = expiryDate > Date()
+        if !isValid {
+            Log.auth.warning("Token expired at \(expiryDate). Clearing tokens.")
+            await clearAll()
+        }
+        return isValid
     }
 
     func clearTokens() async {

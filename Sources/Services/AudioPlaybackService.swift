@@ -7,6 +7,7 @@
 
 import Foundation
 import AVFoundation
+import os
 
 /// Service for playing TTS audio and managing audio playback
 @MainActor
@@ -39,7 +40,7 @@ class AudioPlaybackService: ObservableObject {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .spokenAudio, options: [.allowAirPlay])
         } catch {
-            print("❌ Failed to setup audio session: \(error)")
+            Log.audio.error("Failed to setup audio session: \(error)")
         }
     }
     
@@ -77,7 +78,7 @@ class AudioPlaybackService: ObservableObject {
             await playAudioFile(url: tempURL)
             
         } catch {
-            print("❌ TTS Error: \(error)")
+            Log.audio.error("TTS Error: \(error)")
             self.error = .ttsGenerationFailed(error.localizedDescription)
             isLoading = false
         }
@@ -86,18 +87,7 @@ class AudioPlaybackService: ObservableObject {
     /// Request TTS audio from backend
     private func requestTTS(text: String, voice: TTSVoice) async throws -> Data {
         let endpoint = Endpoints.TTS.generate(text: text, voice: voice, speed: 1.0, withTimings: false)
-        
-        var request = try endpoint.buildURLRequest()
-        request = try await NetworkClient.shared.applyHeaders(request, endpoint: endpoint)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw AudioPlaybackError.serverError
-        }
-        
-        return data
+        return try await NetworkClient.shared.requestRawData(endpoint)
     }
     
     /// Play an audio file
@@ -141,10 +131,10 @@ class AudioPlaybackService: ObservableObject {
             isLoading = false
             
             HapticManager.shared.playLightImpact()
-            print("🔊 TTS playback started")
+            Log.audio.info("TTS playback started")
             
         } catch {
-            print("❌ Failed to play audio: \(error)")
+            Log.audio.error("Failed to play audio: \(error)")
             self.error = .playbackFailed(error.localizedDescription)
             isLoading = false
         }

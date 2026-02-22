@@ -1,5 +1,7 @@
 import SwiftUI
 import MapKit
+import PhotosUI
+import os
 
 struct CreateCommunityItemSheet: View {
     @ObservedObject var viewModel: CommunityViewModel
@@ -15,6 +17,21 @@ struct CreateCommunityItemSheet: View {
     @State private var tags: String = "" // Comma separated
     @State private var isAnonymous: Bool = false
     
+    // New Fields
+    @State private var subject: String = ""
+    @State private var cost: Double = 0
+    @State private var durationMinutes: Int = 60
+    @State private var category: String = "General"
+    @State private var openingHours: String = "9AM - 5PM"
+    
+    // Image Picking
+    @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var selectedImagesData: [Data] = []
+    @State private var isUploadingImages = false
+    @State private var showingImagePicker = false
+    @State private var pickerSourceType: ImagePicker.SourceType = .photoLibrary
+    @State private var capturedImage: UIImage? = nil
+    
     // Loading State
     @State private var isSubmitting: Bool = false
     
@@ -25,12 +42,68 @@ struct CreateCommunityItemSheet: View {
                 Section {
                     Picker("Type", selection: $selectedType) {
                         Text("Event").tag(CommunityItemType.event)
-                        Text("Study Group").tag(CommunityItemType.group)
+                        Text("Group").tag(CommunityItemType.group)
+                        Text("Class").tag(CommunityItemType.privateLesson) // NEW
+                        Text("Center").tag(CommunityItemType.educationalCenter) // NEW
+                        Text("Market").tag(CommunityItemType.marketplace) // NEW
                         Text("Question").tag(CommunityItemType.question)
                     }
                     .pickerStyle(.segmented)
                     .listRowBackground(Color.clear)
                     .padding(.vertical, 8)
+                }
+                
+                // IMAGE PICKER (for Marketplace)
+                if selectedType == .marketplace {
+                    Section(header: Text("Photos")) {
+                        PhotosPicker(
+                            selection: $selectedItems,
+                            maxSelectionCount: 5,
+                            matching: .images
+                        ) {
+                            Label("Pick from Library", systemImage: "photo.on.rectangle")
+                        }
+                        .onChange(of: selectedItems) { _, _ in
+                            loadSelectedImages()
+                        }
+                        
+                        Button {
+                            pickerSourceType = .camera
+                            showingImagePicker = true
+                        } label: {
+                            Label("Take Photo", systemImage: "camera")
+                        }
+                        
+                        if !selectedImagesData.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(0..<selectedImagesData.count, id: \.self) { index in
+                                        if let uiImage = UIImage(data: selectedImagesData[index]) {
+                                            Image(uiImage: uiImage)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                                .frame(width: 80, height: 80)
+                                                .cornerRadius(8)
+                                                .overlay(
+                                                    Button(action: {
+                                                        selectedItems.remove(at: index)
+                                                        selectedImagesData.remove(at: index)
+                                                    }) {
+                                                        Image(systemName: "xmark.circle.fill")
+                                                            .foregroundColor(.white)
+                                                            .background(Color.black.opacity(0.5))
+                                                            .clipShape(Circle())
+                                                    }
+                                                    .padding(2),
+                                                    alignment: .topTrailing
+                                                )
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
                 }
                 
                 // COMMON FIELDS
@@ -39,10 +112,39 @@ struct CreateCommunityItemSheet: View {
                         TextField("Title", text: $title)
                     }
                     
+                    if selectedType == .privateLesson {
+                        TextField("Subject", text: $subject)
+                        TextField("Cost ($)", value: $cost, format: .currency(code: "USD"))
+                            .keyboardType(.decimalPad)
+                        Stepper("Duration: \(durationMinutes) min", value: $durationMinutes, step: 15)
+                    }
+                    
+                    if selectedType == .educationalCenter {
+                         Picker("Category", selection: $category) {
+                             Text("Library").tag("Library")
+                             Text("Dance School").tag("Dance School")
+                             Text("Book Store").tag("Book Store")
+                             Text("Health Club").tag("Health Club")
+                             Text("Other").tag("Other")
+                         }
+                         TextField("Opening Hours", text: $openingHours)
+                    }
+                    
+                    if selectedType == .marketplace {
+                        TextField("Price ($)", value: $cost, format: .currency(code: "USD"))
+                            .keyboardType(.decimalPad)
+                        Picker("Condition", selection: $category) {
+                            Text("New").tag("new")
+                            Text("Like New").tag("like_new")
+                            Text("Good").tag("good")
+                            Text("Acceptable").tag("acceptable")
+                        }
+                    }
+                    
                     TextField(selectedType == .question ? "Your Question" : "Description", text: $description, axis: .vertical)
                         .lineLimit(3...6)
                     
-                    if selectedType == .event || selectedType == .group {
+                    if selectedType == .event || selectedType == .group || selectedType == .educationalCenter {
                         TextField("Location Name", text: $locationName)
                     }
                     
@@ -81,6 +183,15 @@ struct CreateCommunityItemSheet: View {
             }
             .navigationTitle("Create New")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(sourceType: pickerSourceType, selectedImage: $capturedImage)
+            }
+            .onChange(of: capturedImage) { _, newImage in
+                if let image = newImage, let data = image.jpegData(compressionQuality: 0.8) {
+                    selectedImagesData.append(data)
+                    capturedImage = nil // Reset
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -171,6 +282,46 @@ struct CreateCommunityItemSheet: View {
                     let tagList = tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                     try await viewModel.createQuestion(content: description, tags: tagList, isAnonymous: isAnonymous)
                     
+                case .privateLesson:
+                    let newLesson = APIPrivateLessonRequest(
+                        title: title,
+                        subject: subject,
+                        cost: cost,
+                        durationMinutes: durationMinutes,
+                        description: description,
+                        lat: viewModel.region.center.latitude,
+                        lng: viewModel.region.center.longitude,
+                        imageURL: nil
+                    )
+                    try await viewModel.createPrivateLesson(newLesson)
+                    
+                case .educationalCenter:
+                    let newCenter = APIInstitutionRequest(
+                        name: title,
+                        category: category,
+                        description: description,
+                        lat: viewModel.region.center.latitude,
+                        lng: viewModel.region.center.longitude,
+                        address: locationName,
+                        openingHours: openingHours,
+                        imageURL: nil
+                    )
+                    try await viewModel.createEducationalCenter(newCenter)
+                    
+                case .marketplace:
+                    isUploadingImages = true
+                    let imageUrls = try await viewModel.uploadImages(selectedImagesData)
+                    isUploadingImages = false
+                    
+                    try await viewModel.createListing(
+                        title: title,
+                        description: description,
+                        price: cost,
+                        category: "equipment",
+                        condition: category,
+                        imageUrls: imageUrls
+                    )
+                    
                 default:
                     break
                 }
@@ -182,10 +333,28 @@ struct CreateCommunityItemSheet: View {
                 }
                 
             } catch {
-                print("❌ Creation failed: \(error)")
+                Log.social.error("Creation failed: \(error)")
                 await MainActor.run {
                     isSubmitting = false
                     // Real app should show alert here
+                }
+            }
+        }
+    }
+    
+    private func loadSelectedImages() {
+        selectedImagesData = []
+        for item in selectedItems {
+            item.loadTransferable(type: Data.self) { result in
+                switch result {
+                case .success(let data):
+                    if let data = data {
+                        DispatchQueue.main.async {
+                            self.selectedImagesData.append(data)
+                        }
+                    }
+                case .failure(let error):
+                    Log.social.error("Error loading image: \(error.localizedDescription)")
                 }
             }
         }

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct GenerationProgressView: View {
     let topic: String
@@ -227,10 +228,10 @@ struct GenerationProgressView: View {
             topic: "Python Programming for Beginners",
             options: .recommended,
             onComplete: { courseId in
-                print("Completed: \(courseId)")
+                Log.ui.info("Completed: \(courseId)")
             },
             onCancel: {
-                print("Cancelled")
+                Log.ui.info("Cancelled")
             }
         )
     }

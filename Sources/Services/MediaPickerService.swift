@@ -10,6 +10,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import os
 
 /// Result from media picking
 struct PickedMedia: Identifiable {
@@ -56,7 +57,7 @@ class MediaPickerService: ObservableObject {
                     HapticManager.shared.playAttachmentAdded()
                 }
             } catch {
-                print("❌ Failed to process photo picker item: \(error)")
+                Log.net.error("Failed to process photo picker item: \(error)")
                 self.error = .processingFailed(error.localizedDescription)
             }
         }
@@ -189,7 +190,7 @@ class MediaPickerService: ObservableObject {
                 let attachment = try await uploadMedia(media)
                 attachmentIds.append(attachment.id)
             } catch {
-                print("❌ Failed to upload media: \(error)")
+                Log.net.error("Failed to upload media: \(error)")
                 throw MediaPickerError.uploadFailed(error.localizedDescription)
             }
         }
@@ -296,7 +297,7 @@ class MediaPickerService: ObservableObject {
             let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
             return UIImage(cgImage: cgImage).thumbnail(maxSize: 200)
         } catch {
-            print("❌ Failed to generate video thumbnail: \(error)")
+            Log.net.error("Failed to generate video thumbnail: \(error)")
             return UIImage(systemName: "video.fill")
         }
     }

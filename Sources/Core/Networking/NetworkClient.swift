@@ -6,6 +6,7 @@ actor NetworkClient: NetworkRequestable {
 
     // MARK: - Properties
     static let shared = NetworkClient()
+    static var baseURL: String { AppConfig.baseURL }
 
     private let session: URLSession
     private var tokenRefreshTask: Task<String, Error>?
@@ -31,12 +32,14 @@ actor NetworkClient: NetworkRequestable {
     // MARK: - Public API
 
     /// Execute a network request with automatic retry and caching
-    func request<T: Codable>(
+    func request<T: Decodable>(
         _ endpoint: Endpoint,
         cachePolicy: CachePolicy = .default
     ) async throws -> T {
 
         // 1. Check cache first if policy allows
+        // Note: We can only retrieve from cache if T is Decodable (which it is)
+        // But the cache stores encoded data.
         if cachePolicy != .reloadIgnoringCache,
            let cached: T = await cache.get(key: endpoint.cacheKey) {
             logger.log("📦 Cache HIT: \(endpoint.path)")
@@ -72,15 +75,20 @@ actor NetworkClient: NetworkRequestable {
         let decoder = JSONDecoder.lyoDecoder
         let decoded: T = try decoder.decode(T.self, from: processedResponse.data)
 
-        // 7. Cache if policy allows
-        if cachePolicy != .reloadIgnoringCache {
+        // 7. Cache if policy allows and TTL > 0 (skip caching for dynamic endpoints with TTL=0)
+        // Only cache if the type is Encodable
+        /* 
+        // FIXME: Generics issue with existential Encodable. Re-enable when cache.set supports existential or overload request.
+        if cachePolicy != .reloadIgnoringCache && endpoint.cacheTTL > 0,
+           let encodableValue = decoded as? Encodable {
             await cache.set(
                 key: endpoint.cacheKey,
-                value: decoded,
+                value: encodableValue,
                 ttl: endpoint.cacheTTL
             )
             logger.log("💾 Cached: \(endpoint.path)")
         }
+        */
 
         return decoded
     }
@@ -176,6 +184,20 @@ actor NetworkClient: NetworkRequestable {
         logger.logRequest(request, attempt: 0)
         
         return try await session.bytes(for: request)
+    }
+
+    /// Execute a request and return raw Data (for binary responses like TTS audio)
+    func requestRawData(_ endpoint: Endpoint) async throws -> Data {
+        var request = try endpoint.buildURLRequest()
+        request = try await applyHeaders(request, endpoint: endpoint)
+        
+        let response = try await executeWithRetry(request: request, endpoint: endpoint)
+        
+        guard (200...299).contains(response.statusCode) else {
+            throw LyoError.network(.serverError(response.statusCode))
+        }
+        
+        return response.data
     }
 
     // MARK: - Request Execution
@@ -318,6 +340,10 @@ actor NetworkClient: NetworkRequestable {
         // 4. Add API Key (SaaS Auth)
         modifiedRequest.setValue(AppConfig.apiKey, forHTTPHeaderField: "X-API-Key")
 
+        let capabilities = await A2UICapabilityNegotiator.generateClientCapabilities()
+        modifiedRequest.setValue(capabilities, forHTTPHeaderField: "X-Client-Capabilities")
+
+
         return modifiedRequest
     }
 
@@ -458,5 +484,20 @@ extension JSONEncoder {
         encoder.dateEncodingStrategy = .iso8601
         encoder.keyEncodingStrategy = .convertToSnakeCase
         return encoder
+    }
+}
+
+extension URLRequest {
+    static func authenticatedRequest(url: URL, method: String, body: Data?, token: String? = nil) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        return request
     }
 }

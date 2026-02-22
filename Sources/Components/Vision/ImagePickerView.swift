@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import os
 
 // MARK: - Image Picker View
 /// Modern image picker supporting camera and photo library
@@ -322,7 +323,7 @@ struct ImageAnalysisView: View {
 #Preview {
     VStack {
         ScanButton { image in
-            print("Scanned image: \(image.size)")
+            Log.general.info("Scanned image: \(String(describing: image.size))")
         }
     }
 }

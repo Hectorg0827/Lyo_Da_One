@@ -1,5 +1,13 @@
 import Foundation
 
+// MARK: - Backend /api/v1/tts/synthesize response shape
+private struct BackendTTSResponse: Codable {
+    let audio_base64: String
+    let voice: String
+    let format: String
+    let duration_estimate_seconds: Double
+}
+
 // MARK: - Default TTS Repository
 class DefaultTTSRepository: TTSRepository {
 
@@ -10,28 +18,54 @@ class DefaultTTSRepository: TTSRepository {
 
     // MARK: - TTS Generation
 
+    /// Synthesize text via the backend and return a `TTSResult` whose `audioURL`
+    /// is a local `file://` URL suitable for AVPlayer.
     func generate(text: String, voice: TTSVoice = .nova, speed: Double = 1.0, withTimings: Bool = true) async throws -> TTSResult {
-        let result: TTSResult = try await networkClient.request(
+        // 1. Call backend — returns { audio_base64, voice, format, duration_estimate_seconds }
+        let response: BackendTTSResponse = try await networkClient.request(
             Endpoints.TTS.generate(text: text, voice: voice, speed: speed, withTimings: withTimings),
-            cachePolicy: .default // Cache TTS for 2 hours
-        )
-
-        logger.log("✅ TTS generated: \(result.duration ?? 0)s")
-        return result
-    }
-
-    func batchGenerate(texts: [String], voice: TTSVoice = .nova) async throws -> [TTSResult] {
-        struct BatchResponse: Codable {
-            let results: [TTSResult]
-        }
-
-        let response: BatchResponse = try await networkClient.request(
-            Endpoints.TTS.batch(texts: texts, voice: voice),
             cachePolicy: .default
         )
 
-        logger.log("✅ Batch TTS generated: \(response.results.count) audios")
-        return response.results
+        // 2. Decode base64 → Data
+        guard let audioData = Data(base64Encoded: response.audio_base64) else {
+            logger.log("❌ TTS: base64 decode failed")
+            throw LyoError.network(.invalidResponse)
+        }
+
+        // 3. Write to a uniquely-named temp file so AVPlayer can stream it
+        let filename = "tts_\(UUID().uuidString.prefix(8)).\(response.format)"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try audioData.write(to: tempURL)
+
+        let result = TTSResult(
+            id: UUID().uuidString,
+            audioURL: tempURL.absoluteString,
+            timingsURL: nil,
+            duration: response.duration_estimate_seconds,
+            cost: nil
+        )
+
+        logger.log("✅ TTS generated: \(result.duration ?? 0)s — \(filename)")
+        return result
+    }
+
+    /// Generate audio for multiple texts by calling the synthesize endpoint in
+    /// parallel (the backend has no native batch endpoint at /api/v1/tts).
+    func batchGenerate(texts: [String], voice: TTSVoice = .nova) async throws -> [TTSResult] {
+        return try await withThrowingTaskGroup(of: TTSResult.self) { group in
+            for text in texts {
+                group.addTask { [self] in
+                    try await self.generate(text: text, voice: voice, speed: 1.0, withTimings: false)
+                }
+            }
+            var results: [TTSResult] = []
+            for try await result in group {
+                results.append(result)
+            }
+            logger.log("✅ Batch TTS generated: \(results.count) audios")
+            return results
+        }
     }
 
     func getAudioURL(id: String) async throws -> URL {

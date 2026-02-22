@@ -2,7 +2,7 @@ import SwiftUI
 import CoreLocation
 
 struct CommunityCardView: View {
-    let pin: MapPin
+    let pin: CommunityBeacon
     let isSelected: Bool
     let onJoin: () -> Void
     let onChat: () -> Void
@@ -60,7 +60,7 @@ struct CommunityCardView: View {
                         .foregroundColor(.primary)
                         .lineLimit(2)
                     
-                    Text(pin.subtitle)
+                    Text(pin.subtitle ?? "")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -83,7 +83,7 @@ struct CommunityCardView: View {
             if isSelected {
                 HStack(spacing: 8) {
                     Button(action: onJoin) {
-                        Text("Join")
+                        Text(pin.type == .group ? "Join" : "Register") // Updated type check
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -122,37 +122,19 @@ struct CommunityCardView: View {
     
     // MARK: - Helpers
     private var pinColor: Color {
-        switch pin.type.color {
-        case "purple": return .purple
-        case "blue": return .blue
-        case "green": return .green
-        case "gray": return .gray
-        default: return .blue
-        }
+        pin.type.color
     }
     
     private var typeName: String {
-        switch pin.type {
-        case .studyGroup: return "Study Group"
-        case .event: return "Event"
-        case .marketplace: return "Marketplace"
-        case .institution: return "Institution"
-        }
+        pin.type.rawValue
+    }
+    
+    // Optional Context Pill (e.g. "Lyo Course Linked")
+    private var hasLinkedCourse: Bool {
+        pin.hasLinkedCourse
     }
     
     private var imageURL: String? {
-        switch pin.type {
-        case .event(let event): return event.coverImageURL
-        case .marketplace(let listing): return listing.photos.first
-        case .institution(let inst): return inst.photos.first
-        default: return nil
-        }
-    }
-    
-    private var hasLinkedCourse: Bool {
-        if case .studyGroup(let group) = pin.type {
-            return group.relatedCourse != nil
-        }
-        return false
+        pin.imageURL
     }
 }

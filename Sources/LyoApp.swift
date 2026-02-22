@@ -12,6 +12,7 @@ import FirebaseCore
 
 #if canImport(FirebaseCrashlytics)
 import FirebaseCrashlytics
+import os
 #endif
 
 // MARK: - App Delegate
@@ -26,7 +27,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         #if canImport(FirebaseCore)
         FirebaseApp.configure()
         #else
-        print("⚠️ FirebaseCore not available. Skipping FirebaseApp.configure()")
+        Log.app.warning("FirebaseCore not available. Skipping FirebaseApp.configure()")
         #endif
         
         // Configure Crashlytics
@@ -51,9 +52,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Crashlytics.crashlytics().setCustomValue(AppConfig.version, forKey: "app_version")
         Crashlytics.crashlytics().setCustomValue(AppConfig.buildNumber, forKey: "build_number")
         
-        print("✅ Firebase Crashlytics configured")
+        Log.app.error("Firebase Crashlytics configured")
         #else
-        print("⚠️ FirebaseCrashlytics not available")
+        Log.app.warning("FirebaseCrashlytics not available")
         #endif
     }
     
@@ -61,7 +62,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     private func configurePushNotifications() {
         UNUserNotificationCenter.current().delegate = PushNotificationService.shared
-        print("✅ Push notification delegate configured")
+        Log.app.info("Push notification delegate configured")
     }
     
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -78,12 +79,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String {
             let config = GIDConfiguration(clientID: clientID)
             GIDSignIn.sharedInstance.configuration = config
-            print("✅ Google Sign-In configured with client ID")
+            Log.app.info("Google Sign-In configured with client ID")
         } else {
-            print("⚠️ GIDClientID not found in Info.plist")
+            Log.app.warning("GIDClientID not found in Info.plist")
         }
         #else
-        print("⚠️ GoogleSignIn not available. Skipping configuration.")
+        Log.app.warning("GoogleSignIn not available. Skipping configuration.")
         #endif
     }
 
@@ -162,16 +163,17 @@ class DeepLinkHandler: ObservableObject {
         case openLesson(courseId: String, lessonId: String)
         case openProfile(userId: String)
         case openChat
+        case openDemo
     }
     
     private init() {}
     
     /// Handle incoming deep link URL
     func handle(url: URL) {
-        print("🔗 Deep link received: \(url)")
+        Log.app.info("Deep link received: \(url)")
         
         guard url.scheme == "lyoapp" else {
-            print("⚠️ Unknown URL scheme: \(url.scheme ?? "nil")")
+            Log.app.warning("Unknown URL scheme: \(url.scheme ?? "nil")")
             return
         }
         
@@ -179,10 +181,14 @@ class DeepLinkHandler: ObservableObject {
         let pathComponents = url.pathComponents.filter { $0 != "/" }
         
         switch host {
+        case "demo":
+            Log.app.debug("Opening Demo Course")
+            pendingAction = .openDemo
+
         case "course":
             // lyoapp://course/{courseId}
             if let courseId = pathComponents.first {
-                print("📚 Opening course: \(courseId)")
+                Log.app.info("📚 Opening course: \(courseId)")
                 pendingCourseId = courseId
                 pendingAction = .openCourse(courseId)
             }
@@ -192,24 +198,24 @@ class DeepLinkHandler: ObservableObject {
             if pathComponents.count >= 2 {
                 let courseId = pathComponents[0]
                 let lessonId = pathComponents[1]
-                print("📖 Opening lesson: \(lessonId) in course: \(courseId)")
+                Log.app.info("📖 Opening lesson: \(lessonId) in course: \(courseId)")
                 pendingAction = .openLesson(courseId: courseId, lessonId: lessonId)
             }
             
         case "profile":
             // lyoapp://profile/{userId}
             if let userId = pathComponents.first {
-                print("👤 Opening profile: \(userId)")
+                Log.app.info("Opening profile: \(userId)")
                 pendingAction = .openProfile(userId: userId)
             }
             
         case "chat":
             // lyoapp://chat
-            print("💬 Opening chat")
+            Log.app.info("Opening chat")
             pendingAction = .openChat
             
         default:
-            print("⚠️ Unknown deep link host: \(host)")
+            Log.app.warning("Unknown deep link host: \(host)")
         }
     }
     

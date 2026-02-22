@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// Main entry point for course creation with settings
 struct CourseCreationCoordinator: View {
@@ -153,10 +154,10 @@ struct CourseCreationCoordinator: View {
 #Preview {
     CourseCreationCoordinator(
         onComplete: { courseId in
-            print("Completed: \(courseId)")
+            Log.ui.info("Completed: \(courseId)")
         },
         onCancel: {
-            print("Cancelled")
+            Log.ui.info("Cancelled")
         }
     )
 }

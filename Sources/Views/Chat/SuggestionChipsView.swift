@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct SuggestionChipsView: View {
     let suggestions: [SuggestionChip]
@@ -124,42 +125,46 @@ struct ContextualSuggestionsView: View {
 // MARK: - Typing Indicator
 
 struct TypingIndicatorView: View {
-    @State private var animationPhase = 0
-    
-    private let timer = Timer.publish(every: 0.3, on: .main, in: .common).autoconnect()
+    @State private var frameIndex = 0
+    private let frames = ["Mascot_Reading_1", "Mascot_Reading_2", "Mascot_Reading_3", "Mascot_Reading_4"]
+    private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            // Avatar
-            Image("LyoAvatar")
+            // Mascot Animation instead of static avatar
+            Image(frames[frameIndex])
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 32, height: 32)
                 .clipShape(Circle())
+                .onReceive(timer) { _ in
+                    frameIndex = (frameIndex + 1) % frames.count
+                }
             
-            // Dots
+            // Pulsing Dots Bubble
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(animationPhase == index ? 1.3 : 1.0)
-                        .opacity(animationPhase == index ? 1.0 : 0.5)
+                        .fill(Color.white.opacity(0.8))
+                        .frame(width: 6, height: 6)
+                        .opacity(0.4 + (0.6 * sin(Double(frameIndex) * 0.5 + Double(index))))
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color.black.opacity(0.3))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+            )
             
             Spacer()
         }
         .padding(.horizontal, 12)
-        .onReceive(timer) { _ in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                animationPhase = (animationPhase + 1) % 3
-            }
-        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -245,7 +250,7 @@ struct QuickActionsBar: View {
                 SuggestionChip(id: "3", text: "Create a course", icon: "plus.circle", actionType: "course", context: nil)
             ]
         ) { chip in
-            print("Selected: \(chip.text)")
+            Log.ai.info("Selected: \(chip.text)")
         }
         
         Spacer()
@@ -260,7 +265,7 @@ struct QuickActionsBar: View {
             .init(title: "Study", icon: "text.book.closed", color: .green),
             .init(title: "Help", icon: "questionmark.circle", color: .orange)
         ]) { action in
-            print("Selected action: \(action.title)")
+            Log.ai.info("Selected action: \(action.title)")
         }
     }
     .padding()

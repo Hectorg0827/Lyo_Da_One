@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 final class AuthViewModel: ObservableObject {
     @Published var isAuthenticated: Bool = false
     @Published var currentUser: User?
@@ -10,22 +11,16 @@ final class AuthViewModel: ObservableObject {
     
     func login(email: String, password: String) async throws {
         let user = try await repository.login(email: email, password: password)
-        
-        await MainActor.run {
-            self.currentUser = user
-            self.isAuthenticated = true
-            self.isDemoMode = false
-        }
+        self.currentUser = user
+        self.isAuthenticated = true
+        self.isDemoMode = false
     }
     
     func register(email: String, password: String, name: String) async throws {
         let user = try await repository.register(email: email, password: password, name: name)
-        
-        await MainActor.run {
-            self.currentUser = user
-            self.isAuthenticated = true
-            self.isDemoMode = false
-        }
+        self.currentUser = user
+        self.isAuthenticated = true
+        self.isDemoMode = false
     }
     
     func enterDemoMode() {

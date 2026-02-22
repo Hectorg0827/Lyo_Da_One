@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import os
 
 // MARK: - Keychain Helper
 /// A helper class for securely storing and retrieving data from the iOS Keychain
@@ -24,7 +25,7 @@ final class KeychainHelper {
         // Add the new item
         let status = SecItemAdd(query as CFDictionary, nil)
         if status != errSecSuccess {
-            print("⚠️ Keychain save failed: \(status)")
+            Log.general.warning("Keychain save failed: \(status)")
         }
     }
     
@@ -70,7 +71,7 @@ final class KeychainHelper {
         
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
-            print("⚠️ Keychain delete failed: \(status)")
+            Log.general.warning("Keychain delete failed: \(status)")
         }
     }
     

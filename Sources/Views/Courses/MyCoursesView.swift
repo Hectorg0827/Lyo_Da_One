@@ -69,7 +69,7 @@ struct MyCoursesView: View {
             TextField("Search courses...", text: $searchText)
                 .textFieldStyle(.plain)
                 .autocapitalization(.none)
-                .onChange(of: searchText) { newValue in
+                .onChange(of: searchText) { oldValue, newValue in
                     Task {
                         await libraryService.search(query: newValue)
                     }

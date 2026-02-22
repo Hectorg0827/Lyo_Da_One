@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import AVFoundation
 import Combine
+import os
 
 @MainActor
 class ClassroomViewModel: NSObject, ObservableObject {
@@ -18,6 +19,9 @@ class ClassroomViewModel: NSObject, ObservableObject {
     @Published var reteachContent: ReteachContent?
     @Published var errorMessage: String?
     
+    // A2UI Migration
+    @Published var a2uiComponent: A2UIComponent?
+    
     // TTS State
     @Published var isNarrating: Bool = false
     @Published var narrationProgress: Double = 0.0
@@ -32,6 +36,8 @@ class ClassroomViewModel: NSObject, ObservableObject {
     private var controlsHideTimer: Timer?
     private var narrationTimer: Timer?
     private let repository = LyoRepository.shared
+    /// Stores the requested session ID so retry works even if initial load fails
+    private var lastRequestedSessionId: String?
     
     override init() {
         super.init()
@@ -41,6 +47,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
     // MARK: - Session Management
     
     func loadSession(sessionId: String) async {
+        lastRequestedSessionId = sessionId
         state = .loading
         errorMessage = nil
         
@@ -58,21 +65,54 @@ class ClassroomViewModel: NSObject, ObservableObject {
             
             state = .ready
             
-            print("✅ Session loaded successfully: \(session.modules.count) modules")
+            Log.classroom.info("Session loaded successfully: \(session.modules.count) modules")
             
             // Auto-start narration if enabled
             if settings.autoplayNarration {
                 startNarration()
             }
+            
+            // Try loading A2UI version
+            await loadA2UISession(sessionId: sessionId)
+            
         } catch {
-            print("❌ Failed to load session: \(error.localizedDescription)")
+            Log.classroom.error("Failed to load session: \(error.localizedDescription)")
             errorMessage = "Failed to load lesson. Please check your internet connection and try again."
             state = .error
         }
     }
     
+    func loadA2UISession(sessionId: String) async {
+        // Attempt to fetch dynamic server-driven UI from backend
+        Log.classroom.info("🎨 Fetching A2UI session for: \(sessionId)")
+        
+        do {
+            // Backend returns { screen_id, component: A2UIComponent, metadata: {...} }
+            struct A2UIScreenResponse: Codable {
+                let screen_id: String
+                let component: A2UIComponent
+            }
+            
+            let response: A2UIScreenResponse = try await NetworkClient.shared.request(
+                Endpoints.A2UI.classroomScreen(sessionId: sessionId)
+            )
+            
+            withAnimation(.easeIn(duration: 0.3)) {
+                self.a2uiComponent = response.component
+            }
+            Log.classroom.info("✅ A2UI classroom screen loaded — \(response.screen_id)")
+        } catch {
+            // Non-fatal: ClassroomView falls back to ModuleCardView slides
+            Log.classroom.info("ℹ️ A2UI screen not available — using slide view (\(error.localizedDescription))")
+        }
+    }
+    
     func retryLoadSession() async {
-        guard let sessionId = session?.id else { return }
+        // Use stored ID so retry works even when initial load failed (session is nil)
+        guard let sessionId = lastRequestedSessionId ?? session?.id else {
+            Log.classroom.warning("No session ID available for retry")
+            return
+        }
         await loadSession(sessionId: sessionId)
     }
     
@@ -86,18 +126,18 @@ class ClassroomViewModel: NSObject, ObservableObject {
             currentSlideIndex += 1
             saveProgress()
             
-            print("📄 Advanced to slide \(currentSlideIndex + 1)/\(currentModule.slides.count)")
+            Log.classroom.info("📄 Advanced to slide \(self.currentSlideIndex + 1)/\(currentModule.slides.count)")
             
             // Check if we should show a quick check
             if shouldShowQuickCheck() {
-                print("✅ Quick check triggered!")
+                Log.classroom.info("Quick check triggered!")
                 showQuickCheck()
             } else if settings.autoplayNarration {
                 startNarration()
             }
         } else {
             // Move to next module
-            print("📚 Reached end of module, moving to next...")
+            Log.classroom.info("📚 Reached end of module, moving to next...")
             nextModule()
         }
     }
@@ -152,13 +192,13 @@ class ClassroomViewModel: NSObject, ObservableObject {
     
     func startNarration() {
         guard let session = session else { 
-            print("⚠️ Cannot start narration: No session loaded")
+            Log.classroom.warning("Cannot start narration: No session loaded")
             return 
         }
         let currentModule = session.modules[currentModuleIndex]
         let currentSlide = currentModule.slides[currentSlideIndex]
         
-        print("🔊 Starting narration for slide \(currentSlideIndex + 1): \(currentSlide.content.title)")
+        Log.classroom.info("Starting narration for slide \(self.currentSlideIndex + 1): \(currentSlide.content.title)")
         
         stopNarration()
         
@@ -171,7 +211,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
         isNarrating = true
         state = .playing
         
-        print("✅ Narration started. Voice bubble should be visible.")
+        Log.classroom.info("Narration started. Voice bubble should be visible.")
     }
     
     func stopNarration() {
@@ -217,17 +257,19 @@ class ClassroomViewModel: NSObject, ObservableObject {
         }
         
         // Analytics
-        print("Speed changed from \(oldSpeed)x to \(newSpeed)x")
+        Log.classroom.info("Speed changed from \(oldSpeed)x to \(newSpeed)x")
     }
     
     func skipForward() {
-        // Skip forward 10 seconds in narration
-        // TODO: Implement seeking in AVSpeechSynthesizer
+        // AVSpeechSynthesizer does not support seeking — advance to next slide instead
+        HapticManager.shared.light()
+        nextSlide()
     }
     
     func skipBackward() {
-        // Skip backward 10 seconds in narration
-        // TODO: Implement seeking in AVSpeechSynthesizer
+        // AVSpeechSynthesizer does not support seeking — go to previous slide instead
+        HapticManager.shared.light()
+        previousSlide()
     }
     
     // MARK: - Controls
@@ -303,7 +345,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
         
         if answer == check.correctAnswer {
             // Correct answer
-            print("Check passed: \(check.id)")
+            Log.classroom.info("Check passed: \(check.id)")
             currentQuickCheck = nil
             state = .ready
             
@@ -347,13 +389,37 @@ class ClassroomViewModel: NSObject, ObservableObject {
         let completedSlides = session.modules.prefix(currentModuleIndex).reduce(0) { $0 + $1.slides.count } + currentSlideIndex + 1
         moduleProgress = Double(completedSlides) / Double(totalSlides)
         
-        // TODO: Save to backend
+        // Persist to backend (fire-and-forget; errors are non-fatal)
+        Task {
+            do {
+                var progress = session.progress
+                progress.overallProgress = moduleProgress
+                progress.lastAccessedAt = Date()
+                try await repository.saveClassroomProgress(sessionId: session.id, progress: progress)
+            } catch {
+                Log.classroom.warning("Failed to save progress to backend: \(error.localizedDescription)")
+            }
+        }
     }
     
     private func completeLesson() {
         state = .complete
-        // TODO: Save completion to backend
-        print("Lesson completed!")
+        guard let session = session else {
+            Log.classroom.info("Lesson completed!")
+            return
+        }
+        Task {
+            do {
+                var progress = session.progress
+                progress.overallProgress = 1.0
+                progress.completedAt = Date()
+                progress.lastAccessedAt = Date()
+                try await repository.saveClassroomProgress(sessionId: session.id, progress: progress)
+                Log.classroom.info("Lesson completed and saved to backend!")
+            } catch {
+                Log.classroom.warning("Lesson completed locally but failed to save: \(error.localizedDescription)")
+            }
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Unified data service that handles real backend calls and demo mode fallback
 @MainActor
@@ -22,16 +23,16 @@ final class DataService: ObservableObject {
     
     func fetchCourses() async -> [Course] {
         if isInDemoMode {
-            print("📱 Demo Mode: returning mock courses")
+            Log.data.info("Demo Mode: returning mock courses")
             return mockCourses()
         }
         
         do {
             let courses = try await apiClient.fetchCourses()
-            print("✅ Fetched \(courses.count) courses from backend")
+            Log.data.info("Fetched \(courses.count) courses from backend")
             return courses
         } catch {
-            print("❌ Failed to fetch courses: \(error.localizedDescription)")
+            Log.data.error("Failed to fetch courses: \(error.localizedDescription)")
             lastError = error.localizedDescription
             return [] // Return empty list instead of mocks
         }
@@ -41,18 +42,65 @@ final class DataService: ObservableObject {
     
     func fetchDiscoverFeed() async -> [DiscoverItem] {
         if isInDemoMode {
-            print("📱 Demo Mode: returning mock discover items")
+            Log.data.info("Demo Mode: returning mock discover items")
             return mockDiscoverItems()
         }
         
         do {
-            let items = try await apiClient.fetchDiscoverFeed()
-            print("✅ Fetched \(items.count) discover items from backend")
-            return items
+            // Fetch real posts from public feed
+            let posts = try await apiClient.fetchPublicFeed(limit: 20)
+            
+            // Map posts to DiscoverItems
+            let postItems = posts.compactMap { post -> DiscoverItem? in
+                // Only show posts with content or attachments
+                guard !post.content.isEmpty || (post.attachments?.isEmpty == false) else { return nil }
+                
+                // Determine video/image URL
+                var videoURL: URL?
+                var thumbnailURL: URL?
+                
+                if let attachments = post.attachments {
+                    for urlStr in attachments {
+                        if urlStr.hasSuffix(".mp4") || urlStr.contains("video") {
+                            videoURL = URL(string: urlStr)
+                        } else if urlStr.hasSuffix(".jpg") || urlStr.hasSuffix(".png") {
+                            thumbnailURL = URL(string: urlStr)
+                        }
+                    }
+                }
+                
+                return DiscoverItem(
+                    id: post.id,
+                    type: .userClip,
+                    title: post.content.components(separatedBy: "\n").first ?? "New Clip",
+                    subtitle: post.content,
+                    tag: post.author.name,
+                    estimatedMinutes: 1,
+                    thumbnailURL: thumbnailURL,
+                    videoURL: videoURL,
+                    aiInsight: nil, // Could generate this later
+                    subject: "Community",
+                    level: .beginner,
+                    xpReward: 10,
+                    keyPoints: [],
+                    quizMoments: [],
+                    isLiked: post.isLiked,
+                    likeCount: post.likes,
+                    viewCount: 0,
+                    shareCount: 0,
+                    isSaved: false,
+                    authorName: post.author.name,
+                    authorAvatarURL: post.author.avatarURL.flatMap { URL(string: $0) }
+                )
+            }
+            
+            Log.data.info("Fetched \(postItems.count) posts for discover feed")
+            return postItems
+            
         } catch {
-            print("❌ Failed to fetch discover feed: \(error.localizedDescription)")
+            Log.data.error("Failed to fetch discover feed: \(error.localizedDescription)")
             lastError = error.localizedDescription
-            return [] // Return empty list instead of mocks
+            return [] 
         }
     }
     
@@ -60,16 +108,16 @@ final class DataService: ObservableObject {
     
     func fetchCampusEvents() async -> [CampusItem] {
         if isInDemoMode {
-            print("📱 Demo Mode: returning mock campus items")
+            Log.data.info("Demo Mode: returning mock campus items")
             return mockCampusItems()
         }
         
         do {
             let items = try await apiClient.fetchCampusEvents()
-            print("✅ Fetched \(items.count) campus items from backend")
+            Log.data.info("Fetched \(items.count) campus items from backend")
             return items
         } catch {
-            print("❌ Failed to fetch campus events: \(error.localizedDescription)")
+            Log.data.error("Failed to fetch campus events: \(error.localizedDescription)")
             lastError = error.localizedDescription
             return [] // Return empty list instead of mocks
         }
@@ -89,7 +137,7 @@ final class DataService: ObservableObject {
             }
             return events
         } catch {
-            print("❌ Failed to fetch community events: \(error)")
+            Log.data.error("Failed to fetch community events: \(error)")
             return mockCommunityEvents()
         }
     }

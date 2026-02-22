@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import AVFoundation
 import Combine
+import os
 
 // MARK: - TTS ViewModel
 @MainActor
@@ -48,7 +49,7 @@ class TTSViewModel: NSObject, ObservableObject {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to setup audio session: \(error)")
+            Log.audio.error("Failed to setup audio session: \(error)")
         }
     }
 
@@ -100,7 +101,7 @@ class TTSViewModel: NSObject, ObservableObject {
             )
             wordTimings = try await NetworkClient.shared.request(dynamicEndpoint)
         } catch {
-            print("Failed to load word timings: \(error)")
+            Log.audio.error("Failed to load word timings: \(error)")
         }
     }
 

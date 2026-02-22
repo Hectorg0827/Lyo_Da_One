@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os
 
 @MainActor
 @available(iOS 17.0, *)
@@ -17,7 +18,7 @@ class ChatPersistenceService: ObservableObject {
             let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             self.container = try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            print("❌ Failed to create ModelContainer: \(error)")
+            Log.ai.error("Failed to create ModelContainer: \(error)")
         }
     }
     
@@ -82,10 +83,10 @@ class ChatPersistenceService: ObservableObject {
                 context.insert(s2)
                 context.insert(s3)
                 
-                print("🌱 Seeded mock chat data")
+                Log.ai.info("🌱 Seeded mock chat data")
             }
         } catch {
-            print("❌ Seeding failed: \(error)")
+            Log.ai.error("Seeding failed: \(error)")
         }
     }
 }

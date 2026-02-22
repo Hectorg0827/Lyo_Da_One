@@ -114,11 +114,29 @@ struct CreateStoryRequest: Codable {
     let mediaURL: String
     let mediaType: Story.MediaType
     let isLive: Bool
+    let caption: String?
+    let linkedCourseId: String?
+    let linkedGroupId: String?
+    let tags: [String]
+    
+    init(mediaURL: String, mediaType: Story.MediaType = .image, isLive: Bool = false, caption: String? = nil, linkedCourseId: String? = nil, linkedGroupId: String? = nil, tags: [String] = []) {
+        self.mediaURL = mediaURL
+        self.mediaType = mediaType
+        self.isLive = isLive
+        self.caption = caption
+        self.linkedCourseId = linkedCourseId
+        self.linkedGroupId = linkedGroupId
+        self.tags = tags
+    }
     
     enum CodingKeys: String, CodingKey {
         case mediaURL = "media_url"
         case mediaType = "media_type"
         case isLive = "is_live"
+        case caption
+        case linkedCourseId = "linked_course_id"
+        case linkedGroupId = "linked_group_id"
+        case tags
     }
 }
 
@@ -132,9 +150,9 @@ struct Discovery: Identifiable, Codable {
     let description: String?
     let thumbnailURL: String?
     let videoURL: String?
-    let likes: Int
+    var likes: Int
     let views: Int
-    let isLiked: Bool
+    var isLiked: Bool
     let isSaved: Bool
     let createdAt: Date
     

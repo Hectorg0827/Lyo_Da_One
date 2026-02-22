@@ -7,6 +7,7 @@ enum DiscoverItemType: String, Codable, CaseIterable {
     case videoSnippet
     case pathSuggestion
     case eventSuggestion
+    case userClip  // User-created educational clips
     
     var displayName: String {
         switch self {
@@ -14,6 +15,7 @@ enum DiscoverItemType: String, Codable, CaseIterable {
         case .videoSnippet: return "Video"
         case .pathSuggestion: return "Path"
         case .eventSuggestion: return "Event"
+        case .userClip: return "Clip"
         }
     }
     
@@ -23,6 +25,7 @@ enum DiscoverItemType: String, Codable, CaseIterable {
         case .videoSnippet: return "play.rectangle.fill"
         case .pathSuggestion: return "map.fill"
         case .eventSuggestion: return "calendar"
+        case .userClip: return "film.stack"
         }
     }
 }

@@ -60,7 +60,7 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 
     // MARK: - Properties
     private var webSocket: URLSessionWebSocketTask?
-    private var session: URLSession!
+    private var session: URLSession?
     private var isConnected = false
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 5
@@ -74,10 +74,16 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
     // MARK: - Initialization
     private override init() {
         super.init()
+    }
+
+    /// Create a fresh URLSession for each connection.
+    /// Reusing a session after a failure causes
+    /// "invalid reuse after initialization failure" crashes.
+    private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 30
-        self.session = URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue())
+        return URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue())
     }
 
     // MARK: - Connection Management
@@ -108,7 +114,11 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 
         logger.log("🔌 Connecting to WebSocket: \(endpoint.path)")
 
-        webSocket = session.webSocketTask(with: request)
+        // Create fresh session (avoids "invalid reuse after initialization failure")
+        session?.invalidateAndCancel()
+        let newSession = makeSession()
+        session = newSession
+        webSocket = newSession.webSocketTask(with: request)
         webSocket?.resume()
 
         // Start receiving messages
@@ -128,6 +138,8 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
+        session?.invalidateAndCancel()
+        session = nil
         isConnected = false
 
         notifyEvent(.disconnected(nil))
@@ -299,58 +311,6 @@ class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         logger.log("🔌 WebSocket closed: \(closeCode.rawValue)")
         handleDisconnection(error: nil)
-    }
-
-    // MARK: - Helper Types
-
-    /// AnyCodable for dynamic JSON
-    struct AnyCodable: Codable {
-        let value: Any
-
-        init(_ value: Any) {
-            self.value = value
-        }
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.singleValueContainer()
-
-            if let bool = try? container.decode(Bool.self) {
-                value = bool
-            } else if let int = try? container.decode(Int.self) {
-                value = int
-            } else if let double = try? container.decode(Double.self) {
-                value = double
-            } else if let string = try? container.decode(String.self) {
-                value = string
-            } else if let array = try? container.decode([AnyCodable].self) {
-                value = array.map { $0.value }
-            } else if let dict = try? container.decode([String: AnyCodable].self) {
-                value = dict.mapValues { $0.value }
-            } else {
-                value = NSNull()
-            }
-        }
-
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.singleValueContainer()
-
-            switch value {
-            case let bool as Bool:
-                try container.encode(bool)
-            case let int as Int:
-                try container.encode(int)
-            case let double as Double:
-                try container.encode(double)
-            case let string as String:
-                try container.encode(string)
-            case let array as [Any]:
-                try container.encode(array.map { AnyCodable($0) })
-            case let dict as [String: Any]:
-                try container.encode(dict.mapValues { AnyCodable($0) })
-            default:
-                try container.encodeNil()
-            }
-        }
     }
 }
 

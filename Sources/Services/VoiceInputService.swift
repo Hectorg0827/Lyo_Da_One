@@ -8,6 +8,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import os
 
 /// Service for handling voice input (Speech-to-Text)
 @MainActor
@@ -156,7 +157,7 @@ class VoiceInputService: ObservableObject {
                 }
                 
                 if let error = error {
-                    print("❌ Speech recognition error: \(error)")
+                    Log.audio.error("Speech recognition error: \(error)")
                     self?.stopRecording()
                 }
             }
@@ -187,7 +188,7 @@ class VoiceInputService: ObservableObject {
         HapticManager.shared.playRecordingStarted()
         #endif
         
-        print("🎤 Voice recording started")
+        Log.audio.info("Voice recording started")
     }
     
     func stopRecording() {
@@ -220,7 +221,7 @@ class VoiceInputService: ObservableObject {
         HapticManager.shared.playRecordingStopped()
         #endif
         
-        print("🎤 Voice recording stopped. Transcript: \(transcript)")
+        Log.audio.info("Voice recording stopped. Transcript: \(self.transcript)")
     }
     
     func cancelRecording() {

@@ -1,21 +1,21 @@
 import SwiftUI
+import os
 
 struct FocusView: View {
-    @EnvironmentObject var stackService: StackService
+    @EnvironmentObject var uiStackStore: UIStackStore
     @EnvironmentObject var uiState: AppUIState
     @StateObject private var socialService = CourseSocialService.shared
     
+    @StateObject private var feedViewModel = FeedViewModel()
     @State private var animateWelcome = false
-    @State private var streakCount = 7
-    @State private var xpToday = 150
-    @State private var dailyGoalProgress: Double = 0.65
-    @State private var isBreathing = false
-    @State private var messageText = ""
     @State private var activeCourseIndex = 0
-    @State private var focusFeedItems: [FocusFeedItemModel] = FocusFeedItemModel.mock
+    @State private var isShowingAllFeed = false
+
+    /// User data from session manager
+    private var currentUser: User? { UserSessionManager.shared.currentUser }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack(alignment: .bottom) {
                 premiumBackground
                     .ignoresSafeArea()
@@ -33,6 +33,9 @@ struct FocusView: View {
                     }
                     .padding(.horizontal, 20)
                 }
+                .refreshable {
+                    await feedViewModel.loadFeed(refresh: true)
+                }
             }
             .navigationBarHidden(true)
             .onAppear {
@@ -40,7 +43,7 @@ struct FocusView: View {
                     animateWelcome = true
                 }
                 Task {
-                    await stackService.fetchStackItems()
+                    await feedViewModel.loadFeed(refresh: true)
                 }
             }
         }
@@ -93,27 +96,76 @@ struct FocusView: View {
     // MARK: - Course Stack Section
     private var courseStackSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            
-            TabView(selection: $activeCourseIndex) {
-                ForEach(Array(courseStackCards.enumerated()), id: \.element.id) { index, card in
-                    FocusCourseCardView(card: card, socialService: socialService)
+            if courseStackCards.isEmpty {
+                // Empty state — prompt user to create their first course
+                VStack(spacing: 16) {
+                    Image(systemName: "sparkles.rectangle.stack")
+                        .font(.system(size: 48))
+                        .foregroundStyle(
+                            LinearGradient(colors: [Color(hex: "A855F7"), Color(hex: "6366F1")], startPoint: .top, endPoint: .bottom)
+                        )
+                    
+                    Text("No courses yet")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Text("Ask Lio to generate your first AI course")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.6))
+                    
+                    Button {
+                        uiState.isLioChatPresented = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "sparkles")
+                            Text("Start with Lio")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(colors: [Color(hex: "8B5CF6"), Color(hex: "6366F1")], startPoint: .leading, endPoint: .trailing)
+                        )
+                        .clipShape(Capsule())
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
+            } else {
+                TabView(selection: $activeCourseIndex) {
+                    ForEach(Array(courseStackCards.enumerated()), id: \.element.id) { index, card in
+                        FocusCourseCardView(card: card, socialService: socialService) {
+                            // Resume: open classroom for this course
+                            NotificationCenter.default.post(
+                                name: .openClassroom,
+                                object: nil,
+                                userInfo: [
+                                    "courseId": card.courseId ?? card.id,
+                                    "courseTitle": card.title
+                                ]
+                            )
+                        }
                         .padding(.vertical, 4)
                         .tag(index)
+                    }
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .frame(height: 510)
+                
+                // Page indicators
+                if courseStackCards.count > 1 {
+                    HStack(spacing: 8) {
+                        ForEach(courseStackCards.indices, id: \.self) { idx in
+                            Circle()
+                                .fill(idx == activeCourseIndex ? Color.white : Color.white.opacity(0.25))
+                                .frame(width: idx == activeCourseIndex ? 14 : 8, height: 8)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: activeCourseIndex)
+                        }
+                    }
+                    .padding(.top, -6)
                 }
             }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-            .frame(height: 510) // Increased by ~20% (420 -> 510)
-            
-            // Page indicators
-            HStack(spacing: 8) {
-                ForEach(courseStackCards.indices, id: \.self) { idx in
-                    Circle()
-                        .fill(idx == activeCourseIndex ? Color.white : Color.white.opacity(0.25))
-                        .frame(width: idx == activeCourseIndex ? 14 : 8, height: 8)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: activeCourseIndex)
-                }
-            }
-            .padding(.top, -6)
         }
     }
 
@@ -133,21 +185,44 @@ struct FocusView: View {
                 
                 Spacer()
                 
-                Text("See all")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(hex: "A9B7FF"))
+                Button {
+                    isShowingAllFeed = true
+                } label: {
+                    Text("See all")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color(hex: "A9B7FF"))
+                }
             }
             .padding(.horizontal, 2)
             
-            LazyVStack(spacing: 16, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    ForEach(feedRenderItems.indices, id: \.self) { index in
-                        FocusFeedCardView(item: feedRenderItems[index])
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        
-                        if index == 4 {
-                            DiscoverStrip()
-                                .padding(.vertical, 8)
+            if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
+                // Loading skeleton
+                ForEach(0..<3, id: \.self) { idx in
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(Color.white.opacity(0.06))
+                        .frame(height: 120)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [.clear, .white.opacity(0.04), .clear],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                        )
+                }
+            } else {
+                LazyVStack(spacing: 16, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        ForEach(feedRenderItems.indices, id: \.self) { index in
+                            FocusFeedCardView(item: feedRenderItems[index])
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            
+                            if index == 4 {
+                                DiscoverStrip()
+                                    .padding(.vertical, 8)
+                            }
                         }
                     }
                 }
@@ -157,95 +232,54 @@ struct FocusView: View {
 
     // MARK: - Derived Data
     private var courseStackCards: [FocusCourseCardModel] {
-        let mapped = stackService.items.prefix(6).enumerated().map { offset, item in
-            // 🔥 REAL SOCIAL DATA: Get actual likes/ratings from CourseSocialService
+        let courseItems = uiStackStore.items(ofType: .course)
+        guard !courseItems.isEmpty else { return [] }
+        
+        return courseItems.prefix(6).enumerated().map { offset, item in
             let courseId = item.courseId ?? item.id
             let likes = socialService.getLikeCount(courseId: courseId)
             let rating = socialService.getAverageRating(courseId: courseId)
+            let progress = item.progress ?? 0
+            let lessons = item.lessonCount ?? 0
+            _ = item.completedLessons ?? 0
+            let estMinutes = max(lessons * 8, 10) // ~8 min per lesson estimate
             
             return FocusCourseCardModel(
                 id: item.id,
-                title: item.title.isEmpty ? "Course Session" : item.title,
+                title: item.title,
                 subtitle: item.subtitle ?? "Personalized focus",
-                durationText: "~32 min",
-                lessonCount: 3,
-                challengeCount: 1,
-                status: item.status,
+                durationText: "est. \(estMinutes) min",
+                lessonCount: lessons,
+                challengeCount: max(lessons / 3, 1),
+                progress: progress,
+                status: progress >= 1.0 ? .completed : (progress > 0 ? .active : nil),
                 accent: FocusCourseCardModel.palette[offset % FocusCourseCardModel.palette.count],
-                description: {
-                    if let tags = item.tags, !tags.isEmpty {
-                        return "Topics: \(tags.joined(separator: ", "))"
-                    } else {
-                        return "Explore this personalized learning path designed to boost your skills."
-                    }
-                }(),
+                description: "Explore this personalized learning path designed to boost your skills.",
                 creator: "Lyo AI",
                 likes: likes,
-                dislikes: 0,  // Not using dislikes currently
+                dislikes: 0,
                 courseId: courseId,
                 rating: rating
             )
         }
-        if !mapped.isEmpty { return Array(mapped) }
-        return FocusCourseCardModel.suggestedDefaults
     }
     
     private var feedRenderItems: [FocusFeedItemModel] {
-        // Repeat items to simulate endless scroll
-        var items: [FocusFeedItemModel] = []
-        let base = focusFeedItems
-        let multiplier = 3
-        for i in 0..<multiplier {
-            items.append(contentsOf: base.map { $0.withIteration(i) })
+        if feedViewModel.posts.isEmpty {
+            return []
         }
-        return items
-    }
-    
-    // MARK: - Community Feed Section
-    private var communityFeedSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Community Feed")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    // Social Post Cards
-                    CommunityPostCard(
-                        username: "Alex",
-                        action: "finished a lesson",
-                        topic: "Swift Basics",
-                        time: "2h ago"
-                    )
-                    
-                    CommunityPostCard(
-                        username: "Maria",
-                        action: "earned 500 XP",
-                        topic: "Python Mastery",
-                        time: "3h ago"
-                    )
-                    
-                    // Suggested Course
-                    SuggestedCourseCard(
-                        title: "Advanced SwiftUI",
-                        lessons: "12 lessons",
-                        duration: "6 hours"
-                    )
-                    
-                    CommunityPostCard(
-                        username: "James",
-                        action: "completed a challenge",
-                        topic: "Data Structures",
-                        time: "5h ago"
-                    )
-                    
-                    SuggestedCourseCard(
-                        title: "Machine Learning",
-                        lessons: "20 lessons",
-                        duration: "10 hours"
-                    )
-                }
-            }
+        
+        return feedViewModel.posts.enumerated().map { index, post in
+            FocusFeedItemModel(
+                id: post.id,
+                author: post.author.name,
+                title: post.content,
+                timeAgo: post.createdAt.timeAgoDisplay(),
+                progress: nil,
+                badge: (post.attachments ?? []).isEmpty ? "Post" : "Media",
+                accent: FocusCourseCardModel.palette[index % FocusCourseCardModel.palette.count].start,
+                thumbnail: post.attachments?.first
+            )
         }
     }
     
@@ -257,7 +291,7 @@ struct FocusView: View {
                 .font(.system(size: 14, weight: .medium, design: .rounded))
                 .foregroundColor(.white.opacity(0.75))
             
-            Text("Hector")
+            Text(currentUser?.firstName ?? currentUser?.name ?? "Learner")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(
                     LinearGradient(
@@ -268,184 +302,48 @@ struct FocusView: View {
                 )
                 .shadow(color: Color(hex: "A855F7").opacity(0.25), radius: 12, x: 0, y: 4)
             
-            Text("You're one lesson away from an 8-day streak.")
+            Text(streakMessage)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.white.opacity(0.65))
                 .padding(.top, 2)
+            
+            #if DEBUG
+            // Dev-only demo button
+            Button(action: {
+                if let url = URL(string: "lyoapp://demo") {
+                    UIApplication.shared.open(url)
+                }
+            }) {
+                HStack {
+                    Image(systemName: "flask.fill")
+                    Text("Launch Spanish 101 Demo")
+                }
+                .font(.caption.bold())
+                .foregroundColor(.white)
+                .padding(8)
+                .background(Color.purple.opacity(0.4))
+                .cornerRadius(8)
+            }
+            #endif
         }
         .opacity(animateWelcome ? 1 : 0)
         .offset(y: animateWelcome ? 0 : 8)
     }
     
-    // MARK: - Stats Chips
-    private var statsChipsRow: some View {
-        HStack(spacing: 12) {
-            StatChip(icon: "flame.fill", title: "Streak", value: "\(streakCount) days", color: .orange)
-            StatChip(icon: "star.fill", title: "XP Today", value: "\(xpToday)", color: .yellow)
-            StatChip(icon: "target", title: "Goal", value: "\(Int(dailyGoalProgress * 100))%", color: .green)
-            Spacer()
-        }
-        .opacity(animateWelcome ? 1 : 0)
-        .offset(y: animateWelcome ? 0 : 10)
-    }
-    
-    // MARK: - Hero Card
-    private var continueHeroCard: some View {
-        Button {
-            // Action to continue course
-        } label: {
-            GlassCard(intensity: .medium, cornerRadius: 24) {
-                HStack(spacing: 16) {
-                    // Thumbnail / Icon
-                    ZStack {
-                        Circle()
-                            .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 56, height: 56)
-                        
-                        Image(systemName: "swift")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Continue: Swift Basics")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text("Lesson 2 • 12 min left")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
-                        
-                        // Mini Progress
-                        Capsule()
-                            .fill(Color.white.opacity(0.2))
-                            .frame(height: 4)
-                            .overlay(
-                                GeometryReader { geo in
-                                    Capsule()
-                                        .fill(Color.blue)
-                                        .frame(width: geo.size.width * 0.4)
-                                }
-                            )
-                            .padding(.top, 4)
-                    }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.white)
-                        .shadow(radius: 5)
-                }
-                .padding(4)
-            }
-        }
-        .buttonStyle(ScaleButtonStyle())
-    }
-    
-    // MARK: - Your Stacks
-    private var todaysFocusSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Your Stacks")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            if stackService.items.isEmpty {
-                // Suggestions
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        SuggestionCard(title: "Improve your focus", duration: "8 min", icon: "brain.head.profile")
-                        SuggestionCard(title: "Yesterday's recap", duration: "5 min", icon: "clock.arrow.circlepath")
-                    }
-                }
-            } else {
-                // Stack Items
-                VStack(spacing: 12) {
-                    ForEach(stackService.items.prefix(2)) { item in
-                        PremiumStackCard(item: item) // Reusing existing card for now, or could simplify
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Daily Challenge
-    private var dailyChallengeCard: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .opacity(0.9)
-            
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("DAILY CHALLENGE")
-                        .font(.caption2.bold())
-                        .foregroundColor(.white.opacity(0.8))
-                    
-                    Text("Complete 3 lessons")
-                        .font(.headline.bold())
-                        .foregroundColor(.white)
-                    
-                    Text("+50 XP Bonus")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.white.opacity(0.2))
-                        .clipShape(Capsule())
-                        .foregroundColor(.white)
-                }
-                
-                Spacer()
-                
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.3), lineWidth: 4)
-                        .frame(width: 50, height: 50)
-                    
-                    Circle()
-                        .trim(from: 0, to: 0.33)
-                        .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 50, height: 50)
-                        .rotationEffect(.degrees(-90))
-                    
-                    Text("1/3")
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(20)
-        }
-        .shadow(color: .orange.opacity(0.3), radius: 10, x: 0, y: 5)
-    }
-    
-    
-    // MARK: - Bottom Input Bar
-    private var bottomInputBar: some View {
-        Button {
-            uiState.isLioChatPresented = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "sparkles")
-                    .foregroundColor(.purple)
-                
-                Text("Ask Lio anything...")
-                    .foregroundColor(.white.opacity(0.6))
-                
-                Spacer()
-                
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.white.opacity(0.8))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+    /// Dynamic streak motivation message
+    private var streakMessage: String {
+        let streak = currentUser?.streak ?? 0
+        switch streak {
+        case 0:
+            return "Start your streak today! 🔥"
+        case 1:
+            return "1 day streak — keep it going!"
+        case 2...6:
+            return "\(streak)-day streak! You're building momentum."
+        case 7...29:
+            return "\(streak)-day streak 🔥 You're on fire!"
+        default:
+            return "\(streak)-day streak 🌟 Unstoppable!"
         }
     }
     
@@ -458,92 +356,7 @@ struct FocusView: View {
         default: return "Good evening"
         }
     }
-}
-
-// MARK: - Subviews
-
-struct StatChip: View {
-    let icon: String
-    let title: String
-    let value: String
-    let color: Color
     
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .foregroundColor(color)
-                .font(.caption)
-            
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.6))
-                Text(value)
-                    .font(.caption.bold())
-                    .foregroundColor(.white)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
-    }
-}
-
-struct SuggestionCard: View {
-    let title: String
-    let duration: String
-    let icon: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(.white)
-                    .padding(8)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(Circle())
-                
-                Spacer()
-                
-                Text(duration)
-                    .font(.caption2.bold())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.3))
-                    .clipShape(Capsule())
-                    .foregroundColor(.white)
-            }
-            
-            Text(title)
-                .font(.subheadline.bold())
-                .foregroundColor(.white)
-                .lineLimit(2)
-            
-            HStack {
-                Text("Start")
-                    .font(.caption.bold())
-                    .foregroundColor(.white)
-                Spacer()
-                Image(systemName: "arrow.right")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.7))
-            }
-        }
-        .padding(16)
-        .frame(width: 160)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
-    }
 }
 
 // MARK: - Focus Course Models & Views
@@ -555,6 +368,7 @@ struct FocusCourseCardModel: Identifiable, Hashable {
     let durationText: String
     let lessonCount: Int
     let challengeCount: Int
+    let progress: Double
     let status: StackItemStatus?
     let accent: GradientAccent
     
@@ -578,48 +392,12 @@ struct FocusCourseCardModel: Identifiable, Hashable {
         GradientAccent(start: Color(hex: "F59E0B"), end: Color(hex: "F97316"), glow: Color(hex: "FB923C")),
         GradientAccent(start: Color(hex: "10B981"), end: Color(hex: "06B6D4"), glow: Color(hex: "34D399"))
     ]
-    
-    static var suggestedDefaults: [FocusCourseCardModel] {
-        [
-            FocusCourseCardModel(
-                id: "suggested_swift",
-                title: "Tonight's Swift Power Session",
-                subtitle: "3 mini-lessons • 1 challenge",
-                durationText: "est. 32 min",
-                lessonCount: 3,
-                challengeCount: 1,
-                status: .active,
-                accent: palette[0],
-                description: "Master the fundamentals of Swift concurrency and actors in this high-intensity power session designed for senior developers.",
-                creator: "Dr. Angela Yu",
-                likes: 1240,
-                dislikes: 12,
-                courseId: "suggested_swift",
-                rating: 4.8
-            ),
-            FocusCourseCardModel(
-                id: "suggested_ml",
-                title: "Build a Tiny ML Classifier",
-                subtitle: "4 sprints • 1 demo",
-                durationText: "est. 40 min",
-                lessonCount: 4,
-                challengeCount: 1,
-                status: .active,
-                accent: palette[1],
-                description: "Create your first machine learning model on iOS using CoreML and CreateML. Perfect for beginners entering the AI space.",
-                creator: "Paul Hudson",
-                likes: 890,
-                dislikes: 4,
-                courseId: "suggested_ml",
-                rating: 4.6
-            )
-        ]
-    }
 }
 
 struct FocusCourseCardView: View {
     let card: FocusCourseCardModel
     @ObservedObject var socialService: CourseSocialService
+    var onResume: (() -> Void)? = nil
     
     // Animation States
     @State private var isFlipped = false
@@ -789,7 +567,7 @@ struct FocusCourseCardView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundColor(.white.opacity(0.8))
                         Spacer()
-                        Text("32%") // Mock progress for premium feel
+                        Text("\(Int(card.progress * 100))%")
                             .font(.subheadline.weight(.bold))
                             .foregroundColor(.white)
                     }
@@ -802,7 +580,8 @@ struct FocusCourseCardView: View {
                             
                             Capsule()
                                 .fill(Color.white)
-                                .frame(width: geo.size.width * 0.32, height: 6)
+                                .frame(width: geo.size.width * CGFloat(card.progress), height: 6)
+                                .animation(.easeInOut(duration: 0.5), value: card.progress)
                         }
                     }
                     .frame(height: 6)
@@ -811,8 +590,22 @@ struct FocusCourseCardView: View {
                 
                 // Action Buttons
                 HStack(spacing: 16) {
-                    pill(text: "Resume", filled: true, icon: "play.fill")
-                    pill(text: "Details", filled: false, icon: "list.bullet")
+                    Button {
+                        HapticManager.shared.medium()
+                        onResume?()
+                    } label: {
+                        pill(text: "Resume", filled: true, icon: "play.fill")
+                    }
+                    
+                    Button {
+                        HapticManager.shared.light()
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                            isFlipped = true
+                        }
+                        startAutoFlipBackTimer()
+                    } label: {
+                        pill(text: "Details", filled: false, icon: "list.bullet")
+                    }
                 }
             }
             .padding(28)
@@ -885,7 +678,7 @@ struct FocusCourseCardView: View {
                                     try await socialService.toggleLike(courseId: courseId)
                                     HapticManager.shared.light()
                                 } catch {
-                                    print("⚠️ Failed to toggle like: \(error)")
+                                    Log.ui.warning("Failed to toggle like: \(error)")
                                 }
                             }
                         }) {
@@ -916,7 +709,7 @@ struct FocusCourseCardView: View {
                                             try await socialService.rateCourse(courseId: courseId, rating: starIndex)
                                             HapticManager.shared.light()
                                         } catch {
-                                            print("⚠️ Failed to rate course: \(error)")
+                                            Log.ui.warning("Failed to rate course: \(error)")
                                         }
                                     }
                                 }) {
@@ -1031,32 +824,10 @@ struct FocusFeedItemModel: Identifiable, Hashable {
     let author: String
     let title: String
     let timeAgo: String
-    let progress: Double
+    let progress: Double? // Made optional
     let badge: String
     let accent: Color
     let thumbnail: String?
-    
-    func withIteration(_ iteration: Int) -> FocusFeedItemModel {
-        // Slightly tweak id and time label to feel endless
-        return FocusFeedItemModel(
-            id: "\(id)_\(iteration)",
-            author: author,
-            title: title,
-            timeAgo: iteration == 0 ? timeAgo : "\(Int.random(in: 5...40))m ago",
-            progress: progress,
-            badge: badge,
-            accent: accent,
-            thumbnail: thumbnail
-        )
-    }
-    
-    static let mock: [FocusFeedItemModel] = [
-        FocusFeedItemModel(id: "f1", author: "Jade", title: "Shipped the iOS animations challenge", timeAgo: "12m ago", progress: 0.82, badge: "Animations", accent: Color(hex: "7C3AED"), thumbnail: nil),
-        FocusFeedItemModel(id: "f2", author: "Mateo", title: "Completed SwiftUI layout sprint", timeAgo: "28m ago", progress: 0.64, badge: "Layouts", accent: Color(hex: "22D3EE"), thumbnail: nil),
-        FocusFeedItemModel(id: "f3", author: "Priya", title: "Unlocked AI tutor quiz streak", timeAgo: "1h ago", progress: 0.93, badge: "Streak", accent: Color(hex: "F59E0B"), thumbnail: nil),
-        FocusFeedItemModel(id: "f4", author: "Sam", title: "Shared a Swift Concurrency cheat sheet", timeAgo: "2h ago", progress: 0.45, badge: "Share", accent: Color(hex: "10B981"), thumbnail: nil),
-        FocusFeedItemModel(id: "f5", author: "Amina", title: "Published a UIKit > SwiftUI port", timeAgo: "3h ago", progress: 0.71, badge: "Porting", accent: Color(hex: "6366F1"), thumbnail: nil)
-    ]
 }
 
 struct FocusFeedCardView: View {
@@ -1099,7 +870,9 @@ struct FocusFeedCardView: View {
                 .lineSpacing(2)
                 .padding(.horizontal, 2)
             
-            progressBar
+            if let _ = item.progress {
+                progressBar
+            }
         }
         .padding(20)
         .background(
@@ -1133,7 +906,7 @@ struct FocusFeedCardView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.white.opacity(0.7))
                 Spacer()
-                Text("\(Int(item.progress * 100))%")
+                Text("\(Int((item.progress ?? 0) * 100))%")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.white)
             }
@@ -1148,7 +921,7 @@ struct FocusFeedCardView: View {
                             GeometryReader { geo in
                                 Capsule()
                                     .fill(item.accent)
-                                    .frame(width: geo.size.width * CGFloat(item.progress))
+                                    .frame(width: geo.size.width * CGFloat(item.progress ?? 0))
                             }
                         )
                 )
@@ -1225,226 +998,6 @@ struct ScaleButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.spring(), value: configuration.isPressed)
-    }
-}
-
-// MARK: - Premium Stack Card
-struct PremiumStackCard: View {
-    let item: StackItem
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(
-                        LinearGradient(
-                            colors: gradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 50, height: 50)
-                
-                Image(systemName: iconForType)
-                    .font(.title2)
-                    .foregroundColor(.white)
-            }
-            
-            Text(item.type.rawValue.capitalized)
-                .font(.subheadline.bold())
-                .foregroundColor(.white)
-                .lineLimit(2)
-            
-            Text(item.status.rawValue.capitalized)
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.6))
-                .lineLimit(1)
-            
-            // Tags indicator
-            if let tags = item.tags, !tags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(tags.prefix(2), id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(4)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-            }
-        }
-        .frame(width: 140)
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-        )
-    }
-    
-    private var iconForType: String {
-        switch item.type {
-        case .course: return "book.fill"
-        case .lesson: return "play.circle.fill"
-        case .video: return "play.rectangle.fill"
-        case .event: return "calendar"
-        case .group: return "person.3.fill"
-        case .person: return "person.fill"
-        case .question: return "questionmark.circle.fill"
-        case .session: return "clock.fill"
-        case .achievement: return "trophy.fill"
-        case .path: return "map.fill"
-        }
-    }
-    
-    private var gradientColors: [Color] {
-        switch item.type {
-        case .course: return [.blue, .purple]
-        case .lesson: return [.cyan, .blue]
-        case .video: return [.green, .mint]
-        case .event: return [.orange, .yellow]
-        case .group: return [.pink, .purple]
-        case .person: return [.indigo, .purple]
-        case .question: return [.yellow, .orange]
-        case .session: return [.teal, .cyan]
-        case .achievement: return [.yellow, .orange]
-        case .path: return [.purple, .pink]
-        }
-    }
-}
-
-// MARK: - Community Feed Cards
-
-struct CommunityPostCard: View {
-    let username: String
-    let action: String
-    let topic: String
-    let time: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // User info
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        Text(String(username.prefix(1)))
-                            .font(.caption.bold())
-                            .foregroundColor(.white)
-                    )
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(username)
-                        .font(.subheadline.bold())
-                        .foregroundColor(.white)
-                    Text(time)
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                
-                Spacer()
-            }
-            
-            // Action
-            Text("\(action)")
-                .font(.callout)
-                .foregroundColor(.white.opacity(0.8))
-            
-            // Topic tag
-            Text(topic)
-                .font(.caption.bold())
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.purple.opacity(0.3))
-                .clipShape(Capsule())
-                .foregroundColor(.white)
-        }
-        .padding(16)
-        .frame(width: 200)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
-    }
-}
-
-struct SuggestedCourseCard: View {
-    let title: String
-    let lessons: String
-    let duration: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Course icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 50, height: 50)
-                
-                Image(systemName: "book.fill")
-                    .font(.title3)
-                    .foregroundColor(.white)
-            }
-            
-            Text(title)
-                .font(.subheadline.bold())
-                .foregroundColor(.white)
-                .lineLimit(2)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.6))
-                    Text(lessons)
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "clock.fill")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.6))
-                    Text(duration)
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-            }
-            
-            Spacer(minLength: 0)
-            
-            // Enroll button
-            HStack {
-                Text("Explore")
-                    .font(.caption.bold())
-                    .foregroundColor(.white)
-                Spacer()
-                Image(systemName: "arrow.right")
-                    .font(.caption)
-                    .foregroundColor(.white)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.orange.opacity(0.3))
-            .clipShape(Capsule())
-        }
-        .padding(16)
-        .frame(width: 180, height: 220)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
     }
 }
 

@@ -62,11 +62,11 @@ struct OpenClassroomCommand: Codable {
     
     /// Convenience accessor for course data
     var course: CoursePayload { payload.course }
-    /// Convenience accessor for stack item data
-    var stackItem: StackItemPayload { payload.stackItem }
+    /// Convenience accessor for stack item data (optional)
+    var stackItem: StackItemPayload? { payload.stackItem }
     
     struct OpenClassroomPayload: Codable {
-        let stackItem: StackItemPayload
+        let stackItem: StackItemPayload?  // Optional - backend may not include it
         let course: CoursePayload
         
         enum CodingKeys: String, CodingKey {

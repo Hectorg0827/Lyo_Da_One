@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 /// Streaming client for Server-Sent Events from course generation
 @MainActor
@@ -94,7 +95,7 @@ class CourseGenerationStreamingClient: ObservableObject {
                     do {
                         let event = try decoder.decode(CourseGenerationEvent.self, from: data)
                         
-                        print("📥 SSE Event: \(event.type.rawValue) - \(event.message) (\(event.progress)%)")
+                        Log.course.info("📥 SSE Event: \(event.type.rawValue) - \(event.message) (\(event.progress)%)")
                         
                         await MainActor.run {
                             self.currentEvent = event
@@ -123,14 +124,14 @@ class CourseGenerationStreamingClient: ObservableObject {
                             break
                         }
                     } catch {
-                        print("⚠️ Failed to decode SSE event: \(error)")
+                        Log.course.warning("Failed to decode SSE event: \(error)")
                         // Continue streaming despite decode errors
                     }
                 }
             } else if line.hasPrefix("event: ") {
                 // Backend might send event type separately
                 let eventType = String(line.dropFirst(7))
-                print("📋 SSE Event Type: \(eventType)")
+                Log.course.info("SSE Event Type: \(eventType)")
             }
         }
         
@@ -141,6 +142,6 @@ class CourseGenerationStreamingClient: ObservableObject {
             }
         }
         
-        print("✅ SSE stream ended")
+        Log.course.info("SSE stream ended")
     }
 }

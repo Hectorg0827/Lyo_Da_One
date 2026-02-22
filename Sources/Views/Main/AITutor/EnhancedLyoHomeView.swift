@@ -1,9 +1,14 @@
 import SwiftUI
+import os
 
 /// Enhanced Lyo Home View with premium animations and Netflix-style discover rail
 struct EnhancedLyoHomeView: View {
     @StateObject private var viewModel = LyoAIViewModel()
     @EnvironmentObject var rootViewModel: RootViewModel
+    
+    // Services
+    @StateObject private var smartMemory = SmartMemoryService.shared
+    @StateObject private var courseGen = CourseGenerationService.shared
     
     // UI State
     @State private var isHeaderDrawerOpen = false
@@ -113,9 +118,18 @@ struct EnhancedLyoHomeView: View {
             
             // Messages
             ForEach(viewModel.messages) { message in
-                LyoMessageBubbleView(message: message) { action in
-                    handleAction(action)
-                }
+                LyoMessageBubbleView(
+                    message: message,
+                    onActionTap: { action in
+                        handleAction(action)
+                    },
+                    onA2UICourseStart: { course in
+                        viewModel.onA2UICourseStart(course: course)
+                    },
+                    onA2UIQuizAnswer: { question, answerIndex in
+                        viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+                    }
+                )
             }
             
             // Suggestion chips (above composer)
@@ -252,6 +266,20 @@ struct EnhancedLyoHomeView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DesignTokens.Spacing.md) {
+                    
+                    // 🧠 Smart Review Card
+                    if let memory = smartMemory.memory, !memory.struggles.isEmpty {
+                        SmartReviewCard(
+                            struggles: memory.struggles,
+                            isGenerating: courseGen.isGenerating,
+                            action: {
+                                Task {
+                                    await startSmartReview(struggles: memory.struggles)
+                                }
+                            }
+                        )
+                    }
+
                     ForEach(viewModel.suggestedCards) { course in
                         PremiumDiscoverCard(
                             title: course.title,
@@ -441,7 +469,7 @@ struct EnhancedLyoHomeView: View {
         case .openDrawer:
             viewModel.isDrawerOpen = true
         case .createCourse, .createCourseA2A, .quizMe, .addToLibrary, .generateSyllabus, .quickExplainer, .makeFlashcards, .extractKeyPoints:
-            print("Action: \(action.actionType.rawValue)")
+            Log.ui.info("Action: \(action.actionType.rawValue)")
         }
     }
     
@@ -450,7 +478,7 @@ struct EnhancedLyoHomeView: View {
         
         isCreatingSession = true
         
-        Task {
+        Task<Void, Never> {
             do {
                 let session = try await LyoRepository.shared.createClassroomSession(
                     lessonId: lessonData["id"] as? String ?? "temp-lesson"
@@ -459,7 +487,18 @@ struct EnhancedLyoHomeView: View {
                 await MainActor.run {
                     self.classroomSessionId = session.id
                     self.isCreatingSession = false
-                    self.showClassroom = true
+                    
+                    // Post global notification for cinematic flow
+                    NotificationCenter.default.post(
+                        name: .openClassroom, 
+                        object: nil, 
+                        userInfo: [
+                            "courseId": session.id,
+                            "courseTitle": lessonData["title"] as? String ?? "New Lesson",
+                            "lessonId": lessonData["id"] as? String ?? "temp-lesson",
+                            "lessonTitle": lessonData["title"] as? String ?? "Introduction"
+                        ]
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -475,6 +514,90 @@ struct EnhancedLyoHomeView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Smart Review Action
+    
+    private func startSmartReview(struggles: [StruggleItem]) async {
+        isCreatingSession = true
+        do {
+            let course = try await courseGen.generateSmartReview(struggles: struggles)
+            
+            // Navigate to first lesson
+            if let firstLesson = course.modules.first?.lessons.first {
+                createAndOpenClassroom(lessonData: [
+                    "id": firstLesson.id,
+                    "title": firstLesson.title
+                ])
+            }
+        } catch {
+            Log.ui.error("Failed to generate smart review: \(error)")
+            isCreatingSession = false
+        }
+    }
+}
+
+// MARK: - Smart Review Card
+
+struct SmartReviewCard: View {
+    let struggles: [StruggleItem]
+    let isGenerating: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                // Background Gradient
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: "4A00E0"), Color(hex: "8E2DE2")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 280, height: 160)
+                
+                // Pattern/Overlay
+                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
+                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                    .frame(width: 280, height: 160)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "brain.head.profile")
+                            .font(.title2)
+                        Spacer()
+                        if isGenerating {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("\(struggles.count) Topics")
+                                .font(.caption.bold())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.black.opacity(0.2))
+                                .cornerRadius(8)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Daily Smart Review")
+                        .font(.title3.bold())
+                    
+                    Text("Focus on: \(struggles.prefix(2).map(\.topic).joined(separator: ", "))...")
+                        .font(.caption)
+                        .opacity(0.8)
+                        .lineLimit(1)
+                }
+                .foregroundColor(.white)
+                .padding()
+                .frame(width: 280, height: 160)
+            }
+            .applyMultiLayerShadow()
+        }
+        .disabled(isGenerating)
     }
 }
 

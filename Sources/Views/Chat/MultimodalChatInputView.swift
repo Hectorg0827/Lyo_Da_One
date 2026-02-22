@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import os
 
 struct MultimodalChatInputView: View {
     @Binding var text: String
@@ -321,7 +322,7 @@ struct MultimodalChatInputView: View {
                 try await voiceService.startRecording()
                 HapticManager.shared.playRecordingStarted()
             } catch {
-                print("❌ Failed to start recording: \(error)")
+                Log.ai.error("Failed to start recording: \(error)")
             }
         }
     }
@@ -351,7 +352,7 @@ struct MultimodalChatInputView: View {
                 attachmentIds = try await mediaService.uploadSelectedMedia()
                 mediaService.clearSelection()
             } catch {
-                print("❌ Failed to upload attachments: \(error)")
+                Log.ai.error("Failed to upload attachments: \(error)")
             }
             isUploading = false
         }

@@ -17,7 +17,7 @@ struct StoryCircleView: View {
                 
                 // Avatar
                 if let avatar = story.userAvatar {
-                    if avatar == "sparkles" || avatar == "atom" { // System images for mock data
+                    if avatar == "sparkles" || avatar == "atom" { // System images for special bots
                         Image(systemName: avatar)
                             .resizable()
                             .scaledToFit()
@@ -25,9 +25,28 @@ struct StoryCircleView: View {
                             .frame(width: 60, height: 60)
                             .background(Color.black.opacity(0.1))
                             .clipShape(Circle())
+                    } else if let url = URL(string: avatar) {
+                        // Real image URL
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure:
+                                Image(systemName: "person.circle.fill")
+                                    .resizable()
+                                    .foregroundColor(.gray)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                        .frame(width: 60, height: 60)
+                        .clipShape(Circle())
                     } else {
-                        // Real image URL (would use AsyncImage here)
-                        // Using placeholder for now
+                        // Fallback
                         Image(systemName: "person.circle.fill")
                             .resizable()
                             .foregroundColor(.gray)

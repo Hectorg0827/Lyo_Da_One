@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public class PersonalizationService {
     public static let shared = PersonalizationService()
@@ -23,44 +24,29 @@ public class PersonalizationService {
         // Use AnyEncodable wrapper for the body
         let encodableBody = cleanBody.mapValues { AnyEncodable(value: $0) }
         
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/ai/recommendations/next-action",
-            method: .post,
-            body: encodableBody
-        )
+        let endpoint = Endpoints.Personalization.nextAction(body: encodableBody)
         
         return try await NetworkClient.shared.request(endpoint)
     }
     
     public func updateState(update: PersonalizationStateUpdate) async throws {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/ai/recommendations/state",
-            method: .post,
-            body: update
-        )
+        let endpoint = Endpoints.Personalization.updateState(body: update)
         
         do {
             let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
         } catch {
-            print("⚠️ Failed to update affect state: \(error.localizedDescription)")
+            Log.net.warning("Failed to update affect state: \(error.localizedDescription)")
         }
     }
     
     public func traceKnowledge(trace: KnowledgeTraceRequest) async throws {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/ai/recommendations/trace",
-            method: .post,
-            body: trace
-        )
+        let endpoint = Endpoints.Personalization.traceKnowledge(body: trace)
         
         let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
     }
     
     public func getMasteryProfile() async throws -> MasteryProfile {
-        let endpoint = DynamicEndpoint(
-            urlString: "/api/v1/ai/recommendations/profile",
-            method: .get
-        )
+        let endpoint = Endpoints.Personalization.masteryProfile
         
         return try await NetworkClient.shared.request(endpoint)
     }

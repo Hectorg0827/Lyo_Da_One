@@ -1,9 +1,16 @@
 import SwiftUI
+import os
+
+extension Notification.Name {
+    static let showNotifications = Notification.Name("showNotifications")
+    static let navigateToQuiz = Notification.Name("navigateToQuiz")
+}
 
 // MARK: - Home View (Dashboard)
 struct HomeView: View {
     @EnvironmentObject var rootViewModel: RootViewModel
     @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var notificationService = NotificationService.shared
 
     var body: some View {
         NavigationView {
@@ -16,14 +23,18 @@ struct HomeView: View {
                     QuickStatsView(
                         level: rootViewModel.userLevel,
                         xp: rootViewModel.userXP,
-                        streak: 0 // TODO: Get from gamification
+                        streak: viewModel.currentStreak
                     )
 
                     // Daily Challenge
-                    DailyChallengeCard()
+                    if let challenge = viewModel.dailyChallenge {
+                        DailyChallengeCard(challenge: challenge)
+                    } else {
+                        DailyChallengeCard(challenge: nil)
+                    }
 
                     // Continue Learning
-                    ContinueLearningSection()
+                    ContinueLearningSection(courses: viewModel.continueLearning)
 
                     // Recommended Content
                     RecommendedContentSection()
@@ -37,7 +48,7 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        // TODO: Show notifications
+                        viewModel.showNotifications()
                     } label: {
                         Image(systemName: "bell")
                             .overlay(
@@ -46,13 +57,22 @@ struct HomeView: View {
                                     .fill(Color.red)
                                     .frame(width: 8, height: 8)
                                     .offset(x: 8, y: -8)
-                                    .opacity(viewModel.hasNotifications ? 1 : 0)
+                                    .opacity(notificationService.unreadCount > 0 ? 1 : 0)
                             )
                     }
                 }
             }
             .refreshable {
                 await viewModel.refresh()
+                await notificationService.loadUnreadCount()
+            }
+            .sheet(isPresented: $notificationService.isShowingNotificationCenter) {
+                NotificationCenterView()
+            }
+            .onAppear {
+                Task {
+                    await notificationService.loadUnreadCount()
+                }
             }
         }
     }
@@ -138,6 +158,8 @@ struct HomeStatCard: View {
 
 // MARK: - Daily Challenge Card
 struct DailyChallengeCard: View {
+    let challenge: Challenge?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -150,27 +172,27 @@ struct DailyChallengeCard: View {
 
                 Spacer()
 
-                Text("2/3")
+                Text(progressText)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
 
-            Text("Complete 3 lessons today")
+            Text(challenge?.description ?? "Complete 3 lessons today")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            ProgressView(value: 0.66)
+            ProgressView(value: challenge?.progressPercentage ?? 0.66)
                 .progressViewStyle(LinearProgressViewStyle(tint: .yellow))
 
             HStack {
-                Text("200 XP")
+                Text("\(challenge?.xpReward ?? 200) XP")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(.yellow)
 
                 Spacer()
 
-                Text("1 lesson left")
+                Text("\(remainingCount) left")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -185,40 +207,58 @@ struct DailyChallengeCard: View {
         )
         .cornerRadius(16)
     }
+
+    private var progressText: String {
+        let current = Int(challenge?.progress ?? 0)
+        let total = challenge?.target ?? 3
+        return "\(current)/\(total)"
+    }
+
+    private var remainingCount: Int {
+        let target = Double(challenge?.target ?? 3)
+        let progress = challenge?.progress ?? 0
+        return Int(max(0, target - progress))
+    }
 }
 
 // MARK: - Continue Learning Section
 struct ContinueLearningSection: View {
+    let courses: [Course]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Continue Learning")
                 .font(.headline)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    HomeContinueLearningCard(
-                        title: "Python Basics",
-                        progress: 0.75,
-                        lesson: "Variables & Types",
-                        color: .blue
-                    )
-
-                    HomeContinueLearningCard(
-                        title: "Web Development",
-                        progress: 0.30,
-                        lesson: "HTML Structure",
-                        color: .orange
-                    )
-
-                    HomeContinueLearningCard(
-                        title: "Data Science",
-                        progress: 0.10,
-                        lesson: "Intro to Pandas",
-                        color: .green
-                    )
+            if courses.isEmpty {
+                Text("No active courses. Start learning today!")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(12)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(courses) { course in
+                            HomeContinueLearningCard(
+                                title: course.title,
+                                progress: course.progressPercentage,
+                                lesson: course.currentLesson?.title ?? "Ready to start",
+                                color: courseColor(for: course)
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private func courseColor(for course: Course) -> Color {
+        let colors: [Color] = [.blue, .orange, .green, .purple, .red, .yellow]
+        let index = abs(course.title.hashValue) % colors.count
+        return colors[index]
     }
 }
 
@@ -382,10 +422,60 @@ class HomeViewModel: ObservableObject {
     @Published var dailyChallenge: Challenge?
     @Published var continueLearning: [Course] = []
     @Published var recommended: [Any] = []
+    @Published var currentStreak = 0
+    @Published var isLoading = false
 
     func refresh() async {
-        // TODO: Load fresh data
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        await loadDashboardData()
+    }
+
+    private func loadDashboardData() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadDailyChallenge() }
+            group.addTask { await self.loadContinueLearning() }
+            group.addTask { await self.loadRecommendedContent() }
+            group.addTask { await self.loadCurrentStreak() }
+            await group.waitForAll()
+        }
+    }
+
+    private func loadDailyChallenge() async {
+        do {
+            dailyChallenge = try await LyoRepository.shared.getDailyChallenge()
+        } catch {
+            Log.ui.error("Failed to load daily challenge: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadContinueLearning() async {
+        do {
+            let courses = try await LyoRepository.shared.getActiveCourses()
+            continueLearning = Array(courses.prefix(3))
+        } catch {
+            Log.ui.error("Failed to load continue learning: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadRecommendedContent() async {
+        do {
+            let recommendations = try await LyoRepository.shared.getRecommendations()
+            recommended = recommendations
+        } catch {
+            Log.ui.error("Failed to load recommended content: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadCurrentStreak() async {
+        do {
+            let stats = try await LyoRepository.shared.getGamificationStats()
+            currentStreak = stats.currentStreak
+        } catch {
+            Log.ui.error("Failed to load streak: \(error.localizedDescription)")
+        }
+    }
+
+    func showNotifications() {
+        NotificationCenter.default.post(name: .showNotifications, object: nil)
     }
 }
 

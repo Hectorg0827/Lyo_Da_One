@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import os
 
 @MainActor
 class LyoAIViewModel: ObservableObject {
@@ -41,9 +42,23 @@ class LyoAIViewModel: ObservableObject {
     @Published var isVoiceActive: Bool = false
     @Published var showFloatingOrb: Bool = false
     
+    // MARK: - True Live Mode State
+    @Published var isLiveMode: Bool = false
+    @Published var userLiveAudioLevel: Float = 0
+    @Published var aiLiveAudioLevel: Float = 0
+    @Published var isAIThinking: Bool = false
+    @Published var isAISpeaking: Bool = false
+    @Published var lastLiveTranscript: String = ""
+    @Published var activeLiveWidget: [String: Any]?
+    
     // MARK: - Quiz State
     @Published var activeQuiz: Quiz?
     @Published var isQuizActive: Bool = false
+
+    // MARK: - Artifact Pane State
+    /// The most recently received A2UI component — shown pinned in the Artifact Pane.
+    /// Automatically extracted from the messages stream whenever a new .a2ui message arrives.
+    @Published var activeArtifact: A2UIComponent? = nil
     
     // MARK: - Personalization (NEXR)
     @Published var nextAction: NextActionResponse?
@@ -109,15 +124,32 @@ class LyoAIViewModel: ObservableObject {
             
         // Continuous Conversation: Start listening when AI finishes speaking
         ttsService.onSpeechFinished = { [weak self] in
-            guard let self = self, self.isVoiceActive else { return }
-            self.startListening()
+            guard let self = self else { return }
+            self.currentlyPlayingMessageId = nil // Reset playing state
+            
+            if self.isVoiceActive {
+                self.startListening()
+            }
         }
         
         // SYNC WITH UNIFIED CHAT
         unifiedChat.$messages
             .receive(on: RunLoop.main)
             .assign(to: &$messages)
-            
+
+        // Track the latest A2UI component for the pinned Artifact Pane
+        unifiedChat.$messages
+            .receive(on: RunLoop.main)
+            .map { msgs -> A2UIComponent? in
+                msgs.reversed().lazy.compactMap { msg -> A2UIComponent? in
+                    msg.contentTypes?.compactMap { ct -> A2UIComponent? in
+                        if case .a2ui(let c) = ct { return c }
+                        return nil
+                    }.first
+                }.first
+            }
+            .assign(to: &$activeArtifact)
+
         unifiedChat.$isLoading
             .receive(on: RunLoop.main)
             .assign(to: &$isLoading)
@@ -126,26 +158,45 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .assign(to: &$suggestions)
             
+        // Live Mode Bindings
+        AudioStreamManager.shared.$isLive
+            .receive(on: RunLoop.main)
+            .assign(to: &$isLiveMode)
+            
+        AudioStreamManager.shared.$userAudioLevel
+            .receive(on: RunLoop.main)
+            .assign(to: &$userLiveAudioLevel)
+            
+        AudioStreamManager.shared.$aiAudioLevel
+            .receive(on: RunLoop.main)
+            .assign(to: &$aiLiveAudioLevel)
+            
+        AudioStreamManager.shared.$isAIThinking
+            .receive(on: RunLoop.main)
+            .assign(to: &$isAIThinking)
+            
+        AudioStreamManager.shared.$isAISpeaking
+            .receive(on: RunLoop.main)
+            .assign(to: &$isAISpeaking)
+            
+        AudioStreamManager.shared.$lastTranscript
+            .receive(on: RunLoop.main)
+            .assign(to: &$lastLiveTranscript)
+            
+        AudioStreamManager.shared.$activeWidget
+            .receive(on: RunLoop.main)
+            .assign(to: &$activeLiveWidget)
+            
         // Handle Course Navigation from Unified Chat
+        // Note: triggerCourseNavigation() now calls executeOpenClassroom() directly,
+        // so this subscriber just clears navigation state after the fact.
         unifiedChat.$shouldNavigateToClassroom
             .receive(on: RunLoop.main)
             .sink { [weak self] shouldNavigate in
-                if shouldNavigate, let course = self?.unifiedChat.pendingCourse {
-                    print("🚀 ViewModel received navigation to course: \(course.title)")
-                    // Bridge to AICommandHandler for View transparency
-                    // Convert CourseCreationData to CoursePayload
-                    let payload = CoursePayload(
-                        id: course.id,
-                        title: course.title,
-                        topic: course.topic,
-                        level: course.level,
-                        language: "English",
-                        duration: "\(course.modules.count) modules",
-                        objectives: course.modules.map { $0.title }
-                    )
-                    AICommandHandler.shared.pendingClassroomCourse = payload
-                    AICommandHandler.shared.shouldOpenClassroom = true
-                    
+                if shouldNavigate {
+                    if let course = self?.unifiedChat.pendingCourse {
+                        Log.ai.info("ViewModel received navigation to course: \(course.title)")
+                    }
                     self?.unifiedChat.clearNavigation()
                 }
             }
@@ -158,8 +209,39 @@ class LyoAIViewModel: ObservableObject {
         if isVoiceActive {
             stopListening()
         } else {
+            // Stop live mode if active before starting voice mode
+            if isLiveMode {
+                stopLiveMode()
+            }
             startListening()
         }
+    }
+    
+    // MARK: - True Live Mode Control
+    
+    func toggleLiveMode() {
+        if isLiveMode {
+            stopLiveMode()
+        } else {
+            startLiveMode()
+        }
+    }
+    
+    func startLiveMode() {
+        // Stop turn-based voice mode if active
+        if isVoiceActive {
+            stopListening()
+        }
+        
+        Task {
+            let userId = await TokenManager.shared.getUserId() ?? "anonymous"
+            let sessionId = "live-\(userId)"
+            await AudioStreamManager.shared.startLiveMode(sessionId: sessionId)
+        }
+    }
+    
+    func stopLiveMode() {
+        AudioStreamManager.shared.stopLiveMode()
     }
     
     func startListening() {
@@ -172,8 +254,9 @@ class LyoAIViewModel: ObservableObject {
                 try await sttService.startRecording()
                 isVoiceActive = true
             } catch {
-                print("Failed to start recording: \(error)")
+                Log.ai.error("🎙️ Failed to start recording: \(error)")
                 isVoiceActive = false
+                addErrorMessage("Microphone access is required for voice input. Please enable it in Settings > Privacy > Microphone.")
             }
         }
     }
@@ -191,8 +274,13 @@ class LyoAIViewModel: ObservableObject {
         }
     }
     
-    func speak(text: String) {
+    func speak(text: String, messageId: String? = nil) {
         ttsService.speak(text: text)
+        // Update state if a specific message is being read
+        if let messageId = messageId {
+            currentlyPlayingMessageId = messageId
+        }
+        
         // Ensure we are listening for barge-in
         if !sttService.isRecording {
             startListening()
@@ -201,6 +289,7 @@ class LyoAIViewModel: ObservableObject {
     
     func stopSpeaking() {
         ttsService.stop()
+        currentlyPlayingMessageId = nil
     }
     
     // MARK: - Proactive Greeting
@@ -249,7 +338,7 @@ class LyoAIViewModel: ObservableObject {
                 }
             }
         } catch {
-            print("⚠️ Failed to fetch next action: \(error)")
+            Log.ai.warning("Failed to fetch next action: \(error)")
         }
     }
     
@@ -260,7 +349,7 @@ class LyoAIViewModel: ObservableObject {
                 self.masteryProfile = profile
             }
         } catch {
-            print("⚠️ Failed to fetch mastery profile: \(error)")
+            Log.ai.warning("Failed to fetch mastery profile: \(error)")
         }
     }
     
@@ -290,7 +379,7 @@ class LyoAIViewModel: ObservableObject {
         do {
             try await PersonalizationService.shared.updateState(update: update)
         } catch {
-            print("⚠️ Failed to update affect state: \(error)")
+            Log.ai.warning("Failed to update affect state: \(error)")
         }
     }
     
@@ -372,17 +461,27 @@ class LyoAIViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Message Handling (Intent-Based Architecture)
-    
-    // MARK: - Message Handling (Delegated to UnifiedChatService)
+    // MARK: - Message Handling (Unified Flow)
     
     func sendMessage(mode: String? = nil) async {
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         
-        let messageText = inputText
+        let messageText = text
         let messageAttachments = attachments
         inputText = ""
         attachments = []
+        
+        // Capture voice state
+        let shouldSpeak = isVoiceActive
+        
+        if isVoiceActive {
+            // Stop recording the current utterance
+            // We manually manage the restart below to ensure continuous conversation
+            sttService.stopRecording()
+            isVoiceActive = false
+            stopSpeaking() 
+        }
         
         // Update affect signals (debounced)
         if Date().timeIntervalSince(lastAffectUpdate) > 30 {
@@ -392,20 +491,78 @@ class LyoAIViewModel: ObservableObject {
             }
         }
         
-        // No manual loading state needed, observed from service
-        
-        // Delegate to Unified Chat Service
-        let responseText = await unifiedChat.sendMessage(
+        // Use Streaming Flow
+        await unifiedChat.sendMessageStreaming(
             messageText,
             attachments: messageAttachments,
-            context: nil, // Can be improved to pass current context
-            mode: mode ?? uiState?.currentAIMode ?? "focus"
+            context: nil,
+            mode: mode ?? uiState?.currentAIMode ?? "chat",
+            speakResponse: shouldSpeak
         )
         
-        // Auto-speak response if in voice mode
-        if isVoiceActive, let text = responseText {
-            speak(text: text)
+        // If we were in voice mode, restart listening immediately (Barge-in ready)
+        if shouldSpeak {
+            startListening()
         }
+    }
+    
+    private var currentConversationId: String {
+        // Reuse unified chat ID if possible
+        return unifiedChat.currentConversationId
+    }
+    
+    
+    private func extractTopicFromText(_ text: String) -> String {
+        let lowercased = text.lowercased()
+        
+        // Try to extract topic using common patterns (preserved for manual generation sub-flows)
+        if let range = lowercased.range(of: "course on ") {
+            let afterPhrase = String(lowercased[range.upperBound...])
+            return afterPhrase.components(separatedBy: CharacterSet.punctuationCharacters).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized ?? "General Topic"
+        }
+        
+        if let range = lowercased.range(of: "teach me ") {
+            let afterPhrase = String(lowercased[range.upperBound...])
+            return afterPhrase.components(separatedBy: CharacterSet.punctuationCharacters).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized ?? "General Topic"
+        }
+        
+        if let range = lowercased.range(of: "learn about ") {
+            let afterPhrase = String(lowercased[range.upperBound...])
+            return afterPhrase.components(separatedBy: CharacterSet.punctuationCharacters).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized ?? "General Topic"
+        }
+        
+        return text.prefix(50).trimmingCharacters(in: .whitespacesAndNewlines).capitalized
+    }
+    
+    private func extractLevelFromText(_ text: String) -> String {
+        let lowercased = text.lowercased()
+        if lowercased.contains("beginner") || lowercased.contains("basic") { return "beginner" }
+        if lowercased.contains("intermediate") { return "intermediate" }
+        if lowercased.contains("advanced") { return "advanced" }
+        return "beginner"
+    }
+    
+    // MARK: - A2UI Interactions
+    
+    func onA2UICourseStart(course: CourseCreationData) {
+        Log.ai.info("LyoAIViewModel: Starting A2UI course -> \(course.title)")
+        HapticManager.shared.playSuccess()
+        unifiedChat.pendingCourse = course
+        unifiedChat.triggerCourseNavigation()
+    }
+    
+    func onA2UIQuizAnswer(question: String, answerIndex: Int) {
+        Log.ai.info("✍️ LyoAIViewModel: Quiz answer -> \(answerIndex)")
+        HapticManager.shared.playLightImpact()
+        // Send answer to AI
+        inputText = "My answer to '\(question)' is option \(answerIndex + 1)"
+        Task { await sendMessage() }
     }
     
     // MARK: - A2UI Action Handler (DISABLED - A2UI Parser not currently in build)
@@ -459,15 +616,14 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Full Course Generation (Only after wizard approval)
     
     private func startFullCourseGeneration(topic: String, level: String) async {
-        print("🚀 Starting FULL course generation for: \(topic) at \(level) level")
-        
+        Log.ai.info("Starting course generation for: \(topic)")
         isGeneratingCourse = true
         
         // Update last message to show progress
         if let lastIndex = messages.indices.last {
             messages[lastIndex] = LyoMessage(
                 id: messages[lastIndex].id,
-                content: "🔨 Building your course on **\(topic)**... This takes about 30 seconds.",
+                content: "🔨 Creating your course on **\(topic)**...",
                 isFromUser: false,
                 timestamp: Date(),
                 attachments: nil,
@@ -477,85 +633,49 @@ class LyoAIViewModel: ObservableObject {
         }
         
         do {
-            // Generate graph-based course using Interactive Cinema
-            print("🎬 Generating Interactive Cinema course for: \(topic)")
+            // Use InteractiveCinemaService which has proper fallback chain:
+            // Backend → OpenAI → Mock (all via CourseGenerationService)
+            Log.ai.info("🎬 Generating course via InteractiveCinemaService")
             let graphCourse = try await cinemaService.generateGraphCourse(
                 topic: topic,
                 level: level
             )
             
-            print("✅ Graph course generated: \(graphCourse.title) with \(graphCourse.totalNodes) nodes")
+            Log.ai.info("Course generated: \(graphCourse.title)")
             
-            // Start cinematic playback (requires auth token)
-            let playbackState = try await cinemaService.startCourse(courseId: graphCourse.id)
-            
-            print("✅ Cinematic playback started at node: \(playbackState.currentNode.title)")
-            
-            // Reset wizard
-            // courseWizard.reset() // Legacy
-            // intentClassifier.resetWizard() // Legacy
-
-            
-            // Create ContentItem for the course detail sheet
-            let contentItem = ContentItem(
+            // Navigate using the ACTUAL course ID (mock_ if backend failed, gen_ if succeeded)
+            // This ensures LiveClassroomViewModel can find it in CourseGenerationService.shared.generatedCourse
+            let payload = CoursePayload(
                 id: graphCourse.id,
-                type: .anchorCourse,
                 title: graphCourse.title,
-                description: graphCourse.description,
-                coverImage: "book.fill",
-                duration: TimeInterval(graphCourse.estimatedMinutes * 60),
-                author: ContentAuthor(
-                    name: "Lio AI",
-                    avatar: "sparkles",
-                    role: "AI Learning Assistant"
-                ),
-                tags: [topic, level.capitalized, "Interactive Cinema"],
-                level: level.lowercased() == "advanced" ? .advanced : level.lowercased() == "intermediate" ? .intermediate : .beginner,
-                stats: ContentStats(
-                    views: 1,
-                    likes: 0,
-                    rating: 5.0
-                ),
-                progress: 0.0,
-                childContentIds: [] // Graph courses use nodes, not modules
+                topic: topic,
+                level: level,
+                language: "English",
+                duration: "\(graphCourse.estimatedMinutes) min",
+                objectives: []
             )
+            
+            // Navigate to classroom
+            let commandPayload = AICommandPayload(stackItem: nil, course: payload)
+            _ = AICommandHandler.shared.handleOpenClassroom(commandPayload)
             
             // Show success message
             let successMessage = LyoMessage(
                 id: UUID().uuidString,
                 content: """
-                🎉 **Your Interactive Cinema course is ready!**
+                ✅ **Course Ready: \(graphCourse.title)**
                 
-                **\(graphCourse.title)**
-                \(graphCourse.totalNodes) nodes • \(graphCourse.estimatedMinutes) min
-                
-                Opening cinematic experience now...
+                Opening classroom now...
                 """,
                 isFromUser: false,
                 timestamp: Date(),
-                attachments: nil,
-                actions: [
-                    MessageAction(id: "view_course", label: "Start Experience", actionType: .openClassroom, data: ["courseId": graphCourse.id])
-                ],
                 status: .sent
             )
             messages.append(successMessage)
             
-            // Trigger the course detail sheet via AppUIState
-            if let uiState = self.uiState {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay for UX
-                uiState.courseToDisplay = contentItem
-                uiState.showCourseDetail = true
-            }
-            
         } catch {
-            print("❌ Course generation failed: \(error)")
-            
-            // courseWizard.reset()
-            // intentClassifier.resetWizard()
-
-            
-            addErrorMessage("😕 I had trouble creating that course. Let's try again - what topic would you like to learn?")
+            Log.ai.error("Course generation failed completely: \(error)")
+            addErrorMessage("I had trouble creating that course. Please try again.")
         }
         
         isGeneratingCourse = false
@@ -570,7 +690,7 @@ class LyoAIViewModel: ObservableObject {
     @Published var a2aGenerationTier: CourseQualityTier = .standard
     
     func startA2ACourseGeneration(topic: String, qualityTier: CourseQualityTier = .standard) {
-        print("🤖 Starting A2A multi-agent course generation for: \(topic)")
+        Log.ai.info("Starting A2A multi-agent course generation for: \(topic)")
         
         a2aGenerationTopic = topic
         a2aGenerationTier = qualityTier
@@ -600,10 +720,30 @@ class LyoAIViewModel: ObservableObject {
         
         // Show the A2A progress view
         showA2AProgressView = true
+        
+        // Start Generation Task
+        Task {
+            do {
+                let course = try await A2ACourseService.shared.generateCourse(
+                    topic: topic,
+                    qualityTier: qualityTier
+                )
+                await MainActor.run {
+                    self.handleA2AGenerationComplete(course: course)
+                }
+            } catch {
+                Log.ai.error("A2A generation failed: \(error)")
+                await MainActor.run {
+                    self.showA2AProgressView = false
+                    self.isGeneratingCourse = false
+                    self.addErrorMessage("A2A Course Generation Failed: \(error.localizedDescription)")
+                }
+            }
+        }
     }
     
     func handleA2AGenerationComplete(course: A2AGeneratedCourse) {
-        print("✅ A2A course generation complete: \(course.title)")
+        Log.ai.info("A2A course generation complete: \(course.title)")
         
         isGeneratingCourse = false
         showA2AProgressView = false
@@ -666,7 +806,7 @@ class LyoAIViewModel: ObservableObject {
     }
     
     func handleA2AGenerationCancelled() {
-        print("⚠️ A2A course generation cancelled")
+        Log.ai.warning("A2A course generation cancelled")
         
         isGeneratingCourse = false
         showA2AProgressView = false
@@ -682,33 +822,6 @@ class LyoAIViewModel: ObservableObject {
     }
     
     // MARK: - Helper Methods
-    
-    private func convertAction(_ action: LioChatAction) -> [MessageAction] {
-        var actionType: MessageAction.ActionType
-        
-        switch action.type {
-        case "open_classroom":
-            actionType = .openClassroom
-        case "create_course":
-            actionType = .createCourse
-        case "start_quiz":
-            actionType = .quizMe
-        case "open_drawer":
-            actionType = .openDrawer
-        default:
-            // Fallback for unknown actions or map to a generic type
-            actionType = .openDrawer
-        }
-        
-        return [
-            MessageAction(
-                id: UUID().uuidString,
-                label: "Action", // Could improve label based on type
-                actionType: actionType,
-                data: action.parameters
-            )
-        ]
-    }
     
     // addWizardResponse removed (legacy)
 
@@ -743,7 +856,7 @@ class LyoAIViewModel: ObservableObject {
             self.suggestedUsers = users
             
         } catch {
-            print("❌ Error loading social data: \(error)")
+            Log.ai.error("Error loading social data: \(error)")
         }
     }
     
@@ -808,7 +921,7 @@ class LyoAIViewModel: ObservableObject {
             // Extract details from action data
             guard let data = action.data, 
                   let courseId = data["courseId"] else {
-                print("⚠️ openClassroom action missing courseId")
+                Log.ai.warning("openClassroom action missing courseId")
                 return
             }
             
@@ -837,7 +950,7 @@ class LyoAIViewModel: ObservableObject {
                 childContentIds: []
             )
             
-            print("📱 Opening classroom for course: \(courseId)")
+            Log.ai.info("Opening classroom for course: \(courseId)")
             
             DispatchQueue.main.async {
                 if let uiState = self.uiState {
@@ -900,7 +1013,7 @@ class LyoAIViewModel: ObservableObject {
     func continueCourse(_ card: CourseCard) {
         closeDrawer()
         // Navigate to course - would be handled by navigation coordinator
-        print("Continuing course: \(card.title)")
+        Log.ai.info("Continuing course: \(card.title)")
     }
     
     // MARK: - Attachment Handling
@@ -923,31 +1036,70 @@ class LyoAIViewModel: ObservableObject {
             let attachment = try await repository.uploadFile(url: url)
             addAttachment(attachment)
         } catch {
-            print("Error uploading file: \(error)")
+            Log.ai.error("Error uploading file: \(error)")
         }
         isUploadingFile = false
     }
     
     // MARK: - Suggestions
-    
+
+    /// Hardcoded fallback chips shown instantly before the backend responds
+    private static let fallbackGreetingChips: [SuggestionChip] = [
+        SuggestionChip(id: "1", text: "Teach me something new", icon: "sparkles", actionType: "learn", context: nil),
+        SuggestionChip(id: "2", text: "Create a course for me", icon: "plus.circle", actionType: "create_course", context: nil),
+        SuggestionChip(id: "3", text: "🤖 Multi-Agent Course", icon: "cpu", actionType: "create_course_a2a", context: nil),
+        SuggestionChip(id: "4", text: "Quiz me on a topic", icon: "questionmark.circle", actionType: "quiz", context: nil)
+    ]
+
+    private static let fallbackUploadChips: [SuggestionChip] = [
+        SuggestionChip(id: "u1", text: "Extract key points", icon: "list.star", actionType: "extract", context: nil),
+        SuggestionChip(id: "u2", text: "Turn into a course", icon: "plus.circle", actionType: "create_course", context: nil),
+        SuggestionChip(id: "u3", text: "Quiz me on this", icon: "questionmark.circle", actionType: "quiz", context: nil),
+        SuggestionChip(id: "u4", text: "Make flashcards", icon: "rectangle.stack", actionType: "flashcards", context: nil)
+    ]
+
+    /// Seeds chips instantly with fallback, then replaces them with backend chips once available
     func loadInitialSuggestions() {
-        suggestions = [
-            SuggestionChip(id: "1", text: "Teach me something new", icon: "sparkles", actionType: "learn", context: nil),
-            SuggestionChip(id: "2", text: "Create a course for me", icon: "plus.circle", actionType: "create_course", context: nil),
-            SuggestionChip(id: "3", text: "🤖 Multi-Agent Course", icon: "cpu", actionType: "create_course_a2a", context: nil),
-            SuggestionChip(id: "4", text: "Quiz me on a topic", icon: "questionmark.circle", actionType: "quiz", context: nil)
-        ]
+        // Show hardcoded chips immediately — no waiting
+        unifiedChat.suggestions = Self.fallbackGreetingChips
+
+        // Fire and forget: fetch context-aware chips from backend
+        Task {
+            do {
+                let chips = try await BackendAIService.shared.fetchSuggestions(trigger: "Hello, what can I learn today?")
+                if !chips.isEmpty {
+                    await MainActor.run { [weak self] in
+                        self?.unifiedChat.suggestions = chips
+                        Log.ai.info("💡 Greeting chips from backend: \(chips.count)")
+                    }
+                }
+            } catch {
+                // Fallback already visible — no action needed
+                Log.ai.warning("⚠️ Backend suggestion fetch failed (fallback shown): \(error.localizedDescription)")
+            }
+        }
     }
-    
+
+    /// Seeds upload-specific chips instantly, then refreshes from backend
     func updateSuggestionsForUpload() {
-        suggestions = [
-            SuggestionChip(id: "u1", text: "Extract key points", icon: "list.star", actionType: "extract", context: nil),
-            SuggestionChip(id: "u2", text: "Turn into a course", icon: "plus.circle", actionType: "create_course", context: nil),
-            SuggestionChip(id: "u3", text: "Quiz me on this", icon: "questionmark.circle", actionType: "quiz", context: nil),
-            SuggestionChip(id: "u4", text: "Make flashcards", icon: "rectangle.stack", actionType: "flashcards", context: nil)
-        ]
+        unifiedChat.suggestions = Self.fallbackUploadChips
+
+        Task {
+            do {
+                let chips = try await BackendAIService.shared.fetchSuggestions(trigger: "I just uploaded a file to analyze")
+                if !chips.isEmpty {
+                    await MainActor.run { [weak self] in
+                        self?.unifiedChat.suggestions = chips
+                        Log.ai.info("💡 Upload chips from backend: \(chips.count)")
+                    }
+                }
+            } catch {
+                Log.ai.warning("⚠️ Upload suggestion fetch failed (fallback shown): \(error.localizedDescription)")
+            }
+        }
     }
-    
+
+
     // MARK: - Course Cards
     
     func loadCourseCards() async {
@@ -979,7 +1131,7 @@ class LyoAIViewModel: ObservableObject {
             self.suggestedCards = cards.filter { $0.status == .suggested }
             self.continueCards = []
         } catch {
-            print("Error loading course cards: \(error)")
+            Log.ai.error("Error loading course cards: \(error)")
 
             if AppConfig.allowMockFallbacks {
                 self.startedCards = [
@@ -1021,7 +1173,7 @@ class LyoAIViewModel: ObservableObject {
     
     private func createCourse(with data: [String: String]?) {
         let topic = data?["topic"] ?? messages.last(where: { $0.isFromUser })?.content ?? "General Knowledge"
-        print("Creating course for: \(topic)")
+        Log.ai.info("Creating course for: \(topic)")
         
         // Trigger the standard course creation wizard flow via implicit message
         inputText = "Create a course about \(topic)"
@@ -1031,7 +1183,7 @@ class LyoAIViewModel: ObservableObject {
     }
     
     private func startQuiz(with data: [String: String]?) {
-        print("Starting quiz with data: \(data ?? [:])")
+        Log.ai.info("Starting quiz with data: \(data ?? [:])")
         
         Task {
             await MainActor.run { isLoading = true }
@@ -1068,7 +1220,7 @@ class LyoAIViewModel: ObservableObject {
     }
     
     private func addToLibrary(with data: [String: String]?) {
-        print("Adding to library: \(data ?? [:])")
+        Log.ai.info("Adding to library: \(data ?? [:])")
         guard let topic = data?["topic"] else { return }
         
         Task {
@@ -1076,13 +1228,13 @@ class LyoAIViewModel: ObservableObject {
             
             do {
                 // Generate graph-based course using Interactive Cinema
-                print("🎬 [Library] Generating Interactive Cinema course for: \(topic)")
+                Log.ai.info("🎬 [Library] Generating Interactive Cinema course for: \(topic)")
                 let graphCourse = try await cinemaService.generateGraphCourse(
                     topic: topic,
                     level: "beginner"
                 )
                 
-                print("✅ [Library] Graph course generated: \(graphCourse.title)")
+                Log.ai.info("[Library] Graph course generated: \(graphCourse.title)")
                 
                 // Convert GraphCourseItem to ContentItem
                 let course = ContentItem(
@@ -1149,19 +1301,19 @@ class LyoAIViewModel: ObservableObject {
     }
     
     private func generateSyllabus(with data: [String: String]?) {
-        print("Generating syllabus with data: \(data ?? [:])")
+        Log.ai.info("Generating syllabus with data: \(data ?? [:])")
     }
     
     private func requestQuickExplainer(with data: [String: String]?) {
-        print("Requesting quick explainer: \(data ?? [:])")
+        Log.ai.info("Requesting quick explainer: \(data ?? [:])")
     }
     
     private func makeFlashcards(with data: [String: String]?) {
-        print("Making flashcards: \(data ?? [:])")
+        Log.ai.info("Making flashcards: \(data ?? [:])")
     }
     
     private func extractKeyPoints(with data: [String: String]?) {
-        print("Extracting key points: \(data ?? [:])")
+        Log.ai.info("Extracting key points: \(data ?? [:])")
     }
     
     
@@ -1217,7 +1369,7 @@ class LyoAIViewModel: ObservableObject {
                     .receive(on: RunLoop.main)
                     .assign(to: &$voiceInputLevel)
             } catch {
-                print("❌ Failed to start voice recording: \(error)")
+                Log.ai.error("Failed to start voice recording: \(error)")
                 isRecordingVoice = false
             }
         }
@@ -1246,41 +1398,19 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Multimodal TTS Playback
     
     func playMessageAudio(messageId: String, text: String) {
-        Task {
-                currentlyPlayingMessageId = messageId
-                HapticManager.shared.playLightImpact()
-                
-                await audioPlaybackService.playTTS(text: text, messageId: messageId)
-                
-                // Observe playback state
-                audioPlaybackService.$currentProgress
-                    .receive(on: RunLoop.main)
-                    .assign(to: &$playbackProgress)
-                
-                audioPlaybackService.$isPlaying
-                    .receive(on: RunLoop.main)
-                    .sink { [weak self] isPlaying in
-                        if !isPlaying {
-                            self?.currentlyPlayingMessageId = nil
-                        }
-                    }
-                    .store(in: &cancellables)
-        }
+        // Use local TTS instead of AudioPlaybackService for reliability
+        speak(text: text, messageId: messageId)
     }
     
     func stopMessageAudio() {
-        audioPlaybackService.stop()
-        currentlyPlayingMessageId = nil
+        stopSpeaking()
     }
     
     func toggleMessageAudio(messageId: String, text: String) {
         if currentlyPlayingMessageId == messageId {
-            if audioPlaybackService.isPlaying {
-                audioPlaybackService.pause()
-            } else {
-                audioPlaybackService.resume()
-            }
+            stopSpeaking()
         } else {
+            stopSpeaking() // Stop any previous
             playMessageAudio(messageId: messageId, text: text)
         }
     }
@@ -1296,7 +1426,7 @@ class LyoAIViewModel: ObservableObject {
                 addAttachment(attachment)
                 HapticManager.shared.playSuccess()
             } catch {
-                print("❌ Media upload failed: \(error)")
+                Log.ai.error("Media upload failed: \(error)")
                 addErrorMessage("Failed to upload \(media.type.rawValue). Please try again.")
                 HapticManager.shared.playError()
             }
@@ -1329,7 +1459,7 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Navigation Triggers
     
     func openCourse(id: String) {
-        print("🚀 Opening course: \(id)")
+        Log.ai.info("Opening course: \(id)")
         
         let placeholderItem = ContentItem(
             id: id,

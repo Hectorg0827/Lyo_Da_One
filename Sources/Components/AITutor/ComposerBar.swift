@@ -20,7 +20,7 @@ struct ComposerBar: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(attachments) { attachment in
-                            AttachmentChip(attachment: attachment) {
+                            ComposerAttachmentChip(attachment: attachment) {
                                 onRemoveAttachment(attachment)
                             }
                         }
@@ -108,7 +108,7 @@ struct ComposerBar: View {
     }
 }
 
-struct AttachmentChip: View {
+struct ComposerAttachmentChip: View {
     let attachment: MessageAttachment
     let onRemove: () -> Void
     

@@ -130,6 +130,7 @@ struct DiscoverCardView: View {
         case .videoSnippet: return "Play Lesson"
         case .pathSuggestion: return "View Path"
         case .eventSuggestion: return "View Event"
+        case .userClip: return "Watch Clip"
         }
     }
     
@@ -150,6 +151,8 @@ struct DiscoverCardView: View {
             return [Color.green.opacity(0.8), Color.teal.opacity(0.7)]
         case .eventSuggestion:
             return [Color.pink.opacity(0.8), Color.purple.opacity(0.7)]
+        case .userClip:
+            return [Color.indigo.opacity(0.8), Color.purple.opacity(0.7)]
         }
     }
 }

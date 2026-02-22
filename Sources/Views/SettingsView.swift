@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 // MARK: - Settings View
 struct SettingsView: View {
@@ -10,6 +11,7 @@ struct SettingsView: View {
     @State private var selectedColorScheme: ColorSchemeOption = .system
     @State private var showingSubscriptionSheet = false
     @State private var notificationPreferences: NotificationPreferences?
+    @State private var showingDeleteConfirmation = false
 
     var body: some View {
         NavigationView {
@@ -133,12 +135,22 @@ struct SettingsView: View {
                 // Account Section
                 Section("Account") {
                     Button("Delete Account") {
-                        // TODO: Show confirmation dialog
+                        showingDeleteConfirmation = true
                     }
                     .foregroundColor(.red)
                 }
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    deleteAccount()
+                }
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone.")
+            }
+
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -185,8 +197,21 @@ struct SettingsView: View {
     }
 
     private func clearCache() {
-        // TODO: Implement cache clearing
-        print("Cache cleared")
+        URLCache.shared.removeAllCachedResponses()
+        // Clear custom image cache if any
+        // ImageCache.shared.clear() // Example if using custom cache
+        Log.ui.info("Cache cleared")
+    }
+    
+    private func deleteAccount() {
+        Task {
+            do {
+                try await AuthService.shared.deleteAccount()
+                // dismiss() // Usually Logout triggers root view change, so dismiss might be redundant or fail
+            } catch {
+                Log.ui.error("Failed to delete account: \(error.localizedDescription)")
+            }
+        }
     }
 }
 

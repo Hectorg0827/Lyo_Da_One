@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Push Notifications Service
 @MainActor
@@ -82,7 +83,7 @@ class AnalyticsService: ObservableObject {
             )
         } catch {
             // Analytics failures should not disrupt UX
-            print("Analytics track event failed: \(error)")
+            Log.net.error("Analytics track event failed: \(error)")
         }
     }
     
@@ -96,7 +97,7 @@ class AnalyticsService: ObservableObject {
                 )
             )
         } catch {
-            print("Analytics track screen failed: \(error)")
+            Log.net.error("Analytics track screen failed: \(error)")
         }
     }
     
@@ -111,7 +112,7 @@ class AnalyticsService: ObservableObject {
                 )
             )
         } catch {
-            print("Analytics track learning progress failed: \(error)")
+            Log.net.error("Analytics track learning progress failed: \(error)")
         }
     }
     
@@ -124,7 +125,7 @@ class AnalyticsService: ObservableObject {
                 )
             )
         } catch {
-            print("Analytics track AI interaction failed: \(error)")
+            Log.net.error("Analytics track AI interaction failed: \(error)")
         }
     }
     
@@ -229,7 +230,7 @@ class StorageService: ObservableObject {
 class NotificationsService: ObservableObject {
     private let client: NetworkClient
     
-    @Published var notifications: [AppNotification] = []
+    @Published var notifications: [APIAppNotification] = []
     @Published var unreadCount: Int = 0
     @Published var isLoading = false
     
@@ -242,7 +243,7 @@ class NotificationsService: ObservableObject {
         category: String? = nil,
         limit: Int = 20,
         offset: Int = 0
-    ) async throws -> [AppNotification] {
+    ) async throws -> [APIAppNotification] {
         isLoading = true
         defer { isLoading = false }
         
@@ -377,6 +378,8 @@ class SearchService: ObservableObject {
 // MARK: - Messaging Service
 @MainActor
 class MessagingService: ObservableObject {
+    static let shared = MessagingService()
+    
     private let client: NetworkClient
     
     @Published var conversations: [Conversation] = []
