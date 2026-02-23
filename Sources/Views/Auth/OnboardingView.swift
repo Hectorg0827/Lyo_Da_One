@@ -164,7 +164,7 @@ struct OnboardingView: View {
                                 HStack(spacing: 16) {
                                     SignInWithAppleButton(
                                         onRequest: { request in
-                                            request.requestedScopes = [.fullName, .email]
+                                            authService.prepareAppleSignInRequest(request)
                                         },
                                         onCompletion: { result in
                                             handleSocialLogin {

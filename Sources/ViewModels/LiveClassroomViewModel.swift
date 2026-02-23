@@ -1298,8 +1298,8 @@ final class LiveClassroomViewModel: ObservableObject {
     /// Load lesson UI from backend using A2UI (optional enhancement - won't override existing lesson)
     func loadLessonUI(_ lessonId: String) async {
         // Don't reset loading state if we already have lesson content - A2UI is optional upgrade
-        let hadLesson = lesson != nil
-        if !hadLesson {
+        let hadLessonAtStart = lesson != nil
+        if !hadLessonAtStart {
             isLoading = true
         }
         
@@ -1312,12 +1312,15 @@ final class LiveClassroomViewModel: ObservableObject {
             self.fullA2UIComponent = fullComponent
             Log.classroom.info("🎨 A2UI lesson loaded directly: \(fullComponent.type.rawValue)")
             
-            if !hadLesson {
+            if !hadLessonAtStart {
                 self.isLoading = false
             }
         } catch {
-            // A2UI is optional - only set error if we don't have lesson content already
-            if !hadLesson {
+            // A2UI is optional — only set error if we STILL don't have lesson content.
+            // Re-check self.lesson NOW (not the stale hadLessonAtStart captured earlier)
+            // because loadLesson() may have completed in parallel while A2UI was fetching.
+            let hasLessonNow = self.lesson != nil
+            if !hasLessonNow {
                 self.errorMessage = "Failed to load lesson: \(error.localizedDescription)"
                 self.isLoading = false
             }

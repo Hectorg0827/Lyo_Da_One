@@ -221,8 +221,32 @@ struct LiveClassroomView: View {
         ZStack {
             if viewModel.isLoading {
                 loadingView
+            } else if let a2uiComp = viewModel.fullA2UIComponent {
+                // Full A2UI Rendering (PRIMARY — server-driven UI with 120+ component types)
+                ScrollView {
+                    A2UIRenderer(
+                        component: a2uiComp,
+                        context: A2UIRenderContext(),
+                        onAction: { action, component in
+                            Task { await viewModel.handleA2UIAction(action.id) }
+                        }
+                    )
+                    .padding(.horizontal)
+                    .padding(.top, 20)
+                    .padding(.bottom, 120)
+                }
+                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+            } else if let block = viewModel.currentBlock {
+                // Block-based rendering (FALLBACK — the proven workhorse with 27+ block types)
+                // Takes priority over errorMessage — if we have local content, show it
+                blockContentView(block: block)
+                    .id(block.id)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                        removal: .opacity.combined(with: .scale(scale: 1.1))
+                    ))
             } else if let errorMsg = viewModel.errorMessage {
-                // Error state
+                // Error state — only when we have NO content at all
                 VStack(spacing: 20) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 50))
@@ -243,29 +267,6 @@ struct LiveClassroomView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 .padding()
-            } else if let a2uiComp = viewModel.fullA2UIComponent {
-                // Full A2UI Rendering (PRIMARY — server-driven UI with 120+ component types)
-                ScrollView {
-                    A2UIRenderer(
-                        component: a2uiComp,
-                        context: A2UIRenderContext(),
-                        onAction: { action, component in
-                            Task { await viewModel.handleA2UIAction(action.id) }
-                        }
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 20)
-                    .padding(.bottom, 120)
-                }
-                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
-            } else if let block = viewModel.currentBlock {
-                // Block-based rendering (FALLBACK — the proven workhorse with 27+ block types)
-                blockContentView(block: block)
-                    .id(block.id)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
-                        removal: .opacity.combined(with: .scale(scale: 1.1))
-                    ))
             } else if let lesson = viewModel.lesson, lesson.blocks.isEmpty {
                 // Course is generating content
                 VStack(spacing: 16) {
