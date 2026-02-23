@@ -105,13 +105,11 @@ struct LyoMessageBubbleView: View {
                     // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
                     if shouldRenderPlainText {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(message.content)
+                            markdownText(stripEmojis(message.content))
                                 .font(DesignTokens.Typography.bodyMedium)
-                                .foregroundColor(.white) // Force white text
-                                .fixedSize(horizontal: false, vertical: true) // Wrap text
+                                .fixedSize(horizontal: false, vertical: true)
                                 .lineSpacing(4)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.trailing, !message.isFromUser ? 32 : 0) // Leave room for speaker icon
                         }
                     }
                 
@@ -180,13 +178,13 @@ struct LyoMessageBubbleView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 4)
             }
-            .padding(.horizontal, DesignTokens.Spacing.md)
+            .padding(.horizontal, message.isFromUser ? DesignTokens.Spacing.md : DesignTokens.Spacing.xs)
             .padding(.vertical, DesignTokens.Spacing.md)
             .background(messageBackground)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.995, alignment: message.isFromUser ? .trailing : .leading)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, message.isFromUser ? 4 : 1)
         .padding(.vertical, DesignTokens.Spacing.xs)
         }
     }
@@ -400,13 +398,8 @@ struct LyoMessageBubbleView: View {
             }
             .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
         } else {
-            // AI message: Dark Transparent Black with Pulses (Integrated with PulsingTrim)
-            ZStack {
-                RoundedRectangle(cornerRadius: DesignTokens.Radius.lg)
-                    .fill(Color.black.opacity(0.85))
-                
-                PulsingTrimOverlay(cornerRadius: DesignTokens.Radius.lg)
-            }
+            // AI message: Fully transparent, no background fill
+            Color.clear
         }
     }
     
@@ -414,6 +407,36 @@ struct LyoMessageBubbleView: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+    
+    /// Strips emoji characters from text for cleaner UI
+    private func stripEmojis(_ text: String) -> String {
+        text.unicodeScalars.filter { scalar in
+            !(scalar.properties.isEmoji && scalar.properties.isEmojiPresentation)
+            && scalar.value != 0xFE0F
+        }.map { String($0) }.joined()
+    }
+
+    /// Renders content with inline Markdown styling:
+    /// **bold** → white bold + larger font, rest → white
+    private func markdownText(_ content: String) -> Text {
+        guard let attributed = try? AttributedString(
+            markdown: content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) else {
+            return Text(content).foregroundColor(.white)
+        }
+        var styled = attributed
+        for run in styled.runs {
+            if let intent = run.inlinePresentationIntent,
+               intent.contains(.stronglyEmphasized) {
+                styled[run.range].foregroundColor = .white
+                styled[run.range].font = .system(size: 17, weight: .bold)
+            } else {
+                styled[run.range].foregroundColor = .white.opacity(0.9)
+            }
+        }
+        return Text(styled)
     }
 }
 
@@ -526,14 +549,17 @@ struct PremiumActionPillButton: View {
     let action: MessageAction
     let onTap: () -> Void
     @State private var isPressed = false
+    @State private var showShimmer = true
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     
     var body: some View {
         Button {
+            HapticManager.shared.playLightImpact()
             withAnimation(DesignTokens.Animation.quick) {
                 isPressed = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(DesignTokens.Animation.quick) {
+                withAnimation(DesignTokens.Animation.springBouncy) {
                     isPressed = false
                 }
                 onTap()
@@ -541,36 +567,65 @@ struct PremiumActionPillButton: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: iconForAction(action.actionType))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(action.label)
                     .font(DesignTokens.Typography.labelMedium)
             }
-            .foregroundColor(DesignTokens.Colors.accent)
+            .foregroundColor(.white)
             .padding(.horizontal, DesignTokens.Spacing.md)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(
-                ZStack {
-                    Capsule()
-                        .fill(DesignTokens.Colors.surface)
-                    
-                    Capsule()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [
-                                    DesignTokens.Colors.accent.opacity(0.5),
-                                    DesignTokens.Colors.accentSecondary.opacity(0.3)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
-                            lineWidth: 1.5
-                        )
-                }
-            )
-            .applyShadow(DesignTokens.Shadow.sm)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+            .background(pillBackground)
         }
-        .scaleEffect(isPressed ? 0.96 : 1.0)
-        .opacity(isPressed ? 0.85 : 1.0)
+        .scaleEffect(isPressed ? 0.94 : 1.0)
+        .opacity(isPressed ? 0.8 : 1.0)
+        .animation(DesignTokens.Animation.springBouncy, value: isPressed)
+    }
+    
+    @ViewBuilder
+    private var pillBackground: some View {
+        ZStack {
+            // Gradient background matching PremiumChipButton
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            DesignTokens.Colors.surface,
+                            DesignTokens.Colors.surfaceElevated
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            
+            // Border gradient
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            DesignTokens.Colors.accent.opacity(0.6),
+                            DesignTokens.Colors.accentSecondary.opacity(0.4)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
+            
+            // Glossy overlay
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.15),
+                            Color.white.opacity(0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
+        }
+        .applyShadow(DesignTokens.Shadow.sm)
+        .modifier(ConditionalShimmer(enabled: showShimmer && !reduceMotion))
     }
     
     private func iconForAction(_ type: MessageAction.ActionType) -> String {

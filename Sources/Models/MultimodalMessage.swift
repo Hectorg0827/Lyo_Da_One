@@ -32,6 +32,7 @@ enum MessageContentType: Codable, Equatable {
     case a2ui(component: A2UIComponent)
     case cinematic(data: A2UICinematic)
     case courseProposal(payload: CoursePayload)
+    case generativeUI(blocks: [UIBlock])
     
     enum CodingKeys: String, CodingKey {
         case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
@@ -42,6 +43,7 @@ enum MessageContentType: Codable, Equatable {
         case cards, component, studyPlan
         case cinematicData
         case coursePayload
+        case generativeBlocks
     }
     
     init(from decoder: Decoder) throws {
@@ -139,6 +141,9 @@ enum MessageContentType: Codable, Equatable {
         case "course_proposal":
             let payload = try container.decode(CoursePayload.self, forKey: .coursePayload)
             self = .courseProposal(payload: payload)
+        case "generative_ui":
+            let blocks = try container.decode([UIBlock].self, forKey: .generativeBlocks)
+            self = .generativeUI(blocks: blocks)
         default:
             self = .text
         }
@@ -238,6 +243,9 @@ enum MessageContentType: Codable, Equatable {
         case .courseProposal(let payload):
             try container.encode("course_proposal", forKey: .type)
             try container.encode(payload, forKey: .coursePayload)
+        case .generativeUI(let blocks):
+            try container.encode("generative_ui", forKey: .type)
+            try container.encode(blocks, forKey: .generativeBlocks)
         }
     }
     
@@ -264,6 +272,7 @@ enum MessageContentType: Codable, Equatable {
         case (.a2ui(let c1), .a2ui(let c2)): return c1.type == c2.type 
         case (.cinematic(let d1), .cinematic(let d2)): return d1.title == d2.title && d1.mood == d2.mood
         case (.courseProposal(let p1), .courseProposal(let p2)): return p1.title == p2.title && p1.topic == p2.topic
+        case (.generativeUI(let b1), .generativeUI(let b2)): return b1 == b2
         default: return false
         }
     }

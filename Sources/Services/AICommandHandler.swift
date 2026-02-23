@@ -106,6 +106,7 @@ class AICommandHandler: ObservableObject {
                 object: nil,
                 userInfo: [
                     "courseId": resolvedCourseId,
+                    "topic": course.topic,
                     "lessonId": "intro_1",
                     "courseTitle": course.title,
                     "lessonTitle": "Introduction"

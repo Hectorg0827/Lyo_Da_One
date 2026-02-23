@@ -18,6 +18,7 @@ struct PublishFlowView: View {
     @State private var isPublishing = false
     @State private var publishError: String?
     @State private var showSuccess = false
+    @State private var videoDurationFormatted: String = "0s"
 
     var body: some View {
         NavigationView {
@@ -144,9 +145,22 @@ struct PublishFlowView: View {
                     Spacer()
 
                     if let videoURL = media.videoURL {
-                        Text(formatDuration(videoURL))
+                        Text(videoDurationFormatted)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
+                            .task {
+                                let asset = AVAsset(url: videoURL)
+                                if let duration = try? await asset.load(.duration) {
+                                    let seconds = CMTimeGetSeconds(duration)
+                                    if seconds < 60 {
+                                        videoDurationFormatted = String(format: "%.0fs", seconds)
+                                    } else {
+                                        let minutes = Int(seconds) / 60
+                                        let rem = Int(seconds) % 60
+                                        videoDurationFormatted = String(format: "%d:%02ds", minutes, rem)
+                                    }
+                                }
+                            }
                     }
                 }
             }
@@ -414,20 +428,6 @@ struct PublishFlowView: View {
             tags.append(tag)
         }
         HapticManager.shared.light()
-    }
-
-    private func formatDuration(_ videoURL: URL) -> String {
-        // Get video duration
-        let asset = AVAsset(url: videoURL)
-        let duration = CMTimeGetSeconds(asset.duration)
-
-        if duration < 60 {
-            return String(format: "%.0fs", duration)
-        } else {
-            let minutes = Int(duration) / 60
-            let seconds = Int(duration) % 60
-            return String(format: "%d:%02ds", minutes, seconds)
-        }
     }
 
     private func publishContent() {

@@ -405,11 +405,16 @@ extension MainTabView {
                 // this ensures it's fully gone before we present the fullScreenCover.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                     if let userInfo = notification.userInfo,
-                       let courseId = userInfo["courseId"] as? String {
+                       var courseId = userInfo["courseId"] as? String {
                         
                         let lessonId = userInfo["lessonId"] as? String ?? "intro_1"
                         let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
                         let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
+                        
+                        // If it's a new generation request from A2UI, prepend GENERATE: for the LiveClassroomViewModel to intercept
+                        if let topic = userInfo["topic"] as? String, courseId.starts(with: "gen_") {
+                            courseId = "GENERATE:\(topic)"
+                        }
                         
                         self.liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
                         

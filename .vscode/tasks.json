@@ -345,6 +345,17 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Agent Isolated Lyo Build",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npkill -f xcodebuild 2>/dev/null || true\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"id=3243647D-F0AA-4D63-8F57-E22B543D5545\" -derivedDataPath /tmp/lyo_agent_task_dd -skipPackageUpdates -disableAutomaticPackageResolution build"
+			],
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

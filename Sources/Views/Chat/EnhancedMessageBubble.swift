@@ -120,12 +120,12 @@ struct EnhancedMessageBubble: View {
                         case .text:
                             // Suppress raw text when rich content (A2UI, courseProposal, quiz, etc.) is present
                             if !hasRichContent && !message.content.isEmpty {
-                                Text(LocalizedStringKey(message.content))
-                                    .font(.body)
-                                    .foregroundColor(.white)
+                                styledMarkdownText(stripEmojis(message.content))
+                                    .font(DesignTokens.Typography.bodyMedium)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
+                                    .lineSpacing(4)
                             }
                             
                         case .processing(let step, let progress):
@@ -313,13 +313,12 @@ struct EnhancedMessageBubble: View {
                 } // end if !message.content.isEmpty
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DesignTokens.Spacing.xs)
             .padding(.vertical, 14)
-            .background(Color.black.opacity(0.65))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .background(Color.clear)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 0) // Edge-to-edge Gemini style
+        .padding(.horizontal, 1) // Near edge-to-edge
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
                 showFullImage = false
@@ -450,6 +449,37 @@ struct EnhancedMessageBubble: View {
     }
 
     // MARK: - A2UI Action Handling
+    
+    /// Strips emoji characters from text for cleaner UI presentation
+    private func stripEmojis(_ text: String) -> String {
+        text.unicodeScalars.filter { scalar in
+            // Keep everything except emoji-range scalars
+            !(scalar.properties.isEmoji && scalar.properties.isEmojiPresentation)
+            && scalar.value != 0xFE0F // variation selector
+        }.map { String($0) }.joined()
+    }
+
+    /// Renders content with inline Markdown styling:
+    /// **bold** → white bold + larger font, rest → white
+    private func styledMarkdownText(_ content: String) -> Text {
+        guard let attributed = try? AttributedString(
+            markdown: content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) else {
+            return Text(content).foregroundColor(.white)
+        }
+        var styled = attributed
+        for run in styled.runs {
+            if let intent = run.inlinePresentationIntent,
+               intent.contains(.stronglyEmphasized) {
+                styled[run.range].foregroundColor = .white
+                styled[run.range].font = .system(size: 17, weight: .bold)
+            } else {
+                styled[run.range].foregroundColor = .white.opacity(0.9)
+            }
+        }
+        return Text(styled)
+    }
 
     private func handleA2UIAction(_ actionId: String, rootComponent: A2UIComponent? = nil) {
         Log.ai.info("A2UI Action triggered: \(actionId)")

@@ -50,6 +50,16 @@ class AuthService: NSObject, ObservableObject {
             self.authToken = KeychainHelper.shared.readString(forKey: tokenKey)
             self.isDemoMode = UserDefaults.standard.bool(forKey: demoModeKey)
             self.isAuthenticated = true
+            
+            // Re-seed TokenManager from restored token so NetworkClient can use it.
+            // TokenManager uses a different Keychain key ("com.lyo.app.accessToken")
+            // which may be lost on simulator rebuilds.
+            if let token = self.authToken, !isDemoMode {
+                Task {
+                    await TokenManager.shared.setToken(token)
+                    Log.auth.info("♻️ Re-seeded TokenManager from restored session")
+                }
+            }
         }
     }
     

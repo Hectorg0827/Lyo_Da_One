@@ -473,6 +473,16 @@ final class UnifiedChatService: ObservableObject {
                     if case .processing = $0 { return false }
                     return true
                 }
+                
+                // --- Generative UI Block parsing ---
+                let parsedResponse = AIResponseParser.shared.parse(answerText)
+                if let blocks = parsedResponse.uiBlocks, !blocks.isEmpty {
+                    finalTypes.append(.generativeUI(blocks: blocks))
+                    if let newText = parsedResponse.displayText {
+                        answerText = newText
+                    }
+                }
+                
                 if !finalTypes.contains(.text) {
                     finalTypes.append(.text)
                 }
@@ -496,13 +506,28 @@ final class UnifiedChatService: ObservableObject {
                 Log.ai.info("Answer message updated at index \(idx) with types: \(finalTypes)")
             } else {
                 // No skeleton existed — append as new message
+                
+                // --- Generative UI Block parsing ---
+                var finalTypes: [MessageContentType] = []
+                let parsedResponse = AIResponseParser.shared.parse(answerText)
+                if let blocks = parsedResponse.uiBlocks, !blocks.isEmpty {
+                    finalTypes.append(.generativeUI(blocks: blocks))
+                    if let newText = parsedResponse.displayText {
+                        answerText = newText
+                    }
+                }
+                
+                if !finalTypes.contains(.text) {
+                    finalTypes.append(.text)
+                }
+                
                 let answerMsg = LyoMessage(
                     id: aiMessageId,
                     sessionId: currentConversationId,
                     content: answerText,
                     isFromUser: false,
                     timestamp: Date(),
-                    contentTypes: [.text]
+                    contentTypes: finalTypes
                 )
                 messages.append(answerMsg)
                 Log.ai.info("Answer message appended (no skeleton found)")
@@ -719,7 +744,7 @@ final class UnifiedChatService: ObservableObject {
                             newSuggestions.append(SuggestionChip(
                                 id: UUID().uuidString,
                                 text: label,
-                                icon: nil,
+                                icon: Self.iconForChipLabel(label),
                                 actionType: nil,
                                 context: nil
                             ))
@@ -732,7 +757,7 @@ final class UnifiedChatService: ObservableObject {
                                 newSuggestions.append(SuggestionChip(
                                     id: UUID().uuidString,
                                     text: label,
-                                    icon: nil,
+                                    icon: Self.iconForChipLabel(label),
                                     actionType: btn["action_type"] as? String,
                                     context: nil
                                 ))
@@ -1033,6 +1058,22 @@ final class UnifiedChatService: ObservableObject {
     }
 
     // MARK: - A2UI / Course Bridge Helpers
+    
+    // MARK: - Suggestion Chip Helpers
+    
+    /// Maps a suggestion chip label to the appropriate SF Symbol icon
+    private static func iconForChipLabel(_ label: String) -> String {
+        let lowered = label.lowercased()
+        if lowered.contains("course") || lowered.contains("create") { return "plus.circle.fill" }
+        if lowered.contains("quiz") { return "questionmark.circle.fill" }
+        if lowered.contains("deep dive") || lowered.contains("dive") { return "text.magnifyingglass" }
+        if lowered.contains("flashcard") || lowered.contains("cards") { return "rectangle.stack.fill" }
+        if lowered.contains("tell me more") || lowered.contains("more") { return "text.bubble.fill" }
+        if lowered.contains("review") { return "arrow.counterclockwise.circle.fill" }
+        if lowered.contains("plan") || lowered.contains("modify") { return "list.bullet.clipboard.fill" }
+        if lowered.contains("start") { return "play.circle.fill" }
+        return "sparkles"
+    }
     
     // MARK: - Lyo Protocol Helpers
     

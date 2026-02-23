@@ -15,6 +15,7 @@ struct ParsedA2UIResponse {
     let displayText: String?
     let action: ParsedA2UIAction?
     let isSilentAction: Bool // If true, don't show a chat bubble, just run the action
+    let uiBlocks: [UIBlock]?
 }
 
 /// Parsed A2UI action from AI response (different from A2UIAction model in A2UIComponent)
@@ -45,17 +46,40 @@ final class AIResponseParser {
             
             // Check if there was text *before* the JSON
             let textPart = extractTextBefore(original: trimmed, jsonBlock: jsonBlock)
-            let action = convertToAction(wrapper)
+            let isSilent = textPart.isEmpty
             
-            return ParsedA2UIResponse(
-                displayText: textPart.isEmpty ? nil : textPart,
-                action: action,
-                isSilentAction: textPart.isEmpty
-            )
+            // Is it a UI Block or a navigation Action?
+            if isGenerativeUIBlock(type: wrapper.type) {
+                // Decode the UIBlock directly from the json data. 
+                // Because UIBlock handles its own custom Decodable, we can just throw the JSON at it
+                var blocks: [UIBlock] = []
+                if let block = try? JSONDecoder().decode(UIBlock.self, from: data) {
+                    blocks.append(block)
+                } else {
+                    // Safety net fallback
+                    blocks.append(.fallback(errorMessage: "Parser could not decode block type \(wrapper.type)", rawData: jsonBlock))
+                }
+                
+                return ParsedA2UIResponse(
+                    displayText: textPart.isEmpty ? nil : textPart,
+                    action: nil,
+                    isSilentAction: isSilent,
+                    uiBlocks: blocks.isEmpty ? nil : blocks
+                )
+            } else {
+                // Standard navigation action
+                let action = convertToAction(wrapper)
+                return ParsedA2UIResponse(
+                    displayText: textPart.isEmpty ? nil : textPart,
+                    action: action,
+                    isSilentAction: isSilent,
+                    uiBlocks: nil
+                )
+            }
         }
         
         // 2. Fallback: Standard Chat Message
-        return ParsedA2UIResponse(displayText: trimmed, action: nil, isSilentAction: false)
+        return ParsedA2UIResponse(displayText: trimmed, action: nil, isSilentAction: false, uiBlocks: nil)
     }
 
     
@@ -72,11 +96,18 @@ final class AIResponseParser {
         let stack_item: StackItemPayload?
         let destination: String?
         
+        // We do not need to strictly define the block payloads here because 
+        // the custom UIBlock Decodable handles that. We just ignore them in this wrapper.
+        
         enum CodingKeys: String, CodingKey {
             case course
             case stack_item = "stack_item"
             case destination
         }
+    }
+    
+    private func isGenerativeUIBlock(type: String) -> Bool {
+        return type.hasSuffix("_BLOCK")
     }
     
     private func convertToAction(_ wrapper: AIActionWrapper) -> ParsedA2UIAction? {
