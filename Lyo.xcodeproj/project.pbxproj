@@ -177,6 +177,7 @@
 		6CAFEAE9370506D8DD1B0EE4 /* AchievementBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D473BB5C2FB3D1D62B6FD37 /* AchievementBadgeView.swift */; };
 		6FCD120712F971CEF9463AFB /* A2UIStudyPlanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89141B6A9F42047BF11A828 /* A2UIStudyPlanViews.swift */; };
 		70BFF9A8715E6882034BA6AF /* A2AGenerationProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769C7AAC3C8440C829FA7372 /* A2AGenerationProgressView.swift */; };
+		70B709CC4F1148C4AEDA2C98 /* CourseStartGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5514E9EE3AC74A4B8EFA73E2 /* CourseStartGateView.swift */; };
 		72CC30109144F9F7E22EE99D /* AgenticClassroomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16FE49EC2F014F718315D036 /* AgenticClassroomView.swift */; };
 		7321BCD6A8D5E23039F8A8B0 /* Challenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC14D897015706EE4D5DA4A2 /* Challenge.swift */; };
 		737E7C776D668988B44EC211 /* LyoOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09994C205AE4575A85D1BE9 /* LyoOverlayView.swift */; };
@@ -633,6 +634,7 @@
 		762A9E5F69A4574997DE5E2E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		769A4B6901B72EE186252479 /* CommunityCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityCardView.swift; sourceTree = "<group>"; };
 		769C7AAC3C8440C829FA7372 /* A2AGenerationProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2AGenerationProgressView.swift; sourceTree = "<group>"; };
+		5514E9EE3AC74A4B8EFA73E2 /* CourseStartGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseStartGateView.swift; sourceTree = "<group>"; };
 		76AD8DE7A062628A8EF39577 /* MyCoursesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyCoursesView.swift; sourceTree = "<group>"; };
 		76C973FB61F64360F2E5F8EA /* LyoChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoChat.swift; sourceTree = "<group>"; };
 		7870517BEB8921F09B2610C3 /* A2UIQuizRenderers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIQuizRenderers.swift; sourceTree = "<group>"; };
@@ -1586,6 +1588,7 @@
 			isa = PBXGroup;
 			children = (
 				769C7AAC3C8440C829FA7372 /* A2AGenerationProgressView.swift */,
+				5514E9EE3AC74A4B8EFA73E2 /* CourseStartGateView.swift */,
 				160C3AFE3E1DAD351D98977F /* CourseCreationCoordinator.swift */,
 				302E4F85CF2DB1E02EB42C06 /* CourseGenerationSettingsView.swift */,
 				24909BF82FC4D9256DD43BB0 /* GenerationProgressView.swift */,
@@ -1956,6 +1959,7 @@
 				E3975C8399FB9AED41E5216C /* A2ACourseAgent.swift in Sources */,
 				4D3BF73FFCCEE85D294A8415 /* A2ACourseService.swift in Sources */,
 				70BFF9A8715E6882034BA6AF /* A2AGenerationProgressView.swift in Sources */,
+				70B709CC4F1148C4AEDA2C98 /* CourseStartGateView.swift in Sources */,
 				6109ED2ECFEC5D23EA844594 /* A2AModels.swift in Sources */,
 				5046DD2BDE677E1B573DBE69 /* A2AProgressView.swift in Sources */,
 				FADF492A2F86952E46DEF44C /* A2ATaskManager.swift in Sources */,

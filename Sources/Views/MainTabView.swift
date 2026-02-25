@@ -45,6 +45,10 @@ struct MainTabView: View {
     
     // Runtime State (New Architecture)
     @State private var runtimeViewModel: LyoCourseRuntime?
+
+    // Course Start Gate (monetization intercept before classroom)
+    @State private var isCourseGatePresented = false
+    @State private var pendingClassroomFromGate: (courseId: String, lessonId: String, courseTitle: String, lessonTitle: String)? = nil
     
     // Computed property for App Drawer visibility
     private var shouldShowAppDrawer: Bool {
@@ -233,6 +237,23 @@ struct MainTabView: View {
                 .environmentObject(uiState)
             }
         }
+        // ── Monetization gate (shown before classroom for every course start) ──
+        .fullScreenCover(isPresented: $isCourseGatePresented) {
+            if let gateData = pendingClassroomFromGate {
+                CourseStartGateView(
+                    courseId: gateData.courseId,
+                    courseTitle: gateData.courseTitle
+                ) {
+                    // Gate completed → dismiss gate then open classroom
+                    isCourseGatePresented = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        liveClassroomData = gateData
+                        withAnimation { isLiveClassroomPresented = true }
+                        Log.ui.info("MainTabView: Gate done → LiveClassroomView for \(gateData.courseTitle)")
+                    }
+                }
+            }
+        }
         .fullScreenCover(isPresented: $isLiveClassroomPresented) {
             if let data = liveClassroomData {
                 LiveClassroomView(
@@ -399,31 +420,30 @@ extension MainTabView {
                 }
             }
             .onReceive(openClassroomPublisher) { notification in
-                Log.ui.info("MainTabView: Received openClassroom notification")
-                
-                // Wait 0.7 s — the chat sheet dismiss animation takes ~0.4 s;
-                // this ensures it's fully gone before we present the fullScreenCover.
+                Log.ui.info("MainTabView: Received openClassroom notification — routing through gate")
+
+                // Wait 0.7 s for any chat-sheet dismiss animation to finish
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                    if let userInfo = notification.userInfo,
-                       var courseId = userInfo["courseId"] as? String {
-                        
-                        let lessonId = userInfo["lessonId"] as? String ?? "intro_1"
-                        let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
-                        let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
-                        
-                        // If it's a new generation request from A2UI, prepend GENERATE: for the LiveClassroomViewModel to intercept
-                        if let topic = userInfo["topic"] as? String, courseId.starts(with: "gen_") {
-                            courseId = "GENERATE:\(topic)"
-                        }
-                        
-                        self.liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
-                        
-                        withAnimation {
-                            self.isLiveClassroomPresented = true
-                        }
-                        
-                        Log.ui.info("MainTabView: Transitioning to LiveClassroomView for \(courseTitle)")
+                    guard let userInfo = notification.userInfo,
+                          var courseId = userInfo["courseId"] as? String else { return }
+
+                    let lessonId    = userInfo["lessonId"]    as? String ?? "intro_1"
+                    let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
+                    let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
+
+                    // Prepend GENERATE: for new A2UI-originated courses
+                    if let topic = userInfo["topic"] as? String, courseId.starts(with: "gen_") {
+                        courseId = "GENERATE:\(topic)"
                     }
+
+                    // Store the destination; the gate's onProceed will open the classroom
+                    self.pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
+
+                    withAnimation {
+                        self.isCourseGatePresented = true
+                    }
+
+                    Log.ui.info("MainTabView: Presenting CourseStartGateView for \(courseTitle)")
                 }
             }
             .onReceive(dismissOverlayPublisher) { _ in
