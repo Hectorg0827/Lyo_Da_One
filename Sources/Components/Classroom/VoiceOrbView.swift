@@ -74,6 +74,7 @@ public struct VoiceOrbView: View {
             phase = .pi
         }
     }
+}
 
 #Preview {
     ZStack {

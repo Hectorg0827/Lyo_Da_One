@@ -1,7 +1,7 @@
 import SwiftUI
 
-// Advanced Particle structure for the celebration burst
-struct Particle: Identifiable, Equatable {
+// Advanced Particle structure for the celebration burst (scoped to QuizCardView)
+private struct CelebrationParticle: Identifiable, Equatable {
     let id = UUID()
     var x: CGFloat
     var y: CGFloat
@@ -23,7 +23,7 @@ public struct QuizCardView: View {
     @State private var showExplanation = false
     
     // Celebration state
-    @State private var particles: [Particle] = []
+    @State private var particles: [CelebrationParticle] = []
     @State private var celebrationActive = false
     @State private var buttonTapLocation: CGPoint = .zero
     
@@ -76,7 +76,7 @@ public struct QuizCardView: View {
                 VStack(spacing: 16) {
                     ForEach(Array(card.options.enumerated()), id: \.offset) { index, optionText in
                         GeometryReader { proxy in
-                            OptionButton(
+                            QuizCardOptionButton(
                                 text: optionText,
                                 isSelected: selectedOptionIndex == index,
                                 isCorrect: showExplanation ? (index == card.correctOptionIndex) : nil,
@@ -137,9 +137,9 @@ public struct QuizCardView: View {
         
         // Colors from palette + some bright accents
         let colors: [Color] = [
-            Color(hex: palette.color1Hex) ?? .blue,
-            Color(hex: palette.color2Hex) ?? .purple,
-            Color(hex: palette.color3Hex) ?? .orange,
+            Color(hex: palette.color1Hex),
+            Color(hex: palette.color2Hex),
+            Color(hex: palette.color3Hex),
             .yellow,
             .cyan,
             .pink
@@ -151,7 +151,7 @@ public struct QuizCardView: View {
             let angle = Double.random(in: .pi...2 * .pi) + .pi/2 // Mostly up
             let speed = CGFloat.random(in: 8...25)
             
-            let particle = Particle(
+            let particle = CelebrationParticle(
                 x: 0,
                 y: 0,
                 speedX: cos(angle) * speed + CGFloat.random(in: -5...5),
@@ -204,8 +204,8 @@ public struct QuizCardView: View {
     }
 }
 
-// Custom animated option button
-struct OptionButton: View {
+// Custom animated option button (scoped to QuizCardView)
+private struct QuizCardOptionButton: View {
     let text: String
     let isSelected: Bool
     let isCorrect: Bool?

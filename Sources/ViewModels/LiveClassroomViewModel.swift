@@ -760,6 +760,35 @@ final class LiveClassroomViewModel: ObservableObject {
         setLioState(.idle)
     }
     
+    // MARK: - TTS Markdown Sanitizer
+
+    /// Strips markdown syntax that would be read aloud literally by TTS (e.g. "hashtag hashtag", "asterisk asterisk")
+    private func sanitizeForTTS(_ raw: String) -> String {
+        var clean = raw
+        // Remove heading markers (###, ##, #)
+        clean = clean.replacingOccurrences(of: #"#{1,6}\s*"#, with: "", options: .regularExpression)
+        // Un-bold/un-italic: **text** -> text, *text* -> text, __text__ -> text
+        clean = clean.replacingOccurrences(of: #"\*\*(.+?)\*\*"#, with: "$1", options: .regularExpression)
+        clean = clean.replacingOccurrences(of: #"__(.+?)__"#, with: "$1", options: .regularExpression)
+        clean = clean.replacingOccurrences(of: #"\*(.+?)\*"#, with: "$1", options: .regularExpression)
+        clean = clean.replacingOccurrences(of: #"_(.+?)_"#, with: "$1", options: .regularExpression)
+        // Remove inline code backticks: `code` -> code
+        clean = clean.replacingOccurrences(of: #"`(.+?)`"#, with: "$1", options: .regularExpression)
+        // Remove code fences
+        clean = clean.replacingOccurrences(of: #"```[\s\S]*?```"#, with: "", options: .regularExpression)
+        // Remove markdown links: [text](url) -> text
+        clean = clean.replacingOccurrences(of: #"\[(.+?)\]\(.+?\)"#, with: "$1", options: .regularExpression)
+        // Collapse multiple newlines to a single space for natural speech flow
+        clean = clean.replacingOccurrences(of: #"\n+"#, with: " ", options: .regularExpression)
+        // Remove bullet markers (-, *, +) at line starts
+        clean = clean.replacingOccurrences(of: #"(?m)^[\-\*\+]\s+"#, with: "", options: .regularExpression)
+        // Remove numbered list markers (1., 2., etc.)
+        clean = clean.replacingOccurrences(of: #"(?m)^\d+\.\s+"#, with: "", options: .regularExpression)
+        // Collapse multiple spaces
+        clean = clean.replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
+        return clean.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Helper to synthesize and play text using Backend Neural TTS
     /// - Parameters:
     ///   - text: The text to speak
@@ -768,12 +797,21 @@ final class LiveClassroomViewModel: ObservableObject {
         isLioSpeaking = true
         lioState = .speaking
         
-        // 1. Generate Audio via Backend
+        // 1. Sanitize markdown so TTS doesn't read "hashtag hashtag" or "asterisk asterisk"
+        let cleanText = sanitizeForTTS(text)
+        guard !cleanText.isEmpty else {
+            Log.app.warning("⚡️ speakText: sanitized text is empty, skipping TTS")
+            isLioSpeaking = false
+            lioState = .idle
+            return
+        }
+
+        // 2. Generate Audio via Backend
         // 'nova' is a great energetic voice for Lio. 'alloy' is good for neutral.
         let voice: TTSVoice = .nova
         
         let result = try await ttsRepository.generate(
-            text: text,
+            text: cleanText,
             voice: voice,
             speed: 1.0, // Normal speed for clarity
             withTimings: false // We don't need word timings yet

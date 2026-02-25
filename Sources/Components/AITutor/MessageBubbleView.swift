@@ -13,6 +13,8 @@ struct LyoMessageBubbleView: View {
     var onA2UICourseStart: ((CourseCreationData) -> Void)?
     var onA2UIQuizAnswer: ((String, Int) -> Void)?
     
+    var mascotNamespace: Namespace.ID?
+    
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     
     @State private var frameIndex = 0
@@ -53,29 +55,52 @@ struct LyoMessageBubbleView: View {
         return !trimmed.isEmpty
     }
     
+    @State private var showCursor: Bool = true
+    
     var body: some View {
-        VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: 0) {
+        VStack(alignment: message.isFromUser ? .trailing : .leading, spacing: 4) {
+            
             // AI Header: Mascot & Speaker ABOVE the bubble
             if !message.isFromUser {
                 HStack(alignment: .center, spacing: 10) {
                     HStack(alignment: .center, spacing: 8) {
-                        Image("Mascot_Standing")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
+                        // 1) Thinking: No text yet -> Show Animated Reading Mascot
+                        // 2) Streaming: Text is arriving -> Show Mascot #1 (Standing)
+                        // 3) Finished: Text complete -> Show Mascot #1 (Standing)
+                        if message.status == .sending && message.content.isEmpty && !message.isFromUser {
+
+                            // Show reading mascot animation when thinking/streaming
+                            if let ns = mascotNamespace {
+                                AnimatedReadingMascotView(size: 28)
+                                    .matchedGeometryEffect(id: "mascot_\(message.id)", in: ns)
+                            } else {
+                                AnimatedReadingMascotView(size: 28)
+                            }
+                        } else {
+                            // Show Mascot #1 (Standing) when finished, moved down by 10px
+                            if let ns = mascotNamespace {
+                                Image("Mascot_Standing")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 28, height: 28)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
+                                    .offset(y: 10)
+                                    .matchedGeometryEffect(id: "mascot_\(message.id)", in: ns)
+                            } else {
+                                Image("Mascot_Standing")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 28, height: 28)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
+                                    .offset(y: 10)
+                            }
+                        }
                         
                         Text("Lyo")
                             .font(.caption.bold())
                             .foregroundStyle(.white.opacity(0.9))
-                    }
-                    
-                    if message.status == .sending || (message.content.isEmpty && !message.isFromUser) {
-                        ThinkingDotsView()
                     }
                     
                     Spacer()
@@ -105,7 +130,9 @@ struct LyoMessageBubbleView: View {
                     // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
                     if shouldRenderPlainText {
                         VStack(alignment: .leading, spacing: 8) {
-                            markdownText(stripEmojis(message.content))
+                            // Blinking cursor logic
+                            let displayContent = message.isStreaming ? message.content + (showCursor ? "▊" : "") : message.content
+                            markdownText(stripEmojis(displayContent))
                                 .font(DesignTokens.Typography.bodyMedium)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .lineSpacing(4)
@@ -136,9 +163,18 @@ struct LyoMessageBubbleView: View {
                         }
                     case .course:
                         if let data = message.courseProposal {
-                            CourseProposalView(data: data) {
-                                onCourseStart?(data)
-                            }
+                            ChatInteractiveCardView(
+                                type: .course(
+                                    title: data.title,
+                                    topic: data.subtext,
+                                    level: data.summary,
+                                    duration: nil,
+                                    imageURL: nil
+                                ),
+                                onStart: { onCourseStart?(data) },
+                                onRefine: { onActionTap?(MessageAction(id: "refine_course", label: "Refine", actionType: .generateSyllabus)) },
+                                onSave: { onActionTap?(MessageAction(id: "save_course", label: "Save", actionType: .addToLibrary)) }
+                            )
                         }
                     case .chat:
                         EmptyView() // Handled by standard text view above
@@ -184,8 +220,21 @@ struct LyoMessageBubbleView: View {
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: message.isFromUser ? UIScreen.main.bounds.width * 0.8 : UIScreen.main.bounds.width * 0.995, alignment: message.isFromUser ? .trailing : .leading)
         }
+        }
         .padding(.horizontal, message.isFromUser ? 4 : 1)
         .padding(.vertical, DesignTokens.Spacing.xs)
+        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
+            if message.isStreaming {
+                showCursor.toggle()
+            }
+        }
+        .onChange(of: message.content) { oldValue, newValue in
+            if message.isStreaming && newValue.count > oldValue.count {
+                // Throttle haptics slightly so we don't overwhelm the Taptic Engine
+                if newValue.count % 5 == 0 {
+                    HapticManager.shared.playSoftImpact()
+                }
+            }
         }
     }
     
@@ -195,48 +244,40 @@ struct LyoMessageBubbleView: View {
     private func renderContentType(_ contentType: MessageContentType) -> some View {
         switch contentType {
         case .courseRoadmap(let title, let modules, _, _):
-            // Convert CourseModule to CourseModuleData
-            let convertedModules: [CourseModuleData] = modules.map { mod in
-                CourseModuleData(
-                    id: mod.id,
-                    title: mod.title,
-                    description: mod.duration ?? ""
-                )
-            }
-            let courseData = CourseCreationData(
-                id: UUID().uuidString,
-                title: title,
-                topic: title,
-                level: "intermediate",
-                modules: convertedModules
+            ChatInteractiveCardView(
+                type: .course(title: title, topic: title, level: "intermediate", duration: "\(modules.count * 10) min", imageURL: nil),
+                onStart: {
+                    let courseData = CourseCreationData(
+                        id: UUID().uuidString,
+                        title: title,
+                        topic: title,
+                        level: "intermediate",
+                        modules: modules.map { CourseModuleData(id: $0.id, title: $0.title, description: $0.duration ?? "") }
+                    )
+                    onA2UICourseStart?(courseData)
+                },
+                onRefine: { onQuickChipTap?("refine_course") },
+                onSave: { onQuickChipTap?("save_course") }
             )
-            CourseRoadmapCardView(course: courseData) { course in
-                onA2UICourseStart?(course)
-            }
             
         case .quiz(let question, let options, let correctIndex, _):
-            // Single question quiz - use local QuizData/QuizQuestionData
-            let quizData = QuizData(
-                title: "Quick Quiz",
-                questions: [
-                    QuizQuestionData(
-                        id: UUID().uuidString,
-                        question: question,
-                        options: options,
-                        correctAnswer: options.indices.contains(correctIndex) ? options[correctIndex] : options.first ?? ""
-                    )
-                ]
+            ChatInteractiveCardView(
+                type: .quiz(title: "Quick Quiz", questionCount: 1, imageURL: nil),
+                onStart: {
+                    // Start quiz UI action
+                    onA2UIQuizAnswer?(question, correctIndex)
+                },
+                onRefine: { onQuickChipTap?("refine_quiz") },
+                onSave: { onQuickChipTap?("save_quiz") }
             )
-            QuizCardView(quiz: quizData) { questionText, answerIndex in
-                onA2UIQuizAnswer?(questionText, answerIndex)
-            }
             
         case .flashcards(let title, let cards):
-            // Convert Flashcard to FlashcardItem and wrap in FlashcardData
-            let convertedCards: [FlashcardItem] = cards.map { card in
-                FlashcardItem(id: card.id, front: card.front, back: card.back)
-            }
-            FlashcardsCardView(flashcards: FlashcardData(title: title, cards: convertedCards))
+            ChatInteractiveCardView(
+                type: .flashcards(title: title, cardCount: cards.count, imageURL: nil),
+                onStart: { onQuickChipTap?("start_flashcards") },
+                onRefine: { onQuickChipTap?("refine_flashcards") },
+                onSave: { onQuickChipTap?("save_flashcards") }
+            )
             
         case .notes(let title, let sections):
             NotesView(notes: NotesPayload(title: title, sections: sections))
@@ -733,25 +774,24 @@ struct InlineCourseCardView: View {
     }
 }
 
-// MARK: - Thinking Dots helper
-struct ThinkingDotsView: View {
-    @State private var animationPhase = 0
-    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+// MARK: - Animated Reading Mascot
+struct AnimatedReadingMascotView: View {
+    let size: CGFloat
+    @State private var frameIndex = 0
+    private let frames = ["Mascot_Reading_1", "Mascot_Reading_2", "Mascot_Reading_3", "Mascot_Reading_4"]
+    private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(Color.white.opacity(0.6))
-                    .frame(width: 4, height: 4)
-                    .scaleEffect(animationPhase == index ? 1.2 : 0.8)
-                    .opacity(animationPhase == index ? 1.0 : 0.4)
+        Image(frames[frameIndex])
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .onReceive(timer) { _ in
+                frameIndex = (frameIndex + 1) % frames.count
             }
-        }
-        .onReceive(timer) { _ in
-            withAnimation(.easeInOut(duration: 0.3)) {
-                animationPhase = (animationPhase + 1) % 3
-            }
-        }
     }
 }

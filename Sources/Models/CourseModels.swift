@@ -89,6 +89,7 @@ struct OpenClassroomCommand: Codable {
         let language: String?
         let duration: String?
         let objectives: [String]
+        let thumbnail: String?
     }
     
     /// Convert to CourseCreationData for display

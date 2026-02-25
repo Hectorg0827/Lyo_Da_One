@@ -80,11 +80,20 @@ struct EnhancedMessageBubble: View {
             // Header showing Mascot and "Lyo" (Standardized to original mascot)
             HStack(alignment: .center, spacing: 10) {
                 HStack(spacing: 8) {
-                    Image("Mascot_Standing")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 28, height: 28)
-                        .clipShape(Circle())
+                    // Assuming message streaming implies thinking
+                    if message.contentTypes.contains(where: {
+                        if case .processing = $0 { return true }
+                        return false
+                    }) || message.content.isEmpty {
+                        AnimatedReadingMascotView(size: 28)
+                    } else {
+                        Image("Mascot_Standing")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
+                            .offset(y: 10)
+                    }
                     
                     Text("Lyo")
                         .font(.caption.bold())

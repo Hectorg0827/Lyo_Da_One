@@ -83,6 +83,11 @@ final class CourseGenerationService: ObservableObject {
     @Published var currentStep: String = ""
     @Published var generatedCourse: GeneratedCourseResponse?
     @Published var error: String?
+
+    // MARK: - Hydration Race Condition Guard
+    /// Prevents duplicate background hydration tasks from running simultaneously
+    private var isHydrating: Bool = false
+    private var hydrationTask: Task<Void, Never>? = nil
     
     // NEW: Streaming state for live UI updates
     @Published var streamingText: String = ""
@@ -190,10 +195,15 @@ final class CourseGenerationService: ObservableObject {
         Log.course.info("📋 Populated draft course from OPEN_CLASSROOM payload: \(resolvedCourseId)")
         
         // 🚀 Start background hydration to replace template content with REAL AI-generated content
+        // Guard: prevent double hydration
+        guard !isHydrating else {
+            Log.course.info("⚡ Hydration already in progress — skipping duplicate task")
+            return
+        }
         let topic = payload.topic
         let level = payload.level
         let objectives = payload.objectives
-        Task { [weak self] in
+        hydrationTask = Task { [weak self] in
             guard let self else { return }
             Log.course.info("🌊 Starting background hydration for: \(topic)")
             await self.startLegacyGenerationInBackground(
@@ -355,15 +365,20 @@ final class CourseGenerationService: ObservableObject {
         await addCourseToStack(courseId: draftCourse.courseId, title: draftCourse.title, topic: topic)
         
         // 3. Start Background Hydration (errors surface to UI)
-        Task { [weak self] in
-            guard let self else { return }
-            Log.course.info("🌊 Starting Background Hydration...")
-            await self.startLegacyGenerationInBackground(
-                topic: topic,
-                level: level,
-                teachingStyle: teachingStyle,
-                learningOutcomes: learningOutcomes
-            )
+        // Guard: prevent double hydration if another task is already running
+        if !isHydrating {
+            hydrationTask = Task { [weak self] in
+                guard let self else { return }
+                Log.course.info("🌊 Starting Background Hydration...")
+                await self.startLegacyGenerationInBackground(
+                    topic: topic,
+                    level: level,
+                    teachingStyle: teachingStyle,
+                    learningOutcomes: learningOutcomes
+                )
+            }
+        } else {
+            Log.course.info("⚡ Hydration already in progress — skipping duplicate task")
         }
 
         // 4. Return immediately to unblock `await` callers
@@ -403,6 +418,14 @@ final class CourseGenerationService: ObservableObject {
         teachingStyle: String,
         learningOutcomes: [String]
     ) async {
+        // Guard: prevent concurrent hydration
+        guard !isHydrating else {
+            Log.course.info("⚡ Hydration already active — skipping")
+            return
+        }
+        isHydrating = true
+        defer { isHydrating = false }
+
         do {
             // Step 1: Map level to CourseGenerationOptions
             let options: CourseGenerationOptions
@@ -488,13 +511,84 @@ final class CourseGenerationService: ObservableObject {
             }
 
         } catch {
-            Log.course.warning("Background Generation Failed: \(error)")
-            // Surface error to UI so user knows hydration failed
-            await MainActor.run {
-                self.currentStep = "Content upgrade failed — using draft version"
-                self.error = "Background generation failed: \(error.localizedDescription). You can still use the draft course."
+            Log.course.warning("🔴 Pipeline generation failed: \(error.localizedDescription) — trying V2 generator fallback")
+
+            // 🚀 FALLBACK PATH: Try the direct V2 generator which doesn't queue jobs
+            do {
+                let v2Course = try await BackendAIService.shared.generateCourseV2(
+                    topic: topic,
+                    audience: level,
+                    objectives: learningOutcomes
+                )
+                let mappedCourse = mapLyoCourseToGenerated(v2Course)
+
+                await MainActor.run {
+                    Log.course.info("✨ V2 Generator fallback succeeded! Course: \(mappedCourse.title)")
+                    if let currentDraft = self.generatedCourse {
+                        let mergedCourse = self.mergeContent(real: mappedCourse, into: currentDraft)
+                        self.generatedCourse = mergedCourse
+                        self.saveCourseToDisk(mergedCourse)
+                    } else {
+                        self.generatedCourse = mappedCourse
+                        self.saveCourseToDisk(mappedCourse)
+                    }
+                    self.currentStep = "Course ready!"
+                    self.progress = 1.0
+                    self.error = nil
+                }
+            } catch {
+                Log.course.warning("🔴 V2 generator also failed: \(error.localizedDescription) — keeping draft")
+                // Surface error to UI so user knows hydration failed
+                await MainActor.run {
+                    self.currentStep = "Content ready (draft mode)"
+                    self.error = nil // Don't surface error to user — draft content is still usable
+                }
             }
         }
+    }
+
+    // MARK: - LyoCourse → GeneratedCourseResponse Mapper
+
+    private func mapLyoCourseToGenerated(_ lyo: LyoCourse) -> GeneratedCourseResponse {
+        let modules = lyo.modules.enumerated().map { (mIdx, mod) -> GenerationCourseModule in
+            let lessons = mod.lessons.enumerated().map { (lIdx, les) -> GenerationCourseLesson in
+                // Extract text content from artifacts
+                let content: String
+                if let explainer = les.artifacts.first(where: { $0.type == .conceptExplainer }) {
+                    let markdown = (explainer.content.value as? [String: Any]).flatMap { $0["markdown"] as? String }
+                    let notes = (explainer.content.value as? [String: Any]).flatMap { $0["text"] as? String }
+                    content = markdown ?? notes ?? les.goal
+                } else if let notes = les.artifacts.first(where: { $0.type == .notes }) {
+                    let text = (notes.content.value as? [String: Any]).flatMap { $0["markdown"] as? String }
+                        ?? (notes.content.value as? [String: Any]).flatMap { $0["text"] as? String }
+                    content = text ?? les.goal
+                } else {
+                    content = les.goal
+                }
+                return GenerationCourseLesson(
+                    id: les.id,
+                    title: les.title,
+                    content: content,
+                    durationMinutes: les.durationMinutes,
+                    order: lIdx + 1
+                )
+            }
+            return GenerationCourseModule(
+                id: mod.id,
+                title: mod.title,
+                description: mod.goal,
+                lessons: lessons,
+                order: mIdx + 1
+            )
+        }
+        return GeneratedCourseResponse(
+            courseId: lyo.id,
+            title: lyo.title,
+            description: lyo.learningObjectives.first ?? lyo.title,
+            modules: modules,
+            estimatedDuration: modules.reduce(0) { $0 + $1.lessons.reduce(0) { $0 + $1.durationMinutes } },
+            difficulty: lyo.targetAudience
+        )
     }
     
     // MARK: - Smart Selection (Merge)
@@ -717,7 +811,7 @@ final class CourseGenerationService: ObservableObject {
     
     private func pollForCourseCompletion(jobId: String) async throws -> GeneratedCourseResponse {
         let maxAttempts = 60  // 5 minutes max (5 second intervals)
-        let stallThresholdSeconds: TimeInterval = 45  // Force-complete if no progress for 45s
+        let stallThresholdSeconds: TimeInterval = 20  // Force-complete if no progress for 20s (backend stalls quickly)
         var attempts = 0
         var lastProgressPercent = -1  // Track last known progress
         var lastProgressUpdate = Date()  // When progress last changed
@@ -747,31 +841,28 @@ final class CourseGenerationService: ObservableObject {
                 Log.course.warning("STALL DETECTED: No progress for \(Int(timeSinceLastProgress))s - triggering force-complete")
                 forceCompleteAttempted = true
                 
-                // Try to fetch result directly first (backend may have finished without status updates)
-                do {
-                    let partialCourse = try await fetchGeneratedCourse(jobId: jobId)
-                    Log.course.info("Retrieved course despite stalled status")
-                    return partialCourse
-                } catch {
-                    if isNotFound(error) {
-                        Log.course.warning("Result endpoint unavailable (404) during stall - using local draft")
-                        return try fallbackToLocalDraft(reason: "Result endpoint not found")
-                    }
-                    Log.course.warning("Fetch result failed during stall: \(error.localizedDescription)")
-                }
-
-                // Try to force-complete the stalled job
+                // 🔥 Try to force-complete the stalled job FIRST (more reliable approach)
                 do {
                     let forceResult = try await forceCompleteJob(jobId: jobId)
-                    Log.course.info("Force-complete triggered: \(forceResult)")
-                    // Reset timer to give backend time to recover
-                    lastProgressUpdate = Date()
+                    Log.course.info("⚡ Force-complete triggered: \(forceResult)")
+                    // Wait briefly for backend to finalize
+                    try await Task.sleep(nanoseconds: 3_000_000_000)  // 3s
+                    // Now try to fetch the result
+                    do {
+                        let partialCourse = try await fetchGeneratedCourse(jobId: jobId)
+                        Log.course.info("✅ Retrieved course after force-complete")
+                        return partialCourse
+                    } catch {
+                        Log.course.warning("Result unavailable after force-complete (\(error.localizedDescription)) - using local draft")
+                        return try fallbackToLocalDraft(reason: "Result unavailable after force-complete")
+                    }
                 } catch {
                     if isNotFound(error) {
                         Log.course.warning("Force-complete endpoint unavailable (404) - using local draft")
                         backendResultUnavailable = true
                     } else {
-                        Log.course.warning("Force-complete failed: \(error.localizedDescription) - continuing poll")
+                        Log.course.warning("Force-complete failed: \(error.localizedDescription) - falling back to local draft")
+                        return try fallbackToLocalDraft(reason: "Force-complete failed: \(error.localizedDescription)")
                     }
                 }
             }
@@ -791,29 +882,23 @@ final class CourseGenerationService: ObservableObject {
                 do {
                     return try await fetchGeneratedCourse(jobId: jobId)
                 } catch {
-                    if isNotFound(error) {
-                        Log.course.warning("Result endpoint unavailable (404) after completion - using local draft")
-                        return try fallbackToLocalDraft(reason: "Result endpoint not found")
-                    }
-                    throw error
+                    // ⚡ ANY error fetching result after completion = use local draft
+                    // This handles both 404 (endpoint missing) and 400 (validation/state errors)
+                    Log.course.warning("Result unavailable after completion (\(error.localizedDescription)) - using local draft")
+                    return try fallbackToLocalDraft(reason: "Result endpoint error: \(error.localizedDescription)")
                 }
                 
             case "failed":
                 let errorMsg = status.error ?? "Unknown error"
                 Log.course.error("Course generation failed: \(errorMsg)")
-                // 🛡️ RESILIENCE: Try to fetch what we have instead of throwing
-                Log.course.error("Attempting to fetch partial course despite failure...")
+                // 🛡️ RESILIENCE: Try to fetch what we have, fall back to draft for any error
                 do {
                     let partialCourse = try await fetchGeneratedCourse(jobId: jobId)
                     Log.course.info("Recovered partial course with \(partialCourse.modules.count) modules")
                     return partialCourse
                 } catch {
-                    if isNotFound(error) {
-                        Log.course.warning("Result endpoint unavailable (404) after failure - using local draft")
-                        return try fallbackToLocalDraft(reason: "Result endpoint not found")
-                    }
-                    Log.course.error("Could not recover partial course: \(error)")
-                    throw CourseGenerationError.serverError
+                    Log.course.warning("Result unavailable after failure (\(error.localizedDescription)) - using local draft")
+                    return try fallbackToLocalDraft(reason: "Generation failed and result unavailable")
                 }
                 
             case "processing", "running", "pending":

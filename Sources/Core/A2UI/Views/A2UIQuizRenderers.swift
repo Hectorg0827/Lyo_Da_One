@@ -26,7 +26,7 @@ struct A2UIQuizMCQRenderer: View {
 
             // Options
             ForEach(Array((component.props.options ?? []).enumerated()), id: \.offset) { index, option in
-                OptionButton(
+                A2UIOptionButton(
                     text: option.text,
                     index: index,
                     isSelected: selectedIndex == index,
@@ -237,7 +237,7 @@ struct A2UIQuizTrueFalseRenderer: View {
 
 // MARK: - Supporting Views
 
-struct OptionButton: View {
+struct A2UIOptionButton: View {
     let text: String
     let index: Int
     let isSelected: Bool

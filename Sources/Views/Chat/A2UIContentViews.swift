@@ -223,9 +223,10 @@ struct CourseRoadmapCardView: View {
     }
 }
 
-// MARK: - Quiz Card
+// MARK: - Quiz Card (A2UI inline variant)
+// NOTE: The canonical QuizCardView is in Sources/Views/Cards/QuizCardView.swift
 
-struct QuizCardView: View {
+struct A2UIQuizCardView: View {
     let quiz: QuizData
     let onAnswer: ((String, Int) -> Void)?
     
@@ -715,7 +716,7 @@ struct TopicSelectionView: View {
                 onStart: { _ in }
             )
             
-            QuizCardView(
+            A2UIQuizCardView(
                 quiz: QuizData(
                     title: "Python Basics Quiz",
                     questions: [

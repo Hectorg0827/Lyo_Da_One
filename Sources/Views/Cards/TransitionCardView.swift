@@ -16,8 +16,8 @@ public struct TransitionCardView: View {
             // Full-bleed color wash transitioning between two colors
             LinearGradient(
                 colors: appear ? 
-                    [Color(hex: palette.color2Hex) ?? .blue, Color(hex: palette.color3Hex) ?? .indigo] :
-                    [Color(hex: palette.color1Hex) ?? .indigo, Color(hex: palette.color2Hex) ?? .blue],
+                    [Color(hex: palette.color2Hex), Color(hex: palette.color3Hex)] :
+                    [Color(hex: palette.color1Hex), Color(hex: palette.color2Hex)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )

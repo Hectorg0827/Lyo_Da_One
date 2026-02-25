@@ -38,7 +38,7 @@ public struct AnalogyCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(
                     LinearGradient(
-                        colors: [Color(hex: palette.color1Hex) ?? .indigo, Color(hex: palette.color1Hex)?.opacity(0.6) ?? .indigo.opacity(0.6)],
+                        colors: [Color(hex: palette.color1Hex), Color(hex: palette.color1Hex).opacity(0.6)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
@@ -63,7 +63,7 @@ public struct AnalogyCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(
                     LinearGradient(
-                        colors: [Color(hex: palette.color2Hex) ?? .blue, Color(hex: palette.color3Hex) ?? .black],
+                        colors: [Color(hex: palette.color2Hex), Color(hex: palette.color3Hex)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )

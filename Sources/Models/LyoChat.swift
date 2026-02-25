@@ -37,6 +37,9 @@ struct LyoMessage: Identifiable, Codable, Equatable {
     /// When false, the message view is hidden; flipping to true triggers a spring reveal.
     /// Used by buffer-and-reveal for artifact cards (quiz, flashcards, study plans, etc.).
     var isRevealed: Bool = true
+    /// When true, content is still being streamed from the backend (SSE).
+    /// Used by MessageBubbleView to show a blinking cursor and trigger haptics.
+    var isStreaming: Bool = false
     
     // Exclude ephemeral animation state from Codable
     enum CodingKeys: String, CodingKey {
@@ -60,6 +63,7 @@ struct LyoMessage: Identifiable, Codable, Equatable {
             && lhs.isFromUser == rhs.isFromUser
             && lhs.isRevealed == rhs.isRevealed
             && lhs.shouldAnimate == rhs.shouldAnimate
+            && lhs.isStreaming == rhs.isStreaming
     }
 }
 

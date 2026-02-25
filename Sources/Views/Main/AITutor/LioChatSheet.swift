@@ -35,6 +35,12 @@ struct LioChatSheet: View {
     @StateObject private var commandHandler = AICommandHandler.shared
     @State private var showingClassroom = false
     
+    // Waiting Room State
+    @State private var showingWaitingRoom = false
+    @State private var courseTitleToGenerate: String = ""
+    @State private var pendingCourseCallback: (() -> Void)? = nil
+    @Namespace private var mascotAnimation
+    
     // MARK: - Body
     
     var body: some View {
@@ -78,17 +84,33 @@ struct LioChatSheet: View {
                                                 viewModel.inputText = chip
                                                 Task { await viewModel.sendMessage() }
                                             },
+                                            onCourseStart: { data in
+                                                withAnimation {
+                                                    courseTitleToGenerate = data.title
+                                                    pendingCourseCallback = {
+                                                        // Fallback logic for legacy course start
+                                                    }
+                                                    showingWaitingRoom = true
+                                                }
+                                            },
                                             onAudioToggle: { messageId, text in
                                                 viewModel.toggleMessageAudio(messageId: messageId, text: text)
                                             },
                                             isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
                                             audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
                                             onA2UICourseStart: { course in
-                                                viewModel.onA2UICourseStart(course: course)
+                                                withAnimation {
+                                                    courseTitleToGenerate = course.title
+                                                    pendingCourseCallback = {
+                                                        viewModel.onA2UICourseStart(course: course)
+                                                    }
+                                                    showingWaitingRoom = true
+                                                }
                                             },
                                             onA2UIQuizAnswer: { question, answerIndex in
                                                 viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
-                                            }
+                                            },
+                                            mascotNamespace: mascotAnimation
                                         )
                                         .id(msg.id)
                                     }
@@ -127,6 +149,22 @@ struct LioChatSheet: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
+                }
+                
+                // Waiting Room Overlay
+                if showingWaitingRoom {
+                    WaitingRoomView(
+                        courseTitle: courseTitleToGenerate,
+                        mascotNamespace: mascotAnimation,
+                        onComplete: {
+                            withAnimation {
+                                showingWaitingRoom = false
+                            }
+                            pendingCourseCallback?()
+                        }
+                    )
+                    .zIndex(100)
+                    .transition(.opacity)
                 }
             }
             .navigationBarHidden(true)

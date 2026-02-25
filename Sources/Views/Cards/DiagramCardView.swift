@@ -22,94 +22,115 @@ public struct DiagramCardView: View {
     public var body: some View {
         ZStack {
             // Background Layer
-            AnimatedMeshBackground(palette: palette, phase: 0) // Reuse from ConceptCard
+            AnimatedMeshBackground(palette: palette, phase: 0)
                 .offset(LyoParallaxManager.shared.offset(for: LyoParallaxManager.shared.backgroundDepth))
-            
+
             GeometryReader { geo in
-                let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-                let radius: CGFloat = min(geo.size.width, geo.size.height) * 0.35
-                
-                ZStack {
-                    // Lines layer - Canvas
-                    Canvas { context, size in
-                        // Draw established connections securely
-                        for connection in card.connections {
-                            let connectionKey = "\(connection.sourceId)-\(connection.targetId)"
-                            if establishedConnections.contains(connectionKey) {
-                                guard let sourcePos = nodePositions[connection.sourceId],
-                                      let targetPos = nodePositions[connection.targetId] else { continue }
-                                
-                                var path = Path()
-                                path.move(to: sourcePos)
-                                path.addLine(to: targetPos)
-                                
-                                context.stroke(
-                                    path,
-                                    with: .color(.white.opacity(0.8)),
-                                    lineWidth: 4
-                                )
-                            }
-                        }
-                        
-                        // Draw active drag line
-                        if let dragSourceId = dragSourceId,
-                           let sourcePos = nodePositions[dragSourceId],
-                           let dragPos = dragPosition {
-                            var path = Path()
-                            path.move(to: sourcePos)
-                            path.addLine(to: dragPos)
-                            
-                            context.stroke(
-                                path,
-                                with: .color(.white.opacity(0.5)),
-                                style: StrokeStyle(lineWidth: 3, dash: [6, 6])
-                            )
-                        }
-                    }
-                    .frame(width: geo.size.width, height: geo.size.height)
-                    
-                    // Nodes layer
-                    ForEach(Array(card.nodes.enumerated()), id: \.element.id) { index, node in
-                        let angle = (2 * .pi / CGFloat(card.nodes.count)) * CGFloat(index) - .pi / 2
-                        let x = center.x + radius * cos(angle)
-                        let y = center.y + radius * sin(angle)
-                        
-                        DiagramNodeView(
-                            node: node,
-                            isVisible: visibleNodes.contains(node.id),
-                            accentColor: Color(hex: palette.color2Hex) ?? .blue
-                        )
-                        .position(x: x, y: y)
-                        .gesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    if dragSourceId == nil {
-                                        dragSourceId = node.id
-                                    }
-                                    dragPosition = value.location
-                                    // Trigger light continuous haptics during drag mapping
-                                    if Int(value.translation.width) % 20 == 0 || Int(value.translation.height) % 20 == 0 {
-                                        LyoHapticManager.shared.playImpact(.light)
-                                    }
-                                }
-                                .onEnded { value in
-                                    handleDragEnd(dropLocation: value.location, sourceId: node.id)
-                                }
-                        )
-                        .onAppear {
-                            // Store position for Canvas and Drag calculations
-                            DispatchQueue.main.async {
-                                nodePositions[node.id] = CGPoint(x: x, y: y)
-                            }
-                        }
-                    }
-                }
+                diagramContent(in: geo)
             }
             .offset(LyoParallaxManager.shared.offset(for: LyoParallaxManager.shared.foregroundDepth))
         }
         .onAppear {
             startAnimations()
         }
+    }
+
+    // MARK: - Extracted subviews
+
+    @ViewBuilder
+    private func diagramContent(in geo: GeometryProxy) -> some View {
+        let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+        let radius: CGFloat = min(geo.size.width, geo.size.height) * 0.35
+
+        ZStack {
+            connectionsCanvas(size: geo.size)
+            nodesLayer(center: center, radius: radius)
+        }
+    }
+
+    private func connectionsCanvas(size: CGSize) -> some View {
+        Canvas { context, _ in
+            drawEstablishedConnections(context: context)
+            drawActiveDragLine(context: context)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private func drawEstablishedConnections(context: GraphicsContext) {
+        for connection in card.connections {
+            let key = "\(connection.sourceId)-\(connection.targetId)"
+            guard establishedConnections.contains(key),
+                  let sourcePos = nodePositions[connection.sourceId],
+                  let targetPos = nodePositions[connection.targetId] else { continue }
+
+            var path = Path()
+            path.move(to: sourcePos)
+            path.addLine(to: targetPos)
+
+            context.stroke(path, with: .color(.white.opacity(0.8)), lineWidth: 4)
+        }
+    }
+
+    private func drawActiveDragLine(context: GraphicsContext) {
+        guard let activeDragSourceId = dragSourceId,
+              let sourcePos = nodePositions[activeDragSourceId],
+              let dragPos = dragPosition else { return }
+
+        var path = Path()
+        path.move(to: sourcePos)
+        path.addLine(to: dragPos)
+
+        context.stroke(
+            path,
+            with: .color(.white.opacity(0.5)),
+            style: StrokeStyle(lineWidth: 3, dash: [6, 6])
+        )
+    }
+
+    @ViewBuilder
+    private func nodesLayer(center: CGPoint, radius: CGFloat) -> some View {
+        let nodeCount = CGFloat(card.nodes.count)
+        let accentColor = Color(hex: palette.color2Hex) ?? .blue
+
+        ForEach(Array(card.nodes.enumerated()), id: \.element.id) { index, node in
+            let angle = (2 * .pi / nodeCount) * CGFloat(index) - .pi / 2
+            let x = center.x + radius * cos(angle)
+            let y = center.y + radius * sin(angle)
+
+            diagramNodeItem(node: node, x: x, y: y, accentColor: accentColor)
+        }
+    }
+
+    @ViewBuilder
+    private func diagramNodeItem(node: DiagramNode, x: CGFloat, y: CGFloat, accentColor: Color) -> some View {
+        DiagramNodeView(
+            node: node,
+            isVisible: visibleNodes.contains(node.id),
+            accentColor: accentColor
+        )
+        .position(x: x, y: y)
+        .gesture(nodeDragGesture(for: node))
+        .onAppear {
+            DispatchQueue.main.async {
+                nodePositions[node.id] = CGPoint(x: x, y: y)
+            }
+        }
+    }
+
+    private func nodeDragGesture(for node: DiagramNode) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                if dragSourceId == nil {
+                    dragSourceId = node.id
+                }
+                dragPosition = value.location
+                if Int(value.translation.width) % 20 == 0 || Int(value.translation.height) % 20 == 0 {
+                    LyoHapticManager.shared.playTypingCharacter()
+                }
+            }
+            .onEnded { value in
+                handleDragEnd(dropLocation: value.location, sourceId: node.id)
+            }
     }
     
     private func startAnimations() {
@@ -163,14 +184,14 @@ public struct DiagramCardView: View {
                     establishedConnections.insert("\(sourceId)-\(targetId)")
                     establishedConnections.insert("\(targetId)-\(sourceId)") // Register both directions
                 }
-                LyoHapticManager.shared.playSuccess()
+                LyoHapticManager.shared.playQuizSuccess()
             } else {
                 // Invalid hit
-                LyoHapticManager.shared.playImpact(.heavy)
+                LyoHapticManager.shared.playCardArrival()
             }
         } else {
             // Dropped in empty space
-            LyoHapticManager.shared.playImpact(.medium)
+            LyoHapticManager.shared.playTypingCharacter()
         }
     }
 }

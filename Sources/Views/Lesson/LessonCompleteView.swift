@@ -82,7 +82,7 @@ public struct LessonCompleteView: View {
         }
         .onAppear {
             analytics.endSession()
-            LyoHapticManager.shared.playSuccess()
+            LyoHapticManager.shared.playQuizSuccess()
             withAnimation {
                 appearAnimation = true
             }

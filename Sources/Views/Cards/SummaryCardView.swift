@@ -23,14 +23,14 @@ public struct SummaryCardView: View {
                 
                 Text(card.title.uppercased())
                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(hex: palette.color2Hex) ?? .blue)
+                    .foregroundColor(Color(hex: palette.color2Hex))
                     .tracking(2.0)
                 
                 VStack(alignment: .leading, spacing: 24) {
                     ForEach(Array(card.keyPoints.enumerated()), id: \.offset) { index, point in
                         HStack(alignment: .top, spacing: 16) {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(Color(hex: palette.color2Hex) ?? .blue)
+                                .foregroundColor(Color(hex: palette.color2Hex))
                                 .font(.system(size: 24))
                                 .padding(.top, 2)
                             

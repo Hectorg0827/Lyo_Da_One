@@ -36,11 +36,16 @@ struct MultimodalMessageBubble: View {
                 // AI Header: Mascot & Speaker ABOVE
                 HStack(alignment: .center, spacing: 10) {
                     HStack(spacing: 8) {
-                        Image("Mascot_Standing")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
+                        if message.isStreaming {
+                            AnimatedReadingMascotView(size: 28)
+                        } else {
+                            Image("Mascot_Standing")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 28, height: 28)
+                                .clipShape(Circle())
+                                .offset(y: 10)
+                        }
                         
                         Text("Lyo")
                             .font(.caption.bold())
