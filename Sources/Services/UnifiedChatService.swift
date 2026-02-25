@@ -1210,7 +1210,8 @@ final class UnifiedChatService: ObservableObject {
                 if let courseDict = block.content[key]?.value {
                     Log.ai.info("🏫 Found nested '\(key)' dict, attempting decode")
                     do {
-                        let data = try JSONSerialization.data(withJSONObject: courseDict)
+                        let sanitized = AnyCodable.sanitizeForJSON(courseDict)
+                        let data = try JSONSerialization.data(withJSONObject: sanitized)
                         let course = try JSONDecoder().decode(CoursePayload.self, from: data)
                         Log.ai.info("🏫 ✅ Decoded CoursePayload from '\(key)': \(course.title)")
                         return course
@@ -1226,7 +1227,8 @@ final class UnifiedChatService: ObservableObject {
             if !contentDict.isEmpty {
                 Log.ai.info("🏫 Trying to decode full content dict as CoursePayload")
                 do {
-                    let data = try JSONSerialization.data(withJSONObject: contentDict)
+                    let sanitized = AnyCodable.sanitizeForJSON(contentDict)
+                    let data = try JSONSerialization.data(withJSONObject: sanitized)
                     let course = try JSONDecoder().decode(CoursePayload.self, from: data)
                     Log.ai.info("🏫 ✅ Decoded CoursePayload from full content: \(course.title)")
                     return course
@@ -1243,7 +1245,8 @@ final class UnifiedChatService: ObservableObject {
             guard let componentDict = block.content[key]?.value else { continue }
             Log.ai.info("🏫 Found '\(key)' in content, attempting A2UI component decode")
             do {
-                let data = try JSONSerialization.data(withJSONObject: componentDict)
+                let sanitized = AnyCodable.sanitizeForJSON(componentDict)
+                let data = try JSONSerialization.data(withJSONObject: sanitized)
                 let component = try JSONDecoder().decode(A2UIComponent.self, from: data)
                 
                 // Check for intent in the component tree (root or first-level children)
