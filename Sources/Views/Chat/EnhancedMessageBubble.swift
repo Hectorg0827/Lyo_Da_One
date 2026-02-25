@@ -205,13 +205,36 @@ struct EnhancedMessageBubble: View {
                             }
 
                         case .courseProposal(let payload):
-                            CourseProposalCardView(
-                                payload: payload,
+                            ChatInteractiveCardView(
+                                type: .course(
+                                    title: payload.title,
+                                    topic: payload.topic,
+                                    level: payload.level,
+                                    duration: payload.duration,
+                                    imageURL: nil
+                                ),
                                 onStart: {
+                                    // Save to Focus stack then open classroom
+                                    _ = AICommandHandler.shared.handleOpenClassroom(
+                                        AICommandPayload(stackItem: nil, course: payload)
+                                    )
+                                    UIStackStore.shared.upsertCourse(
+                                        courseId: payload.id ?? UUID().uuidString,
+                                        title: payload.title,
+                                        subtitle: payload.topic
+                                    )
                                     AICommandHandler.shared.executeOpenClassroom(for: payload)
                                 },
-                                onAdjust: {
-                                    onSuggestionSelect?("I'd like to adjust the course: \(payload.title). Can you modify it?")
+                                onRefine: {
+                                    onSuggestionSelect?("I want to refine the course '\(payload.title)' on \(payload.topic). Please offer options to adjust the difficulty, duration, or focus areas.")
+                                },
+                                onSave: {
+                                    UIStackStore.shared.upsertCourse(
+                                        courseId: payload.id ?? UUID().uuidString,
+                                        title: payload.title,
+                                        subtitle: payload.topic
+                                    )
+                                    HapticManager.shared.playSuccess()
                                 }
                             )
                             .padding(.horizontal, -8)

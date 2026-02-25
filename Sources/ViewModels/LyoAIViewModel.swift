@@ -629,6 +629,12 @@ class LyoAIViewModel: ObservableObject {
     func onA2UICourseStart(course: CourseCreationData) {
         Log.ai.info("LyoAIViewModel: Starting A2UI course -> \(course.title)")
         HapticManager.shared.playSuccess()
+        // Save to Focus stack before opening classroom
+        UIStackStore.shared.upsertCourse(
+            courseId: course.id,
+            title: course.title,
+            subtitle: course.topic
+        )
         unifiedChat.pendingCourse = course
         unifiedChat.triggerCourseNavigation()
     }

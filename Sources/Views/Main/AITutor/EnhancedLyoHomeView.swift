@@ -468,7 +468,16 @@ struct EnhancedLyoHomeView: View {
             }
         case .openDrawer:
             viewModel.isDrawerOpen = true
-        case .createCourse, .createCourseA2A, .quizMe, .addToLibrary, .generateSyllabus, .quickExplainer, .makeFlashcards, .extractKeyPoints:
+        case .generateSyllabus:
+            // "Refine Course" button tapped — inject a refinement prompt into chat
+            if let data = action.data, data["refine"] == "true",
+               let title = data["title"], let topic = data["topic"] {
+                viewModel.inputText = "I want to refine the course '\(title)' on \(topic). Please offer options to adjust the difficulty level, duration, or focus areas."
+                Task { await viewModel.sendMessage() }
+            } else {
+                Log.ui.info("Action: generateSyllabus")
+            }
+        case .createCourse, .createCourseA2A, .quizMe, .addToLibrary, .quickExplainer, .makeFlashcards, .extractKeyPoints:
             Log.ui.info("Action: \(action.actionType.rawValue)")
         }
     }

@@ -243,6 +243,49 @@ struct LyoMessageBubbleView: View {
     @ViewBuilder
     private func renderContentType(_ contentType: MessageContentType) -> some View {
         switch contentType {
+        case .courseProposal(let payload):
+            ChatInteractiveCardView(
+                type: .course(
+                    title: payload.title,
+                    topic: payload.topic,
+                    level: payload.level,
+                    duration: payload.duration,
+                    imageURL: nil
+                ),
+                onStart: {
+                    let courseData = CourseCreationData(
+                        id: payload.id ?? UUID().uuidString,
+                        title: payload.title,
+                        topic: payload.topic,
+                        level: payload.level,
+                        modules: []
+                    )
+                    // Save shell to Focus stack, then open classroom
+                    UIStackStore.shared.upsertCourse(
+                        courseId: courseData.id,
+                        title: courseData.title,
+                        subtitle: courseData.topic
+                    )
+                    onA2UICourseStart?(courseData)
+                },
+                onRefine: {
+                    onActionTap?(MessageAction(
+                        id: "refine_course",
+                        label: "Refine Course",
+                        actionType: .generateSyllabus,
+                        data: ["topic": payload.topic, "title": payload.title, "refine": "true"]
+                    ))
+                },
+                onSave: {
+                    UIStackStore.shared.upsertCourse(
+                        courseId: payload.id ?? UUID().uuidString,
+                        title: payload.title,
+                        subtitle: payload.topic
+                    )
+                    HapticManager.shared.playSuccess()
+                }
+            )
+
         case .courseRoadmap(let title, let modules, _, _):
             ChatInteractiveCardView(
                 type: .course(title: title, topic: title, level: "intermediate", duration: "\(modules.count * 10) min", imageURL: nil),

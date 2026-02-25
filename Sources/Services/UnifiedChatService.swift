@@ -188,15 +188,10 @@ final class UnifiedChatService: ObservableObject {
             }
             
             // If backend returned OPEN_CLASSROOM with a CoursePayload, render as proposal card
+            // User must tap "Start Class" — no auto-navigation
             if let coursePayload = coursePayload {
-                Log.ai.info("🏫 Fast path: rendering course proposal card for '\(coursePayload.title)'")
+                Log.ai.info("🏫 Fast path: showing course proposal card for '\(coursePayload.title)' — awaiting user action")
                 contentTypes = [.courseProposal(payload: coursePayload)]
-                _ = AICommandHandler.shared.handleOpenClassroom(
-                    AICommandPayload(stackItem: nil, course: coursePayload)
-                )
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
-                }
             }
             
             let fastMsg = LyoMessage(
@@ -667,13 +662,7 @@ final class UnifiedChatService: ObservableObject {
             
             // 3. Check if artifact contains OPEN_CLASSROOM payload → render proposal card
             else if let coursePayload = tryDecodeOpenClassroom(from: block) {
-                Log.ai.info("📋 OPEN_CLASSROOM detected in artifact — replacing answer with proposal card")
-                _ = AICommandHandler.shared.handleOpenClassroom(
-                    AICommandPayload(stackItem: nil, course: coursePayload)
-                )
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
-                }
+                Log.ai.info("📋 OPEN_CLASSROOM detected in artifact — showing proposal card (user must tap Start Class)")
                 // Replace the existing answer message to avoid duplicates
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
                     // Merge types
@@ -808,42 +797,32 @@ final class UnifiedChatService: ObservableObject {
             isLoading = false
             
         case .openClassroom(let block):
-            Log.ai.info("📋 OPEN_CLASSROOM stream event — auto-opening classroom")
+            Log.ai.info("📋 OPEN_CLASSROOM stream event — showing proposal card (user must tap Start Class)")
             if let coursePayload = tryDecodeOpenClassroom(from: block) {
-                // Stage the course on AICommandHandler
-                _ = AICommandHandler.shared.handleOpenClassroom(
-                    AICommandPayload(stackItem: nil, course: coursePayload)
-                )
-                
-                // Show a brief summary card in chat (not the full course)
-                let briefContent = "Creating your course: **\(coursePayload.title)** 🎓\nOpening classroom…"
+                // Show interactive proposal card — user chooses Start Class / Save to Stack / Refine Course
+                let proposalContent = "Here's your course proposal! Tap **Start Class** to begin, **Save to Stack** to save for later, or **Refine Course** to adjust. 🎓"
                 if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    let summaryMsg = LyoMessage(
+                    let proposalMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: messages[idx].sessionId,
-                        content: briefContent,
+                        content: proposalContent,
                         isFromUser: false,
                         timestamp: messages[idx].timestamp,
-                        contentTypes: [.text]
+                        contentTypes: [.courseProposal(payload: coursePayload)]
                     )
-                    messages[idx] = summaryMsg
+                    messages[idx] = proposalMsg
                 } else {
-                    let summaryMsg = LyoMessage(
+                    let proposalMsg = LyoMessage(
                         id: aiMessageId,
                         sessionId: currentConversationId,
-                        content: briefContent,
+                        content: proposalContent,
                         isFromUser: false,
                         timestamp: Date(),
-                        contentTypes: [.text]
+                        contentTypes: [.courseProposal(payload: coursePayload)]
                     )
-                    messages.append(summaryMsg)
+                    messages.append(proposalMsg)
                 }
                 Task { await saveConversation() }
-                
-                // Auto-navigate to classroom after a brief delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
-                }
             }
             
         case .a2ui(let block):
@@ -854,13 +833,7 @@ final class UnifiedChatService: ObservableObject {
             if let a2uiComponent = tryDecodeA2UIComponent(from: block) {
                 // Check if this A2UI component carries an open_classroom intent
                 if let coursePayload = extractCourseFromComponent(a2uiComponent) {
-                    Log.ai.info("📋 A2UI component has classroom intent — rendering proposal card")
-                    _ = AICommandHandler.shared.handleOpenClassroom(
-                        AICommandPayload(stackItem: nil, course: coursePayload)
-                    )
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
-                    }
+                    Log.ai.info("📋 A2UI component has classroom intent — showing proposal card (no auto-navigate)")
                     if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
                         var currentTypes = messages[idx].contentTypes ?? []
                         currentTypes.removeAll { if case .processing = $0 { return true } else { return false } }

@@ -188,8 +188,8 @@ struct ChatInteractiveCardView: View {
                     .padding(.bottom, 8)
                 
                 // Action Buttons
-                HStack(spacing: 12) {
-                    // Start Button
+                VStack(spacing: 10) {
+                    // Start Class Button (full width, primary CTA)
                     Button {
                         guard !isGenerating else { return }
                         HapticManager.shared.playMediumImpact()
@@ -199,10 +199,10 @@ struct ChatInteractiveCardView: View {
                         HStack(spacing: 6) {
                             if isGenerating {
                                 ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white)).scaleEffect(0.8)
-                                Text("Starting")
+                                Text("Starting…")
                             } else {
                                 Image(systemName: "play.fill")
-                                Text("Start")
+                                Text("Start Class")
                             }
                         }
                         .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -214,35 +214,46 @@ struct ChatInteractiveCardView: View {
                         .shadow(color: .black.opacity(0.15), radius: 5, y: 3)
                     }
                     .disabled(isGenerating)
-                    
-                    // Refine Button
-                    Button {
-                        HapticManager.shared.playLightImpact()
-                        onRefine()
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 16, weight: .bold))
+
+                    // Secondary row: Refine Course + Save to Stack
+                    HStack(spacing: 8) {
+                        // Refine Course Button
+                        Button {
+                            HapticManager.shared.playLightImpact()
+                            onRefine()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("Refine Course")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
                             .foregroundColor(.white)
-                            .padding(.vertical, 14)
-                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .frame(maxWidth: .infinity)
                             .background(Color.white.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.3), lineWidth: 1))
-                    }
-                    
-                    // Save Button
-                    Button {
-                        HapticManager.shared.playLightImpact()
-                        onSave()
-                    } label: {
-                        Image(systemName: "bookmark")
-                            .font(.system(size: 16, weight: .bold))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.35), lineWidth: 1))
+                        }
+
+                        // Save to Stack Button
+                        Button {
+                            HapticManager.shared.playLightImpact()
+                            onSave()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "bookmark.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("Save to Stack")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
                             .foregroundColor(.white)
-                            .padding(.vertical, 14)
-                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .frame(maxWidth: .infinity)
                             .background(Color.white.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.3), lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.35), lineWidth: 1))
+                        }
                     }
                 }
             }
