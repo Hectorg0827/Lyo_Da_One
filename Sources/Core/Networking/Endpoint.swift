@@ -865,7 +865,7 @@ enum Endpoints {
             case .stream: return "/api/v2/courses/stream-a2a"
             case .generate: return "/api/v2/courses/generate"
             case .status(let taskId): return "/api/v2/courses/status/\(taskId)"
-            case .result(let taskId): return "/api/v2/courses/result/\(taskId)"
+            case .result(let taskId): return "/api/v2/courses/\(taskId)/result"
             case .discoverAgents: return "/api/v2/agents"
             case .getAgentCard(let name): return "/api/v2/agents/\(name)"
             case .protocolDiscovery: return "/.well-known/agent.json"

@@ -160,9 +160,28 @@ enum A2AEventType: String, Codable {
     case thinking = "thinking"
     case agentStarted = "agent_started"
     case agentCompleted = "agent_completed"
+    
+    // Multi-agent V2 streaming event types (from routes_streaming.py)
+    case started = "started"
+    case agentWorking = "agent_working"
+    case lessonComplete = "lesson_complete"
+    case progress = "progress"
+    case completed = "completed"
+    case costUpdate = "cost_update"
+    
+    // Catch-all for any unrecognized backend events
+    case unknown = "__unknown__"
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = A2AEventType(rawValue: rawValue) ?? .unknown
+    }
 }
 
-/// Streaming event from A2A pipeline
+/// Streaming event from A2A pipeline.
+/// Handles both the A2A orchestrator schema (event_type, pipeline_id)
+/// and the multi-agent-v2 streaming schema (type, progress, message, data).
 struct A2AStreamingEvent: Codable {
     let type: A2AEventType
     let timestamp: Date
@@ -175,17 +194,89 @@ struct A2AStreamingEvent: Codable {
     // New fields from backend schema
     let chunkContent: String?
     let thinkingContent: String?
-    let artifact: A2AArtifact?  // Using A2AArtifact from Agent Execution section
+    let artifact: A2AArtifact?
     let payload: [String: A2AAnyCodableValue]?
     
-    enum CodingKeys: String, CodingKey {
-        case type, timestamp
-        case pipelineId = "pipeline_id"
-        case phase, progress, message, data
-        case chunkContent = "chunk_content"
-        case thinkingContent = "thinking_content"
-        case artifact, payload
+    // MARK: - Custom Decoder
+    // Backend may send the event type key as either "type" or "event_type"
+    // and pipeline ID as either "pipeline_id" or "task_id".
+    // Many fields are optional depending on the event source.
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexCodingKeys.self)
+        
+        // Decode event type — try "type" first, then "event_type"
+        if let t = try? container.decode(A2AEventType.self, forKey: .init("type")) {
+            self.type = t
+        } else if let t = try? container.decode(A2AEventType.self, forKey: .init("event_type")) {
+            self.type = t
+        } else {
+            self.type = .unknown
+        }
+        
+        // Decode timestamp (optional — backend may omit it)
+        if let ts = try? container.decode(Date.self, forKey: .init("timestamp")) {
+            self.timestamp = ts
+        } else {
+            self.timestamp = Date()
+        }
+        
+        // Pipeline ID — try "pipeline_id" then "task_id"
+        if let pid = try? container.decode(String.self, forKey: .init("pipeline_id")) {
+            self.pipelineId = pid
+        } else if let tid = try? container.decode(String.self, forKey: .init("task_id")) {
+            self.pipelineId = tid
+        } else {
+            self.pipelineId = "unknown"
+        }
+        
+        self.phase = try? container.decode(A2APipelinePhase.self, forKey: .init("phase"))
+        self.progress = (try? container.decode(Int.self, forKey: .init("progress"))) ?? 0
+        self.message = try? container.decode(String.self, forKey: .init("message"))
+        self.data = try? container.decode(A2AEventData.self, forKey: .init("data"))
+        self.chunkContent = try? container.decode(String.self, forKey: .init("chunk_content"))
+        self.thinkingContent = try? container.decode(String.self, forKey: .init("thinking_content"))
+        self.artifact = try? container.decode(A2AArtifact.self, forKey: .init("artifact"))
+        self.payload = try? container.decode([String: A2AAnyCodableValue].self, forKey: .init("payload"))
     }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: FlexCodingKeys.self)
+        try container.encode(type, forKey: .init("type"))
+        try container.encode(timestamp, forKey: .init("timestamp"))
+        try container.encode(pipelineId, forKey: .init("pipeline_id"))
+        try container.encodeIfPresent(phase, forKey: .init("phase"))
+        try container.encode(progress, forKey: .init("progress"))
+        try container.encodeIfPresent(message, forKey: .init("message"))
+        try container.encodeIfPresent(data, forKey: .init("data"))
+        try container.encodeIfPresent(chunkContent, forKey: .init("chunk_content"))
+        try container.encodeIfPresent(thinkingContent, forKey: .init("thinking_content"))
+        try container.encodeIfPresent(artifact, forKey: .init("artifact"))
+        try container.encodeIfPresent(payload, forKey: .init("payload"))
+    }
+    
+    /// Manual init for testing/internal use
+    init(
+        type: A2AEventType, timestamp: Date = Date(), pipelineId: String = "",
+        phase: A2APipelinePhase? = nil, progress: Int = 0, message: String? = nil,
+        data: A2AEventData? = nil, chunkContent: String? = nil,
+        thinkingContent: String? = nil, artifact: A2AArtifact? = nil,
+        payload: [String: A2AAnyCodableValue]? = nil
+    ) {
+        self.type = type; self.timestamp = timestamp; self.pipelineId = pipelineId
+        self.phase = phase; self.progress = progress; self.message = message
+        self.data = data; self.chunkContent = chunkContent
+        self.thinkingContent = thinkingContent; self.artifact = artifact; self.payload = payload
+    }
+}
+
+/// Flexible coding keys that accept any string key.
+private struct FlexCodingKeys: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(_ string: String) { self.stringValue = string }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
 }
 
 struct A2AEventData: Codable {

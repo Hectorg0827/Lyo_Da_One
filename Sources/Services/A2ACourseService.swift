@@ -122,6 +122,11 @@ final class A2ACourseService: ObservableObject {
                     self.streamingState = .streaming
                 }
                 
+                // Track completion data from streaming events
+                var completionCourseId: String?
+                var completionPayload: [String: A2AAnyCodableValue]?
+                var didComplete = false
+                
                 // Process lines from stream
                 let lines = bytes.lines
                 for try await line in lines {
@@ -141,25 +146,135 @@ final class A2ACourseService: ObservableObject {
                             handleStreamingEvent(event, onEvent: onEvent)
                         }
                         
-                        if event.type == .pipelineCompleted {
+                        // Capture completion data
+                        if event.type == .pipelineCompleted || event.type == .completed {
+                            completionCourseId = event.data?.courseId ?? event.pipelineId
+                            completionPayload = event.payload
+                            didComplete = true
                             break
                         }
                     } catch {
                         Log.ai.warning("Failed to decode streaming event: \(error)")
                         Log.ai.info("Raw data: \(jsonString)")
+                        
+                        // Even if formal decode fails, try to extract progress from raw JSON
+                        await self.handleRawSSEFallback(jsonString: jsonString, onEvent: onEvent)
                     }
                 }
                 
-                await MainActor.run {
-                    self.isGenerating = false
-                    self.streamingState = .idle
+                // ── After stream ends: Fetch the final course ──
+                if didComplete || self.currentPipelineId != nil {
+                    let jobId = completionCourseId ?? self.currentPipelineId ?? ""
+                    Log.ai.info("🎯 Stream completed, fetching course result for: \(jobId)")
+                    
+                    // Strategy 1: Try to decode course from the payload of the completion event
+                    if let payload = completionPayload {
+                        do {
+                            let payloadData = try JSONEncoder().encode(payload)
+                            let course = try JSONDecoder.lyoDecoder.decode(A2AGeneratedCourse.self, from: payloadData)
+                            await MainActor.run {
+                                self.generatedCourse = course
+                                self.streamingState = .completed
+                                self.isGenerating = false
+                                self.progress = 100
+                            }
+                            Log.ai.info("✅ Course decoded from stream payload: \(course.title)")
+                            return
+                        } catch {
+                            Log.ai.info("Payload decode failed, will fetch via API: \(error)")
+                        }
+                        
+                        // Strategy 1b: Try decoding A2ACourseResponse which wraps the course
+                        do {
+                            let payloadData = try JSONEncoder().encode(payload)
+                            let courseResponse = try JSONDecoder.lyoDecoder.decode(A2ACourseResponse.self, from: payloadData)
+                            if let course = courseResponse.course {
+                                await MainActor.run {
+                                    self.generatedCourse = course
+                                    self.streamingState = .completed
+                                    self.isGenerating = false
+                                    self.progress = 100
+                                }
+                                Log.ai.info("✅ Course decoded from A2ACourseResponse payload: \(course.title)")
+                                return
+                            }
+                        } catch {
+                            Log.ai.info("A2ACourseResponse payload decode also failed: \(error)")
+                        }
+                    }
+                    
+                    // Strategy 2: Fetch via result API endpoint
+                    if !jobId.isEmpty && jobId != "unknown" {
+                        do {
+                            let course = try await fetchFinalCourseResult(jobId: jobId)
+                            await MainActor.run {
+                                self.generatedCourse = course
+                                self.streamingState = .completed
+                                self.isGenerating = false
+                                self.progress = 100
+                            }
+                            Log.ai.info("✅ Course fetched via API: \(course.title)")
+                            return
+                        } catch {
+                            Log.ai.warning("⚠️ Failed to fetch course via A2A result: \(error)")
+                        }
+                        
+                        // Strategy 2b: Try CourseGenerationV2 result endpoint (different URL pattern)
+                        do {
+                            let endpoint = Endpoints.CourseGenerationV2.result(jobId: jobId)
+                            let apiResult: APICourseResult = try await NetworkClient.shared.request(endpoint)
+                            let course = convertApiResultToCourse(apiResult)
+                            await MainActor.run {
+                                self.generatedCourse = course
+                                self.streamingState = .completed
+                                self.isGenerating = false
+                                self.progress = 100
+                            }
+                            Log.ai.info("✅ Course fetched via V2 result: \(course.title)")
+                            return
+                        } catch {
+                            Log.ai.warning("⚠️ Failed to fetch course via V2 result: \(error)")
+                        }
+                    }
+                    
+                    // If all else fails, report error
+                    await MainActor.run {
+                        self.errorMessage = "Course was generated but could not be retrieved."
+                        self.streamingState = .failed(A2AError.noCourseGenerated)
+                        self.isGenerating = false
+                    }
+                } else {
+                    await MainActor.run {
+                        self.isGenerating = false
+                        self.streamingState = .idle
+                    }
                 }
                 
             } catch {
-                await MainActor.run {
-                    self.errorMessage = error.localizedDescription
-                    self.streamingState = .failed(error)
-                    self.isGenerating = false
+                Log.ai.error("❌ SSE streaming failed: \(error). Falling back to polling...")
+                
+                // ── Fallback: Use submit + poll approach ──
+                do {
+                    let course = try await self.generateCourse(
+                        topic: topic,
+                        qualityTier: qualityTier,
+                        userContext: userContext,
+                        enableVisuals: enableVisuals,
+                        enableVoice: enableVoice
+                    )
+                    await MainActor.run {
+                        self.generatedCourse = course
+                        self.streamingState = .completed
+                        self.isGenerating = false
+                        self.progress = 100
+                    }
+                    Log.ai.info("✅ Course generated via polling fallback: \(course.title)")
+                } catch {
+                    await MainActor.run {
+                        self.errorMessage = error.localizedDescription
+                        self.streamingState = .failed(error)
+                        self.isGenerating = false
+                    }
                 }
             }
         }
@@ -189,6 +304,64 @@ final class A2ACourseService: ObservableObject {
                 Log.ai.info("Raw data: \(jsonString)")
             }
         }
+    }
+    
+    // MARK: - Raw SSE Fallback
+    
+    /// When formal decode fails, try to extract useful progress info from raw JSON.
+    @MainActor
+    private func handleRawSSEFallback(jsonString: String, onEvent: @escaping (A2AStreamingEvent) -> Void) {
+        guard let jsonData = jsonString.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return }
+        
+        // Extract type string
+        let typeStr = (json["type"] as? String) ?? (json["event_type"] as? String) ?? ""
+        let progressVal = (json["progress"] as? Int) ?? (json["progress_percent"] as? Int) ?? self.progress
+        let messageVal = json["message"] as? String
+        
+        // Update progress even if we can't form a full event
+        self.progress = progressVal
+        
+        // Map backend V2 types to pipeline phases for UI timeline
+        switch typeStr {
+        case "started", "pipeline_started":
+            self.currentPhase = .initialization
+        case "agent_working":
+            if let agent = (json["data"] as? [String: Any])?["agent"] as? String {
+                switch agent {
+                case "orchestrator": self.currentPhase = .initialization
+                case "curriculum_architect": self.currentPhase = .pedagogy
+                case "content_creator": self.currentPhase = .cinematic
+                case "assessment_designer": self.currentPhase = .qaCheck
+                case "qa_agent": self.currentPhase = .qaCheck
+                default: break
+                }
+            }
+        case "lesson_complete", "progress":
+            // Keep current phase, just update progress
+            break
+        case "completed", "pipeline_completed":
+            self.currentPhase = .finalization
+            self.progress = 100
+            // Extract course_id if available
+            if let data = json["data"] as? [String: Any], let cid = data["course_id"] as? String {
+                self.currentPipelineId = cid
+            }
+        default:
+            break
+        }
+        
+        // Build a synthetic event for the onEvent callback
+        let syntheticEvent = A2AStreamingEvent(
+            type: A2AEventType(rawValue: typeStr) ?? .unknown,
+            pipelineId: self.currentPipelineId ?? "unknown",
+            progress: progressVal,
+            message: messageVal
+        )
+        self.streamingEvents.append(syntheticEvent)
+        onEvent(syntheticEvent)
+        
+        Log.ai.debug("📡 Raw SSE fallback: type=\(typeStr) progress=\(progressVal)")
     }
     
     /// Start the generation job on the backend
@@ -537,19 +710,35 @@ extension A2ACourseService {
             }
         }
         
-        if event.type == .pipelineCompleted {
-            Log.ai.info("✨ Pipeline Completed Successfully: \(event.pipelineId)")
-        } else if event.type == .error {
+        switch event.type {
+        case .pipelineCompleted, .completed:
+            Log.ai.info("✨ Pipeline Completed: \(event.pipelineId)")
+            self.currentPhase = .finalization
+            self.progress = 100
+        case .pipelineStarted, .started:
+            Log.ai.info("🚀 Pipeline Started: \(event.pipelineId)")
+            self.currentPhase = .initialization
+        case .agentWorking:
+            Log.ai.debug("🤖 Agent Working: \(event.message ?? "")")
+        case .lessonComplete:
+            Log.ai.debug("📚 Lesson Complete: \(event.message ?? "")")
+        case .progress:
+            Log.ai.debug("📊 Progress: \(event.progress)%")
+        case .costUpdate:
+            Log.ai.debug("💰 Cost Update")
+        case .error:
             self.errorMessage = event.message
             self.streamingState = .failed(LyoError.network(.serverError(500)))
-        } else if event.type == .contentChunk {
-            // Can be used to stream partial text to UI if needed
-             Log.ai.debug("📝 Chunk: \(event.chunkContent?.prefix(20) ?? "")")
-        } else if event.type == .thinking {
-             Log.ai.debug("🤔 Thinking: \(event.thinkingContent?.prefix(50) ?? "")")
-        } else if event.type == .artifactCreated {
+        case .contentChunk:
+            Log.ai.debug("📝 Chunk: \(event.chunkContent?.prefix(20) ?? "")")
+        case .thinking:
+            Log.ai.debug("🤔 Thinking: \(event.thinkingContent?.prefix(50) ?? "")")
+        case .artifactCreated:
             Log.ai.info("🎨 Artifact Created: \(event.artifact?.name ?? "Unknown")")
-            // Here we could append to a list of artifacts or notify UI
+        case .unknown:
+            Log.ai.debug("❓ Unknown event: \(event.message ?? "")")
+        default:
+            break
         }
         
         onEvent(event)

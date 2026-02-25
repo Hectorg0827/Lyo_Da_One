@@ -672,6 +672,13 @@ extension A2AEventType {
         case .thinking: return "💭"
         case .agentStarted: return "🏁"
         case .agentCompleted: return "🏆"
+        case .started: return "🚀"
+        case .agentWorking: return "🤖"
+        case .lessonComplete: return "📚"
+        case .progress: return "📊"
+        case .completed: return "🎉"
+        case .costUpdate: return "💰"
+        case .unknown: return "❓"
         }
     }
 }
