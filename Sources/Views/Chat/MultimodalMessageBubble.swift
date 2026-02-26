@@ -357,10 +357,43 @@ struct MultimodalMessageBubble: View {
         return Color(.systemBackground)
     }
     
-    // MARK: - Course Card Bubble
+    // MARK: - Course Card Bubble (Premium Gamified UI)
     
     private func courseCardBubble(_ course: CourseCardContent) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: AI Badge
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("AI GENERATED COURSE")
+                        .font(.system(size: 9, weight: .black, design: .rounded))
+                }
+                .foregroundColor(Color.accentColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.accentColor.opacity(0.15))
+                .clipShape(Capsule())
+                
+                Spacer()
+                
+                if let duration = course.duration {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.fill")
+                        Text(duration)
+                    }
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                }
+            }
+            .padding(12)
+            .padding(.bottom, -8) // Pull content up
+            .zIndex(1)
+            
             // Thumbnail
             if let thumbnail = course.thumbnail {
                 AsyncImage(url: thumbnail) { image in
@@ -368,50 +401,84 @@ struct MultimodalMessageBubble: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Rectangle()
-                        .fill(Color(.systemGray5))
+                    ZStack {
+                        Color.accentColor.opacity(0.1)
+                        Image(systemName: "play.tv.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.accentColor.opacity(0.5))
+                    }
                 }
-                .frame(height: 120)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .frame(height: 140)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
             }
             
-            Text(course.title)
-                .font(.headline)
-            
-            if let description = course.description {
-                Text(description)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(course.title)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
                     .lineLimit(2)
-            }
-            
-            HStack {
-                if let duration = course.duration {
-                    Label(duration, systemImage: "clock")
-                        .font(.caption2)
+                
+                if let description = course.description {
+                    Text(description)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Button {
-                    onCourseOpen?(course.courseId)
-                    HapticManager.shared.playMediumImpact()
-                } label: {
-                    Text("Start")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor)
-                        .foregroundColor(.white)
-                        .clipShape(Capsule())
+                        .lineLimit(2)
                 }
             }
+            .padding(14)
+            
+            // CTA Button
+            Button {
+                onCourseOpen?(course.courseId)
+                HapticManager.shared.playSuccess()
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Start Course")
+                        .font(.headline.weight(.bold))
+                    Image(systemName: "play.circle.fill")
+                        .font(.title3)
+                    Spacer()
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: Color.accentColor.opacity(0.3), radius: 8, y: 4)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
-        .padding(12)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .frame(width: 260)
+        .background(
+            ZStack {
+                // Frosted Glass Base
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThickMaterial)
+                
+                // Subtle Glow Border
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.5), .clear, Color.accentColor.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            }
+        )
+        // Main Card Shadow
+        .shadow(color: Color.black.opacity(0.1), radius: 15, y: 10)
+        .frame(width: 280)
     }
     
     // MARK: - Poll Bubble

@@ -137,7 +137,12 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
                 if connection.isVideoStabilizationSupported {
                     connection.preferredVideoStabilizationMode = .cinematic
                 }
-                connection.videoOrientation = .portrait
+                if #available(iOS 17.0, *) {
+                    // 0 degrees means portrait by default; use 0, 90, 180, 270 as needed
+                    connection.videoRotationAngle = 0
+                } else {
+                    connection.videoOrientation = .portrait
+                }
             }
         }
 
@@ -625,3 +630,4 @@ extension EnhancedCameraManager {
         }
     }
 }
+

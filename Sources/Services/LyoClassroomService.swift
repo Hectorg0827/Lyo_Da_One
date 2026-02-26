@@ -63,18 +63,23 @@ public class LyoClassroomService: ObservableObject {
             case .success(let message):
                 switch message {
                 case .string(let text):
-                    self.processJSONPayload(text)
+                    Task { @MainActor in
+                        self.processJSONPayload(text)
+                    }
                 case .data(let data):
                     if let text = String(data: data, encoding: .utf8) {
-                        self.processJSONPayload(text)
+                        Task { @MainActor in
+                            self.processJSONPayload(text)
+                        }
                     }
                 @unknown default:
                     break
                 }
                 
-                // Continue receiving if not complete
-                if !self.streamComplete {
-                    self.receiveMessages()
+                Task { @MainActor in
+                    if !self.streamComplete {
+                        self.receiveMessages()
+                    }
                 }
             }
         }

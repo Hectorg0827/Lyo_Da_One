@@ -17,11 +17,16 @@ struct EnhancedLyoHomeView: View {
     @State private var showBottomNav = true
     @State private var lastScrollOffset: CGFloat = 0
     @State private var drawerAutoHideTimer: Timer?
+    // Session creation state
+    @State private var isCreatingSession = false
     
     // Classroom navigation
-    @State private var showClassroom = false
-    @State private var classroomSessionId: String?
-    @State private var isCreatingSession = false
+    @State private var classroomSession: ClassroomSession?
+    
+    // Wrapper for using item-based fullScreenCover with a String id
+    struct ClassroomSession: Identifiable, Equatable {
+        let id: String
+    }
     
     // Accessibility
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -91,10 +96,16 @@ struct EnhancedLyoHomeView: View {
             }
             .zIndex(99)
             
-            // Loading overlay
+            // Loading overlay - always visible during session creation
             if isCreatingSession {
                 loadingOverlay
+                    .zIndex(150)
             }
+        }
+        // Present ClassroomView as fullScreenCover when classroomSession is set
+        .fullScreenCover(item: $classroomSession) { session in
+            ClassroomView(sessionId: session.id)
+                .zIndex(200)
         }
         .onAppear {
             viewModel.loadInitialSuggestions()
@@ -405,6 +416,10 @@ struct EnhancedLyoHomeView: View {
             VStack(spacing: 20) {
                 EnhancedAnimatedLyoAvatar(state: .thinking, size: 80)
                 
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.4)
+                
                 Text("Creating your lesson...")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundColor(.white)
@@ -494,13 +509,13 @@ struct EnhancedLyoHomeView: View {
                 )
                 
                 await MainActor.run {
-                    self.classroomSessionId = session.id
+                    self.classroomSession = ClassroomSession(id: session.id)
                     self.isCreatingSession = false
                     
                     // Post global notification for cinematic flow
                     NotificationCenter.default.post(
-                        name: .openClassroom, 
-                        object: nil, 
+                        name: .openClassroom,
+                        object: nil,
                         userInfo: [
                             "courseId": session.id,
                             "courseTitle": lessonData["title"] as? String ?? "New Lesson",

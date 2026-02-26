@@ -711,11 +711,13 @@ struct TopicSelectionView: View {
                     modules: [
                         CourseModuleData(id: "1", title: "Getting Started", description: "Setup and basics"),
                         CourseModuleData(id: "2", title: "Data Types", description: "Variables and structures")
-                    ]
+                    ],
+                    difficultyLevel: "beginner",
+                    instructorId: "demo-instructor"
                 ),
                 onStart: { _ in }
             )
-            
+
             A2UIQuizCardView(
                 quiz: QuizData(
                     title: "Python Basics Quiz",
@@ -725,7 +727,7 @@ struct TopicSelectionView: View {
                 ),
                 onAnswer: { _, _ in }
             )
-            
+
             FlashcardsCardView(
                 flashcards: FlashcardData(
                     title: "Python Vocabulary",
@@ -734,7 +736,7 @@ struct TopicSelectionView: View {
                     ]
                 )
             )
-            
+
             ProcessingIndicatorView(step: "Generating course...", progress: nil)
         }
         .padding()

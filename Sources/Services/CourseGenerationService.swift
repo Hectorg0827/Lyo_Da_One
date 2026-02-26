@@ -493,7 +493,9 @@ final class CourseGenerationService: ObservableObject {
                                 CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
                             }
                         )
-                    }
+                    },
+                    difficultyLevel: level.lowercased(),
+                    instructorId: await TokenManager.shared.getUserId() ?? "unknown"
                 )
                 try await LyoRepository.shared.saveCourse(data: persistenceData)
                 
@@ -755,7 +757,9 @@ final class CourseGenerationService: ObservableObject {
                                             CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
                                         }
                                     )
-                                }
+                                },
+                                difficultyLevel: level,
+                                instructorId: await TokenManager.shared.getUserId() ?? "unknown"
                             )
                             try await LyoRepository.shared.saveCourse(data: persistenceData)
                         } catch {
@@ -1042,7 +1046,9 @@ final class CourseGenerationService: ObservableObject {
                             CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
                         }
                     )
-                }
+                },
+                difficultyLevel: level.lowercased(),
+                instructorId: await TokenManager.shared.getUserId() ?? "unknown"
             )
             try await LyoRepository.shared.saveCourse(data: persistenceData)
         } catch {
@@ -1081,7 +1087,9 @@ final class CourseGenerationService: ObservableObject {
                                     CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
                                 }
                             )
-                        }
+                        },
+                        difficultyLevel: level.lowercased(),
+                        instructorId: await TokenManager.shared.getUserId() ?? "unknown"
                     )
                     try await LyoRepository.shared.saveCourse(data: persistenceData)
                 } catch {
@@ -2140,3 +2148,4 @@ enum CourseGenerationError: LocalizedError {
         }
     }
 }
+

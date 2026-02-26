@@ -113,6 +113,89 @@ final class CourseOrchestrator: ObservableObject {
         if let data = try? JSONEncoder().encode(course) {
             UserDefaults.standard.set(data, forKey: "course_cache_\(course.id)")
         }
+        // Also populate an in-memory lightweight GeneratedCourseResponse so
+        // InteractiveCinemaService and LiveClassroomViewModel can render a richer
+        // playable experience immediately while backend generation completes.
+        let entryLessonId = course.entryNodeId ?? "welcome_1"
+
+        // Welcome & orientation
+        let welcome = GenerationCourseLesson(
+            id: entryLessonId,
+            title: "Welcome",
+            content: "Welcome! Your personalized course is being prepared. We'll start with a quick orientation.",
+            durationMinutes: 1,
+            order: 1
+        )
+        let overview = GenerationCourseLesson(
+            id: "overview_1",
+            title: "Course Overview",
+            content: "In this short course you'll learn the fundamentals, complete practice tasks, and try a quick quiz to check progress.",
+            durationMinutes: 2,
+            order: 2
+        )
+
+        // Core content (video + practice)
+        let video = GenerationCourseLesson(
+            id: "video_1",
+            title: "Short Explainer Video",
+            content: "(Video) Watch this 90-second explainer to get the key ideas.",
+            durationMinutes: 3,
+            order: 1
+        )
+        let practice = GenerationCourseLesson(
+            id: "practice_1",
+            title: "Quick Practice",
+            content: "Try the interactive exercise: identify the main concept from three examples.",
+            durationMinutes: 4,
+            order: 2
+        )
+
+        // Assessment
+        let quiz = GenerationCourseLesson(
+            id: "quiz_1",
+            title: "Quick Quiz",
+            content: "A short 3-question quiz to check understanding.",
+            durationMinutes: 2,
+            order: 1
+        )
+
+        let welcomeModule = GenerationCourseModule(
+            id: "m_welcome",
+            title: "Welcome & Orientation",
+            description: course.description,
+            lessons: [welcome, overview],
+            order: 1
+        )
+
+        let coreModule = GenerationCourseModule(
+            id: "m_core",
+            title: "Core Concepts",
+            description: "Core learning material",
+            lessons: [video, practice],
+            order: 2
+        )
+
+        let assessmentModule = GenerationCourseModule(
+            id: "m_assess",
+            title: "Assessment",
+            description: "Check what you've learned",
+            lessons: [quiz],
+            order: 3
+        )
+
+        let stubGenerated = GeneratedCourseResponse(
+            courseId: course.id,
+            title: course.title,
+            description: course.description,
+            modules: [welcomeModule, coreModule, assessmentModule],
+            estimatedDuration: max(5, course.estimatedMinutes),
+            difficulty: course.gradeBand
+        )
+
+        Task { @MainActor in
+            CourseGenerationService.shared.generatedCourse = stubGenerated
+            Log.a2ui.info("CourseOrchestrator: populated richer GeneratedCourseResponse stub for \(course.id) with \(stubGenerated.modules.count) modules")
+        }
     }
 }
 

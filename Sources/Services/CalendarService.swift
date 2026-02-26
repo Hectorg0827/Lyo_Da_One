@@ -1,4 +1,3 @@
-
 import Foundation
 import EventKit
 import SwiftUI
@@ -20,16 +19,32 @@ class CalendarService: ObservableObject {
     
     func checkAccess() {
         let status = EKEventStore.authorizationStatus(for: .event)
-        isAccessGranted = (status == .authorized)
+        if #available(iOS 17.0, *) {
+            switch status {
+            case .fullAccess, .writeOnly:
+                isAccessGranted = true
+            default:
+                isAccessGranted = false
+            }
+        } else {
+            isAccessGranted = (status == .authorized)
+        }
     }
     
     // MARK: - Authorization
     
     func requestAccess() async -> Bool {
         do {
-            let granted = try await eventStore.requestAccess(to: .event)
-            self.isAccessGranted = granted
-            return granted
+            if #available(iOS 17.0, *) {
+                // Prefer full access for creating events
+                let granted = try await eventStore.requestFullAccessToEvents()
+                self.isAccessGranted = granted
+                return granted
+            } else {
+                let granted = try await eventStore.requestAccess(to: .event)
+                self.isAccessGranted = granted
+                return granted
+            }
         } catch {
             Log.general.error("Failed to request calendar access: \(error.localizedDescription)")
             return false

@@ -493,7 +493,9 @@ class CreateViewModel: ObservableObject {
                         CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
                     }
                 )
-            }
+            },
+            difficultyLevel: courseLevel,
+            instructorId: await TokenManager.shared.getUserId() ?? "unknown"
         )
         try await repository.saveCourse(data: persistenceData)
         

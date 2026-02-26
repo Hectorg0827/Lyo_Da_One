@@ -2347,8 +2347,6 @@ extension Endpoints {
                 return "/api/v1/community/posts/\(postId)/comments"
             case .createComment(let postId, _):
                 return "/api/v1/community/posts/\(postId)/comments"
-            case .likeComment(let commentId):
-                return "/api/v1/community/comments/\(commentId)/like"
             case .deleteComment(let postId, let commentId):
                 return "/api/v1/community/posts/\(postId)/comments/\(commentId)"
             case .likeComment(let postId, let commentId):

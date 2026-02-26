@@ -151,20 +151,16 @@ struct LioChatSheet: View {
                     }
                 }
                 
-                // Waiting Room Overlay
+                // Waiting Room Overlay (DISABLED temporarily for debugging)
                 if showingWaitingRoom {
-                    WaitingRoomView(
-                        courseTitle: courseTitleToGenerate,
-                        mascotNamespace: mascotAnimation,
-                        onComplete: {
-                            withAnimation {
+                    Color.black.opacity(0.8).ignoresSafeArea()
+                        .onAppear {
+                            // Immediately complete to skip the waiting room
+                            DispatchQueue.main.async {
                                 showingWaitingRoom = false
+                                pendingCourseCallback?()
                             }
-                            pendingCourseCallback?()
                         }
-                    )
-                    .zIndex(100)
-                    .transition(.opacity)
                 }
             }
             .navigationBarHidden(true)

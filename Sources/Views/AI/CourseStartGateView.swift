@@ -12,12 +12,17 @@
 
 import SwiftUI
 
+import Combine
+
 struct CourseStartGateView: View {
     let courseId: String
     let courseTitle: String
     let onProceed: () -> Void
 
+    @StateObject private var createViewModel = CreateViewModel()
+
     @StateObject private var monetization = MonetizationService.shared
+    @Environment(\.presentationMode) var presentationMode
 
     // ── Ad-gate state ──────────────────────────────────────────────────
     @State private var secondsRemaining: Int = 10
@@ -70,15 +75,12 @@ struct CourseStartGateView: View {
 
     private var adGateContent: some View {
         VStack(spacing: 0) {
-
-            // Top bar
+            // Top bar (unchanged)
             HStack {
                 Text("Your course is being prepared…")
                     .font(.caption.weight(.medium))
                     .foregroundColor(.white.opacity(0.45))
-
                 Spacer()
-
                 if canSkip {
                     Button(action: onProceed) {
                         Text("Skip  ›")
@@ -109,105 +111,151 @@ struct CourseStartGateView: View {
             .padding(.top, 56)
             .padding(.bottom, 16)
 
-            // ── Ad card ──────────────────────────────────────────────
-            // TODO: Replace this ZStack with a real AdMob interstitial view once
-            //       GADMobileAds (Google Mobile Ads SDK for iOS) is integrated.
-            //       See /Desktop/LyoBackendJune/ios_integration/AdMobIntegration.swift
-            ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "1E1B4B"), Color(hex: "2D2572")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22)
-                            .stroke(Color(hex: "6366F1").opacity(0.25), lineWidth: 1)
-                    )
-
-                VStack(spacing: 22) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 52, weight: .thin))
-                        .foregroundStyle(
+            // Progress bar bound to ViewModel
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.1))
+                        .frame(height: 6)
+                    Capsule()
+                        .fill(
                             LinearGradient(
                                 colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
-                                startPoint: .top,
-                                endPoint: .bottom
+                                startPoint: .leading,
+                                endPoint: .trailing
                             )
                         )
-
-                    Text("Learn faster with Lyo Premium")
-                        .font(.title2.weight(.bold))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-
-                    Text("Unlimited AI-generated courses,\nzero ads, and instant generation.")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-
-                    // Ad-progress bar replacing numeric countdown
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.1))
-                                .frame(height: 4)
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(
-                                    width: geo.size.width * CGFloat(10 - secondsRemaining) / 10.0,
-                                    height: 4
-                                )
-                                .animation(.linear(duration: 0.9), value: secondsRemaining)
-                        }
-                    }
-                    .frame(height: 4)
-                    .padding(.horizontal, 8)
-                }
-                .padding(32)
-
-                // AD badge
-                VStack {
-                    HStack {
-                        Spacer()
-                        Text("AD")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.white.opacity(0.35))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Color.white.opacity(0.07))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                            .padding(14)
-                    }
-                    Spacer()
+                        .frame(
+                            width: geo.size.width * CGFloat(createViewModel.progress),
+                            height: 6
+                        )
+                        .animation(.linear(duration: 0.5), value: createViewModel.progress)
                 }
             }
-            .frame(height: 370)
-            .padding(.horizontal, 16)
+            .frame(height: 12)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 12)
+
+            // Placeholder Ad Card (Interstitial Mock)
+            VStack(spacing: 16) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .frame(height: 260)
+                    .overlay(
+                        ZStack {
+                            // Branded gradient placeholder (Video style)
+                            LinearGradient(
+                                colors: [Color(hex: "0F172A"), Color(hex: "1E1B4B")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .opacity(0.8)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+
+                            VStack(spacing: 12) {
+                                // Ad Header
+                                HStack(spacing: 8) {
+                                    Text("Sponsored Video")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.white.opacity(0.12))
+                                        .clipShape(Capsule())
+                                    Spacer()
+                                    Button(action: {
+                                        presentationMode.wrappedValue.dismiss()
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundColor(.white.opacity(0.4))
+                                            .padding(8)
+                                            .background(Color.white.opacity(0.1))
+                                            .clipShape(Circle())
+                                    }
+                                }
+
+                                Spacer()
+
+                                // Play Button Video style
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.2))
+                                        .frame(width: 64, height: 64)
+                                        .blur(radius: 8)
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 56, height: 56)
+                                    Image(systemName: "play.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.white)
+                                        .offset(x: 2)
+                                }
+
+                                Text("Advertiser Video Placeholder")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundColor(.white)
+
+                                Text("Enjoy this short video format while we build your curriculum.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.75))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
+
+                                Spacer()
+
+                                // CTA + Countdown
+                                HStack(spacing: 12) {
+                                    Button(action: { /* open advertiser link */ }) {
+                                        Text("Learn More")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(.black)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 44)
+                                            .background(Color.white)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    }
+
+                                    Button(action: {
+                                        if canSkip { onProceed() }
+                                    }) {
+                                        Text(canSkip ? "Continue" : "Wait…")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(.white)
+                                            .frame(width: 120, height: 44)
+                                            .background(
+                                                LinearGradient(
+                                                    colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                ).opacity(canSkip ? 1.0 : 0.5)
+                                            )
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    }
+                                    .disabled(!canSkip)
+                                }
+                            }
+                            .padding(16)
+                        }
+                    )
+                    .padding(.horizontal, 20)
+            }
+            .padding(.top, 20)
 
             Spacer()
 
-            // Bottom section
             VStack(spacing: 14) {
                 Text("Preparing: \(courseTitle)")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(.white.opacity(0.65))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .padding(.horizontal, 20)
-
-                // Upgrade CTA
+                
                 Button(action: {
-                    // TODO: Present paywall / subscription purchase screen
                     Log.ai.info("🔒 User tapped upgrade from gate")
                 }) {
                     HStack(spacing: 8) {

@@ -581,18 +581,54 @@ struct LyoCreateStudioView: View {
     private func handleRecordingComplete(videoURL: URL) {
         Log.ui.info("📹 Recording completed: \(videoURL)")
 
-        // Create captured media object
+        // Validate the URL is a file URL and exists
+        guard videoURL.isFileURL else {
+            Log.ui.error("Recorded URL is not a file URL: \(videoURL)")
+            HapticManager.shared.error()
+            return
+        }
+
+        let path = videoURL.path
+        guard FileManager.default.fileExists(atPath: path) else {
+            Log.ui.error("Recorded file does not exist at path: \(path)")
+            HapticManager.shared.error()
+            return
+        }
+
+        // Keep a strong reference in capturedMedia
         capturedMedia = CapturedMedia(
             videoURL: videoURL,
             mode: selectedMode
         )
 
-        // Show publish flow
-        showPublishFlow = true
-        recordingComplete = true
-
-        // Haptic feedback for completion
-        haptics.success()
+        // Optionally save to Photos, but proceed regardless of outcome
+        Task { @MainActor in
+            // Request add-only permission for saving
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            if status == .authorized || status == .limited {
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoURL)
+                }) { success, error in
+                    DispatchQueue.main.async {
+                        if let error = error {
+                            Log.ui.error("Failed to save video to Photos: \(error.localizedDescription)")
+                        } else if success {
+                            Log.ui.info("✅ Video saved to Photos")
+                        }
+                        // Show publish flow regardless
+                        showPublishFlow = true
+                        recordingComplete = true
+                        haptics.success()
+                    }
+                }
+            } else {
+                Log.ui.error("Photos permission not granted for saving video")
+                // Continue without saving
+                showPublishFlow = true
+                recordingComplete = true
+                haptics.success()
+            }
+        }
     }
 
     private func handlePhotoCapture(photo: UIImage) {

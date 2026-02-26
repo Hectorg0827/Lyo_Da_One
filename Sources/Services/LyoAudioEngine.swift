@@ -111,7 +111,10 @@ public class LyoAudioEngine: NSObject, ObservableObject, AVAudioPlayerDelegate {
             
             // Start metering at 60fps for smooth visual updates
             meteringTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-                self?.updateMetering()
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.updateMetering()
+                }
             }
         } catch {
             print("Failed to play audio: \(error)")

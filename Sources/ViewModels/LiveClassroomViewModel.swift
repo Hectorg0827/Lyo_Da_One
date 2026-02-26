@@ -1354,14 +1354,8 @@ final class LiveClassroomViewModel: ObservableObject {
                 self.isLoading = false
             }
         } catch {
-            // A2UI is optional — only set error if we STILL don't have lesson content.
-            // Re-check self.lesson NOW (not the stale hadLessonAtStart captured earlier)
-            // because loadLesson() may have completed in parallel while A2UI was fetching.
-            let hasLessonNow = self.lesson != nil
-            if !hasLessonNow {
-                self.errorMessage = "Failed to load lesson: \(error.localizedDescription)"
-                self.isLoading = false
-            }
+            // A2UI is optional — do NOT set error or stop loading state here.
+            // Let the primary loadLesson() task manage the loading state and errors.
             Log.classroom.warning("⚠️ A2UI not available for lesson \(lessonId): \(error.localizedDescription)")
         }
     }

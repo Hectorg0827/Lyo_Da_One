@@ -158,7 +158,9 @@ final class A2ACourseService: ObservableObject {
                         Log.ai.info("Raw data: \(jsonString)")
                         
                         // Even if formal decode fails, try to extract progress from raw JSON
-                        await self.handleRawSSEFallback(jsonString: jsonString, onEvent: onEvent)
+                        Task { @MainActor in
+                            self.handleRawSSEFallback(jsonString: jsonString, onEvent: onEvent)
+                        }
                     }
                 }
                 

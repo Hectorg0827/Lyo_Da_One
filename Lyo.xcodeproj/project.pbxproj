@@ -176,8 +176,8 @@
 		6AD9E65E5EA76AC47DBAE681 /* FloatingModeButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1192D5046C9C281BEB5AB286 /* FloatingModeButton.swift */; };
 		6CAFEAE9370506D8DD1B0EE4 /* AchievementBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D473BB5C2FB3D1D62B6FD37 /* AchievementBadgeView.swift */; };
 		6FCD120712F971CEF9463AFB /* A2UIStudyPlanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89141B6A9F42047BF11A828 /* A2UIStudyPlanViews.swift */; };
-		70BFF9A8715E6882034BA6AF /* A2AGenerationProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769C7AAC3C8440C829FA7372 /* A2AGenerationProgressView.swift */; };
 		70B709CC4F1148C4AEDA2C98 /* CourseStartGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5514E9EE3AC74A4B8EFA73E2 /* CourseStartGateView.swift */; };
+		70BFF9A8715E6882034BA6AF /* A2AGenerationProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769C7AAC3C8440C829FA7372 /* A2AGenerationProgressView.swift */; };
 		72CC30109144F9F7E22EE99D /* AgenticClassroomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16FE49EC2F014F718315D036 /* AgenticClassroomView.swift */; };
 		7321BCD6A8D5E23039F8A8B0 /* Challenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC14D897015706EE4D5DA4A2 /* Challenge.swift */; };
 		737E7C776D668988B44EC211 /* LyoOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09994C205AE4575A85D1BE9 /* LyoOverlayView.swift */; };
@@ -592,6 +592,7 @@
 		5291E6397AF59E9E39828CC8 /* DefaultAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultAuthRepository.swift; sourceTree = "<group>"; };
 		532AD8931650A03C81E366F7 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		53385204FBD32F17238B87A6 /* PersonalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationService.swift; sourceTree = "<group>"; };
+		5514E9EE3AC74A4B8EFA73E2 /* CourseStartGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseStartGateView.swift; sourceTree = "<group>"; };
 		576187781DD9B1E403DEC6F7 /* AppNotification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotification.swift; sourceTree = "<group>"; };
 		5827DE22041B89BD829EFA4A /* A2ATaskManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2ATaskManagerTests.swift; sourceTree = "<group>"; };
 		583894E89D97399DE1EFDB32 /* StreakCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakCalendarView.swift; sourceTree = "<group>"; };
@@ -634,7 +635,6 @@
 		762A9E5F69A4574997DE5E2E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		769A4B6901B72EE186252479 /* CommunityCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityCardView.swift; sourceTree = "<group>"; };
 		769C7AAC3C8440C829FA7372 /* A2AGenerationProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2AGenerationProgressView.swift; sourceTree = "<group>"; };
-		5514E9EE3AC74A4B8EFA73E2 /* CourseStartGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseStartGateView.swift; sourceTree = "<group>"; };
 		76AD8DE7A062628A8EF39577 /* MyCoursesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyCoursesView.swift; sourceTree = "<group>"; };
 		76C973FB61F64360F2E5F8EA /* LyoChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoChat.swift; sourceTree = "<group>"; };
 		7870517BEB8921F09B2610C3 /* A2UIQuizRenderers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIQuizRenderers.swift; sourceTree = "<group>"; };
@@ -1910,7 +1910,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2620;
 			};
 			buildConfigurationList = 87597440F183580A4AC5CBD5 /* Build configuration list for PBXProject "Lyo" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -2465,6 +2465,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -2478,6 +2479,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -2541,6 +2543,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -2561,6 +2564,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;

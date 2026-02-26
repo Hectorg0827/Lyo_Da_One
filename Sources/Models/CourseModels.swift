@@ -15,13 +15,17 @@ struct CourseCreationData: Identifiable, Codable, Equatable {
     let topic: String
     let level: String
     let modules: [CourseModuleData]
-    
-    init(id: String = UUID().uuidString, title: String, topic: String, level: String, modules: [CourseModuleData]) {
+    let difficultyLevel: String
+    let instructorId: String
+
+    init(id: String = UUID().uuidString, title: String, topic: String, level: String, modules: [CourseModuleData], difficultyLevel: String, instructorId: String) {
         self.id = id
         self.title = title
         self.topic = topic
         self.level = level
         self.modules = modules
+        self.difficultyLevel = difficultyLevel
+        self.instructorId = instructorId
     }
 }
 
@@ -90,6 +94,8 @@ struct OpenClassroomCommand: Codable {
         let duration: String?
         let objectives: [String]
         let thumbnail: String?
+        let difficultyLevel: String?
+        let instructorId: String?
     }
     
     /// Convert to CourseCreationData for display
@@ -104,7 +110,9 @@ struct OpenClassroomCommand: Codable {
                     title: "Module \(index + 1)",
                     description: objective
                 )
-            }
+            },
+            difficultyLevel: payload.course.difficultyLevel ?? "beginner",
+            instructorId: payload.course.instructorId ?? "default"
         )
     }
 }
