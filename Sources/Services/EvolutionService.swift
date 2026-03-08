@@ -378,8 +378,6 @@ final class EvolutionService: ObservableObject {
 
 // MARK: - Helper Types
 
-private struct EmptyResponse: Codable {}
-
 private struct LearningEventResponse: Codable {
     let id: Int
 }
