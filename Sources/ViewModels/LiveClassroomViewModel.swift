@@ -204,12 +204,22 @@ final class LiveClassroomViewModel: ObservableObject {
     
     /// Whether this lesson was loaded via the GENERATE: flow
     private var isGenerateFlow: Bool = false
-    /// Track the last module count to detect when new modules arrive
-    private var lastReadyModuleCount: Int = 0
+    /// Track a content fingerprint to detect meaningful changes (not just count)
+    private var lastProgressiveFingerprint: String = ""
     /// Whether the hydration (final truth) pass has refreshed content
     private var hasHydrationRefreshed: Bool = false
     /// Hash of draft content before hydration, to detect new content
     private var initialDraftContentHash: Int?
+    
+    /// Build a fingerprint representing the current state of modules.
+    /// Changes when: a module transitions state, or when new lesson content arrives.
+    private func buildProgressiveFingerprint(_ course: GeneratedCourse) -> String {
+        course.modules.map { m in
+            let lessonCount = m.lessons?.count ?? 0
+            let contentLen = m.lessons?.reduce(0) { $0 + ($1.content?.count ?? 0) } ?? 0
+            return "\(m.index):\(m.state):\(lessonCount):\(contentLen)"
+        }.joined(separator: "|")
+    }
     
     /// Observe `CourseGenerationService.shared.$generatedCourse` for progressive module updates
     private func observeProgressiveGeneration() {
@@ -220,13 +230,14 @@ final class LiveClassroomViewModel: ObservableObject {
                       self.isGenerateFlow,
                       let updatedCourse else { return }
                 
-                // Count modules that are actively building or ready
+                // Build a fingerprint of current module states + content
+                let fingerprint = self.buildProgressiveFingerprint(updatedCourse)
+                
+                // Only rebuild when something actually changed
+                guard fingerprint != self.lastProgressiveFingerprint else { return }
+                self.lastProgressiveFingerprint = fingerprint
+                
                 let activeModules = updatedCourse.modules.filter { $0.state != .locked }
-                
-                // Only rebuild when new modules have become active (building/ready)
-                guard activeModules.count > self.lastReadyModuleCount else { return }
-                self.lastReadyModuleCount = activeModules.count
-                
                 Log.classroom.info("🔄 Progressive update: \(activeModules.count) modules active — rebuilding lesson blocks")
                 self.rebuildLessonFromProgressiveCourse(updatedCourse)
             }
@@ -263,6 +274,17 @@ final class LiveClassroomViewModel: ObservableObject {
         for module in course.modules {
             switch module.state {
             case .ready:
+                // Only show full content if we actually have lessons
+                guard let lessons = module.lessons, !lessons.isEmpty else {
+                    // Ready on server but no content fetched yet — show loading
+                    blocks.append(LessonBlock(
+                        id: "loading_\(module.index)",
+                        type: .paragraph,
+                        title: "⏳ \(module.title)",
+                        content: "Loading module content..."
+                    ))
+                    continue
+                }
                 // Full content — add header + each lesson + completion summary
                 blocks.append(LessonBlock(
                     id: "mod_header_\(module.index)",
@@ -270,7 +292,7 @@ final class LiveClassroomViewModel: ObservableObject {
                     title: "📚 \(module.title)",
                     content: module.summary ?? "Module \(module.index)"
                 ))
-                for lesson in module.lessons ?? [] {
+                for lesson in lessons {
                     blocks.append(LessonBlock(
                         id: "lesson_\(lesson.id)",
                         type: .paragraph,
@@ -442,7 +464,7 @@ final class LiveClassroomViewModel: ObservableObject {
             
             // Mark as generate flow so observers fire
             isGenerateFlow = true
-            lastReadyModuleCount = 0
+            lastProgressiveFingerprint = ""
             
             // Phase A: startCourseGeneration returns in <5 seconds with instant payload
             // Phase C polling starts automatically inside CourseGenerationService

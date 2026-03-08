@@ -35,6 +35,7 @@ class CourseGenerationService: ObservableObject {
     /// Kicks off generation. Returns in < 5 seconds with syllabus + preview.
     func startCourseGeneration(topic: String, level: String = "beginner") async {
         generationState = .startingGeneration
+        failedModuleFetches.removeAll()
         
         do {
             let response: InstantCourseResponse = try await NetworkClient.shared.request(
@@ -87,16 +88,35 @@ class CourseGenerationService: ObservableObject {
                     
                     // Fetch any newly-ready modules
                     for moduleStatus in status.modules where moduleStatus.state == .ready {
-                        await fetchModuleIfNeeded(courseId: courseId, index: moduleStatus.index)
+                        let _ = await fetchModuleIfNeeded(courseId: courseId, index: moduleStatus.index)
                     }
-                    
+
+                    // Retry any previously failed fetches
+                    if !self.failedModuleFetches.isEmpty {
+                        let retryIndices = self.failedModuleFetches.sorted()
+                        for idx in retryIndices {
+                            if status.modules.first(where: { $0.index == idx })?.state == .ready {
+                                print("🔄 Retrying failed module \(idx)")
+                                let _ = await fetchModuleIfNeeded(courseId: courseId, index: idx)
+                            }
+                        }
+                    }
+
                     // Update states for building/failed modules in local model
                     updateModuleStates(from: status)
                     
                     // Terminal states
                     if status.state == "complete" {
                         print("🎉 All modules ready!")
-                        self.generationState = .complete
+                        // Hydration pass: re-fetch any modules that failed during polling
+                        await hydrateFailedModules(courseId: courseId)
+                        // If hydration couldn't recover all modules, fetch full course as safety net
+                        if !self.failedModuleFetches.isEmpty {
+                            print("🔄 Hydration incomplete — fetching full course truth")
+                            await fetchFinalTruth(courseId: courseId)
+                        } else {
+                            self.generationState = .complete
+                        }
                         break
                     } else if status.state == "failed" {
                         print("🚨 Backend generation failed")
@@ -119,46 +139,84 @@ class CourseGenerationService: ObservableObject {
     }
     
     // MARK: - Fetch Individual Module
-    
-    private func fetchModuleIfNeeded(courseId: String, index: Int) async {
-        // Don't re-fetch if already ready locally
+
+    /// Track module indices that failed to fetch so we can retry during hydration
+    private var failedModuleFetches: Set<Int> = []
+
+    private func fetchModuleIfNeeded(courseId: String, index: Int) async -> Bool {
+        // Don't re-fetch if already ready locally WITH lessons
         if let existingModule = generatedCourse?.modules.first(where: { $0.index == index }),
            existingModule.state == .ready, existingModule.lessons?.isEmpty == false {
-            return
+            return true
         }
-        
+
         do {
             let fullModule: ProgressiveModule = try await NetworkClient.shared.request(
                 Endpoints.CourseGen.module(courseId: courseId, index: index)
             )
-            
-            print("✅ Module \\(index) fetched: \\(fullModule.title) — \\(fullModule.lessons?.count ?? 0) lessons")
-            
+
+            let lessonCount = fullModule.lessons?.count ?? 0
+            print("✅ Module \(index) fetched: \(fullModule.title) — \(lessonCount) lessons")
+
+            // Only accept if it actually has lesson content
+            guard lessonCount > 0 else {
+                print("⚠️ Module \(index) returned 0 lessons — treating as not ready")
+                failedModuleFetches.insert(index)
+                return false
+            }
+
+            failedModuleFetches.remove(index)
+
             // Swap into local course model
             if let idx = generatedCourse?.modules.firstIndex(where: { $0.index == index }) {
                 generatedCourse?.modules[idx] = fullModule
             } else {
                 generatedCourse?.modules.append(fullModule)
             }
-            
+
+            return true
+
         } catch {
-            print("🚨 Failed to fetch module \\(index): \\(error)")
+            print("🚨 Failed to fetch module \(index): \(error)")
+            failedModuleFetches.insert(index)
+            return false
         }
     }
-    
+
     // MARK: - Update Module States from Status
-    
+
     private func updateModuleStates(from status: CourseStatus) {
         for moduleStatus in status.modules {
             guard let idx = generatedCourse?.modules.firstIndex(where: { $0.index == moduleStatus.index }) else { continue }
-            // Only update while not yet fully fetched
-            if generatedCourse?.modules[idx].state != .ready {
-                let currentModule = generatedCourse!.modules[idx]
-                // Preserve or upgrade the title from status if better than our current value
+
+            let currentModule = generatedCourse!.modules[idx]
+
+            // NEVER mark a module as .ready locally unless we have actual lesson content.
+            // If the backend says "ready" but our fetch failed, keep the local state as .building
+            // so the UI shows a loading indicator instead of empty content.
+            let effectiveState: ModuleState
+            if moduleStatus.state == .ready {
+                let hasLessons = currentModule.lessons?.isEmpty == false
+                if hasLessons {
+                    // Already fetched with content — keep as ready
+                    effectiveState = .ready
+                } else if failedModuleFetches.contains(moduleStatus.index) {
+                    // Fetch failed — keep as building so UI shows progress, not empty "complete"
+                    effectiveState = .building
+                    print("⚠️ Module \(moduleStatus.index) reported ready by server but fetch failed — keeping as .building")
+                } else {
+                    // Fetch succeeded and set state already — trust it
+                    effectiveState = .ready
+                }
+            } else {
+                effectiveState = moduleStatus.state
+            }
+
+            // Only update if local state needs changing
+            if currentModule.state != effectiveState || currentModule.state != .ready {
                 let updatedTitle: String
                 if let statusTitle = moduleStatus.title, !statusTitle.isEmpty,
                    currentModule.title.hasPrefix("Module ") {
-                    // Our placeholder title is generic — use the one from the server
                     updatedTitle = statusTitle
                 } else {
                     updatedTitle = currentModule.title
@@ -166,7 +224,7 @@ class CourseGenerationService: ObservableObject {
                 generatedCourse?.modules[idx] = ProgressiveModule(
                     id: currentModule.id,
                     index: currentModule.index,
-                    state: moduleStatus.state,
+                    state: effectiveState,
                     title: updatedTitle,
                     lessons: currentModule.lessons,
                     summary: currentModule.summary
@@ -174,20 +232,52 @@ class CourseGenerationService: ObservableObject {
             }
         }
     }
-    
+
+    // MARK: - Hydration Pass
+
+    /// Re-fetch any modules that failed during polling. Called when generation completes.
+    private func hydrateFailedModules(courseId: String) async {
+        guard !failedModuleFetches.isEmpty else { return }
+
+        let toRetry = failedModuleFetches.sorted()
+        print("💧 Hydration pass: retrying \(toRetry.count) failed module fetches")
+
+        for index in toRetry {
+            // Give each retry 2 attempts with a small delay
+            for attempt in 1...2 {
+                let success = await fetchModuleIfNeeded(courseId: courseId, index: index)
+                if success {
+                    print("💧 Hydration: Module \(index) recovered on attempt \(attempt)")
+                    break
+                }
+                if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+            }
+        }
+
+        // If we recovered any modules, trigger a final rebuild
+        if failedModuleFetches.isEmpty {
+            print("💧 Hydration complete — all modules recovered")
+        } else {
+            print("⚠️ Hydration finished with \(failedModuleFetches.count) still missing")
+        }
+    }
+
     // MARK: - Safety Net: Final Truth
-    
+
     /// Called on timeout, app relaunch, or background return
     func fetchFinalTruth(courseId: String) async {
         do {
             let fullCourse: GeneratedCourse = try await NetworkClient.shared.request(
                 Endpoints.CourseGen.fullCourse(courseId: courseId)
             )
-            print("🔄 Final truth fetched: \\(fullCourse.modules.count) modules")
+            print("🔄 Final truth fetched: \(fullCourse.modules.count) modules")
             self.generatedCourse = fullCourse
+            self.failedModuleFetches.removeAll()
             self.generationState = .complete
         } catch {
-            print("🚨 Final truth fetch failed: \\(error)")
+            print("🚨 Final truth fetch failed: \(error)")
             self.generationState = .failed("Could not retrieve course")
         }
     }
