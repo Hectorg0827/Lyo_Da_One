@@ -150,11 +150,27 @@ class CourseGenerationService: ObservableObject {
     
     private func updateModuleStates(from status: CourseStatus) {
         for moduleStatus in status.modules {
-            if let idx = generatedCourse?.modules.firstIndex(where: { $0.index == moduleStatus.index }) {
-                // Only update state if we haven't already fetched full content
-                if generatedCourse?.modules[idx].state != .ready {
-                    generatedCourse?.modules[idx].state = moduleStatus.state
+            guard let idx = generatedCourse?.modules.firstIndex(where: { $0.index == moduleStatus.index }) else { continue }
+            // Only update while not yet fully fetched
+            if generatedCourse?.modules[idx].state != .ready {
+                let currentModule = generatedCourse!.modules[idx]
+                // Preserve or upgrade the title from status if better than our current value
+                let updatedTitle: String
+                if let statusTitle = moduleStatus.title, !statusTitle.isEmpty,
+                   currentModule.title.hasPrefix("Module ") {
+                    // Our placeholder title is generic — use the one from the server
+                    updatedTitle = statusTitle
+                } else {
+                    updatedTitle = currentModule.title
                 }
+                generatedCourse?.modules[idx] = ProgressiveModule(
+                    id: currentModule.id,
+                    index: currentModule.index,
+                    state: moduleStatus.state,
+                    title: updatedTitle,
+                    lessons: currentModule.lessons,
+                    summary: currentModule.summary
+                )
             }
         }
     }

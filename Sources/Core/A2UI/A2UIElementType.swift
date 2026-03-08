@@ -57,6 +57,25 @@ enum A2UIElementType: String, Codable, CaseIterable {
         "scroll": .scrollView,
         "progress_ring": .progressBar,
         "code_block": .codeBlock,
+        // Quiz aliases — backend may send "quiz", "quiz_mcq", or "mcq"
+        "quiz": .quizMcq,
+        "mcq": .quizMcq,
+        "multiple_choice": .quizMcq,
+        "true_false": .quizTrueFalse,
+        "fill_blank": .quizFillBlank,
+        "fill_in_the_blank": .quizFillBlank,
+        "multi_select": .quizMultiSelect,
+        // Flashcard aliases
+        "flashcard_deck": .flashcardDeck,
+        "flash_card": .flashcard,
+        // Course card aliases
+        "course_card": .courseCard,
+        "course_roadmap": .courseRoadmap,
+        "lesson_block": .lessonBlock,
+        // Layout aliases
+        "v_stack": .vStack,
+        "h_stack": .hStack,
+        "z_stack": .zStack,
     ]
     
     // MARK: - Core Display Elements

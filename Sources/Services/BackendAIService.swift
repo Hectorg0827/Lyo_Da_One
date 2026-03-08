@@ -282,7 +282,7 @@ struct BackendAIChatResponse: Codable {
         case courseProposal = "courseProposal"
         case studyPlan = "study_plan"
         case contentTypes = "contentTypes"
-        case uiComponent = "uiComponent"
+        case uiComponent = "ui_component"   // backend sends snake_case
         case lyoBlocks = "lyoBlocks"
         case suggestions = "suggestions"
     }

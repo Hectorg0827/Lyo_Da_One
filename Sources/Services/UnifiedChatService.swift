@@ -173,7 +173,7 @@ final class UnifiedChatService: ObservableObject {
             await saveConversation()
             Log.ai.info("⚡ Instant response served on-device")
 
-        case .fastResponse(let text, let studyPlan, let latencyMs, let chips, let coursePayload):
+        case .fastResponse(let text, let studyPlan, let latencyMs, let chips, let coursePayload, let mappedComponents):
             // Single-agent non-streaming response
             var contentTypes: [MessageContentType] = [.text]
             // Note: studyPlan is TestPrepData, but contentType expects StudyPlan.
@@ -200,6 +200,13 @@ final class UnifiedChatService: ObservableObject {
                     "🏫 Fast path: showing course proposal card for '\(coursePayload.title)' — awaiting user action"
                 )
                 contentTypes = [.courseProposal(payload: coursePayload)]
+            } else if let components = mappedComponents, !components.isEmpty {
+                // A2UI components decoded from backend ui_component field — use for rich rendering
+                // Keep .text first so it still shows the text bubble, then append A2UI widgets
+                for component in components {
+                    contentTypes.append(.a2ui(component: component))
+                }
+                Log.ai.info("🎨 Fast path: \(components.count) A2UI component(s) added to chat bubble")
             }
 
             let fastMsg = LyoMessage(

@@ -50,6 +50,9 @@ struct CourseStatus: Codable {
     struct ModuleStatus: Codable {
         let index: Int
         let state: ModuleState
+        /// Title sent by backend in status payload — used to keep card titles
+        /// accurate while modules transition from locked → building → ready.
+        let title: String?
     }
 }
 

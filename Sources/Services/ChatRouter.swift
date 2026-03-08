@@ -23,11 +23,10 @@ import os
 
 /// The result of routing a message through the appropriate pipeline
 enum ChatRouteResult {
-    /// Fast path completed — single text response
-    /// Fast path completed — single text response with optional Study Plan + context chips + course payload
+    /// Fast path completed — single text response with optional Study Plan + context chips + course payload + A2UI components
     case fastResponse(
         text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?,
-        coursePayload: CoursePayload?)
+        coursePayload: CoursePayload?, mappedComponents: [A2UIComponent]?)
 
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
@@ -174,9 +173,17 @@ final class ChatRouter: ObservableObject {
                 return nil
             }()
 
+            // Extract A2UI components from ui_component field if present
+            var mappedComponents: [A2UIComponent]? = nil
+            if let uiComp = response.uiComponent,
+               let jsonData = try? JSONEncoder().encode(uiComp) {
+                mappedComponents = A2IPayloadMapper.mapFromJSON(jsonData)
+            }
+
             return .fastResponse(
                 text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency,
-                suggestions: response.suggestions, coursePayload: coursePayload)
+                suggestions: response.suggestions, coursePayload: coursePayload,
+                mappedComponents: mappedComponents)
 
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")

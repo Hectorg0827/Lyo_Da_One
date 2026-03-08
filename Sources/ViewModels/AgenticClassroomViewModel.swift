@@ -118,7 +118,7 @@ final class AgenticClassroomViewModel: ObservableObject {
             appendAIMessage(id: aiMessageId, text: text)
             isProcessing = false
             
-        case .fastResponse(let text, _, let latencyMs, _, _):
+        case .fastResponse(let text, _, let latencyMs, _, _, _):
             appendAIMessage(id: aiMessageId, text: text)
             isProcessing = false
             Log.ai.info("⚡ Fast response: \(String(format: "%.0f", latencyMs))ms")

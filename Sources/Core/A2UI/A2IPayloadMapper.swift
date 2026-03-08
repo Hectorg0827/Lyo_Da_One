@@ -163,6 +163,14 @@ extension A2IPayloadMapper {
             {
                 return mapComponents(from: payload)
             }
+            // Try decoding as a single A2UIComponent directly (chat responses)
+            if let component = try? decoder.decode(A2UIComponent.self, from: data) {
+                return [component]
+            }
+            // Try decoding as an array of A2UIComponents
+            if let components = try? decoder.decode([A2UIComponent].self, from: data) {
+                return components.isEmpty ? nil : components
+            }
             print("A2IPayloadMapper.mapFromJSON decode failed: \(error)")
             return nil
         }
