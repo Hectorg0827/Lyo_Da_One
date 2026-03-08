@@ -22,7 +22,7 @@ public struct LessonCompleteView: View {
                 
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 80))
-                    .foregroundColor(Color(hex: activePalette.color3Hex) ?? .yellow)
+                    .foregroundColor(Color(hex: activePalette.color3Hex))
                     .scaleEffect(appearAnimation ? 1.0 : 0.5)
                     .opacity(appearAnimation ? 1.0 : 0)
                     .animation(.spring(response: 0.6, dampingFraction: 0.6).delay(0.2), value: appearAnimation)
@@ -68,10 +68,10 @@ public struct LessonCompleteView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 18)
-                        .background(Color(hex: activePalette.color2Hex) ?? .blue)
+                        .background(Color(hex: activePalette.color2Hex))
                         .cornerRadius(30)
                         .padding(.horizontal, 32)
-                        .shadow(color: (Color(hex: activePalette.color2Hex) ?? .blue).opacity(0.4), radius: 12, y: 8)
+                        .shadow(color: (Color(hex: activePalette.color2Hex)).opacity(0.4), radius: 12, y: 8)
                 }
                 .opacity(appearAnimation ? 1.0 : 0)
                 .offset(y: appearAnimation ? 0 : 20)

@@ -16,15 +16,21 @@ struct LyoAd: Identifiable, Codable {
 class AdService: ObservableObject {
     static let shared = AdService()
     
+    // Initialize directly to ensure instant loading
+    init() {
+        self.availableAds = Self.mockAds
+    }
+    
     @Published var availableAds: [LyoAd] = []
     
-    // Mock network delay to simulate fetching from backend
     func fetchAds() async {
-        // In a real implementation this would hit /api/v1/ads
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        
-        // Hardcoded custom backend ads for now
-        self.availableAds = [
+        // Ads are now synchronously available directly on init.
+        // If a real backend is implemented, fetch here and update self.availableAds without a fixed sleep.
+        self.availableAds = Self.mockAds
+    }
+    
+    // Hardcoded custom backend ads
+    private static let mockAds: [LyoAd] = [
             LyoAd(
                 id: "ad_1",
                 title: "Lyo Premium 🌟",
@@ -50,5 +56,4 @@ class AdService: ObservableObject {
                 destinationURL: "lyo://path/ml"
             )
         ]
-    }
 }

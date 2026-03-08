@@ -596,34 +596,7 @@ struct CourseProgressResponse: Codable {
 }
 
 // MARK: - AI Content Generation Models
-struct GeneratedCourse: Codable {
-    let title: String
-    let description: String
-    let lessons: [GeneratedLesson]
-    let estimatedDurationHours: Int
-    let difficultyLevel: String
-    
-    enum CodingKeys: String, CodingKey {
-        case title, description, lessons
-        case estimatedDurationHours = "estimated_duration_hours"
-        case difficultyLevel = "difficulty_level"
-    }
-}
-
-struct GeneratedLesson: Codable, Identifiable {
-    var id: String { title }
-    let title: String
-    let description: String
-    let content: String?
-    let durationMinutes: Int
-    let orderIndex: Int
-    
-    enum CodingKeys: String, CodingKey {
-        case title, description, content
-        case durationMinutes = "duration_minutes"
-        case orderIndex = "order_index"
-    }
-}
+// (Moved to ProgressiveCourseModels.swift)
 
 struct AssembledLessonContent: Codable {
     let title: String

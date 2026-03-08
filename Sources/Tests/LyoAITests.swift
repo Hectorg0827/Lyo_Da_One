@@ -74,30 +74,32 @@ class CinemaPriorityTests: XCTestCase {
         //  but simpler here to mock the generation flow if possible, or just set the property if it was mutable/accessible.
         //  Since we can't easily write to the property (it's read-only publicly usually), we'll simulate the generation success.)
         
-        // Simulating the state by crafting the response object
-        let specificLesson = GenerationCourseLesson(
+        // Simulating the state by crafting the response object using new progressive types
+        let specificLesson = ProgressiveLesson(
             id: "lesson_1",
             title: "Lesson 1",
             content: expectedContent,
-            durationMinutes: 5,
-            order: 1
+            summary: nil,
+            miniPractice: nil
         )
         
-        let specificModule = GenerationCourseModule(
+        let specificModule = ProgressiveModule(
             id: "mod_1",
+            index: 1,
+            state: .ready,
             title: "Module 1",
-            description: "Desc",
             lessons: [specificLesson],
-            order: 1
+            summary: "Desc"
         )
         
-        let specificCourse = GeneratedCourseResponse(
-            courseId: mockId,
+        let specificCourse = GeneratedCourse(
+            id: mockId,
+            jobId: nil,
             title: expectedTitle,
-            description: "Desc",
+            objective: "Desc",
+            syllabus: [],
             modules: [specificModule],
-            estimatedDuration: 10,
-            difficulty: "Beginner"
+            schemaVersion: nil
         )
         
         // Inject into the singleton (this requires `generatedCourse` to be accessible or settable)

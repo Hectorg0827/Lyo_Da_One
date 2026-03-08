@@ -119,82 +119,86 @@ final class CourseOrchestrator: ObservableObject {
         let entryLessonId = course.entryNodeId ?? "welcome_1"
 
         // Welcome & orientation
-        let welcome = GenerationCourseLesson(
+        let welcome = ProgressiveLesson(
             id: entryLessonId,
             title: "Welcome",
             content: "Welcome! Your personalized course is being prepared. We'll start with a quick orientation.",
-            durationMinutes: 1,
-            order: 1
+            summary: nil,
+            miniPractice: nil
         )
-        let overview = GenerationCourseLesson(
+        let overview = ProgressiveLesson(
             id: "overview_1",
             title: "Course Overview",
             content: "In this short course you'll learn the fundamentals, complete practice tasks, and try a quick quiz to check progress.",
-            durationMinutes: 2,
-            order: 2
+            summary: nil,
+            miniPractice: nil
         )
 
         // Core content (video + practice)
-        let video = GenerationCourseLesson(
+        let video = ProgressiveLesson(
             id: "video_1",
             title: "Short Explainer Video",
             content: "(Video) Watch this 90-second explainer to get the key ideas.",
-            durationMinutes: 3,
-            order: 1
+            summary: nil,
+            miniPractice: nil
         )
-        let practice = GenerationCourseLesson(
+        let practice = ProgressiveLesson(
             id: "practice_1",
             title: "Quick Practice",
             content: "Try the interactive exercise: identify the main concept from three examples.",
-            durationMinutes: 4,
-            order: 2
+            summary: nil,
+            miniPractice: nil
         )
 
         // Assessment
-        let quiz = GenerationCourseLesson(
+        let quiz = ProgressiveLesson(
             id: "quiz_1",
             title: "Quick Quiz",
             content: "A short 3-question quiz to check understanding.",
-            durationMinutes: 2,
-            order: 1
+            summary: nil,
+            miniPractice: nil
         )
 
-        let welcomeModule = GenerationCourseModule(
+        let welcomeModule = ProgressiveModule(
             id: "m_welcome",
+            index: 1,
+            state: .ready,
             title: "Welcome & Orientation",
-            description: course.description,
             lessons: [welcome, overview],
-            order: 1
+            summary: course.description
         )
 
-        let coreModule = GenerationCourseModule(
+        let coreModule = ProgressiveModule(
             id: "m_core",
+            index: 2,
+            state: .ready,
             title: "Core Concepts",
-            description: "Core learning material",
             lessons: [video, practice],
-            order: 2
+            summary: "Core learning material"
         )
 
-        let assessmentModule = GenerationCourseModule(
+        let assessmentModule = ProgressiveModule(
             id: "m_assess",
+            index: 3,
+            state: .ready,
             title: "Assessment",
-            description: "Check what you've learned",
             lessons: [quiz],
-            order: 3
+            summary: "Check what you've learned"
         )
 
-        let stubGenerated = GeneratedCourseResponse(
-            courseId: course.id,
+        let stubGenerated = GeneratedCourse(
+            id: course.id,
+            jobId: nil,
             title: course.title,
-            description: course.description,
+            objective: course.description,
+            syllabus: ["Welcome & Orientation", "Core Concepts", "Assessment"],
             modules: [welcomeModule, coreModule, assessmentModule],
-            estimatedDuration: max(5, course.estimatedMinutes),
-            difficulty: course.gradeBand
+            schemaVersion: nil
         )
 
         Task { @MainActor in
             CourseGenerationService.shared.generatedCourse = stubGenerated
-            Log.a2ui.info("CourseOrchestrator: populated richer GeneratedCourseResponse stub for \(course.id) with \(stubGenerated.modules.count) modules")
+            Log.a2ui.info("CourseOrchestrator: populated richer GeneratedCourse stub for \(course.id) with \(stubGenerated.modules.count) modules")
         }
     }
 }

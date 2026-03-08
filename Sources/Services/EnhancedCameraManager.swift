@@ -115,6 +115,21 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
         }
     }
 
+    /// Ensure the capture session is running. Call this when presenting
+    /// a child view that shares this camera manager (e.g. ClipsRecordingView).
+    func ensureSessionRunning() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            if !self.session.isRunning {
+                // Re-configure if needed (inputs/outputs may have been removed)
+                if self.session.inputs.isEmpty {
+                    self.configureSession()
+                }
+                self.session.startRunning()
+            }
+        }
+    }
+
     // MARK: - Session Configuration
 
     private func configureSession() {
@@ -402,6 +417,25 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
         recordedVideoURL = nil
         generatedThumbnail = nil
         recordingDuration = 0
+
+        // Guard: ensure the session is running and movieOutput is connected
+        guard session.isRunning else {
+            print("⚠️ Cannot start recording — session is not running. Restarting...")
+            ensureSessionRunning()
+            // Retry after a short delay to let the session spin up
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.performRecording()
+            }
+            return
+        }
+
+        guard !movieOutput.connections.isEmpty else {
+            print("⚠️ Cannot start recording — movieOutput has no connections")
+            DispatchQueue.main.async {
+                self.errorMessage = "Camera not ready. Please try again."
+            }
+            return
+        }
 
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("lyo_clip_\(UUID().uuidString).mp4")

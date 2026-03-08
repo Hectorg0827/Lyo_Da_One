@@ -3,7 +3,8 @@
 //  Lyo
 //
 //  ViewModel for the Clips recording screen — manages teleprompter,
-//  chapter-based recording, educational overlays, and publishing.
+//  chapter-based recording, educational overlays, background music,
+//  chapter video merging, and publishing.
 //
 
 import SwiftUI
@@ -86,13 +87,15 @@ struct BackgroundMusicPreset: Identifiable {
     let name: String
     let genre: String
     let icon: String
+    /// Bundled file name (without extension). nil = "None" preset.
+    let fileName: String?
     
     static let presets: [BackgroundMusicPreset] = [
-        BackgroundMusicPreset(name: "Lo-Fi Chill",     genre: "lo-fi",    icon: "headphones"),
-        BackgroundMusicPreset(name: "Ambient Focus",   genre: "ambient",  icon: "waveform"),
-        BackgroundMusicPreset(name: "Soft Piano",      genre: "piano",    icon: "pianokeys"),
-        BackgroundMusicPreset(name: "Study Beats",     genre: "beats",    icon: "metronome"),
-        BackgroundMusicPreset(name: "None",            genre: "none",     icon: "speaker.slash")
+        BackgroundMusicPreset(name: "Lo-Fi Chill",     genre: "lo-fi",    icon: "headphones",    fileName: "lofi_chill"),
+        BackgroundMusicPreset(name: "Ambient Focus",   genre: "ambient",  icon: "waveform",      fileName: "ambient_focus"),
+        BackgroundMusicPreset(name: "Soft Piano",      genre: "piano",    icon: "pianokeys",      fileName: "soft_piano"),
+        BackgroundMusicPreset(name: "Study Beats",     genre: "beats",    icon: "metronome",      fileName: "study_beats"),
+        BackgroundMusicPreset(name: "None",            genre: "none",     icon: "speaker.slash",  fileName: nil)
     ]
 }
 
@@ -112,6 +115,7 @@ final class ClipsViewModel: ObservableObject {
     @Published var chapters: [ChapterSegment] = ChapterSegment.defaultChapters
     @Published var activeChapterIndex: Int = 0
     @Published var isRecordingChapter: Bool = false
+    @Published var chapterElapsed: TimeInterval = 0
     
     // MARK: - Overlay State
     @Published var activeOverlays: [EducationalOverlay] = []
@@ -122,6 +126,7 @@ final class ClipsViewModel: ObservableObject {
     @Published var selectedMusic: BackgroundMusicPreset? = BackgroundMusicPreset.presets.first
     @Published var isDuckingEnabled: Bool = true
     @Published var musicVolume: Double = 0.3
+    @Published var isMusicPlaying: Bool = false
     
     // MARK: - Publishing State
     @Published var clipTitle: String = ""
@@ -139,6 +144,14 @@ final class ClipsViewModel: ObservableObject {
     // MARK: - Services
     private let clipService = ClipService.shared
     private let haptics = HapticManager.shared
+    
+    // MARK: - Audio Engine
+    private var musicPlayer: AVAudioPlayer?
+    private var normalVolume: Float = 0.3
+    private let duckedVolume: Float = 0.08
+    
+    // MARK: - Chapter Timer
+    private var chapterTimer: Timer?
     
     // MARK: - Computed Properties
     
@@ -166,6 +179,16 @@ final class ClipsViewModel: ObservableObject {
     /// Maximum clip length per-chapter (22.5s × 4 = 90s total)
     let maxChapterDuration: TimeInterval = 22.5
     
+    /// Remaining time for the current chapter while recording
+    var chapterTimeRemaining: TimeInterval {
+        max(0, maxChapterDuration - chapterElapsed)
+    }
+    
+    var formattedChapterRemaining: String {
+        let seconds = Int(chapterTimeRemaining)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+    
     // MARK: - Chapter Actions
     
     func selectChapter(at index: Int) {
@@ -174,17 +197,46 @@ final class ClipsViewModel: ObservableObject {
         haptics.selection()
     }
     
+    /// Start recording the active chapter — starts timer and auto-scrolls teleprompter.
     func startRecordingChapter() {
         isRecordingChapter = true
+        chapterElapsed = 0
         haptics.heavy()
+        
+        // Start per-chapter countdown timer
+        startChapterTimer()
+        
+        // Auto-start teleprompter if visible and has text
+        if isTeleprompterVisible && !scriptText.isEmpty {
+            isTeleprompterPaused = false
+        }
+        
+        // Duck background music if enabled
+        if isDuckingEnabled && isMusicPlaying {
+            setMusicVolume(duckedVolume, animated: true)
+        }
     }
     
+    /// Stop recording the active chapter — saves video, stops timer, auto-pauses teleprompter.
     func stopRecordingChapter(videoURL: URL, duration: TimeInterval) {
         chapters[activeChapterIndex].videoURL = videoURL
-        chapters[activeChapterIndex].duration = duration
+        chapters[activeChapterIndex].duration = min(duration, maxChapterDuration)
         chapters[activeChapterIndex].isRecorded = true
         isRecordingChapter = false
         haptics.success()
+        
+        // Stop chapter timer
+        stopChapterTimer()
+        
+        // Auto-pause teleprompter
+        if isTeleprompterVisible {
+            isTeleprompterPaused = true
+        }
+        
+        // Restore music volume
+        if isDuckingEnabled && isMusicPlaying {
+            setMusicVolume(normalVolume, animated: true)
+        }
         
         // Auto-advance to next unrecorded chapter
         if let nextUnrecorded = chapters.firstIndex(where: { !$0.isRecorded }) {
@@ -194,11 +246,37 @@ final class ClipsViewModel: ObservableObject {
     
     func reRecordChapter(at index: Int) {
         guard index >= 0, index < chapters.count else { return }
+        // Clean up old video file
+        if let oldURL = chapters[index].videoURL {
+            try? FileManager.default.removeItem(at: oldURL)
+        }
         chapters[index].isRecorded = false
         chapters[index].videoURL = nil
         chapters[index].duration = 0
         activeChapterIndex = index
         haptics.medium()
+    }
+    
+    // MARK: - Chapter Timer
+    
+    private func startChapterTimer() {
+        chapterElapsed = 0
+        chapterTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.chapterElapsed += 0.1
+            }
+        }
+    }
+    
+    private func stopChapterTimer() {
+        chapterTimer?.invalidate()
+        chapterTimer = nil
+    }
+    
+    /// Returns true if the chapter timer has expired (called from the view to auto-stop).
+    var shouldAutoStopRecording: Bool {
+        chapterElapsed >= maxChapterDuration
     }
     
     // MARK: - Teleprompter Actions
@@ -231,11 +309,188 @@ final class ClipsViewModel: ObservableObject {
         activeOverlays.removeAll { $0.id == id }
     }
     
+    /// Update the position of an overlay (for drag-to-reposition).
+    func updateOverlayPosition(_ id: UUID, to newPosition: CGPoint) {
+        if let index = activeOverlays.firstIndex(where: { $0.id == id }) {
+            activeOverlays[index].position = newPosition
+        }
+    }
+    
     func toggleOverlayTray() {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             isOverlayTrayVisible.toggle()
         }
         haptics.light()
+    }
+    
+    // MARK: - Background Music
+    
+    /// Load and play the selected music preset.
+    func playMusic() {
+        guard let preset = selectedMusic, let fileName = preset.fileName else {
+            stopMusic()
+            return
+        }
+        
+        // Try to load from bundle
+        if let url = Bundle.main.url(forResource: fileName, withExtension: "mp3") ??
+                      Bundle.main.url(forResource: fileName, withExtension: "m4a") ??
+                      Bundle.main.url(forResource: fileName, withExtension: "wav") {
+            do {
+                // Configure audio session for playback + recording simultaneously
+                try AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers])
+                try AVAudioSession.sharedInstance().setActive(true)
+                
+                musicPlayer = try AVAudioPlayer(contentsOf: url)
+                musicPlayer?.numberOfLoops = -1 // Loop indefinitely
+                normalVolume = Float(musicVolume)
+                musicPlayer?.volume = normalVolume
+                musicPlayer?.prepareToPlay()
+                musicPlayer?.play()
+                isMusicPlaying = true
+                
+                Log.ui.info("🎵 Music started: \(preset.name)")
+            } catch {
+                Log.ui.error("Failed to play music \(fileName): \(error)")
+                isMusicPlaying = false
+            }
+        } else {
+            Log.ui.warning("Music file not found in bundle: \(fileName)")
+            // No bundled file — set state but don't crash
+            isMusicPlaying = false
+        }
+    }
+    
+    func pauseMusic() {
+        musicPlayer?.pause()
+        isMusicPlaying = false
+    }
+    
+    func stopMusic() {
+        musicPlayer?.stop()
+        musicPlayer = nil
+        isMusicPlaying = false
+    }
+    
+    /// Update the playback volume (called when slider changes).
+    func updateMusicVolume(_ volume: Double) {
+        normalVolume = Float(volume)
+        if !(isDuckingEnabled && isRecordingChapter) {
+            musicPlayer?.volume = normalVolume
+        }
+    }
+    
+    /// Animate volume change for ducking.
+    private func setMusicVolume(_ target: Float, animated: Bool) {
+        if animated {
+            // Smooth fade over 0.3s
+            let steps = 10
+            let stepDuration = 0.03
+            let current = musicPlayer?.volume ?? normalVolume
+            let delta = (target - current) / Float(steps)
+            
+            for i in 0..<steps {
+                DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i)) { [weak self] in
+                    self?.musicPlayer?.volume = current + delta * Float(i + 1)
+                }
+            }
+        } else {
+            musicPlayer?.volume = target
+        }
+    }
+    
+    /// Called when the selected music preset changes.
+    func onMusicPresetChanged() {
+        stopMusic()
+        if selectedMusic?.fileName != nil {
+            playMusic()
+        }
+    }
+    
+    // MARK: - Video Merging
+    
+    /// Merge all recorded chapter videos into a single output file using AVMutableComposition.
+    func mergeChapterVideos() async throws -> URL {
+        let videoURLs = chapters.compactMap(\.videoURL)
+        
+        guard !videoURLs.isEmpty else {
+            throw ClipError.invalidVideo
+        }
+        
+        // If only one chapter, return it directly
+        if videoURLs.count == 1 {
+            return videoURLs[0]
+        }
+        
+        let composition = AVMutableComposition()
+        
+        guard let videoTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ),
+        let audioTrack = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw ClipError.invalidVideo
+        }
+        
+        var currentTime = CMTime.zero
+        
+        for url in videoURLs {
+            let asset = AVAsset(url: url)
+            let duration = try await asset.load(.duration)
+            let timeRange = CMTimeRange(start: .zero, duration: duration)
+            
+            // Add video track
+            if let sourceVideoTrack = try await asset.loadTracks(withMediaType: .video).first {
+                try videoTrack.insertTimeRange(timeRange, of: sourceVideoTrack, at: currentTime)
+                
+                // Apply the first video's transform to maintain orientation
+                if currentTime == .zero {
+                    let transform = try await sourceVideoTrack.load(.preferredTransform)
+                    videoTrack.preferredTransform = transform
+                }
+            }
+            
+            // Add audio track (if available)
+            if let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first {
+                try audioTrack.insertTimeRange(timeRange, of: sourceAudioTrack, at: currentTime)
+            }
+            
+            currentTime = CMTimeAdd(currentTime, duration)
+        }
+        
+        // Export the composition
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lyo_merged_\(UUID().uuidString).mp4")
+        
+        guard let exportSession = AVAssetExportSession(
+            asset: composition,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            throw ClipError.invalidVideo
+        }
+        
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mp4
+        exportSession.shouldOptimizeForNetworkUse = true
+        
+        await exportSession.export()
+        
+        switch exportSession.status {
+        case .completed:
+            Log.ui.info("✅ Merged \(videoURLs.count) chapters into: \(outputURL)")
+            return outputURL
+        case .failed:
+            let errorMsg = exportSession.error?.localizedDescription ?? "Unknown export error"
+            Log.ui.error("❌ Video merge failed: \(errorMsg)")
+            throw ClipError.serverError("Video merge failed: \(errorMsg)")
+        case .cancelled:
+            throw ClipError.serverError("Video export was cancelled")
+        default:
+            throw ClipError.serverError("Unexpected export status")
+        }
     }
     
     // MARK: - Publishing
@@ -248,16 +503,12 @@ final class ClipsViewModel: ObservableObject {
         }
         
         isPublishing = true
-        publishProgress = 0.1
+        publishProgress = 0.05
         
         do {
-            // 1. Collect chapter video URLs (use the last recorded chapter video for now)
-            let videoURLs = chapters.compactMap(\.videoURL)
-            guard let primaryVideo = videoURLs.first else {
-                publishError = "No recorded chapters found"
-                isPublishing = false
-                return
-            }
+            // 1. Merge all chapter videos into one
+            publishProgress = 0.1
+            let mergedVideoURL = try await mergeChapterVideos()
             
             publishProgress = 0.2
             
@@ -276,7 +527,7 @@ final class ClipsViewModel: ObservableObject {
             
             // 3. Use ClipService for cloud upload + backend record creation
             let clip = try await clipService.createClip(
-                videoURL: primaryVideo,
+                videoURL: mergedVideoURL,
                 title: clipTitle,
                 description: clipDescription.isEmpty ? nil : clipDescription,
                 metadata: metadata,
@@ -295,6 +546,11 @@ final class ClipsViewModel: ObservableObject {
             isPublishComplete = true
             haptics.success()
             
+            // Clean up temporary merged file (not the individual chapters)
+            if mergedVideoURL.lastPathComponent.contains("lyo_merged_") {
+                try? FileManager.default.removeItem(at: mergedVideoURL)
+            }
+            
         } catch {
             Log.ui.error("❌ Clip publish failed: \(error)")
             publishError = error.localizedDescription
@@ -307,11 +563,26 @@ final class ClipsViewModel: ObservableObject {
     // MARK: - Reset
     
     func reset() {
+        // Stop music
+        stopMusic()
+        
+        // Stop timers
+        stopChapterTimer()
+        
+        // Clean up chapter video files
+        for chapter in chapters {
+            if let url = chapter.videoURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        
         chapters = ChapterSegment.defaultChapters
         activeChapterIndex = 0
         isRecordingChapter = false
+        chapterElapsed = 0
         scriptText = ""
         isTeleprompterVisible = false
+        isTeleprompterPaused = false
         activeOverlays = []
         clipTitle = ""
         clipDescription = ""
@@ -323,5 +594,10 @@ final class ClipsViewModel: ObservableObject {
         publishProgress = 0
         publishError = nil
         isPublishComplete = false
+    }
+    
+    deinit {
+        chapterTimer?.invalidate()
+        musicPlayer?.stop()
     }
 }

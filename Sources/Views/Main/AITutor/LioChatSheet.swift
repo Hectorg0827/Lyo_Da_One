@@ -45,124 +45,7 @@ struct LioChatSheet: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                // FORCE BLACK BACKGROUND
-                Color.black.ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    // Custom Header
-                    headerView
-
-                    // ── Artifact Pane (pinned, collapsible) ─────────────────────
-                    if let artifact = viewModel.activeArtifact, artifact.id != dismissedArtifactId {
-                        artifactPane(component: artifact)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isArtifactExpanded)
-                            // Reset dismiss state whenever a brand-new artifact arrives
-                            .onChange(of: artifact.id) { _, newId in
-                                if newId != dismissedArtifactId {
-                                    dismissedArtifactId = nil
-                                    isArtifactExpanded = true
-                                }
-                            }
-                    }
-
-                    // Messages area
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 16) {
-                                if viewModel.messages.isEmpty {
-                                    emptyStateView
-                                } else {
-                                    ForEach(viewModel.messages) { msg in
-                                        LyoMessageBubbleView(
-                                            message: msg,
-                                            onActionTap: { action in
-                                                viewModel.executeAction(action)
-                                            },
-                                            onQuickChipTap: { chip in
-                                                viewModel.inputText = chip
-                                                Task { await viewModel.sendMessage() }
-                                            },
-                                            onCourseStart: { data in
-                                                withAnimation {
-                                                    courseTitleToGenerate = data.title
-                                                    pendingCourseCallback = {
-                                                        // Fallback logic for legacy course start
-                                                    }
-                                                    showingWaitingRoom = true
-                                                }
-                                            },
-                                            onAudioToggle: { messageId, text in
-                                                viewModel.toggleMessageAudio(messageId: messageId, text: text)
-                                            },
-                                            isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
-                                            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
-                                            onA2UICourseStart: { course in
-                                                withAnimation {
-                                                    courseTitleToGenerate = course.title
-                                                    pendingCourseCallback = {
-                                                        viewModel.onA2UICourseStart(course: course)
-                                                    }
-                                                    showingWaitingRoom = true
-                                                }
-                                            },
-                                            onA2UIQuizAnswer: { question, answerIndex in
-                                                viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
-                                            },
-                                            mascotNamespace: mascotAnimation
-                                        )
-                                        .id(msg.id)
-                                    }
-                                }
-                                
-                                // Typing indicator when sending
-                                if viewModel.isLoading {
-                                    LyoUnifiedThinkingIndicator()
-                                        .id("typing")
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 20)
-                            .padding(.bottom, 100) // Space for input bar
-                        }
-                        .onAppear { scrollProxy = proxy }
-                        .onChange(of: viewModel.messages.count) {
-                            scrollToBottom(using: proxy)
-                        }
-                    }
-                }
-                
-                // Floating Input Bar
-                VStack {
-                    Spacer()
-                    
-                    if !viewModel.isVoiceActive {
-                        nextActionView
-                    }
-                    
-                    if viewModel.isVoiceActive {
-                        voiceListeningView
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else {
-                        inputBar
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 16)
-                    }
-                }
-                
-                // Waiting Room Overlay (DISABLED temporarily for debugging)
-                if showingWaitingRoom {
-                    Color.black.opacity(0.8).ignoresSafeArea()
-                        .onAppear {
-                            // Immediately complete to skip the waiting room
-                            DispatchQueue.main.async {
-                                showingWaitingRoom = false
-                                pendingCourseCallback?()
-                            }
-                        }
-                }
-            }
+            mainContentView
             .navigationBarHidden(true)
             .sheet(isPresented: $showMasteryProfile) {
                 MasteryProfileView()
@@ -222,6 +105,148 @@ struct LioChatSheet: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Main Content (extracted for type-checker)
+    
+    private var mainContentView: some View {
+        ZStack {
+            // FORCE BLACK BACKGROUND
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Custom Header
+                headerView
+
+                // ── Artifact Pane (pinned, collapsible) ─────────────────────
+                if let artifact = viewModel.activeArtifact, artifact.id != dismissedArtifactId {
+                    artifactPane(component: artifact)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isArtifactExpanded)
+                        // Reset dismiss state whenever a brand-new artifact arrives
+                        .onChange(of: artifact.id) { _, newId in
+                            if newId != dismissedArtifactId {
+                                dismissedArtifactId = nil
+                                isArtifactExpanded = true
+                            }
+                        }
+                }
+
+                // Messages area
+                chatMessagesArea
+            }
+            
+            // Floating Input Bar
+            VStack {
+                Spacer()
+                
+                if !viewModel.isVoiceActive {
+                    nextActionView
+                }
+                
+                if viewModel.isVoiceActive {
+                    voiceListeningView
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    inputBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                }
+            }
+            
+            // Waiting Room Overlay
+            if showingWaitingRoom {
+                Color.black.opacity(0.8).ignoresSafeArea()
+                WaitingRoomView(
+                    courseTitle: courseTitleToGenerate,
+                    mascotNamespace: mascotAnimation
+                ) {
+                    showingWaitingRoom = false
+                    pendingCourseCallback?()
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+    
+    // MARK: - Chat Messages Area (extracted for type-checker)
+    
+    private var chatMessagesArea: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if viewModel.messages.isEmpty {
+                        emptyStateView
+                    } else {
+                        ForEach(viewModel.messages) { msg in
+                            messageBubble(for: msg)
+                                .id(msg.id)
+                        }
+                    }
+                    
+                    // Typing indicator when sending
+                    if viewModel.isLoading {
+                        LyoUnifiedThinkingIndicator()
+                            .id("typing")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                .padding(.bottom, 100) // Space for input bar
+            }
+            .onAppear { scrollProxy = proxy }
+            .onChange(of: viewModel.messages.count) {
+                scrollToBottom(using: proxy)
+            }
+        }
+    }
+    
+    // MARK: - Message Bubble Helper (extracted for type-checker)
+    
+    private func messageBubble(for msg: LyoMessage) -> some View {
+        LyoMessageBubbleView(
+            message: msg,
+            onActionTap: { action in
+                viewModel.executeAction(action)
+            },
+            onQuickChipTap: { chip in
+                viewModel.inputText = chip
+                Task { await viewModel.sendMessage() }
+            },
+            onCourseStart: { data in
+                let payload = CoursePayload(
+                    id: nil,
+                    title: data.title,
+                    topic: data.subtext,
+                    level: data.summary,
+                    language: nil,
+                    duration: nil,
+                    objectives: data.modules
+                )
+                AICommandHandler.shared.executeOpenClassroom(for: payload)
+            },
+            onAudioToggle: { messageId, text in
+                viewModel.toggleMessageAudio(messageId: messageId, text: text)
+            },
+            isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
+            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
+            onA2UICourseStart: { course in
+                let payload = CoursePayload(
+                    id: nil,
+                    title: course.title,
+                    topic: course.topic,
+                    level: course.level,
+                    language: nil,
+                    duration: nil,
+                    objectives: course.modules.map { $0.title }
+                )
+                AICommandHandler.shared.executeOpenClassroom(for: payload)
+            },
+            onA2UIQuizAnswer: { question, answerIndex in
+                viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+            },
+            mascotNamespace: mascotAnimation
+        )
     }
     
     // MARK: - Subviews

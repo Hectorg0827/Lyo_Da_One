@@ -83,14 +83,14 @@ class CalendarService: ObservableObject {
         var addedCount = 0
         
         // Start from tomorrow if no date specified, or use plan date
-        let baseDate = plan.testDate ?? Date().addingTimeInterval(86400)
+        _ = plan.testDate ?? Date().addingTimeInterval(86400)
         
         // If test date is set, schedule backwards. If not, schedule forwards.
         // For simplicity, let's just schedule them sequentially from tomorrow for now 
         // unless they have specific dates in the payload (which our backend schema supports but simpler to plan here)
         
-        var scheduledDate = Date().addingTimeInterval(86400) // Start tomorrow
-        if let testDate = plan.testDate {
+        let scheduledDate = Date().addingTimeInterval(86400) // Start tomorrow
+        if plan.testDate != nil {
              // Basic logic: spread sessions before test date
              // This is complex, so for V1 we'll stick to sequential days
         }

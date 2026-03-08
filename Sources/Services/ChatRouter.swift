@@ -25,14 +25,16 @@ import os
 enum ChatRouteResult {
     /// Fast path completed — single text response
     /// Fast path completed — single text response with optional Study Plan + context chips + course payload
-    case fastResponse(text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?, coursePayload: CoursePayload?)
-    
+    case fastResponse(
+        text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?,
+        coursePayload: CoursePayload?)
+
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
-    
+
     /// Instant/on-device response — no network needed
     case instantResponse(text: String)
-    
+
     /// Error during routing
     case error(String)
 }
@@ -42,34 +44,34 @@ enum ChatRouteResult {
 @MainActor
 final class ChatRouter: ObservableObject {
     static let shared = ChatRouter()
-    
+
     // Dependencies
     private let intentClassifier = MessageIntentClassifier.shared
     private let backendAI = BackendAIService.shared
     private let lyo2Chat = Lyo2ChatService.shared
-    
+
     // MARK: - Published State
-    
+
     /// The last classified intent (for debug/analytics)
     @Published private(set) var lastIntent: ClassifiedIntent?
-    
+
     /// Current routing tier being used
     @Published private(set) var currentTier: MessageSpeedTier = .standard
-    
+
     // MARK: - Metrics
-    
+
     /// Running average latency per tier (for adaptive tuning)
     private var tierLatencies: [MessageSpeedTier: [Double]] = [
         .instant: [],
         .fast: [],
         .standard: [],
-        .deep: []
+        .deep: [],
     ]
-    
+
     private init() {}
-    
+
     // MARK: - Route Message
-    
+
     /// Route a message through the appropriate pipeline.
     /// Returns the route result; for streaming, blocks arrive via the callback.
     func route(
@@ -79,14 +81,16 @@ final class ChatRouter: ObservableObject {
         onStreamEvent: ((Lyo2StreamEvent) -> Void)? = nil
     ) async -> ChatRouteResult {
         let startTime = CFAbsoluteTimeGetCurrent()
-        
+
         // 1. Classify intent on-device (< 1ms)
         let intent = intentClassifier.classify(message)
         lastIntent = intent
         currentTier = intent.tier
-        
-        Log.ai.info("🎯 Intent: \(intent.category.rawValue) | Tier: \(intent.tier.label) | Confidence: \(String(format: "%.0f%%", intent.confidence * 100))")
-        
+
+        Log.ai.info(
+            "🎯 Intent: \(intent.category.rawValue) | Tier: \(intent.tier.label) | Confidence: \(String(format: "%.0f%%", intent.confidence * 100))"
+        )
+
         // 2. Route based on tier
         switch intent.tier {
         case .instant:
@@ -94,7 +98,7 @@ final class ChatRouter: ObservableObject {
             let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             recordLatency(latency, for: .instant)
             return .instantResponse(text: response)
-            
+
         case .fast:
             return await handleFastPath(
                 message: message,
@@ -103,7 +107,7 @@ final class ChatRouter: ObservableObject {
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
             )
-            
+
         case .standard, .deep:
             return await handleDeepPath(
                 message: message,
@@ -114,9 +118,9 @@ final class ChatRouter: ObservableObject {
             )
         }
     }
-    
+
     // MARK: - Instant Handler (On-Device)
-    
+
     private func handleInstantResponse(message: String, intent: ClassifiedIntent) -> String {
         switch intent.category {
         case .navigation:
@@ -128,9 +132,9 @@ final class ChatRouter: ObservableObject {
             return "Got it!"
         }
     }
-    
+
     // MARK: - Fast Path (Single Agent)
-    
+
     private func handleFastPath(
         message: String,
         intent: ClassifiedIntent,
@@ -145,18 +149,22 @@ final class ChatRouter: ObservableObject {
                 context: intent.category.rawValue,
                 conversationHistory: conversationHistory
             )
-            
+
             let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             recordLatency(latency, for: .fast)
-            
+
             Log.ai.info("⚡ Fast path response in \(String(format: "%.0f", latency))ms")
-            
+
             // Extract course payload if backend returned OPEN_CLASSROOM type
             let coursePayload: CoursePayload? = {
-                // 1. Check explicit type + payload
+                // 1. Check explicit type + payload (payload is OpenClassroomCommand.OpenClassroomPayload)
                 if response.type == "OPEN_CLASSROOM", let payload = response.payload {
                     Log.ai.info("🏫 Fast path: OPEN_CLASSROOM type with payload detected")
-                    return payload.course
+                    // Map nested OpenClassroomCommand.CoursePayload -> top-level CoursePayload
+                    let c = payload.course
+                    return CoursePayload(
+                        id: nil, title: c.title, topic: c.topic, level: c.level,
+                        language: c.language, duration: c.duration, objectives: c.objectives)
                 }
                 // 2. Check extractedUI (regex-based extraction from response text)
                 if let extracted = response.extractedUI {
@@ -165,12 +173,14 @@ final class ChatRouter: ObservableObject {
                 }
                 return nil
             }()
-            
-            return .fastResponse(text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency, suggestions: response.suggestions, coursePayload: coursePayload)
-            
+
+            return .fastResponse(
+                text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency,
+                suggestions: response.suggestions, coursePayload: coursePayload)
+
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")
-            // Fallback to standard streaming on fast-path failure. 
+            // Fallback to standard streaming on fast-path failure.
             // CRITICAL: Pass onStreamEvent down so the fallback actually renders!
             return await handleDeepPath(
                 message: message,
@@ -181,9 +191,9 @@ final class ChatRouter: ObservableObject {
             )
         }
     }
-    
+
     // MARK: - Deep Path (Multi-Agent Streaming)
-    
+
     private func handleDeepPath(
         message: String,
         intent: ClassifiedIntent,
@@ -192,12 +202,12 @@ final class ChatRouter: ObservableObject {
         startTime: CFAbsoluteTime
     ) async -> ChatRouteResult {
         let sessionId = UUID().uuidString
-        
+
         // Build conversation memory window
         let memoryWindow = conversationHistory.suffix(20).map {
             Lyo2ConversationTurn(role: $0.role, content: $0.content)
         }
-        
+
         // Start streaming via Lyo2 pipeline
         // NOTE: The Lyo2StreamingManager now fires callbacks on OperationQueue.main,
         // so this closure runs on the main thread — safe to access @MainActor state directly.
@@ -206,7 +216,7 @@ final class ChatRouter: ObservableObject {
             conversationHistory: memoryWindow
         ) { event in
             onStreamEvent?(event)
-            
+
             // Record first-token latency
             if case .answer = event {
                 let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
@@ -214,12 +224,12 @@ final class ChatRouter: ObservableObject {
                 Log.ai.info("🧠 Deep path first token in \(String(format: "%.0f", latency))ms")
             }
         }
-        
+
         return .streamingStarted(sessionId: sessionId)
     }
-    
+
     // MARK: - Quick Message (Non-Streaming)
-    
+
     /// Send a message via the lightweight non-streaming endpoint
     private func sendQuickMessage(
         message: String,
@@ -234,12 +244,12 @@ final class ChatRouter: ObservableObject {
                 context: nil
             )
         )
-        
+
         return response
     }
-    
+
     // MARK: - Latency Tracking
-    
+
     private func recordLatency(_ ms: Double, for tier: MessageSpeedTier) {
         var samples = tierLatencies[tier] ?? []
         samples.append(ms)
@@ -247,14 +257,14 @@ final class ChatRouter: ObservableObject {
         if samples.count > 50 { samples.removeFirst() }
         tierLatencies[tier] = samples
     }
-    
+
     /// Average latency for a given tier
     func averageLatency(for tier: MessageSpeedTier) -> Double {
         let samples = tierLatencies[tier] ?? []
         guard !samples.isEmpty else { return Double(tier.targetLatencyMs) }
         return samples.reduce(0, +) / Double(samples.count)
     }
-    
+
     /// Debug summary of routing metrics
     var metricsReport: String {
         var lines: [String] = ["📊 Chat Router Metrics:"]
@@ -266,4 +276,3 @@ final class ChatRouter: ObservableObject {
         return lines.joined(separator: "\n")
     }
 }
-

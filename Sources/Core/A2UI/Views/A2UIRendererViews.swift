@@ -37,7 +37,7 @@ struct A2UITextRenderer: View {
                 if trimmed.hasPrefix("* ") || trimmed.hasPrefix("- ") {
                     return "\u{2022}  " + trimmed.dropFirst(2)
                 }
-                if trimmed.hasPrefix("# ")  { return String(trimmed.dropFirst(2)) }
+                if trimmed.hasPrefix("# ") { return String(trimmed.dropFirst(2)) }
                 if trimmed.hasPrefix("## ") { return String(trimmed.dropFirst(3)) }
                 if trimmed.hasPrefix("### ") { return String(trimmed.dropFirst(4)) }
                 return line
@@ -53,19 +53,20 @@ struct A2UITextRenderer: View {
             .padding(paddingForComponent())
             .onAppear {
                 if let initial = component.props.text ?? component.props.title {
-                     streamedContent = initial
+                    streamedContent = initial
                 }
             }
-            .onReceive(A2UIStreamService.shared.stream(for: component.props.streamId ?? "")) { chunk in
+            .onReceive(A2UIStreamService.shared.stream(for: component.props.streamId ?? "")) {
+                chunk in
                 // If we receive a chunk, we assume the content is cumulative or we append
                 // Ideally the service sends full text or we handle append logic here.
                 // For simplicity, let's assume the service sends the FULL text so far for this update model
                 streamedContent = chunk
             }
     }
-    
+
     private var displayContent: String {
-        if let _ = component.props.streamId {
+        if component.props.streamId != nil {
             return streamedContent
         }
         return component.props.text ?? component.props.title ?? ""
@@ -167,9 +168,11 @@ struct A2UIMarkdownRenderer: View {
             let t = line.trimmingCharacters(in: .init(charactersIn: " \t"))
             if t.isEmpty { return .blank }
             if t.hasPrefix("### ") { return .heading(level: 3, text: String(t.dropFirst(4))) }
-            if t.hasPrefix("## ")  { return .heading(level: 2, text: String(t.dropFirst(3))) }
-            if t.hasPrefix("# ")   { return .heading(level: 1, text: String(t.dropFirst(2))) }
-            if t.hasPrefix("* ") || t.hasPrefix("- ") { return .bullet(text: String(t.dropFirst(2))) }
+            if t.hasPrefix("## ") { return .heading(level: 2, text: String(t.dropFirst(3))) }
+            if t.hasPrefix("# ") { return .heading(level: 1, text: String(t.dropFirst(2))) }
+            if t.hasPrefix("* ") || t.hasPrefix("- ") {
+                return .bullet(text: String(t.dropFirst(2)))
+            }
             return .paragraph(text: line)
         }
     }
@@ -278,8 +281,10 @@ struct A2UIImageRenderer: View {
                     .font(.system(size: 40))
             }
         }
-        .frame(maxWidth: dimensionToCGFloat(component.props.maxWidth),
-               maxHeight: dimensionToCGFloat(component.props.maxHeight))
+        .frame(
+            maxWidth: dimensionToCGFloat(component.props.maxWidth),
+            maxHeight: dimensionToCGFloat(component.props.maxHeight)
+        )
         .cornerRadius(component.props.borderRadius ?? 0)
     }
 
@@ -289,14 +294,16 @@ struct A2UIImageRenderer: View {
             Image(systemName: "photo.badge.exclamationmark")
                 .font(.system(size: 32))
                 .foregroundColor(Color(.systemGray3))
-            Text(component.props.altText
-                 ?? component.props.title
-                 ?? component.props.text
-                 ?? "Image unavailable")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            Text(
+                component.props.altText
+                    ?? component.props.title
+                    ?? component.props.text
+                    ?? "Image unavailable"
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
         }
         .frame(maxWidth: .infinity, minHeight: 80)
         .padding()
@@ -323,17 +330,54 @@ struct A2UIVideoRenderer: View {
     let onAction: ((A2UIAction) -> Void)?
 
     var body: some View {
-        VStack {
-            Image(systemName: "play.rectangle")
-                .font(.system(size: 40))
-                .foregroundColor(.blue)
-            Text("Video Player")
-                .font(.caption)
-                .foregroundColor(.secondary)
+        Group {
+            if let videoUrl = component.props.videoUrl, let url = URL(string: videoUrl) {
+                ZStack {
+                    if let poster = component.props.thumbnailUrl, let purl = URL(string: poster) {
+                        AsyncImage(url: purl) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            default:
+                                Color(.systemGray5)
+                            }
+                        }
+                    } else {
+                        Color(.systemGray5)
+                    }
+
+                    Button(action: {
+                        // Emit playVideo action with url
+                        let action = A2UIAction(
+                            id: "play-", trigger: .tap, type: .playVideo,
+                            payload: ["url": .string(url.absoluteString)])
+                        onAction?(action)
+                        // Fallback: open URL
+                        UIApplication.shared.open(url)
+                    }) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white)
+                            .shadow(radius: 4)
+                    }
+                }
+                .frame(width: 220, height: 140)
+                .clipped()
+                .cornerRadius(10)
+            } else {
+                VStack {
+                    Image(systemName: "play.rectangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(.blue)
+                    Text("Video Player")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(width: 200, height: 120)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+            }
         }
-        .frame(width: 200, height: 120)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
     }
 }
 
@@ -367,14 +411,27 @@ struct A2UIDiagramRenderer: View {
 
     var body: some View {
         VStack {
-            Image(systemName: "chart.bar")
-                .font(.system(size: 40))
-                .foregroundColor(.green)
-            Text("Diagram/Chart")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if let chartJson = component.props.documentContent {
+                // Simple textual preview for chart data
+                Text(component.props.title ?? "Chart")
+                    .font(.headline)
+                ScrollView(.horizontal) {
+                    Text(chartJson)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                        .padding(6)
+                }
+            } else {
+                Image(systemName: "chart.bar")
+                    .font(.system(size: 40))
+                    .foregroundColor(.green)
+                Text("Diagram/Chart")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
-        .frame(width: 150, height: 100)
+        .frame(width: 180, height: 120)
         .background(Color(.systemGray6))
         .cornerRadius(8)
     }

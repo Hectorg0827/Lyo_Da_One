@@ -276,25 +276,24 @@ struct LyoMessageBubbleView: View {
     private func renderContentType(_ contentType: MessageContentType) -> some View {
         switch contentType {
         case .courseProposal(let payload):
-            ChatInteractiveCardView(
-                type: .course(
-                    title: payload.title,
-                    topic: payload.topic,
-                    level: payload.level,
-                    duration: payload.duration,
-                    imageURL: nil
-                ),
+            CourseProposalCardView(
+                payload: payload,
                 onStart: {
                     let courseData = CourseCreationData(
                         id: payload.id ?? UUID().uuidString,
                         title: payload.title,
                         topic: payload.topic,
                         level: payload.level,
-                        modules: [],
+                        modules: payload.objectives.enumerated().map { index, objective in
+                            CourseModuleData(
+                                id: "course_preview_\(index + 1)",
+                                title: "Module \(index + 1)",
+                                description: objective
+                            )
+                        },
                         difficultyLevel: payload.level,
                         instructorId: "default"
                     )
-                    // Save shell to Focus stack, then open classroom
                     UIStackStore.shared.upsertCourse(
                         courseId: courseData.id,
                         title: courseData.title,
@@ -302,24 +301,9 @@ struct LyoMessageBubbleView: View {
                     )
                     onA2UICourseStart?(courseData)
                 },
-                onRefine: {
-                    onActionTap?(
-                        MessageAction(
-                            id: "refine_course",
-                            label: "Refine Course",
-                            actionType: .generateSyllabus,
-                            data: [
-                                "topic": payload.topic, "title": payload.title, "refine": "true",
-                            ]
-                        ))
-                },
-                onSave: {
-                    UIStackStore.shared.upsertCourse(
-                        courseId: payload.id ?? UUID().uuidString,
-                        title: payload.title,
-                        subtitle: payload.topic
-                    )
-                    HapticManager.shared.playSuccess()
+                onAdjust: {
+                    let refinePrompt = "Refine this course on \(payload.topic) for a \(payload.level.lowercased()) learner. Keep the title '\(payload.title)' but make the first module more hands-on, add a better project arc, and tighten the learning outcomes."
+                    onQuickChipTap?(refinePrompt)
                 }
             )
 

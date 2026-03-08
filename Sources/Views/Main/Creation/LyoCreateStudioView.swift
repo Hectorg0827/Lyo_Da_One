@@ -26,6 +26,12 @@ struct LyoCreateStudioView: View {
     @State private var showClipsStudio = false
     @State private var showStoriesStudio = false
     @State private var showPostEditor = false
+    @State private var showMusicPicker = false
+    @State private var showEffectsPicker = false
+    @State private var showAIQuizSheet = false
+    @State private var showSlidesPicker = false
+    @State private var selectedCameraFilter: CameraFilterPreset = .none
+    @State private var aiQuizTopic: String = ""
 
     // MARK: - Animation State
     @State private var recordButtonScale: CGFloat = 1.0
@@ -58,6 +64,23 @@ struct LyoCreateStudioView: View {
                                 cameraManager.setZoom(newZoom)
                             }
                     )
+                    
+                    // Camera filter overlay
+                    if selectedCameraFilter != .none {
+                        Rectangle()
+                            .fill(selectedCameraFilter.color.opacity(0.25))
+                            .blendMode(selectedCameraFilter == .noir || selectedCameraFilter == .mono ? .color : .overlay)
+                            .ignoresSafeArea(.all)
+                            .allowsHitTesting(false)
+                        
+                        if selectedCameraFilter == .mono {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.1))
+                                .blendMode(.saturation)
+                                .ignoresSafeArea(.all)
+                                .allowsHitTesting(false)
+                        }
+                    }
                 } else {
                     // Non-camera dynamic background
                     selectedMode.gradient
@@ -181,6 +204,9 @@ struct LyoCreateStudioView: View {
             setupInitialState()
         }
         .onDisappear {
+            // Don't kill the session if a fullScreenCover is being presented —
+            // those child views share this cameraManager and need the session alive.
+            guard !showClipsStudio, !showStoriesStudio, !showPostEditor else { return }
             cameraManager.cleanup()
         }
         .onChange(of: selectedMode) { _, newMode in
@@ -222,6 +248,19 @@ struct LyoCreateStudioView: View {
         }
         .fullScreenCover(isPresented: $showPostEditor) {
             PostEditorView(isPresented: $showPostEditor)
+        }
+        // MARK: - Tool Sheets
+        .sheet(isPresented: $showMusicPicker) {
+            musicPickerSheet
+        }
+        .sheet(isPresented: $showEffectsPicker) {
+            effectsPickerSheet
+        }
+        .sheet(isPresented: $showAIQuizSheet) {
+            aiQuizSheet
+        }
+        .sheet(isPresented: $showSlidesPicker) {
+            slidesPickerSheet
         }
     }
 
@@ -427,16 +466,17 @@ struct LyoCreateStudioView: View {
                 icon: "music.note",
                 action: {
                     haptics.light()
-                    // Handle music selection
+                    showMusicPicker = true
                 }
             )
 
             // Effects
             GlassMorphicToolButton(
                 icon: "camera.filters",
+                isActive: selectedCameraFilter != .none,
                 action: {
                     haptics.light()
-                    // Handle effects
+                    showEffectsPicker = true
                 }
             )
 
@@ -469,7 +509,7 @@ struct LyoCreateStudioView: View {
                 isText: true,
                 action: {
                     haptics.medium()
-                    // Handle AI quiz addition
+                    showAIQuizSheet = true
                 }
             )
 
@@ -479,7 +519,7 @@ struct LyoCreateStudioView: View {
                 isText: true,
                 action: {
                     haptics.light()
-                    // Handle slide addition
+                    showSlidesPicker = true
                 }
             )
         }
@@ -665,6 +705,359 @@ struct CapturedMedia {
         self.videoURL = videoURL
         self.mode = mode
         self.timestamp = Date()
+    }
+}
+
+// MARK: - Camera Filter Preset
+
+enum CameraFilterPreset: String, CaseIterable, Identifiable {
+    case none = "None"
+    case warmth = "Warmth"
+    case coolTone = "Cool"
+    case vivid = "Vivid"
+    case noir = "Noir"
+    case mono = "Mono"
+    
+    var id: String { rawValue }
+    
+    var icon: String {
+        switch self {
+        case .none: return "circle"
+        case .warmth: return "sun.max.fill"
+        case .coolTone: return "snowflake"
+        case .vivid: return "paintpalette.fill"
+        case .noir: return "circle.lefthalf.filled"
+        case .mono: return "circle.grid.3x3.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .none: return .white.opacity(0.3)
+        case .warmth: return .orange
+        case .coolTone: return .cyan
+        case .vivid: return .purple
+        case .noir: return .gray
+        case .mono: return .white
+        }
+    }
+}
+
+// MARK: - Hub Tool Sheet Views
+
+extension LyoCreateStudioView {
+    
+    // MARK: - Music Picker Sheet
+    
+    var musicPickerSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    ForEach(BackgroundMusicPreset.presets) { preset in
+                        Button {
+                            haptics.selection()
+                            // Music only plays in Clips mode; here we just show the selection
+                            showMusicPicker = false
+                        } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: preset.icon)
+                                    .font(.system(size: 20))
+                                    .foregroundColor(Color(hex: "6366F1"))
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color(hex: "6366F1").opacity(0.15))
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(preset.name)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    Text(preset.genre)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                                
+                                Spacer()
+                                
+                                if preset.fileName == nil {
+                                    Text("Off")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.4))
+                                } else {
+                                    Image(systemName: "play.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(Color(hex: "6366F1"))
+                                }
+                            }
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.white.opacity(0.06))
+                            )
+                        }
+                    }
+                    
+                    Text("Background music is active during Clips recording mode.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 8)
+                }
+                .padding(20)
+            }
+            .background(Color(hex: "0F0F1A").ignoresSafeArea())
+            .navigationTitle("Background Music")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { showMusicPicker = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+    
+    // MARK: - Effects Picker Sheet
+    
+    var effectsPickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Text("Camera Filters")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 16) {
+                    ForEach(CameraFilterPreset.allCases) { filter in
+                        Button {
+                            selectedCameraFilter = filter
+                            haptics.selection()
+                        } label: {
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .fill(filter.color.opacity(0.2))
+                                        .frame(width: 60, height: 60)
+                                    
+                                    Image(systemName: filter.icon)
+                                        .font(.system(size: 24))
+                                        .foregroundColor(filter.color)
+                                }
+                                .overlay(
+                                    Circle()
+                                        .stroke(
+                                            selectedCameraFilter == filter
+                                            ? Color(hex: "6366F1")
+                                            : Color.clear,
+                                            lineWidth: 3
+                                        )
+                                        .frame(width: 64, height: 64)
+                                )
+                                
+                                Text(filter.rawValue)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(
+                                        selectedCameraFilter == filter
+                                        ? .white : .white.opacity(0.6)
+                                    )
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                Spacer()
+                
+                Text("Filters apply to Reel-mode direct recording.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.4))
+                    .padding(.bottom, 20)
+            }
+            .padding(.top, 20)
+            .background(Color(hex: "0F0F1A").ignoresSafeArea())
+            .navigationTitle("Effects")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") { showEffectsPicker = false }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(Color(hex: "6366F1"))
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+    
+    // MARK: - AI Quiz Sheet
+    
+    var aiQuizSheet: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 48))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(hex: "6366F1"), Color(hex: "EC4899")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                Text("AI Quiz Generator")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Text("Add an interactive quiz overlay to your recording. AI will generate relevant questions based on your topic.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Quiz Topic")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    TextField("e.g. Photosynthesis, Algebra...", text: $aiQuizTopic)
+                        .font(.system(size: 16))
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                }
+                .padding(.horizontal, 24)
+                
+                Button {
+                    haptics.medium()
+                    // Quiz overlay would be added to the recording
+                    showAIQuizSheet = false
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                        Text("Generate Quiz")
+                    }
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "6366F1"), Color(hex: "8B5CF6")],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                    )
+                }
+                .disabled(aiQuizTopic.trimmingCharacters(in: .whitespaces).isEmpty)
+                .opacity(aiQuizTopic.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1.0)
+                .padding(.horizontal, 24)
+                
+                Spacer()
+            }
+            .padding(.top, 30)
+            .background(Color(hex: "0F0F1A").ignoresSafeArea())
+            .navigationTitle("Quiz Overlay")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showAIQuizSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+    
+    // MARK: - Slides Picker Sheet
+    
+    var slidesPickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Image(systemName: "doc.on.doc.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(hex: "F97316"), Color(hex: "EAB308")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                Text("Import Slides")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Text("Import images or PDF pages as slide overlays that display during your recording.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                
+                VStack(spacing: 12) {
+                    Button {
+                        haptics.light()
+                        // Would open photo picker for slide images
+                        showSlidesPicker = false
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 20))
+                            Text("Choose from Photos")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.3))
+                        }
+                        .foregroundColor(.white)
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                    }
+                    
+                    Button {
+                        haptics.light()
+                        // Would open file picker for PDFs
+                        showSlidesPicker = false
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "doc.fill")
+                                .font(.system(size: 20))
+                            Text("Import PDF")
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.3))
+                        }
+                        .foregroundColor(.white)
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                    }
+                }
+                .padding(.horizontal, 24)
+                
+                Spacer()
+            }
+            .padding(.top, 30)
+            .background(Color(hex: "0F0F1A").ignoresSafeArea())
+            .navigationTitle("Slide Overlay")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showSlidesPicker = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

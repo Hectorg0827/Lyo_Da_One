@@ -72,8 +72,35 @@ actor NetworkClient: NetworkRequestable {
         let processedResponse = try await applyResponseInterceptors(response)
 
         // 6. Decode response
-        let decoder = JSONDecoder.lyoDecoder
-        let decoded: T = try decoder.decode(T.self, from: processedResponse.data)
+        #if DEBUG
+        if let urlPath = request.url?.path, urlPath.contains("/course/") {
+            let rawString = String(data: processedResponse.data, encoding: .utf8) ?? "<non-UTF8>"
+            print("🌐 RAW RESPONSE [\\(urlPath)]: \\(rawString.prefix(2000))")
+        }
+        #endif
+        
+        let decoded: T
+        do {
+            let decoder = JSONDecoder.lyoDecoder
+            decoded = try decoder.decode(T.self, from: processedResponse.data)
+        } catch let DecodingError.keyNotFound(key, context) {
+            print("🚨 DECODE FAIL: Missing key '\\(key.stringValue)' — \\(context.debugDescription)")
+            print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
+            throw DecodingError.keyNotFound(key, context)
+        } catch let DecodingError.typeMismatch(type, context) {
+            print("🚨 DECODE FAIL: Type mismatch for \\(type) — \\(context.debugDescription)")
+            print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
+            throw DecodingError.typeMismatch(type, context)
+        } catch let DecodingError.valueNotFound(type, context) {
+            print("🚨 DECODE FAIL: Null value for \\(type) — \\(context.debugDescription)")
+            throw DecodingError.valueNotFound(type, context)
+        } catch let DecodingError.dataCorrupted(context) {
+            print("🚨 DECODE FAIL: Corrupted data — \\(context.debugDescription)")
+            throw DecodingError.dataCorrupted(context)
+        } catch {
+            print("🚨 NETWORK ERROR: \\(error.localizedDescription)")
+            throw error
+        }
 
         // 7. Cache if policy allows and TTL > 0 (skip caching for dynamic endpoints with TTL=0)
         // Only cache if the type is Encodable

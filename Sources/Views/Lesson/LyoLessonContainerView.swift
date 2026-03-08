@@ -38,7 +38,7 @@ public struct LyoLessonContainerView: View {
             } else if service.cards.isEmpty && service.isGenerating {
                 // Initial Loading State
                 VStack(spacing: 40) {
-                    VoiceOrbView(state: .thinking, accent: Color(hex: activePalette.color2Hex) ?? .blue)
+                    VoiceOrbView(state: .thinking, accent: Color(hex: activePalette.color2Hex))
                         .matchedGeometryEffect(id: "voice_orb", in: lessonAnimationNamespace)
                     
                     Text("Generating classroom for\n\(topic)...")
@@ -99,7 +99,7 @@ public struct LyoLessonContainerView: View {
                     VStack {
                         VoiceOrbView(
                             state: audioEngine.isPlaying ? .speaking : .idle, 
-                            accent: Color(hex: activePalette.color2Hex) ?? .blue,
+                            accent: Color(hex: activePalette.color2Hex),
                             amplitude: audioEngine.currentAmplitude
                         )
                         .matchedGeometryEffect(id: "voice_orb", in: lessonAnimationNamespace)
@@ -147,7 +147,7 @@ public struct LyoLessonContainerView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 24)
                                     .padding(.vertical, 12)
-                                    .background(Color(hex: activePalette.color2Hex) ?? .blue)
+                                    .background(Color(hex: activePalette.color2Hex))
                                     .cornerRadius(24)
                                     .padding()
                             }

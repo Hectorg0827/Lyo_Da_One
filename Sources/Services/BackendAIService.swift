@@ -9,6 +9,28 @@
 import Foundation
 import os
 
+// MARK: - Backend AI Error
+
+enum BackendAIError: Error, LocalizedError {
+    case invalidResponse
+    case invalidPayload(String)
+    case networkError(String)
+    case serverError(String)
+    case unauthorized
+    case rateLimited
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: return "Invalid response from server"
+        case .invalidPayload(let msg): return "Invalid payload: \(msg)"
+        case .networkError(let msg): return "Network error: \(msg)"
+        case .serverError(let msg): return "Server error: \(msg)"
+        case .unauthorized: return "Unauthorized"
+        case .rateLimited: return "Rate limited"
+        }
+    }
+}
+
 // MARK: - Backend AI Request/Response Models
 
 // Request for /api/v1/ai/chat (public endpoint - no auth required)
@@ -210,7 +232,7 @@ struct BackendAIChatResponse: Codable {
     
     // A2UI Command fields (OPEN_CLASSROOM, etc.)
     let type: String?  // e.g. "OPEN_CLASSROOM"
-    let payload: OpenClassroomPayload?  // The course/classroom payload
+    let payload: OpenClassroomCommand.OpenClassroomPayload?  // The course/classroom payload
     
     // Legacy fields for backward compatibility (may not be present anymore)
     let content: String?  // Some endpoints still use this
@@ -302,22 +324,31 @@ struct BackendAIChatResponse: Codable {
             // But if there are markdown ticks inside, we might need a stricter clean.
             // A common case: ```json\n{...}\n```. The regex above matches { to }.
             
-            if let data = jsonString.data(using: .utf8),
-               let envelope = try? JSONDecoder().decode(OpenClassroomEnvelope.self, from: data) {
-                return envelope.payload
+            do {
+                if let data = jsonString.data(using: .utf8) {
+                    let envelope = try JSONDecoder().decode(OpenClassroomEnvelope.self, from: data)
+                    return envelope.payload
+                }
+            } catch {
+                Log.ai.error("Failed to decode JSON string: \(error.localizedDescription)")
             }
-        }
-        
-        // Fallback: If the entire string is just the JSON (no markdown wrapping caught by regex or mixed text)
-        // Clean markdown code blocks blindly
-        let cleaned = text
-            .replacingOccurrences(of: "```json", with: "")
-            .replacingOccurrences(of: "```", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            
-        if let data = cleaned.data(using: .utf8),
-           let envelope = try? JSONDecoder().decode(OpenClassroomEnvelope.self, from: data) {
-            return envelope.payload
+
+            // Fallback: Clean markdown code blocks and retry decoding
+            let cleaned = text
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            do {
+                if let data = cleaned.data(using: .utf8) {
+                    let envelope = try JSONDecoder().decode(OpenClassroomEnvelope.self, from: data)
+                    return envelope.payload
+                }
+            } catch {
+                Log.ai.error("Failed to decode cleaned JSON string: \(error.localizedDescription)")
+            }
+
+            return nil
         }
         
         return nil
@@ -628,7 +659,7 @@ final class BackendAIService {
         resourceId: String? = nil,
         mode: String = "focus",
         history: [ConversationMessage]? = nil
-    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: AnyCodable?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?) {
+    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: AnyCodable?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?, mappedComponents: [A2UIComponent]?) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -673,41 +704,42 @@ final class BackendAIService {
         // that trigger classroom navigation in the iOS app
         let endpoint = "\(baseURL)/api/v1/chat"
         
-        do {
-            let response: BackendAIChatResponse = try await postPublic(endpoint: endpoint, body: request)
-            
-            let rawResponse = response.responseText
-            
-            // Update local conversation history with the original user message
-            // Note: We keep the raw response in history so the AI knows what it sent (including JSON)
-            if history == nil {
-                conversationHistory.append(ConversationMessage(role: "user", content: message))
-                conversationHistory.append(ConversationMessage(role: "assistant", content: rawResponse))
-                // Keep history reasonable size
-                if conversationHistory.count > 10 {
-                    conversationHistory = Array(conversationHistory.suffix(10))
-                }
-            }
-            
-            // Check if this is an OPEN_CLASSROOM command
-            let isCommand = response.type == "OPEN_CLASSROOM"
-            
-            // Mix in Lyo Blocks (The Adapter Pattern)
-            var finalUIContent = response.contentTypes ?? []
-            if let lyoBlocks = response.lyoBlocks {
-                let adaptedContent = lyoBlocks.map { LyoAdapter.render($0) }
-                finalUIContent.append(contentsOf: adaptedContent)
-            }
-            // If empty, pass nil to match original signature if preferred, 
-            // or keep empty array. Original was optional [A2UIContent]?
-            let uiContentToReturn = finalUIContent.isEmpty ? nil : finalUIContent
-            
-            return (response: rawResponse, source: response.aiSource, uiContent: uiContentToReturn, uiComponent: response.uiComponent, wasCommand: isCommand, openClassroomPayload: response.payload ?? response.extractedUI)
-            
-        } catch {
-            Log.ai.warning("Backend AI failed: \(error). Will fallback to local.")
-            throw error
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: request,
+            requiresAuth: true
+        )
+        
+        let chatResponse: BackendAIChatResponse = try await NetworkClient.shared.request(dynamicEndpoint)
+        
+        // Update internal conversation history
+        conversationHistory.append(ConversationMessage(role: "user", content: message))
+        conversationHistory.append(ConversationMessage(role: "assistant", content: chatResponse.responseText))
+        if conversationHistory.count > 10 {
+            conversationHistory = Array(conversationHistory.suffix(10))
         }
+        
+        // Detect A2UI command
+        let wasCommand = chatResponse.type == "OPEN_CLASSROOM"
+        let openClassroomPayload = chatResponse.extractedUI
+        
+        // Map A2UI components if uiComponent JSON is present
+        var mappedComponents: [A2UIComponent]? = nil
+        if let uiComp = chatResponse.uiComponent,
+           let jsonData = try? JSONEncoder().encode(uiComp) {
+            mappedComponents = A2IPayloadMapper.mapFromJSON(jsonData)
+        }
+        
+        return (
+            response: chatResponse.responseText,
+            source: chatResponse.aiSource,
+            uiContent: chatResponse.contentTypes,
+            uiComponent: chatResponse.uiComponent,
+            wasCommand: wasCommand,
+            openClassroomPayload: openClassroomPayload,
+            mappedComponents: mappedComponents
+        )
     }
     
     // MARK: - Generate Quiz
@@ -895,6 +927,30 @@ final class BackendAIService {
     
     // MARK: - System Prompt Builder
     
+    // MARK: - Private Networking Helpers
+    
+    /// Generic POST helper (authenticated)
+    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: body,
+            requiresAuth: true
+        )
+        return try await NetworkClient.shared.request(dynamicEndpoint)
+    }
+    
+    /// Generic POST helper (public / no auth)
+    internal func postPublic<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: body,
+            requiresAuth: false
+        )
+        return try await NetworkClient.shared.request(dynamicEndpoint)
+    }
+    
     private func buildSystemPrompt(for mode: String, resourceId: String) -> String {
         return """
         You are **Lyo**, the AI assistant inside the **Lyo** learning app.
@@ -982,103 +1038,6 @@ final class BackendAIService {
             }
           }
         }
-        ```
-
-        ### 2.1. Rules for the JSON output
-
-        * You must output **valid JSON only**.
-        * Do **NOT** include markdown, code fences, backticks, comments, or any extra text.
-        * The top-level field **must** be `"type": "OPEN_CLASSROOM"`.
-        * `"payload.stack_item.category"` must be `"Course"` for course requests.
-        * `"payload.stack_item.status"` must be `"active"` for new courses.
-        * `"payload.stack_item.due"` can be `null` unless the user explicitly mentions a deadline (then you can set a simple string like `"Exam next month"`).
-        * `title` and `subtitle` must be short enough to fit on a mobile card:
-          * `title`: very short, clear, and attractive.
-          * `subtitle`: one line that summarizes the focus or benefit.
-        * `language` must match the language the user used in the request (e.g., Spanish vs English).
-        * `objectives` should be **2–5 short bullet-style phrases**, not long paragraphs.
-
-        The app will:
-        * Use `stack_item` to create a card in “Today’s Stack”.
-        * Use `course` to configure the AI Classroom for that topic.
-
-        ---
-
-        ---
-        
-        CRITICAL RULE FOR COURSE CREATION:
-        Even if you have already provided an outline or discussed the topic, if the user says "Start", "Begin", "Create", "Yes", or "Let's go" to confirm they want the course, you **MUST** output the `OPEN_CLASSROOM` JSON object immediately.
-        
-        *   **Do NOT** start teaching the first lesson textually.
-        *   **Do NOT** continue the conversation.
-        *   **ONLY** output the JSON.
-        
-        The JSON object is the ONLY way to launch the interactive classroom. If you just reply with text, the user stays stuck in chat.
-        
-        ---
-
-        ## 3. Normal chat behavior (no classroom)
-
-        If the user is **not clearly** asking for a full course or class:
-        * Answer directly in chat as a helpful tutor.
-        * Be clear and concise. Use steps and examples when helpful.
-        * You may **offer** a course as an option, e.g.:
-          * “If you want, I can create a full course on this for you.”
-        * But only trigger the JSON event **after** the user explicitly agrees or asks for a course.
-
-        When in normal chat mode, you must NOT send the `OPEN_CLASSROOM` JSON.
         """
-    }
-    
-    // MARK: - Network Helpers
-    
-    /// POST request WITH authentication (for auth-required endpoints)
-    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: body,
-            requiresAuth: true
-        )
-        return try await NetworkClient.shared.request(dynamicEndpoint)
-    }
-    
-    /// POST request WITHOUT authentication (for public endpoints like /api/v1/ai/chat)
-    private func postPublic<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: body,
-            requiresAuth: false
-        )
-        return try await NetworkClient.shared.request(dynamicEndpoint)
-    }
-}
-
-// MARK: - Errors
-
-enum BackendAIError: LocalizedError {
-    case invalidURL
-    case invalidResponse
-    case unauthorized
-    case rateLimited
-    case serverError(String)
-    case networkError(String)
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Invalid URL"
-        case .invalidResponse:
-            return "Invalid response from server"
-        case .unauthorized:
-            return "Please log in to use AI features"
-        case .rateLimited:
-            return "Too many requests. Please wait a moment."
-        case .serverError(let message):
-            return message
-        case .networkError(let message):
-            return "Network error: \(message)"
-        }
     }
 }

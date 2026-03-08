@@ -472,7 +472,7 @@ class CreateViewModel: ObservableObject {
         let generatedCourse = try await courseService.generateCourse(
             topic: courseTopic,
             level: courseLevel,
-            outcomes: courseOutcomes.isEmpty ? nil : courseOutcomes,
+            outcomes: courseOutcomes.isEmpty ? [] : courseOutcomes,
             teachingStyle: "interactive"
         )
         

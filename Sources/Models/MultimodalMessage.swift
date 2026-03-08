@@ -604,26 +604,7 @@ struct CourseRoadmapPayload: Codable, Equatable {
     let completedModules: Int
 }
 
-/// Module info for course roadmap widget
-struct CourseModule: Codable, Identifiable, Equatable {
-    let id: String
-    let title: String
-    let description: String?
-    let duration: String?
-    let isCompleted: Bool
-    let isLocked: Bool
-    let lessons: [ModuleLessonData]?
-    
-    init(id: String = UUID().uuidString, title: String, description: String? = nil, duration: String?, isCompleted: Bool = false, isLocked: Bool = false, lessons: [ModuleLessonData]? = nil) {
-        self.id = id
-        self.title = title
-        self.description = description
-        self.duration = duration
-        self.isCompleted = isCompleted
-        self.isLocked = isLocked
-        self.lessons = lessons
-    }
-}
+// CourseModule moved to ProgressiveCourseModels.swift
 
 /// Lesson within a module
 struct ModuleLessonData: Codable, Identifiable, Equatable {

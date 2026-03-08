@@ -90,7 +90,7 @@ public struct DiagramCardView: View {
     @ViewBuilder
     private func nodesLayer(center: CGPoint, radius: CGFloat) -> some View {
         let nodeCount = CGFloat(card.nodes.count)
-        let accentColor = Color(hex: palette.color2Hex) ?? .blue
+        let accentColor = Color(hex: palette.color2Hex)
 
         ForEach(Array(card.nodes.enumerated()), id: \.element.id) { index, node in
             let angle = (2 * .pi / nodeCount) * CGFloat(index) - .pi / 2
@@ -209,7 +209,7 @@ struct DiagramNodeView: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(Color(hex: node.colorHex ?? "") ?? accentColor)
+                    .fill(Color(hex: node.colorHex ?? ""))
                     .frame(width: 60, height: 60)
                     .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
                 

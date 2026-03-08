@@ -209,21 +209,13 @@ final class DiscoverViewModel: ObservableObject {
         Log.ui.info("Generating mini-course for: \(item.title)")
         
         Task {
-            do {
-                let topic = item.topic ?? item.title
-                let level = item.level.rawValue
-                _ = try await CourseGenerationService.shared.generateCourse(
-                    topic: topic,
-                    level: level,
-                    outcomes: item.keyPoints.isEmpty ? nil : item.keyPoints
-                )
-                Log.ui.info("Mini-course generated for: \(item.title)")
-            } catch {
-                Log.ui.warning("Failed to generate mini-course: \(error.localizedDescription)")
-                await MainActor.run {
-                    errorMessage = "Failed to generate course: \(error.localizedDescription)"
-                }
-            }
+            let topic = item.topic ?? item.title
+            let level = item.level.rawValue
+            await CourseGenerationService.shared.startCourseGeneration(
+                topic: topic,
+                level: level
+            )
+            Log.ui.info("Mini-course generation started for: \(item.title)")
         }
     }
     

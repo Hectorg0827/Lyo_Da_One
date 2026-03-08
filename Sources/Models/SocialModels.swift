@@ -261,8 +261,35 @@ struct DiscoveriesResponse: Codable {
     
     enum CodingKeys: String, CodingKey {
         case discoveries
+        case items
+        case posts // fallback if backend uses "posts"
         case total
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try multiple keys for discoveries
+        if let d = try container.decodeIfPresent([Discovery].self, forKey: .discoveries) {
+            self.discoveries = d
+        } else if let items = try container.decodeIfPresent([Discovery].self, forKey: .items) {
+            self.discoveries = items
+        } else if let posts = try container.decodeIfPresent([Discovery].self, forKey: .posts) {
+            self.discoveries = posts
+        } else {
+            self.discoveries = []
+        }
+        
+        self.total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(discoveries, forKey: .discoveries)
+        try container.encode(total, forKey: .total)
+        try container.encode(hasMore, forKey: .hasMore)
     }
 }
 
@@ -272,8 +299,16 @@ struct PostsResponse: Codable {
     let hasMore: Bool
     
     enum CodingKeys: String, CodingKey {
-        case posts
+        case posts = "items" // API returns "items"
         case total
         case hasMore = "has_more"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.posts = try container.decodeIfPresent([Post].self, forKey: .posts) ?? []
+        self.total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+    }
 }
+

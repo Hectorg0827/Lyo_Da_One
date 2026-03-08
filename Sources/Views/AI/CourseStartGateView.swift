@@ -42,6 +42,43 @@ struct CourseStartGateView: View {
         ("checkmark.seal.fill",   "Finalizing your course")
     ]
 
+    private var teaserTags: [String] {
+        let lowercased = courseTitle.lowercased()
+        var tags: [String] = []
+
+        if lowercased.contains("swift") || lowercased.contains("ios") || lowercased.contains("code") {
+            tags.append("Hands-on project")
+            tags.append("Code walk-through")
+        }
+        if lowercased.contains("math") || lowercased.contains("physics") {
+            tags.append("Worked examples")
+            tags.append("Quick mastery checks")
+        }
+        if lowercased.contains("language") || lowercased.contains("english") || lowercased.contains("spanish") {
+            tags.append("Speaking practice")
+            tags.append("Recall drills")
+        }
+
+        tags.append("Adaptive pacing")
+        tags.append("Checkpoint quiz")
+        return Array(tags.prefix(3))
+    }
+
+    private var premiumProgress: Double {
+        Double(stepsDone.filter { $0 }.count) / Double(max(1, premiumSteps.count))
+    }
+
+    private var adProgress: Double {
+        max(createViewModel.progress, 1 - (Double(secondsRemaining) / 10.0))
+    }
+
+    private var activeStepLabel: String {
+        if let current = premiumSteps.indices.first(where: { !stepsDone[$0] }) {
+            return premiumSteps[current].label
+        }
+        return premiumSteps.last?.label ?? "Finalizing"
+    }
+
     // ── Body ──────────────────────────────────────────────────────────
     var body: some View {
         ZStack {
@@ -60,6 +97,7 @@ struct CourseStartGateView: View {
             }
         }
         .onAppear {
+            Log.ai.info("🎬 CourseStartGateView onAppear — isPremium: \(monetization.isPremium), courseId: \(courseId)")
             if monetization.isPremium {
                 startPremiumAnimation()
             } else {
@@ -111,6 +149,10 @@ struct CourseStartGateView: View {
             .padding(.top, 56)
             .padding(.bottom, 16)
 
+            courseBlueprintCard(progress: adProgress, accent: Color(hex: "A855F7"))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 18)
+
             // Progress bar bound to ViewModel
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -126,7 +168,7 @@ struct CourseStartGateView: View {
                             )
                         )
                         .frame(
-                            width: geo.size.width * CGFloat(createViewModel.progress),
+                            width: geo.size.width * CGFloat(adProgress),
                             height: 6
                         )
                         .animation(.linear(duration: 0.5), value: createViewModel.progress)
@@ -254,6 +296,12 @@ struct CourseStartGateView: View {
                     .foregroundColor(.white.opacity(0.65))
                     .lineLimit(1)
                     .truncationMode(.tail)
+
+                Text("We’re packaging the first lesson, activity flow, and AI checkpoints so you can jump straight in.")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
                 
                 Button(action: {
                     Log.ai.info("🔒 User tapped upgrade from gate")
@@ -285,6 +333,10 @@ struct CourseStartGateView: View {
     private var premiumContent: some View {
         VStack(spacing: 0) {
             Spacer()
+
+            courseBlueprintCard(progress: premiumProgress, accent: Color(hex: "7C3AED"))
+                .padding(.horizontal, 24)
+                .padding(.bottom, 26)
 
             // Animated orb cluster
             ZStack {
@@ -373,6 +425,10 @@ struct CourseStartGateView: View {
                     .foregroundColor(Color(hex: "A78BFA"))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 36)
+
+                Text(activeStepLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.66))
             }
 
             // Steps timeline
@@ -433,6 +489,19 @@ struct CourseStartGateView: View {
             }
             .padding(.top, 28)
 
+            HStack(spacing: 8) {
+                ForEach(teaserTags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.caption2.bold())
+                        .foregroundColor(.white.opacity(0.82))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.top, 22)
+
             Spacer()
         }
     }
@@ -440,12 +509,14 @@ struct CourseStartGateView: View {
     // MARK: - Logic ─────────────────────────────────────────────────────
 
     private func startAdCountdown() {
+        Log.ai.info("🎬 CourseStartGateView: Starting 10s ad countdown")
         secondsRemaining = 10
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { t in
             if secondsRemaining > 0 {
                 secondsRemaining -= 1
             } else {
                 t.invalidate()
+                Log.ai.info("🎬 CourseStartGateView: Ad countdown done — proceeding to classroom")
                 withAnimation { canSkip = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                     onProceed()
@@ -455,6 +526,8 @@ struct CourseStartGateView: View {
     }
 
     private func startPremiumAnimation() {
+        stepIndex = 0
+        stepsDone = Array(repeating: false, count: premiumSteps.count)
         orbPulse = true
         withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
             particlePhase = 360
@@ -474,6 +547,82 @@ struct CourseStartGateView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + totalTime) {
             onProceed()
         }
+    }
+
+    private func courseBlueprintCard(progress: Double, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI Course Blueprint")
+                        .font(.caption.bold())
+                        .foregroundColor(.white.opacity(0.6))
+                        .textCase(.uppercase)
+                    Text(courseTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Image(systemName: monetization.isPremium ? "sparkles.rectangle.stack.fill" : "play.tv.fill")
+                    .font(.title3)
+                    .foregroundColor(accent)
+                    .padding(10)
+                    .background(accent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Generation progress")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(.white.opacity(0.56))
+                    Spacer()
+                    Text("\(Int(progress * 100))%")
+                        .font(.caption.bold())
+                        .foregroundColor(.white.opacity(0.74))
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.08))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent, accent.opacity(0.55)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(20, geo.size.width * progress))
+                    }
+                }
+                .frame(height: 8)
+            }
+
+            HStack(spacing: 8) {
+                ForEach(teaserTags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.caption2.bold())
+                        .foregroundColor(.white.opacity(0.78))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Capsule())
+                }
+            }
+
+            Text(monetization.isPremium ? "Premium unlocks an ad-free handoff into the live classroom." : "Your course is still being assembled while the sponsor spot plays.")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.5))
+        }
+        .padding(18)
+        .background(Color.white.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 

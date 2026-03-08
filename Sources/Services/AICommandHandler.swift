@@ -82,16 +82,12 @@ class AICommandHandler: ObservableObject {
     public func executeOpenClassroom(for course: CoursePayload) {
         Log.ai.info("🚀 User approved course — executing: \(course.title)")
         
-        // Populate the generated course so LiveClassroomViewModel can find it
-        CourseGenerationService.shared.populateGeneratedCourse(from: course)
-        
         // Trigger local navigation flag
         self.shouldOpenClassroom = true
-        
-        // Resolve the actual courseId
-        let resolvedCourseId = CourseGenerationService.shared.generatedCourse?.courseId
-            ?? course.id
-            ?? "gen_\(UUID().uuidString.prefix(6))"
+
+        // Route proposal-based starts through the progressive generation flow.
+        // The live classroom will kick off generation using this sentinel ID.
+        let resolvedCourseId = "GENERATE:\(course.topic)"
         
         // 1. Dismiss the Lyo overlay first so fullScreenCover can appear
         NotificationCenter.default.post(
@@ -107,6 +103,7 @@ class AICommandHandler: ObservableObject {
                 userInfo: [
                     "courseId": resolvedCourseId,
                     "topic": course.topic,
+                    "shouldGenerateCourse": true,
                     "lessonId": "intro_1",
                     "courseTitle": course.title,
                     "lessonTitle": "Introduction"
@@ -207,6 +204,7 @@ class AICommandHandler: ObservableObject {
             let request = CreateStackItemRequest(
                 type: itemType,
                 refId: item.title, // Using title as refId for now
+                title: item.title,
                 tags: course.map { [$0.topic, $0.level] } ?? [],
                 contextData: contextData
             )

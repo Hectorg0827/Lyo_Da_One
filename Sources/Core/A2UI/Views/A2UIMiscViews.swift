@@ -140,40 +140,163 @@ struct A2UIDocumentGenericView: View {
 struct A2UICourseCardView: View {
     let props: A2UIProps
     let onAction: ((A2UIAction) -> Void)?
+
+    private var displayedProgress: Double? {
+        props.progressPercent ?? props.progress
+    }
+
+    private var previewObjectives: [String] {
+        Array((props.objectives ?? []).prefix(3))
+    }
+
+    private var previewMilestones: [A2UIMilestone] {
+        Array((props.milestones ?? []).prefix(3))
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Cover image placeholder
-            RoundedRectangle(cornerRadius: 12)
-                .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(height: 120)
-                .overlay(
-                    Image(systemName: "book.fill")
-                        .font(.largeTitle)
-                        .foregroundColor(.white.opacity(0.8))
-                )
-            
-            Text(props.title ?? "Course")
-                .font(.headline)
-            
-            if let subtitle = props.subtitle {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(LinearGradient(colors: [Color.blue, Color.purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(height: 148)
+                    .overlay(
+                        LinearGradient(
+                            colors: [Color.clear, Color.black.opacity(0.35)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        Image(systemName: "sparkles")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(Color.white.opacity(0.14))
+                            .clipShape(Circle())
+                            .padding(12)
+                    }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(props.title ?? "Course")
+                        .font(.headline.weight(.bold))
+                        .foregroundColor(.white)
+
+                    if let subtitle = props.subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+
+                    HStack(spacing: 8) {
+                        if let level = props.level {
+                            courseMetaChip(icon: "chart.bar.fill", text: level)
+                        }
+                        if let duration = props.estimatedDuration {
+                            courseMetaChip(icon: "clock.fill", text: "\(duration)m")
+                        } else if let helper = props.helperText {
+                            courseMetaChip(icon: "sparkles", text: helper)
+                        }
+                    }
+                }
+                .padding(16)
             }
-            
-            if let progress = props.progressPercent {
-                ProgressView(value: progress / 100)
-                    .tint(.blue)
-                Text("\(Int(progress))% complete")
+
+            if let body = props.body, !body.isEmpty {
+                Text(body)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !previewObjectives.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("What’s inside")
+                        .font(.caption.bold())
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                    ForEach(previewObjectives, id: \.self) { objective in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                                .padding(.top, 2)
+                            Text(objective)
+                                .font(.caption)
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
+            if !previewMilestones.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Milestones")
+                        .font(.caption.bold())
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                    ForEach(previewMilestones) { milestone in
+                        HStack(spacing: 10) {
+                            Image(systemName: milestone.isCompleted ? "checkmark.circle.fill" : "circle.dotted")
+                                .foregroundColor(milestone.isCompleted ? .green : .blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(milestone.title)
+                                    .font(.caption.bold())
+                                if let description = milestone.description, !description.isEmpty {
+                                    Text(description)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+            }
+
+            if let progress = displayedProgress {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Progress")
+                            .font(.caption.bold())
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(Int(progress))%")
+                            .font(.caption.bold())
+                            .foregroundColor(.blue)
+                    }
+                    ProgressView(value: progress / 100)
+                        .tint(.blue)
+                }
+            }
+
+            if let helper = props.helperText, !helper.isEmpty {
+                Text(helper)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                    .padding(.top, 2)
             }
         }
         .padding()
         .background(Color(.systemBackground))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+    }
+
+    private func courseMetaChip(icon: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .font(.caption2.bold())
+                .lineLimit(1)
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.12))
+        .clipShape(Capsule())
     }
 }
 
