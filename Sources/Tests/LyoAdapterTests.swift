@@ -74,12 +74,13 @@ class LyoAdapterTests: XCTestCase {
         let processor = LyoStreamProcessor()
         
         // Simulate a stream of two blocks coming in chunks
+        // NOTE: JSON keys must use snake_case to match LyoBlock CodingKeys
         let chunk1 = "{\"id\":\"1\", \"type\":\"con"
-        let chunk2 = "cept\", \"role\":\"normal\", \"presentationHint\":\"inline\", "
+        let chunk2 = "cept\", \"role\":\"normal\", \"presentation_hint\":\"inline\", "
         // Escape quotes in JSON string
-        let contentJson = "\"content\": { \"markdown\": \"Hello\", \"keyTakeaway\": null }, \"mood\":\"neutral\" }"
+        let contentJson = "\"content\": { \"kind\": \"concept\", \"markdown\": \"Hello\", \"key_takeaway\": null }, \"mood\":\"neutral\" }"
         let chunk3 = contentJson
-        let chunk4 = "\n{\"id\":\"2\", \"type\":\"quiz\", \"role\":\"assessment\", \"presentationHint\":\"inline\", \"content\": {\"question\":\"Q?\", \"options\":[], \"correctOptionId\":\"a\", \"explanation\":null}, \"mood\":\"neutral\"}"
+        let chunk4 = "\n{\"id\":\"2\", \"type\":\"quiz\", \"role\":\"assessment\", \"presentation_hint\":\"inline\", \"content\": {\"kind\":\"quiz\", \"question\":\"Q?\", \"options\":[{\"id\":\"a\",\"text\":\"Yes\"}], \"correct_option_id\":\"a\", \"explanation\":null}, \"mood\":\"neutral\"}"
         
         // 1. Incomplete chunk
         let result1 = processor.append(chunk1)

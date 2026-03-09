@@ -257,6 +257,10 @@ class LyoStreamProcessor {
         
         var results: [A2UIContent] = []
         
+        // Reset brace counter before re-scanning — we always scan the full buffer
+        openBraces = 0
+        lastValidIndex = nil
+        
         // Simple "Bracket Counter" parser to find top-level JSON objects
         // This assumes the stream creates discrete JSON objects one after another,
         // or a list that we peel items off of.

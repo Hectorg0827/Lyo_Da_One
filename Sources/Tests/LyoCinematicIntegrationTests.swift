@@ -29,8 +29,8 @@ final class LyoCinematicIntegrationTests: XCTestCase {
         let data = backendPayload.data(using: .utf8)!
         let decoder = JSONDecoder()
         
-        // Ensure snake_case decoding strategy matches backend
-        decoder.keyDecodingStrategy = .convertFromSnakeCase 
+        // LyoBlock uses explicit CodingKeys (e.g. presentationHint = "presentation_hint")
+        // so do NOT also set convertFromSnakeCase — that double-converts and breaks the match.
         
         let block = try decoder.decode(LyoBlock.self, from: data)
         

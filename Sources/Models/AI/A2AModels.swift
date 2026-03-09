@@ -291,12 +291,17 @@ struct A2AStreamingEvent: Codable {
     // Backend may send the event type key as either "type" or "event_type"
     // and pipeline ID as either "pipeline_id" or "task_id".
     // Many fields are optional depending on the event source.
+    // NOTE: lyoDecoder uses .convertFromSnakeCase which converts JSON keys
+    // to camelCase BEFORE container lookup, so FlexCodingKeys must try
+    // both camelCase and snake_case variants.
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: FlexCodingKeys.self)
 
-        // Decode event type — try "type" first, then "event_type"
+        // Decode event type — try "type" first, then "event_type" / "eventType"
         if let t = try? container.decode(A2AEventType.self, forKey: .init("type")) {
+            self.type = t
+        } else if let t = try? container.decode(A2AEventType.self, forKey: .init("eventType")) {
             self.type = t
         } else if let t = try? container.decode(A2AEventType.self, forKey: .init("event_type")) {
             self.type = t
@@ -311,9 +316,13 @@ struct A2AStreamingEvent: Codable {
             self.timestamp = Date()
         }
 
-        // Pipeline ID — try "pipeline_id" then "task_id"
-        if let pid = try? container.decode(String.self, forKey: .init("pipeline_id")) {
+        // Pipeline ID — try camelCase first (lyoDecoder converts), then snake_case fallback
+        if let pid = try? container.decode(String.self, forKey: .init("pipelineId")) {
             self.pipelineId = pid
+        } else if let pid = try? container.decode(String.self, forKey: .init("pipeline_id")) {
+            self.pipelineId = pid
+        } else if let tid = try? container.decode(String.self, forKey: .init("taskId")) {
+            self.pipelineId = tid
         } else if let tid = try? container.decode(String.self, forKey: .init("task_id")) {
             self.pipelineId = tid
         } else {
@@ -324,8 +333,11 @@ struct A2AStreamingEvent: Codable {
         self.progress = (try? container.decode(Int.self, forKey: .init("progress"))) ?? 0
         self.message = try? container.decode(String.self, forKey: .init("message"))
         self.data = try? container.decode(A2AEventData.self, forKey: .init("data"))
-        self.chunkContent = try? container.decode(String.self, forKey: .init("chunk_content"))
-        self.thinkingContent = try? container.decode(String.self, forKey: .init("thinking_content"))
+        // Try camelCase (lyoDecoder converts snake_case keys) then snake_case fallback
+        self.chunkContent = (try? container.decode(String.self, forKey: .init("chunkContent")))
+            ?? (try? container.decode(String.self, forKey: .init("chunk_content")))
+        self.thinkingContent = (try? container.decode(String.self, forKey: .init("thinkingContent")))
+            ?? (try? container.decode(String.self, forKey: .init("thinking_content")))
         self.artifact = try? container.decode(A2AArtifact.self, forKey: .init("artifact"))
         self.payload = try? container.decode(
             [String: A2AAnyCodableValue].self, forKey: .init("payload"))
@@ -681,15 +693,13 @@ struct A2AArtifact: Codable, Identifiable {
     let id: String
     let type: String
     let name: String
-    let mimeType: String
+    let mimeType: String?
     let data: String?  // Base64 or JSON string
     let metadata: [String: String]?
 
-    enum CodingKeys: String, CodingKey {
-        case id, type, name
-        case mimeType = "mime_type"
-        case data, metadata
-    }
+    // Note: No explicit CodingKeys — lyoDecoder's .convertFromSnakeCase
+    // handles mime_type → mimeType automatically. Explicit CodingKeys
+    // would conflict with convertFromSnakeCase (double-conversion).
 }
 
 struct A2ATaskMetrics: Codable {
