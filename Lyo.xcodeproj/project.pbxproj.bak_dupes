@@ -7,10 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		FF5CAE0CC2D3CF01BA931F82 /* VoiceSessionBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9963FF567039D863373AFE /* VoiceSessionBottomSheet.swift */; };
-		84405AC46A6FBCBAAA223FAC /* NotebookOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABEDEF9F76FD2CBA53BB5DFA /* NotebookOverlayView.swift */; };
-		538C08E40130CFAEF0C13343 /* LyoThinkingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44BFAE2341C82D42965A29D5 /* LyoThinkingView.swift */; };
-		CC186A71636E8979AABCEB5D /* NotebookStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7BF4F9A005ED7B4C1C57E4E /* NotebookStore.swift */; };
 		00FC9925402B87326A07CEBF /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5072328A04C620F7E85CA07F /* CameraPreview.swift */; };
 		01B31E74773604890DF43991 /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363CFDA6D1153271F3050044 /* Community.swift */; };
 		01D132B07B2975A1EBB24F6C /* StreamingResponseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66315549DD0DF6BF1EF6B47 /* StreamingResponseManager.swift */; };
@@ -107,14 +103,6 @@
 		424B9F105B85A33C73B8C3BD /* HeroSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9D03B4E7833F37BA7A4117 /* HeroSectionView.swift */; };
 		428E50D04E8E4B22E66609C9 /* EnhancedLyoHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D19F543FE091E7D874DB29 /* EnhancedLyoHomeView.swift */; };
 		441249C078DA5487004D5454 /* A2UIComponent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FE1827347C6C63D5DD49F12 /* A2UIComponent.swift */; };
-		AA11BB22CC33DD44EE55FF67 /* A2UIPrimitive.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF66 /* A2UIPrimitive.swift */; };
-		BB22CC33DD44EE55FF66AA12 /* LyoResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF66AA11 /* LyoResponse.swift */; };
-		CC11DD22EE33FF44AA55BB01 /* LyoPrimitiveRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11DD22EE33FF44AA55BB00 /* LyoPrimitiveRenderer.swift */; };
-		CC11DD22EE33FF44AA55BB03 /* LyoContentPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11DD22EE33FF44AA55BB02 /* LyoContentPrimitives.swift */; };
-		CC11DD22EE33FF44AA55BB05 /* LyoInputPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11DD22EE33FF44AA55BB04 /* LyoInputPrimitives.swift */; };
-		CC11DD22EE33FF44AA55BB07 /* LyoLayoutPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11DD22EE33FF44AA55BB06 /* LyoLayoutPrimitives.swift */; };
-		CC11DD22EE33FF44AA55BB09 /* LyoLearningPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11DD22EE33FF44AA55BB08 /* LyoLearningPrimitives.swift */; };
-		CC11DD22EE33FF44AA55BB0B /* LyoEngagementPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC11DD22EE33FF44AA55BB0A /* LyoEngagementPrimitives.swift */; };
 		1A2B3C4D5E6F7081920A3B4C /* A2IPayloadMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7A6C5D4E3F2A1B0C9D8E7F /* A2IPayloadMapper.swift */; };
 		44158CE10727DACC33F50EF1 /* EducationalCenterDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D68F7DB3C8F85F5F78E36654 /* EducationalCenterDetailView.swift */; };
 		445CE2686D2A9415852FF5D5 /* CommentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C450FDBF83E8C87F61FA63AC /* CommentsView.swift */; };
@@ -497,11 +485,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		FF9963FF567039D863373AFE /* VoiceSessionBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionBottomSheet.swift; sourceTree = "<group>"; };
-		ABEDEF9F76FD2CBA53BB5DFA /* NotebookOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookOverlayView.swift; sourceTree = "<group>"; };
-		44BFAE2341C82D42965A29D5 /* LyoThinkingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoThinkingView.swift; sourceTree = "<group>"; };
-		E7BF4F9A005ED7B4C1C57E4E /* NotebookStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookStore.swift; sourceTree = "<group>"; };
-		DF7BCEB23146EDB5024B399C /* LegacyCourseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyCourseModels.swift; sourceTree = "<group>"; };
 		01848796781FD0D91FDF1ABD /* EnergyPaymentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyPaymentSheet.swift; sourceTree = "<group>"; };
 		01FB17BF582A15FDCA2B35F2 /* ReflectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReflectCardView.swift; sourceTree = "<group>"; };
 		0207E2855711409218635E9E /* MessageIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageIntentClassifier.swift; sourceTree = "<group>"; };
@@ -670,14 +653,6 @@
 		58B122BFBA5535BA7B572364 /* MultimodalChatInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultimodalChatInputView.swift; sourceTree = "<group>"; };
 		58BC9E6AEC3F5E0762862B5C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		58FAA354BBB6728DA9744E7D /* A2UIElementType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIElementType.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE55FF66 /* A2UIPrimitive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIPrimitive.swift; sourceTree = "<group>"; };
-		BB22CC33DD44EE55FF66AA11 /* LyoResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoResponse.swift; sourceTree = "<group>"; };
-		CC11DD22EE33FF44AA55BB00 /* LyoPrimitiveRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoPrimitiveRenderer.swift; sourceTree = "<group>"; };
-		CC11DD22EE33FF44AA55BB02 /* LyoContentPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoContentPrimitives.swift; sourceTree = "<group>"; };
-		CC11DD22EE33FF44AA55BB04 /* LyoInputPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoInputPrimitives.swift; sourceTree = "<group>"; };
-		CC11DD22EE33FF44AA55BB06 /* LyoLayoutPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoLayoutPrimitives.swift; sourceTree = "<group>"; };
-		CC11DD22EE33FF44AA55BB08 /* LyoLearningPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoLearningPrimitives.swift; sourceTree = "<group>"; };
-		CC11DD22EE33FF44AA55BB0A /* LyoEngagementPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoEngagementPrimitives.swift; sourceTree = "<group>"; };
 		5959A5110AEC59BEC94D8E6E /* SimpleVideoContextSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleVideoContextSheet.swift; sourceTree = "<group>"; };
 		59A0FCE208785B0264B164F2 /* LyoCourseRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoCourseRuntime.swift; sourceTree = "<group>"; };
 		5A4591D656604E631F42D285 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
@@ -1044,8 +1019,6 @@
 				9B7A6C5D4E3F2A1B0C9D8E7F /* A2IPayloadMapper.swift */,
 				B5D6ED5DDC213AD1F96C0D05 /* A2UIContentSynthesizer.swift */,
 				58FAA354BBB6728DA9744E7D /* A2UIElementType.swift */,
-				AA11BB22CC33DD44EE55FF66 /* A2UIPrimitive.swift */,
-				BB22CC33DD44EE55FF66AA11 /* LyoResponse.swift */,
 				E3D8AD1C3C0E1A0929EEB6B0 /* A2UIProps.swift */,
 				F325DA5BA610464C6B5A6EF3 /* A2UIRenderer.swift */,
 				095C492E863EF742F1E3E492 /* A2UIStateObserver.swift */,
@@ -1138,6 +1111,9 @@
 				5DA62509A317D111D50C80CB /* CommentsView.swift */,
 				ECE0D0EDA2CB673D15915099 /* CommunityFeedView.swift */,
 				01F9AA72938357EAA357643A /* CommunityPostModels.swift */,
+				5DA62509A317D111D50C80CB /* CommentsView.swift */,
+				ECE0D0EDA2CB673D15915099 /* CommunityFeedView.swift */,
+				01F9AA72938357EAA357643A /* CommunityPostModels.swift */,
 				D7AC0746094A529BA516EB89 /* BookingCalendarView.swift */,
 				C450FDBF83E8C87F61FA63AC /* CommentsView.swift */,
 				49C4B30962138757FC3D7956 /* CommunityFeedView.swift */,
@@ -1202,6 +1178,7 @@
 			isa = PBXGroup;
 			children = (
 				FD465A1CCB15290CD725A87D /* CommunityFeedViewModel.swift */,
+				FD465A1CCB15290CD725A87D /* CommunityFeedViewModel.swift */,
 				21AF4CDF73F93BEEAAE65C5C /* AgenticClassroomViewModel.swift */,
 				8E42D5596E2AC7C1E4A56FC2 /* AuthViewModel.swift */,
 				3A2A6B615E5AF90C9154801F /* CampusViewModel.swift */,
@@ -1250,6 +1227,16 @@
 		3C0BD0E8EE25D74F14A9428C /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				7092070FB1572A32B69851AA /* A2UIHomeworkRenderers.swift */,
+				E09D2C6CCC5884E56D1B8553 /* A2UIMiscRenderers.swift */,
+				E0B86941AC5B2233ADF004E7 /* A2UIMistakeRenderers.swift */,
+				6E94A6F5F9E7E46D1A098465 /* A2UIStudyPlanRenderers.swift */,
+				93136B1B520996EA017D5D49 /* CourseRuntimeView.swift */,
+				7092070FB1572A32B69851AA /* A2UIHomeworkRenderers.swift */,
+				E09D2C6CCC5884E56D1B8553 /* A2UIMiscRenderers.swift */,
+				E0B86941AC5B2233ADF004E7 /* A2UIMistakeRenderers.swift */,
+				6E94A6F5F9E7E46D1A098465 /* A2UIStudyPlanRenderers.swift */,
+				93136B1B520996EA017D5D49 /* CourseRuntimeView.swift */,
 				293E6CB659E1F9AEE8A1F3F5 /* A2UIHomeworkRenderers.swift */,
 				3E2E90DD8063B5DE1743D1EB /* A2UIHomeworkViews.swift */,
 				D31DAC9564C5B3B26FC83BD3 /* A2UILayoutRenderers.swift */,
@@ -1263,12 +1250,6 @@
 				C1D0B2583B7BF3E128C636B3 /* A2UIRendererViews.swift */,
 				A46AD14B3E20291628090184 /* A2UIStudyPlanRenderers.swift */,
 				D89141B6A9F42047BF11A828 /* A2UIStudyPlanViews.swift */,
-				CC11DD22EE33FF44AA55BB00 /* LyoPrimitiveRenderer.swift */,
-				CC11DD22EE33FF44AA55BB02 /* LyoContentPrimitives.swift */,
-				CC11DD22EE33FF44AA55BB04 /* LyoInputPrimitives.swift */,
-				CC11DD22EE33FF44AA55BB06 /* LyoLayoutPrimitives.swift */,
-				CC11DD22EE33FF44AA55BB08 /* LyoLearningPrimitives.swift */,
-				CC11DD22EE33FF44AA55BB0A /* LyoEngagementPrimitives.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1293,6 +1274,16 @@
 		40129AD9038DD3AA8C29232F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				C9525E61B92DD99D7C9BF0D3 /* CommunityService.swift */,
+				3FA5164E8DD89581BD1DB319 /* DemoCourseLoader.swift */,
+				FB0DD15C2BD3A8E41638A13A /* LessonBlockParser.swift */,
+				5FE6D2C492EFBF35CE20858F /* Lyo2ChatService.swift */,
+				8726CD530F99B402316E90C6 /* LyoCourseRuntime.swift */,
+				C9525E61B92DD99D7C9BF0D3 /* CommunityService.swift */,
+				3FA5164E8DD89581BD1DB319 /* DemoCourseLoader.swift */,
+				FB0DD15C2BD3A8E41638A13A /* LessonBlockParser.swift */,
+				5FE6D2C492EFBF35CE20858F /* Lyo2ChatService.swift */,
+				8726CD530F99B402316E90C6 /* LyoCourseRuntime.swift */,
 				456FEC78D3CDE12275B7850B /* CourseLibraryService.swift */,
 				5215209E95C644E2A1982F1E /* CourseShareService.swift */,
 				CAA14CFBF3106F28DD5414A0 /* CourseSocialService.swift */,
@@ -1304,6 +1295,11 @@
 		40B4CA1358F34A7EC4F744CB /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				7092070FB1572A32B69851AA /* A2UIHomeworkRenderers.swift */,
+				E09D2C6CCC5884E56D1B8553 /* A2UIMiscRenderers.swift */,
+				E0B86941AC5B2233ADF004E7 /* A2UIMistakeRenderers.swift */,
+				6E94A6F5F9E7E46D1A098465 /* A2UIStudyPlanRenderers.swift */,
+				93136B1B520996EA017D5D49 /* CourseRuntimeView.swift */,
 				7092070FB1572A32B69851AA /* A2UIHomeworkRenderers.swift */,
 				E09D2C6CCC5884E56D1B8553 /* A2UIMiscRenderers.swift */,
 				E0B86941AC5B2233ADF004E7 /* A2UIMistakeRenderers.swift */,
@@ -1526,6 +1522,12 @@
 		7DC7802AD4F2D27D6C70E13E /* Community */ = {
 			isa = PBXGroup;
 			children = (
+				5DA62509A317D111D50C80CB /* CommentsView.swift */,
+				ECE0D0EDA2CB673D15915099 /* CommunityFeedView.swift */,
+				01F9AA72938357EAA357643A /* CommunityPostModels.swift */,
+				5DA62509A317D111D50C80CB /* CommentsView.swift */,
+				ECE0D0EDA2CB673D15915099 /* CommunityFeedView.swift */,
+				01F9AA72938357EAA357643A /* CommunityPostModels.swift */,
 				303D7C9301977095F5EECFD1 /* CommunityPostModels.swift */,
 			);
 			path = Community;
@@ -1534,6 +1536,7 @@
 		87BAE6486B51635E13AFC957 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				0B5F05D8ED0F00F697B5E27D /* ClientCapabilities.swift */,
 				0B5F05D8ED0F00F697B5E27D /* ClientCapabilities.swift */,
 				0D315C086762FBBF8225712E /* AppUIState.swift */,
 				67E72FA212DD70BC1E2669D3 /* ClientCapabilities.swift */,
@@ -1555,6 +1558,11 @@
 		8A978EE0169561752DD14E2B /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				C9525E61B92DD99D7C9BF0D3 /* CommunityService.swift */,
+				3FA5164E8DD89581BD1DB319 /* DemoCourseLoader.swift */,
+				FB0DD15C2BD3A8E41638A13A /* LessonBlockParser.swift */,
+				5FE6D2C492EFBF35CE20858F /* Lyo2ChatService.swift */,
+				8726CD530F99B402316E90C6 /* LyoCourseRuntime.swift */,
 				C9525E61B92DD99D7C9BF0D3 /* CommunityService.swift */,
 				3FA5164E8DD89581BD1DB319 /* DemoCourseLoader.swift */,
 				FB0DD15C2BD3A8E41638A13A /* LessonBlockParser.swift */,
@@ -1697,6 +1705,8 @@
 		AD0E7701686E65AE6063F9CB /* Learning */ = {
 			isa = PBXGroup;
 			children = (
+				6C635A279950F3A4D52D7C11 /* PremiumQuizView.swift */,
+				6C635A279950F3A4D52D7C11 /* PremiumQuizView.swift */,
 				102D00F5D459B0EB25C13F29 /* PremiumQuizView.swift */,
 			);
 			path = Learning;
@@ -1721,6 +1731,8 @@
 		B88430F74B9E81692A13589A /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				7AC57674FBE16866E2D4AA1B /* LyoAdapterTests.swift */,
+				0384B2E62CD15B72E41FD87A /* LyoCinematicIntegrationTests.swift */,
 				7AC57674FBE16866E2D4AA1B /* LyoAdapterTests.swift */,
 				0384B2E62CD15B72E41FD87A /* LyoCinematicIntegrationTests.swift */,
 				B8B903E7E7D3F11E9D6CD546 /* A2AIntegrationTests.swift */,
@@ -1836,6 +1848,9 @@
 				4EAB46140079B0614EE320F0 /* Lyo2Models.swift */,
 				F547A3A201BDF16593950EA1 /* LyoCourseProtocol.swift */,
 				DD485F3BF05913065BE273C7 /* LyoRuntimeModels.swift */,
+				4EAB46140079B0614EE320F0 /* Lyo2Models.swift */,
+				F547A3A201BDF16593950EA1 /* LyoCourseProtocol.swift */,
+				DD485F3BF05913065BE273C7 /* LyoRuntimeModels.swift */,
 				806944AF316BC50F258AA4DC /* A2UIRecursive.swift */,
 				06033546CE9C7E9748A412CE /* AgentBlock.swift */,
 				EBA872ED82681634487C685F /* AICommandResponse.swift */,
@@ -1876,9 +1891,7 @@
 				9011863CA8041D8ABE83EAB0 /* AI */,
 				7DC7802AD4F2D27D6C70E13E /* Community */,
 				030D8EBE95A5C2D3678D2FFA /* Sprint1 */,
-			
-				DF7BCEB23146EDB5024B399C /* LegacyCourseModels.swift */,
-				E7BF4F9A005ED7B4C1C57E4E /* NotebookStore.swift */,);
+			);
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -1901,6 +1914,7 @@
 		E33E9FE7CDF7BF4991E3C131 /* Learning */ = {
 			isa = PBXGroup;
 			children = (
+				6C635A279950F3A4D52D7C11 /* PremiumQuizView.swift */,
 				6C635A279950F3A4D52D7C11 /* PremiumQuizView.swift */,
 				99DADA92F789F49C9F923576 /* QuizView.swift */,
 				E9F61BB0B00820BBFD5937E6 /* TTSView.swift */,
@@ -1931,6 +1945,7 @@
 			isa = PBXGroup;
 			children = (
 				221CAFB71F1A26620C5BCF89 /* NotesView.swift */,
+				221CAFB71F1A26620C5BCF89 /* NotesView.swift */,
 				AC3698F509CF667EAD7BD2BD /* A2UIContentViews.swift */,
 				842251F35B013D43328360FB /* A2UIRecursiveRenderer.swift */,
 				A789B12100244E087E952BDA /* ChatHistoryView.swift */,
@@ -1949,10 +1964,7 @@
 				F2CD3B1709A67C834CE07DBC /* ProcessingBubbleView.swift */,
 				2CD71B667CD6A15A0ECB89C6 /* SuggestionChipsView.swift */,
 				A1849E6B2AFB38235C89BE90 /* TopicSelectionBubbleView.swift */,
-			
-				44BFAE2341C82D42965A29D5 /* LyoThinkingView.swift */,
-				ABEDEF9F76FD2CBA53BB5DFA /* NotebookOverlayView.swift */,
-				FF9963FF567039D863373AFE /* VoiceSessionBottomSheet.swift */,);
+			);
 			path = Chat;
 			sourceTree = "<group>";
 		};
@@ -2129,7 +2141,29 @@
 			buildActionMask = 2147483647;
 			files = (
 				440DDF8B0D789E1FD7433FF6 /* InsightsDashboardView.swift in Sources */,
+
 				B5D4A2123974EEB34B861920 /* GoalsView.swift in Sources */,
+
+				20D31D61BF6088B22C8A52A3 /* A2UIHomeworkRenderers.swift in Sources */,
+				45A90A3BFD75D3A58AB672C1 /* A2UIMiscRenderers.swift in Sources */,
+				4968234892A62093063E1183 /* A2UIMistakeRenderers.swift in Sources */,
+				7A26229644B4324BB56FA129 /* A2UIStudyPlanRenderers.swift in Sources */,
+				3515A9859D918F1710670A8A /* ClientCapabilities.swift in Sources */,
+				5C13161AE3B2689A39B58C8E /* CommentsView.swift in Sources */,
+				C188F27EA8750928DF1F80FE /* CommunityFeedView.swift in Sources */,
+				3733FD28C8D1814ED15103E2 /* CommunityFeedViewModel.swift in Sources */,
+				04A29BC0A8537978862A9DA4 /* CommunityPostModels.swift in Sources */,
+				F83D6DCFF29CC4C3AAAB9358 /* CommunityService.swift in Sources */,
+				63F44DC77F53425E3382683B /* CourseRuntimeView.swift in Sources */,
+				A0F36D89F528C0EFFF9C446A /* DemoCourseLoader.swift in Sources */,
+				FBF71C21DE57C15533499177 /* LessonBlockParser.swift in Sources */,
+				CE94C1204E058ECB2252483F /* Lyo2ChatService.swift in Sources */,
+				9792AFF2EEDEFFF4E3B39D70 /* Lyo2Models.swift in Sources */,
+				23474965821AECB32EDDBA36 /* LyoCourseProtocol.swift in Sources */,
+				160AB2677C463855DE6D6434 /* LyoCourseRuntime.swift in Sources */,
+				0A3DF686E95C0CFC56661C0D /* LyoRuntimeModels.swift in Sources */,
+				735FCE02369B79AD7285047D /* NotesView.swift in Sources */,
+				02172D6A271E64D11E5537B3 /* PremiumQuizView.swift in Sources */,
 				20D31D61BF6088B22C8A52A3 /* A2UIHomeworkRenderers.swift in Sources */,
 				45A90A3BFD75D3A58AB672C1 /* A2UIMiscRenderers.swift in Sources */,
 				4968234892A62093063E1183 /* A2UIMistakeRenderers.swift in Sources */,
@@ -2163,12 +2197,13 @@
 				CA3833FC667652E9E5F017CC /* A2UIContentSynthesizer.swift in Sources */,
 				E5249944504F957B4BFE589E /* A2UIContentViews.swift in Sources */,
 				E7C188D0062B023A2638BB21 /* A2UIElementType.swift in Sources */,
-				AA11BB22CC33DD44EE55FF67 /* A2UIPrimitive.swift in Sources */,
-				BB22CC33DD44EE55FF66AA12 /* LyoResponse.swift in Sources */,
+				3DD1531458DA140A3DB36179 /* A2UIHomeworkRenderers.swift in Sources */,
 				DCB9DE00FEEB19D22AB7084A /* A2UIHomeworkViews.swift in Sources */,
 				BF3163E4A9B57BED8D8A4E0A /* A2UILayoutRenderers.swift in Sources */,
 				056900B81F553FC9F53BBFAD /* A2UILayoutViews.swift in Sources */,
+				043473625795702D6ADE062C /* A2UIMiscRenderers.swift in Sources */,
 				628C3CFE378378475D37CB8C /* A2UIMiscViews.swift in Sources */,
+				B09FC6DA28AC1C7AEA2A45D8 /* A2UIMistakeRenderers.swift in Sources */,
 				D731FBA8E5967F0624A1D755 /* A2UIMistakeViews.swift in Sources */,
 				312F6561EE20553CB44F9FEA /* A2UIParser.swift in Sources */,
 				B46AA85C67543D495469A014 /* A2UIProps.swift in Sources */,
@@ -2178,14 +2213,9 @@
 				0F7CA1F9C1E82C552C0E0B05 /* A2UIRecursiveRenderer.swift in Sources */,
 				CF60859728F4747A9A30074F /* A2UIRenderer.swift in Sources */,
 				A47B26A867A649D1918CA263 /* A2UIRendererViews.swift in Sources */,
-				CC11DD22EE33FF44AA55BB01 /* LyoPrimitiveRenderer.swift in Sources */,
-				CC11DD22EE33FF44AA55BB03 /* LyoContentPrimitives.swift in Sources */,
-				CC11DD22EE33FF44AA55BB05 /* LyoInputPrimitives.swift in Sources */,
-				CC11DD22EE33FF44AA55BB07 /* LyoLayoutPrimitives.swift in Sources */,
-				CC11DD22EE33FF44AA55BB09 /* LyoLearningPrimitives.swift in Sources */,
-				CC11DD22EE33FF44AA55BB0B /* LyoEngagementPrimitives.swift in Sources */,
 				EEC71040B4DDAD2F556246D0 /* A2UIStateObserver.swift in Sources */,
 				F914F0B88502F3C0F0DCA628 /* A2UIStreamService.swift in Sources */,
+				D55CF1693A19D613458D85AF /* A2UIStudyPlanRenderers.swift in Sources */,
 				6FCD120712F971CEF9463AFB /* A2UIStudyPlanViews.swift in Sources */,
 				5820C61A0B77B072689343AF /* A2UITestView.swift in Sources */,
 				0878E07F27CCBE7E525A3C84 /* A2UIVoiceController.swift in Sources */,
@@ -2247,6 +2277,7 @@
 				AA598F7F776F634EDC27EB3E /* Classroom.swift in Sources */,
 				24CADF9904E2B96A163E0F67 /* ClassroomView.swift in Sources */,
 				4136639C26A85D95515DB60E /* ClassroomViewModel.swift in Sources */,
+				66E2792EF7A4793B8B9A0ED2 /* ClientCapabilities.swift in Sources */,
 				1421DFE6D93A505D9F6AF380 /* ClipMetadataSheet.swift in Sources */,
 				2183FB4F45D08AA6290BC746 /* ClipModels.swift in Sources */,
 				486285B3A4ECEDC26C21ECA4 /* ClipService.swift in Sources */,
@@ -2254,11 +2285,16 @@
 				2820D1BCA9F2FFC34E4B3884 /* ClipsViewModel.swift in Sources */,
 				37FDDC04322AD1B5E4D0B083 /* CloudStorageService.swift in Sources */,
 				F25186C1A89EA44EBD277ED9 /* CommentsSheet.swift in Sources */,
+				445CE2686D2A9415852FF5D5 /* CommentsView.swift in Sources */,
 				01B31E74773604890DF43991 /* Community.swift in Sources */,
 				3F933BC2A52F965C25222E66 /* CommunityCardView.swift in Sources */,
 				D999327E6D91C449CF55DA1F /* CommunityDTOs.swift in Sources */,
 				0C43D43B305F8698BBE04B63 /* CommunityDockView.swift in Sources */,
+				B082B59ABD30663607EF8DEE /* CommunityFeedView.swift in Sources */,
+				6190A3D0E52057EFC86CB455 /* CommunityFeedViewModel.swift in Sources */,
 				44FB1388A6D9A4C421D60F57 /* CommunityMapView.swift in Sources */,
+				07EFD6C549C750BA7BADB01A /* CommunityPostModels.swift in Sources */,
+				A68BBCFD62AAA1DACFA49F30 /* CommunityService.swift in Sources */,
 				3A996444492482BF782217C6 /* CommunityView.swift in Sources */,
 				F59AFC4DA5CA5EF793168084 /* CommunityViewModel.swift in Sources */,
 				7DEED86BF5E4AD9BA43E1A6E /* ComposerBar.swift in Sources */,
@@ -2286,6 +2322,7 @@
 				CA88D6580B443DD97585A244 /* CourseProposalCardView.swift in Sources */,
 				2D9A29993118038EE54D8AF1 /* CourseProposalView.swift in Sources */,
 				5FD3D03E72C9A0338A949F33 /* CourseRoadmapBubbleView.swift in Sources */,
+				11820391B09B5CB2B7FEE44B /* CourseRuntimeView.swift in Sources */,
 				6281093A17F709F43C47DD08 /* CourseShareService.swift in Sources */,
 				83999C46BAD9236AC1A9EE2A /* CourseSocialService.swift in Sources */,
 				9C5DB0A4CA8800536EB0D8A9 /* CourseWizardHandler.swift in Sources */,
@@ -2307,6 +2344,7 @@
 				CFDFB27C56C7FBC6C4D71F59 /* DefaultLearningRepository.swift in Sources */,
 				63BE157BC71AB485AF0E4A48 /* DefaultSocialRepository.swift in Sources */,
 				79DB2BC985795D231EEDF095 /* DefaultTTSRepository.swift in Sources */,
+				BEF47BF11C0A7645024AD3AE /* DemoCourseLoader.swift in Sources */,
 				2E04934F0BA1FA18276D9432 /* DesignSystem.swift in Sources */,
 				4CA4A8AF28758C2593B943A4 /* DesignTokens.swift in Sources */,
 				9230237BC3FFBDCF55EDB545 /* DeveloperDashboardView.swift in Sources */,
@@ -2362,6 +2400,7 @@
 				2960EF2822082BD7D80CEC76 /* LeaderboardRowView.swift in Sources */,
 				0247300F5C6EAEA5AAFC994E /* LearningModels.swift in Sources */,
 				C3D4E5F6A7B8C9D0E1F2A3B4 /* LegacyCourseTypes.swift in Sources */,
+				DBE882E2590BA705F13494EE /* LessonBlockParser.swift in Sources */,
 				C07E15329FEDB351A0550B24 /* LessonCompleteView.swift in Sources */,
 				97B10DCF894CD89D9F0B72D5 /* LioChatSheet.swift in Sources */,
 				7A82AF5BD6C0A8AC20610F4B /* LioOrbView.swift in Sources */,
@@ -2371,6 +2410,8 @@
 				9855DD513E8C92C2F976FEF6 /* LiveStageWidgetView.swift in Sources */,
 				207C3133DD597B0F3C192208 /* Log.swift in Sources */,
 				E47708861B4732B438DE145F /* LoginView.swift in Sources */,
+				880B3DBCF028AD17293964F4 /* Lyo2ChatService.swift in Sources */,
+				B83D1B116A97380156B8DA3F /* Lyo2Models.swift in Sources */,
 				D4A5114DDDC17A61B3EF6070 /* LyoAIViewModel.swift in Sources */,
 				1A25C2D150B7E757EF253E3D /* SelfEvolutionViewModel.swift in Sources */,
 				49599F172AC54DEF7E6ED4AC /* LyoAPIClient.swift in Sources */,
@@ -2384,6 +2425,8 @@
 				FABE7D231A7B1BE253B548A0 /* LyoCardModels.swift in Sources */,
 				B0FFC594DC9F9E5E66424165 /* LyoChat.swift in Sources */,
 				EC3724238882B131495DACEC /* LyoClassroomService.swift in Sources */,
+				1406ED3FEB2F3EAFD9E1E6BB /* LyoCourseProtocol.swift in Sources */,
+				375DE8B0788C174BEDE6DC82 /* LyoCourseRuntime.swift in Sources */,
 				4CA25393B3000768B00B07F3 /* LyoCreateStudioView.swift in Sources */,
 				89BDA4F1BB119B8E92BA1A4E /* LyoError.swift in Sources */,
 				7F7B49C5D0CB10B6A4C0EAFA /* LyoErrorViews.swift in Sources */,
@@ -2398,6 +2441,7 @@
 				752C36A0C71848E2BBAEADC8 /* LyoParallaxManager.swift in Sources */,
 				C9E6453E8DF6E0C856F26700 /* LyoRepository.swift in Sources */,
 				66195A492C17BCC04E2CE4F8 /* EvolutionService.swift in Sources */,
+				D3786AD58E46ED00D8E8371B /* LyoRuntimeModels.swift in Sources */,
 				40E9772AB19DAFE11BF09D7A /* MagicEffectView.swift in Sources */,
 				65949DA31559C2A58C99CD68 /* MagicalBackgroundView.swift in Sources */,
 				96C28D6557C0E070AE8C6EC0 /* MainTabView.swift in Sources */,
@@ -2427,6 +2471,7 @@
 				F57ED1C4810C127F6E8CFCC6 /* NetworkLogger.swift in Sources */,
 				BEDC67585A1E5250E0D050C9 /* NetworkRequestable.swift in Sources */,
 				63CF8E055AFA4D946EF6C21C /* NewFeatureServices.swift in Sources */,
+				1FE56C570454ADE8EFEB9ACD /* NotesView.swift in Sources */,
 				35DD2CE98A4BA5B04ADACB19 /* NotificationCenterView.swift in Sources */,
 				BB767CD4F3FB852C86CC0E0A /* NotificationExtensions.swift in Sources */,
 				06E4AE3713B6D82F9C87AF74 /* NotificationModels.swift in Sources */,
@@ -2445,6 +2490,7 @@
 				AB9690D95C42C1AE1362F8F6 /* PostService.swift in Sources */,
 				C80DBCFA2B3B027172EBE3CD /* PremiumButton.swift in Sources */,
 				11280253C9AB5BA7A492A4F0 /* PremiumHomeView.swift in Sources */,
+				CA87F67AF7DCFE66C4DF288F /* PremiumQuizView.swift in Sources */,
 				9F301E31F2B2D97C9AA8E5A7 /* PrivateLessonDetailView.swift in Sources */,
 				1BBF0134881EC569EDD6C279 /* ProactiveHintBanner.swift in Sources */,
 				3026CFD21162217DB57C9900 /* ProcessingBubbleView.swift in Sources */,
@@ -2534,11 +2580,7 @@
 				80F9B0C9EDA09491A35F9798 /* WaitingRoomView.swift in Sources */,
 				7A5B6669D488E4B28B02448B /* WebSocketManager.swift in Sources */,
 				85476E1A927B96950007EC2A /* AdService.swift in Sources */,
-			
-						CC186A71636E8979AABCEB5D /* NotebookStore.swift in Sources */,
-				538C08E40130CFAEF0C13343 /* LyoThinkingView.swift in Sources */,
-				84405AC46A6FBCBAAA223FAC /* NotebookOverlayView.swift in Sources */,
-				FF5CAE0CC2D3CF01BA931F82 /* VoiceSessionBottomSheet.swift in Sources */,);
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A5D791AFD9669394D7A0EF0D /* Sources */ = {

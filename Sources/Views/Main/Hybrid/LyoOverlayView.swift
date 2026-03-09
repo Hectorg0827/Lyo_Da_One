@@ -8,9 +8,12 @@ struct LyoOverlayView: View {
     @EnvironmentObject var viewModel: LyoAIViewModel
     @EnvironmentObject var rootViewModel: RootViewModel
     @ObservedObject var conversationManager = ConversationManager.shared
+    @StateObject var notebookStore = NotebookStore()
+    @State private var isNotebookOpen = false
     
     @State private var animationState: AnimationState = .initial
     @State private var isThinking = false
+    @State private var showVoiceSheet = false
     @State private var showGreeting = false
     @State private var showHistory = false
     @State private var selectedMode: ChatMode = .chat
@@ -129,14 +132,34 @@ struct LyoOverlayView: View {
                                                     submitText()
                                                 }
                                             )
+                                            .contextMenu {
+                                                Button {
+                                                    Task {
+                                                        await notebookStore.saveNote(
+                                                            text: message.content,
+                                                            sourceContext: message.isFromUser ? "My Question" : "Lyo's Explanation"
+                                                        )
+                                                        withAnimation { isNotebookOpen = true }
+                                                    }
+                                                } label: {
+                                                    Label("Highlight & Save", systemImage: "highlighter")
+                                                }
+                                                
+                                                Button {
+                                                    UIPasteboard.general.string = message.content
+                                                } label: {
+                                                    Label("Copy", systemImage: "doc.on.doc")
+                                                }
+                                            }
                                         }
                                         .id(message.id)
                                     }
                                     
                                     // Thinking indicator bubble
                                     if isThinking && !hasAssistantPlaceholderBubble {
-                                        LyoUnifiedThinkingIndicator()
+                                        LyoThinkingView()
                                             .id("thinking")
+                                            .padding(.leading, 12)
                                     }
                                 }
                                 .padding(.top, 60) // Space for header/back button
@@ -365,6 +388,14 @@ struct LyoOverlayView: View {
                         }
                         .padding(.horizontal)
                         .padding(.top, 8)
+                        
+                        // Sticky Notebook Overlay at top of chat
+                        if animationState == .chatting {
+                            NotebookOverlayView(store: notebookStore, isOpen: $isNotebookOpen)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                                .padding(.top, 50) // Adjust for header height
+                        }
+                        
                         Spacer()
                     }
                 }
@@ -406,6 +437,14 @@ struct LyoOverlayView: View {
                     createNewChat()
                 }
             )
+        }
+        .sheet(isPresented: $showVoiceSheet) {
+            VoiceSessionBottomSheet(viewModel: viewModel)
+        }
+        .onChange(of: viewModel.isVoiceActive) { _, newValue in
+            if newValue {
+                showVoiceSheet = true
+            }
         }
     }
     

@@ -73,13 +73,40 @@ struct A2UIRenderer: View {
 
     var body: some View {
         // Wrap in AnyView to strict break type recursion for SwiftUI
-        AnyView(renderComponent(component))
+        AnyView(renderRoot(component))
             .onAppear {
                 // Register this UI tree for voice control
                 if let onAction = onAction {
                     A2UIVoiceController.shared.registerActiveUI(component: component, onAction: onAction)
                 }
             }
+    }
+
+    // MARK: - V2 Bridge
+
+    /// When A2UI v2 is enabled and the component carries a `variant`,
+    /// convert it to a `LyoUIComponent` and render via the primitive engine.
+    @ViewBuilder
+    private func renderRoot(_ comp: A2UIComponent) -> some View {
+        if AppConfig.isA2UIv2Enabled, comp.variant != nil,
+           let v2Comp = LyoUIComponent.from(legacy: comp) {
+            LyoPrimitiveRenderer(
+                component: v2Comp,
+                context: context,
+                onAction: { cmd in
+                    // Bridge LyoCommand back to A2UIAction
+                    let actionType = A2UIActionType(rawValue: cmd.action) ?? .submit
+                    let action = A2UIAction(
+                        trigger: .tap,
+                        type: actionType,
+                        payload: cmd.payload
+                    )
+                    self.onAction?(action, comp)
+                }
+            )
+        } else {
+            renderComponent(comp)
+        }
     }
 
 
@@ -154,6 +181,8 @@ struct A2UIRenderer: View {
         // MARK: - Course
         case .courseCard, .courseRoadmap:
             AnyView(A2UICourseCardRenderer(component: comp, context: context, onAction: handleAction))
+        case .course:
+            AnyView(A2UICourseGenericRenderer(component: comp, context: context, onAction: handleAction))
         case .lessonBlock:
             AnyView(A2UILessonCardRenderer(component: comp, context: context, onAction: handleAction))
         case .moduleHeader, .chapterNav, .lessonList, .courseOutline:

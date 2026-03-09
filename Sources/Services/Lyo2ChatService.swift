@@ -21,6 +21,7 @@ class Lyo2ChatService: ObservableObject {
         text: String,
         media: [Lyo2MediaRef]? = nil,
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
+        stateSummary: [String: AnyCodable] = [:],
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         onEvent: @escaping (Lyo2StreamEvent) -> Void
     ) {
@@ -38,6 +39,7 @@ class Lyo2ChatService: ObservableObject {
             text: text,
             media: media,
             activeArtifact: activeArtifact,
+            stateSummary: stateSummary,
             conversationHistory: conversationHistory
         )
         
@@ -155,6 +157,14 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
             request.setValue(
                 Bundle.main.bundleIdentifier ?? "com.lyo.app",
                 forHTTPHeaderField: "X-Bundle-Id"
+            )
+            request.setValue(
+                ClientCapabilities.shared.versionHeader,
+                forHTTPHeaderField: "X-Client-Version"
+            )
+            request.setValue(
+                ClientCapabilities.shared.componentsHeader,
+                forHTTPHeaderField: "X-Client-Capabilities"
             )
             if let tenantId {
                 request.setValue(tenantId, forHTTPHeaderField: "X-Tenant-Id")

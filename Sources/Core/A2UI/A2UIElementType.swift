@@ -201,6 +201,7 @@ enum A2UIElementType: String, Codable, CaseIterable {
     case citation
     
     // MARK: - Course & Lesson Elements
+    case course            // generic course container (v2 primitive compat)
     case courseCard
     case courseRoadmap
     case lessonBlock
@@ -346,7 +347,7 @@ enum A2UIElementType: String, Codable, CaseIterable {
             return .homework
         case .documentViewer, .pdfViewer, .noteCard, .noteEditor, .highlightedText, .annotation, .flashcard, .flashcardDeck, .summary, .outline, .keyPoints, .definition, .vocabulary, .citation:
             return .documents
-        case .courseCard, .courseRoadmap, .lessonBlock, .moduleHeader, .chapterNav, .progressBar, .completionBadge, .prerequisiteCheck, .learningPath, .skillTree, .lessonList, .courseHeader, .courseOutline:
+        case .course, .courseCard, .courseRoadmap, .lessonBlock, .moduleHeader, .chapterNav, .progressBar, .completionBadge, .prerequisiteCheck, .learningPath, .skillTree, .lessonList, .courseHeader, .courseOutline:
             return .course
         case .container, .stack, .hStack, .vStack, .zStack, .grid, .scrollView, .lazyVStack, .carousel, .tabs, .accordion, .collapsible, .modal, .sheet, .popover, .tooltip, .divider, .spacer, .card, .section, .group:
             return .layout

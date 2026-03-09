@@ -75,6 +75,7 @@ final class ChatRouter: ObservableObject {
     /// Returns the route result; for streaming, blocks arrive via the callback.
     func route(
         message: String,
+        mode: String = "chat",
         conversationHistory: [ConversationMessage] = [],
         onAgentBlock: ((AgentBlock) -> Void)? = nil,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)? = nil
@@ -101,6 +102,7 @@ final class ChatRouter: ObservableObject {
         case .fast:
             return await handleFastPath(
                 message: message,
+                mode: mode,
                 intent: intent,
                 conversationHistory: conversationHistory,
                 onStreamEvent: onStreamEvent,
@@ -110,6 +112,7 @@ final class ChatRouter: ObservableObject {
         case .standard, .deep:
             return await handleDeepPath(
                 message: message,
+                mode: mode,
                 intent: intent,
                 conversationHistory: conversationHistory,
                 onStreamEvent: onStreamEvent,
@@ -136,6 +139,7 @@ final class ChatRouter: ObservableObject {
 
     private func handleFastPath(
         message: String,
+        mode: String,
         intent: ClassifiedIntent,
         conversationHistory: [ConversationMessage],
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
@@ -145,6 +149,7 @@ final class ChatRouter: ObservableObject {
             // Use the standard AI chat endpoint (non-streaming, fast)
             let response = try await sendQuickMessage(
                 message: message,
+                mode: mode,
                 context: intent.category.rawValue,
                 conversationHistory: conversationHistory
             )
@@ -191,6 +196,7 @@ final class ChatRouter: ObservableObject {
             // CRITICAL: Pass onStreamEvent down so the fallback actually renders!
             return await handleDeepPath(
                 message: message,
+                mode: mode,
                 intent: intent,
                 conversationHistory: conversationHistory,
                 onStreamEvent: onStreamEvent,
@@ -203,6 +209,7 @@ final class ChatRouter: ObservableObject {
 
     private func handleDeepPath(
         message: String,
+        mode: String,
         intent: ClassifiedIntent,
         conversationHistory: [ConversationMessage],
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
@@ -220,6 +227,7 @@ final class ChatRouter: ObservableObject {
         // so this closure runs on the main thread — safe to access @MainActor state directly.
         lyo2Chat.sendMessageStreaming(
             text: message,
+            stateSummary: buildStateSummary(mode: mode, intent: intent),
             conversationHistory: memoryWindow
         ) { event in
             onStreamEvent?(event)
@@ -240,19 +248,43 @@ final class ChatRouter: ObservableObject {
     /// Send a message via the lightweight non-streaming endpoint
     private func sendQuickMessage(
         message: String,
+        mode: String,
         context: String,
         conversationHistory: [ConversationMessage]
     ) async throws -> BackendAIChatResponse {
-        // Use the existing AI.chat endpoint (non-streaming)
-        let response: BackendAIChatResponse = try await NetworkClient.shared.request(
-            Endpoints.AI.chat(
-                message: message,
-                provider: nil,
-                context: nil
-            )
+        let request = BackendAIChatRequest(
+            message: message,
+            conversationHistory: conversationHistory.isEmpty ? nil : conversationHistory,
+            context: context,
+            modeHint: backendAI.chatModeHint(for: mode)
         )
 
-        return response
+        let payload = try JSONEncoder().encode(request)
+        let endpoint = Endpoints.ChatModule.sendMessage(payload: payload)
+        return try await NetworkClient.shared.request(endpoint)
+    }
+
+    private func buildStateSummary(mode: String, intent: ClassifiedIntent) -> [String: AnyCodable] {
+        var summary: [String: AnyCodable] = [
+            "requested_mode": AnyCodable(mode),
+            "mode_hint": AnyCodable(backendAI.chatModeHint(for: mode)),
+            "speed_tier": AnyCodable(intent.tier.label),
+            "intent_category": AnyCodable(intent.category.rawValue),
+            "prefer_rich_ui": AnyCodable(true),
+            "client_platform": AnyCodable("ios"),
+            "client_version": AnyCodable(ClientCapabilities.shared.versionHeader),
+            "client_components": AnyCodable(ClientCapabilities.shared.supportedComponents)
+        ]
+
+        if let topic = intent.extractedTopic, !topic.isEmpty {
+            summary["topic"] = AnyCodable(topic)
+        }
+
+        if let emotion = intent.emotionalContext {
+            summary["emotional_context"] = AnyCodable(emotion.rawValue)
+        }
+
+        return summary
     }
 
     // MARK: - Latency Tracking

@@ -39,6 +39,10 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
     let actions: [A2UIAction]?
     let conditions: A2UIConditions?
     let metadata: A2UIMetadata?
+
+    // MARK: - v2 Fields (backward-compatible)
+    /// Sub-type selector for the v2 primitive system (e.g. "mcq", "heading", "stack")
+    let variant: String?
     
     // MARK: - Memberwise init (unchanged)
     init(
@@ -48,7 +52,8 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
         children: [A2UIComponent]? = nil,
         actions: [A2UIAction]? = nil,
         conditions: A2UIConditions? = nil,
-        metadata: A2UIMetadata? = nil
+        metadata: A2UIMetadata? = nil,
+        variant: String? = nil
     ) {
         self.id = id
         self.type = type
@@ -57,12 +62,13 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
         self.actions = actions
         self.conditions = conditions
         self.metadata = metadata
+        self.variant = variant
     }
 
     // MARK: - Custom Codable
 
     private enum CodingKeys: String, CodingKey {
-        case id, type, props, children, actions, conditions, metadata
+        case id, type, props, children, actions, conditions, metadata, variant
     }
 
     /// Custom decoder so that a missing "id" field (which the backend sometimes omits)
@@ -74,6 +80,8 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
         type     = try c.decode(A2UIElementType.self, forKey: .type)
         // props is optional on the wire — use empty props when absent
         props    = (try? c.decodeIfPresent(A2UIProps.self, forKey: .props)) ?? A2UIProps()
+        // v2 variant (backward-compatible, nil for v1 payloads)
+        variant  = try? c.decodeIfPresent(String.self, forKey: .variant)
         
         // Safely decode children: if one child fails, drop it instead of failing the whole array
         if let childrenContainer = try? c.decodeIfPresent([SafeDecodable<A2UIComponent>].self, forKey: .children) {
@@ -92,6 +100,7 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
         try c.encode(id, forKey: .id)
         try c.encode(type, forKey: .type)
         try c.encode(props, forKey: .props)
+        try c.encodeIfPresent(variant, forKey: .variant)
         try c.encodeIfPresent(children, forKey: .children)
         try c.encodeIfPresent(actions, forKey: .actions)
         try c.encodeIfPresent(conditions, forKey: .conditions)
@@ -101,6 +110,7 @@ struct A2UIComponent: Codable, Identifiable, Equatable {
     static func == (lhs: A2UIComponent, rhs: A2UIComponent) -> Bool {
         lhs.id == rhs.id
         && lhs.type == rhs.type
+        && lhs.variant == rhs.variant
         && lhs.props == rhs.props
         && lhs.children == rhs.children
         && lhs.actions == rhs.actions

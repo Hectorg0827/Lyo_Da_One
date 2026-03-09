@@ -146,6 +146,7 @@ final class UnifiedChatService: ObservableObject {
         // 6. Route through ChatRouter (Two-Speed Engine)
         let result = await chatRouter.route(
             message: trimmedText,
+            mode: mode,
             conversationHistory: conversationHistory,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
@@ -1089,8 +1090,8 @@ final class UnifiedChatService: ObservableObject {
     private func normalizeContentTypes(_ types: [MessageContentType]) -> [MessageContentType] {
         let hasRichContent = types.contains { contentType in
             switch contentType {
-            case .a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan,
-                .recursiveUI, .cinematic:
+            case .a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep,
+                .recursiveUI, .cinematic, .generativeUI:
                 return true
             default:
                 return false

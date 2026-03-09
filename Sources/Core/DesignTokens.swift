@@ -6,7 +6,11 @@ import Combine
 // Must be at the top to ensure availability during static property initialization
 extension Color {
     public init(hex: String) {
-        let scanner = Scanner(string: hex)
+        var hexString = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if hexString.hasPrefix("#") {
+            hexString.removeFirst()
+        }
+        let scanner = Scanner(string: hexString)
         var rgbValue: UInt64 = 0
         scanner.scanHexInt64(&rgbValue)
         

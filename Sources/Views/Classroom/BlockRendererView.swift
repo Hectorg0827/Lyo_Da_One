@@ -2,6 +2,10 @@ import SwiftUI
 import AVKit
 import Charts
 
+#if canImport(LaTeXSwiftUI)
+import LaTeXSwiftUI
+#endif
+
 // MARK: - Main Block Renderer
 
 /// Renders ANY LessonBlock type dynamically
@@ -820,43 +824,87 @@ struct ChartBlockView: View {
     let block: LessonBlock
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let title = block.title {
-                Text(title)
-                    .font(.headline)
-            }
+        VStack(alignment: .leading, spacing: 16) {
+            headerSection
             
-            if #available(iOS 16.0, *), let chartData = block.chartData {
-                // Use Swift Charts
-                Chart {
-                    if let datasets = chartData.datasets {
-                        ForEach(0..<(datasets.first?.data.count ?? 0), id: \.self) { index in
-                            let labels = chartData.labels ?? []
-                            let label = index < labels.count ? labels[index] : "Item \(index)"
-                            let value = datasets.first?.data[index] ?? 0
-                            
-                            BarMark(
-                                x: .value("Category", label),
-                                y: .value("Value", value)
-                            )
-                            .foregroundStyle(Color.blue.gradient)
-                        }
-                    }
-                }
-                .frame(height: 200)
-                .chartXAxis {
-                    AxisMarks(values: .automatic)
-                }
+            if #available(iOS 16.0, *) {
+                chartContainer
             } else {
-                // Fallback chart placeholder
                 ChartPlaceholderView(block: block)
             }
+            
+            if let footer = block.caption {
+                Text(footer)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 10)
-        .padding(.vertical, 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
+    }
+    
+    private var headerSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                if let title = block.title {
+                    Text(title)
+                        .font(.system(size: 16, weight: .bold))
+                }
+                if let subtitle = block.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "chart.bar.fill")
+                .foregroundColor(.blue.opacity(0.8))
+        }
+    }
+    
+    @available(iOS 16.0, *)
+    private var chartContainer: some View {
+        chartView
+    }
+    
+    @available(iOS 16.0, *)
+    private var chartView: some View {
+        let flatData = buildFlatChartData()
+        return Chart(flatData, id: \.id) { item in
+            BarMark(
+                x: .value("Category", item.label),
+                y: .value("Value", item.value)
+            )
+            .foregroundStyle(by: .value("Dataset", item.series))
+            .cornerRadius(4)
+        }
+        .frame(height: 220)
+    }
+    
+    private struct FlatChartItem: Identifiable {
+        let id: String
+        let label: String
+        let value: Double
+        let series: String
+    }
+    
+    private func buildFlatChartData() -> [FlatChartItem] {
+        guard let chartData = block.chartData, let datasets = chartData.datasets else { return [] }
+        let labels = chartData.labels ?? []
+        var items: [FlatChartItem] = []
+        for dataset in datasets {
+            let series = dataset.label ?? "Default"
+            for (index, value) in dataset.data.enumerated() {
+                let label = index < labels.count ? labels[index] : "\(index)"
+                items.append(FlatChartItem(id: "\(series)-\(index)", label: label, value: value, series: series))
+            }
+        }
+        return items
     }
 }
 
@@ -982,7 +1030,16 @@ struct MathBlockView: View {
                     .foregroundColor(.orange)
             }
             
-            // LaTeX rendering placeholder - could use MathJax WebView
+            #if canImport(LaTeXSwiftUI)
+            LaTeX(latex)
+                .parsingMode(.all)
+                .font(.system(size: 16))
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .background(Color.orange.opacity(0.05))
+                .cornerRadius(8)
+            #else
+            // LaTeX rendering placeholder - requires LaTeXSwiftUI package
             Text(latex)
                 .font(.system(.body, design: .monospaced))
                 .italic()
@@ -990,6 +1047,7 @@ struct MathBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .background(Color.orange.opacity(0.05))
                 .cornerRadius(8)
+            #endif
         }
         .padding()
         .background(Color(.systemBackground))

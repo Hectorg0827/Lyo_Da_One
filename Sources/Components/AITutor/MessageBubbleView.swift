@@ -40,6 +40,7 @@ struct LyoMessageBubbleView: View {
             case .quiz: return true
             case .flashcards: return true
             case .studyPlan: return true
+            case .testPrep: return true
             case .recursiveUI: return true
             case .cinematic: return true
             default: return false
@@ -429,6 +430,58 @@ struct LyoMessageBubbleView: View {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(maxWidth: .infinity, alignment: .center)
+                }
+            }
+            .padding()
+            .background(Color(white: 0.1))
+            .cornerRadius(16)
+            
+        case .testPrep(let data):
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Test Prep")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.7))
+                            .textCase(.uppercase)
+                        Text(data.subject)
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
+                    }
+                    Spacer()
+                    Image(systemName: "pencil.and.list.clipboard")
+                        .font(.title)
+                        .foregroundStyle(Color.accentColor)
+                }
+                Divider().background(Color.white.opacity(0.2))
+                
+                if let topic = data.topic {
+                    HStack {
+                        Text("Topic:")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text(topic)
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                if let date = data.testDate {
+                    HStack {
+                        Text("Date:")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text(date)
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                if let plan = data.studyPlan {
+                    Divider().background(Color.white.opacity(0.2))
+                    Text("Study Plan attached (\(plan.schedule.count) days)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
                 }
             }
             .padding()

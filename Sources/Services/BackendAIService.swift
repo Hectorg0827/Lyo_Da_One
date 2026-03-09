@@ -39,11 +39,13 @@ struct BackendAIChatRequest: Encodable {
     let message: String
     let conversationHistory: [ConversationMessage]?
     let context: String?  // Must be a string, not a dictionary!
+    let modeHint: String?
     
     enum CodingKeys: String, CodingKey {
         case message
         case conversationHistory
         case context
+        case modeHint = "mode_hint"
     }
 }
 
@@ -474,6 +476,25 @@ final class BackendAIService {
         encoder.keyEncodingStrategy = .convertToSnakeCase
         return encoder
     }
+
+    /// Maps UI-facing chat modes to backend chat-module mode hints.
+    /// These hints are consumed by `/api/v1/chat` to select the correct agent path.
+    func chatModeHint(for mode: String) -> String {
+        switch mode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "course":
+            return "course_planner"
+        case "quiz", "practice":
+            return "practice"
+        case "study", "tutor", "focus":
+            return "quick_explainer"
+        case "test_prep", "testprep", "exam":
+            return "test_prep"
+        case "notes", "note", "note_taker":
+            return "note_taker"
+        default:
+            return "general"
+        }
+    }
     
     // MARK: - Context-Aware Suggestions
 
@@ -696,7 +717,8 @@ final class BackendAIService {
         let request = BackendAIChatRequest(
             message: message,
             conversationHistory: historyWithSystem.isEmpty ? nil : historyWithSystem,
-            context: contextMetadata
+            context: contextMetadata,
+            modeHint: chatModeHint(for: mode)
         )
         
         // CRITICAL: Use /api/v1/chat (Chat Module) NOT /api/v1/ai/chat (AI Study)

@@ -462,3 +462,20 @@ struct Milestone: Codable {
     let description: String?
     let percent: Double?
 }
+
+// MARK: - Test Prep Content (for A2UI chat rendering)
+
+struct TestPrepContent: Codable, Equatable {
+    let subject: String
+    let topic: String?
+    let testDate: String?
+    let studyPlan: StudyPlan?
+    
+    init(subject: String, topic: String? = nil, testDate: String? = nil, studyPlan: StudyPlan? = nil) {
+        self.subject = subject
+        self.topic = topic
+        self.testDate = testDate
+        self.studyPlan = studyPlan
+    }
+}
+

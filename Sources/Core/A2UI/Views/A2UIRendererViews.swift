@@ -8,6 +8,10 @@
 
 import SwiftUI
 
+#if canImport(LaTeXSwiftUI)
+import LaTeXSwiftUI
+#endif
+
 // MARK: - Text Renderers
 
 /// Renders text, heading, paragraph, label, caption
@@ -233,12 +237,23 @@ struct A2UILatexRenderer: View {
     let onAction: ((A2UIAction) -> Void)?
 
     var body: some View {
+        let content = component.props.text ?? component.props.body ?? ""
+        
+        #if canImport(LaTeXSwiftUI)
+        LaTeX(content)
+            .parsingMode(.all)
+            .font(.system(size: 16))
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+        #else
         // For now, render as formatted text - can be enhanced with LaTeX rendering later
-        Text(component.props.text ?? component.props.body ?? "")
+        Text(content)
             .font(.system(.body, design: .monospaced))
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(8)
+        #endif
     }
 }
 

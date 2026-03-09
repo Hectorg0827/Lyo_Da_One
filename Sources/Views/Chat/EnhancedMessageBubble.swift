@@ -9,6 +9,10 @@ import SwiftUI
 import AVKit
 import os
 
+#if canImport(LaTeXSwiftUI)
+import LaTeXSwiftUI
+#endif
+
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
     let onTTSToggle: (() -> Void)?
@@ -129,12 +133,20 @@ struct EnhancedMessageBubble: View {
                         case .text:
                             // Suppress raw text when rich content (A2UI, courseProposal, quiz, etc.) is present
                             if !hasRichContent && !message.content.isEmpty {
-                                styledMarkdownText(stripEmojis(message.content))
-                                    .font(DesignTokens.Typography.bodyMedium)
-                                    .textSelection(.enabled)
+                                #if canImport(LaTeXSwiftUI)
+                                LaTeX(stripEmojis(message.content))
+                                    .parsingMode(.all)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white.opacity(0.9))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .lineSpacing(4)
+                                #else
+                                styledMarkdownText(stripEmojis(message.content))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .lineSpacing(4)
+                                #endif
                             }
                             
                         case .processing(let step, let progress):
@@ -491,25 +503,49 @@ struct EnhancedMessageBubble: View {
         }.map { String($0) }.joined()
     }
 
-    /// Renders content with inline Markdown styling:
-    /// **bold** → white bold + larger font, rest → white
+    /// Renders content with inline Markdown styling for a modern, polished look:
+    /// Handles bold, italics, inline code, and links with distinct visual hierarchy.
     private func styledMarkdownText(_ content: String) -> Text {
-        guard let attributed = try? AttributedString(
-            markdown: content,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) else {
-            return Text(content).foregroundColor(.white)
+        var options = AttributedString.MarkdownParsingOptions()
+        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+        
+        guard let attributed = try? AttributedString(markdown: content, options: options) else {
+            return Text(content)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundColor(.white.opacity(0.9))
         }
+        
         var styled = attributed
+        // Base styling for modern look
+        styled.font = .system(size: 16, weight: .regular, design: .default)
+        styled.foregroundColor = .white.opacity(0.9)
+        
         for run in styled.runs {
-            if let intent = run.inlinePresentationIntent,
-               intent.contains(.stronglyEmphasized) {
-                styled[run.range].foregroundColor = .white
-                styled[run.range].font = .system(size: 17, weight: .bold)
-            } else {
-                styled[run.range].foregroundColor = .white.opacity(0.9)
+            if let intent = run.inlinePresentationIntent {
+                if intent.contains(.stronglyEmphasized) {
+                    // Bold: Slightly larger, crisp white for emphasis
+                    styled[run.range].font = .system(size: 17, weight: .bold, design: .default)
+                    styled[run.range].foregroundColor = .white
+                } 
+                if intent.contains(.emphasized) {
+                    // Italic: Softer
+                    styled[run.range].font = .system(size: 16, weight: .regular, design: .default).italic()
+                    styled[run.range].foregroundColor = .white.opacity(0.85)
+                }
+                if intent.contains(.code) {
+                    // Inline Code: Monospaced, soft blue tint, subtle background
+                    styled[run.range].font = .system(size: 15, weight: .semibold, design: .monospaced)
+                    styled[run.range].foregroundColor = Color(red: 0.6, green: 0.85, blue: 1.0)
+                    styled[run.range].backgroundColor = Color.white.opacity(0.12)
+                }
+            }
+            if run.link != nil {
+                // Links: Bright blue with underline
+                styled[run.range].foregroundColor = Color(red: 0.4, green: 0.7, blue: 1.0)
+                styled[run.range].underlineStyle = .single
             }
         }
+        
         return Text(styled)
     }
 
