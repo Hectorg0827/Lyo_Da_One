@@ -383,6 +383,47 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                         Log.ai.error("Lyo2 Decoding Error (A2UI): \(error)")
                     }
                 }
+
+            // ── v2 events (LyoResponse envelope) ──────────────────────
+
+            case "lyo_ui":
+                didReceiveContentEvent = true
+                if let responseDict = json["response"],
+                   let responseData = try? JSONSerialization.data(withJSONObject: responseDict) {
+                    do {
+                        let response = try JSONDecoder().decode(LyoResponse.self, from: responseData)
+                        Log.ai.info("🎨 Lyo2 SSE: lyo_ui v2 event received")
+                        callback?(.lyoUI(response: response))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (lyo_ui): \(error)")
+                    }
+                }
+
+            case "lyo_command":
+                didReceiveContentEvent = true
+                if let responseDict = json["response"],
+                   let responseData = try? JSONSerialization.data(withJSONObject: responseDict) {
+                    do {
+                        let response = try JSONDecoder().decode(LyoResponse.self, from: responseData)
+                        Log.ai.info("🎨 Lyo2 SSE: lyo_command v2 event received")
+                        callback?(.lyoCommand(response: response))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (lyo_command): \(error)")
+                    }
+                }
+
+            case "lyo_suggestions":
+                didReceiveContentEvent = true
+                if let responseDict = json["response"],
+                   let responseData = try? JSONSerialization.data(withJSONObject: responseDict) {
+                    do {
+                        let response = try JSONDecoder().decode(LyoResponse.self, from: responseData)
+                        Log.ai.info("🎨 Lyo2 SSE: lyo_suggestions v2 event received")
+                        callback?(.lyoSuggestions(response: response))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (lyo_suggestions): \(error)")
+                    }
+                }
                 
             default:
                 Log.ai.warning("Lyo2 unknown event type: \(eventType)")

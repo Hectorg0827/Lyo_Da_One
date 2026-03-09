@@ -134,4 +134,9 @@ enum Lyo2StreamEvent {
     case a2ui(block: Lyo2UIBlock)
     case error(message: String)
     case done
+    
+    // ── v2 events (LyoResponse envelope) ──
+    case lyoUI(response: LyoResponse)
+    case lyoCommand(response: LyoResponse)
+    case lyoSuggestions(response: LyoResponse)
 }

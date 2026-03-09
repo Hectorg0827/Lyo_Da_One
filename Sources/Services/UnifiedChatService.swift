@@ -940,6 +940,92 @@ final class UnifiedChatService: ObservableObject {
                 Log.ai.warning("🎨 ⚠️ Could not decode A2UI component from block")
             }
 
+        // ── v2 events (LyoResponse envelope) ──────────────────────
+
+        case .lyoUI(let response):
+            Log.ai.info("🎨 v2 lyo_ui event received")
+            // Decode the v2 UI component from the LyoResponse
+            if let uiComponent = response.ui {
+                // Convert LyoUIComponent → A2UIComponent for rendering via existing pipeline
+                // The v2 renderer will be triggered by the variant field presence
+                let a2uiComponent = lyoUIComponentToA2UI(uiComponent)
+                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    var currentTypes = messages[idx].contentTypes ?? []
+                    currentTypes.removeAll {
+                        if case .processing = $0 { return true } else { return false }
+                    }
+                    currentTypes.append(.a2ui(component: a2uiComponent))
+                    currentTypes = normalizeContentTypes(currentTypes)
+
+                    let a2uiMsg = LyoMessage(
+                        id: aiMessageId,
+                        sessionId: messages[idx].sessionId,
+                        content: messages[idx].content,
+                        isFromUser: false,
+                        timestamp: messages[idx].timestamp,
+                        contentTypes: currentTypes
+                    )
+                    messages[idx] = a2uiMsg
+                } else {
+                    let a2uiMsg = LyoMessage(
+                        id: aiMessageId,
+                        sessionId: currentConversationId,
+                        content: "",
+                        isFromUser: false,
+                        timestamp: Date(),
+                        contentTypes: [.a2ui(component: a2uiComponent)]
+                    )
+                    messages.append(a2uiMsg)
+                }
+                Task { await saveConversation() }
+            }
+
+        case .lyoCommand(let response):
+            Log.ai.info("🎨 v2 lyo_command event received")
+            if let command = response.command {
+                if command.action == "open_classroom",
+                   let payload = command.payload,
+                   let payloadData = try? JSONSerialization.data(withJSONObject: payload),
+                   let courseDict = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+                   let coursePayload = tryDecodeOpenClassroomDict(courseDict) {
+                    let proposalContent =
+                        "Here's your course proposal! Tap **Start Class** to begin. 🎓"
+                    if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                        let proposalMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: messages[idx].sessionId,
+                            content: proposalContent,
+                            isFromUser: false,
+                            timestamp: messages[idx].timestamp,
+                            contentTypes: [.courseProposal(payload: coursePayload)]
+                        )
+                        messages[idx] = proposalMsg
+                    }
+                    Task { await saveConversation() }
+                }
+            }
+
+        case .lyoSuggestions(let response):
+            Log.ai.info("🎨 v2 lyo_suggestions event received")
+            if let suggestions = response.suggestions {
+                var newSuggestions: [SuggestionChip] = []
+                for suggestion in suggestions {
+                    newSuggestions.append(
+                        SuggestionChip(
+                            id: UUID().uuidString,
+                            text: suggestion.text,
+                            icon: Self.iconForChipLabel(suggestion.text),
+                            actionType: suggestion.actionId,
+                            context: nil
+                        )
+                    )
+                }
+                if !newSuggestions.isEmpty {
+                    self.suggestions = newSuggestions
+                    Log.ai.info("Set \(newSuggestions.count) v2 suggestion chips")
+                }
+            }
+
         case .done:
             // ✅ Stream completed — cancel the safety timeout
             streamTimeoutTask?.cancel()
@@ -1530,6 +1616,103 @@ final class UnifiedChatService: ObservableObject {
         }
 
         // No explicit intent — don't heuristically guess (avoids false positives)
+        return nil
+    }
+
+    // MARK: - v2 Helpers
+
+    /// Convert a LyoUIComponent (v2) back to an A2UIComponent for rendering.
+    /// The variant field on the A2UIComponent enables the v2 renderer path.
+    private func lyoUIComponentToA2UI(_ lyoComponent: LyoUIComponent) -> A2UIComponent {
+        // Build props from content + style
+        var props = A2UIProps()
+        if let content = lyoComponent.content {
+            props.text = content.text ?? content.body
+            props.title = content.title
+            props.subtitle = content.subtitle
+            props.label = content.label
+            props.hint = content.hint
+            if let iconName = content.icon {
+                props.icon = iconName
+            }
+            if let imgUrl = content.imageUrl {
+                props.imageUrl = imgUrl
+            }
+        }
+        if let style = lyoComponent.style {
+            props.foregroundColor = style.foreground
+            props.backgroundColor = style.background
+            props.spacing = style.spacing
+            props.borderRadius = style.radius
+            if let alignStr = style.alignment {
+                props.alignment = A2UIAlignment(rawValue: alignStr)
+            }
+            if let fs = style.fontSize {
+                props.fontSize = fs
+            }
+            props.fontWeight = style.fontWeight
+        }
+
+        // Map primitive type to A2UIElementType
+        let elementType: A2UIElementType
+        switch lyoComponent.type {
+        case .text: elementType = .text
+        case .media: elementType = .image
+        case .divider: elementType = .divider
+        case .input: elementType = .textInput
+        case .button: elementType = .button
+        case .container: elementType = .vStack
+        case .card: elementType = .card
+        case .list: elementType = .lessonList
+        case .nav: elementType = .tabs
+        case .quiz: elementType = .quizMcq
+        case .quizResult: elementType = .gradeDisplay
+        case .course: elementType = .course
+        case .flashcard: elementType = .flashcard
+        case .plan: elementType = .card
+        case .tracker: elementType = .progressBar
+        case .assignment: elementType = .card
+        case .document: elementType = .card
+        case .progress: elementType = .progressBar
+        case .aiBubble: elementType = .text
+        case .social: elementType = .card
+        case .alert: elementType = .card
+        case .skeleton: elementType = .skeleton
+        }
+
+        // Recursively convert children
+        var children: [A2UIComponent]? = nil
+        if let lyoChildren = lyoComponent.children, !lyoChildren.isEmpty {
+            children = lyoChildren.map { lyoUIComponentToA2UI($0) }
+        }
+
+        return A2UIComponent(
+            id: lyoComponent.id,
+            type: elementType,
+            props: props,
+            children: children,
+            variant: lyoComponent.variant
+        )
+    }
+
+    /// Try to decode a CoursePayload from a raw dictionary (used by v2 lyo_command events).
+    private func tryDecodeOpenClassroomDict(_ dict: [String: Any]) -> CoursePayload? {
+        // Look for "course" key first
+        if let courseDict = dict["course"] as? [String: Any] {
+            do {
+                let data = try JSONSerialization.data(withJSONObject: courseDict)
+                return try JSONDecoder().decode(CoursePayload.self, from: data)
+            } catch {
+                Log.ai.warning("🏫 v2: Failed to decode CoursePayload from 'course' key: \(error)")
+            }
+        }
+        // Try decoding the full dict
+        do {
+            let data = try JSONSerialization.data(withJSONObject: dict)
+            return try JSONDecoder().decode(CoursePayload.self, from: data)
+        } catch {
+            Log.ai.warning("🏫 v2: Failed to decode CoursePayload from dict: \(error)")
+        }
         return nil
     }
 
