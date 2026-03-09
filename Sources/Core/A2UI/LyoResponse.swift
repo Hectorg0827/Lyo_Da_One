@@ -463,6 +463,19 @@ extension LyoUIComponent {
         
         let variant = comp.variant ?? defaultVariant(for: comp.type)
         
+        // Extract domain-specific data from the A2UIProps god-bag into the typed data dict
+        let data = extractDomainData(from: comp.props, primitive: primitive)
+        
+        // Map metadata
+        let meta: LyoMetaProps? = comp.metadata.map { m in
+            LyoMetaProps(
+                analyticsId: m.analyticsId,
+                debugLabel: m.debugLabel,
+                version: m.version,
+                tags: m.tags
+            )
+        }
+        
         // Convert children recursively
         let v2Children = comp.children?.compactMap { LyoUIComponent.from(legacy: $0) }
         
@@ -472,12 +485,98 @@ extension LyoUIComponent {
             variant: variant,
             content: content,
             style: style,
-            data: nil,
+            data: data,
             children: v2Children,
             actions: comp.actions,
             conditions: comp.conditions,
-            meta: nil
+            meta: meta
         )
+    }
+    
+    // MARK: - Domain Data Extraction
+    
+    /// Extracts domain-specific fields from A2UIProps into a typed dictionary.
+    /// Only includes keys that are actually populated.
+    private static func extractDomainData(from props: A2UIProps, primitive: A2UIPrimitive) -> [String: AnyCodableValue]? {
+        var data: [String: AnyCodableValue] = [:]
+        
+        switch primitive {
+        case .quiz:
+            if let q = props.question        { data["question"] = .string(q) }
+            if let e = props.explanation      { data["explanation"] = .string(e) }
+            if let s = props.shuffleOptions   { data["shuffle_options"] = .bool(s) }
+            if let s = props.showFeedback     { data["show_feedback"] = .bool(s) }
+            if let m = props.maxAttempts      { data["max_attempts"] = .int(m) }
+            if let t = props.timeLimit        { data["time_limit"] = .int(t) }
+            if let p = props.points           { data["points"] = .int(p) }
+            if let d = props.difficulty       { data["difficulty"] = .string(d) }
+            
+        case .flashcard:
+            if let f = props.front ?? props.flashcardFront  { data["front"] = .string(f) }
+            if let b = props.back ?? props.flashcardBack    { data["back"] = .string(b) }
+            if let fm = props.frontMedia      { data["front_media"] = .string(fm) }
+            if let bm = props.backMedia       { data["back_media"] = .string(bm) }
+            if let ci = props.cardIndex       { data["card_index"] = .int(ci) }
+            if let tc = props.totalCards      { data["total_cards"] = .int(tc) }
+            if let c = props.confidence       { data["confidence"] = .double(c) }
+            
+        case .course:
+            if let cid = props.courseId       { data["course_id"] = .string(cid) }
+            if let cn = props.courseName      { data["course_name"] = .string(cn) }
+            if let lvl = props.level          { data["level"] = .string(lvl) }
+            if let ed = props.estimatedDuration { data["estimated_duration"] = .int(ed) }
+            if let cp = props.completionPercentage { data["completion_percentage"] = .double(cp) }
+            if let inst = props.instructor    { data["instructor"] = .string(inst) }
+            if let objs = props.objectives    { data["objectives"] = .array(objs.map { .string($0) }) }
+            if let prereqs = props.prerequisites { data["prerequisites"] = .array(prereqs.map { .string($0) }) }
+            
+        case .plan:
+            if let gt = props.goalTitle       { data["goal_title"] = .string(gt) }
+            if let gd = props.goalDescription { data["goal_description"] = .string(gd) }
+            if let p = props.progress         { data["progress"] = .double(p) }
+            if let cc = props.completedCount  { data["completed_count"] = .int(cc) }
+            if let tc = props.totalCount      { data["total_count"] = .int(tc) }
+            if let dur = props.duration       { data["duration"] = .int(dur) }
+            if let pri = props.priority       { data["priority"] = .string(pri) }
+            if let st = props.status          { data["status"] = .string(st) }
+            
+        case .progress:
+            if let p = props.progress         { data["value"] = .double(p) }
+            if let tc = props.totalCount      { data["total"] = .int(tc) }
+            if let cc = props.completedCount  { data["completed"] = .int(cc) }
+            if let xp = props.xp              { data["xp"] = .int(xp) }
+            if let streak = props.streak      { data["streak"] = .int(streak) }
+            if let lvl = props.levelNumber    { data["level"] = .int(lvl) }
+            
+        case .assignment:
+            if let hid = props.homeworkId     { data["homework_id"] = .string(hid) }
+            if let at = props.assignmentTitle  { data["assignment_title"] = .string(at) }
+            if let sub = props.subject        { data["subject"] = .string(sub) }
+            if let g = props.grade            { data["grade"] = .string(g) }
+            if let mg = props.maxGrade        { data["max_grade"] = .string(mg) }
+            if let fb = props.feedback        { data["feedback"] = .string(fb) }
+            if let il = props.isLate          { data["is_late"] = .bool(il) }
+            
+        case .tracker:
+            if let mt = props.mistakeType     { data["mistake_type"] = .string(mt) }
+            if let topic = props.topic        { data["topic"] = .string(topic) }
+            if let ct = props.conceptTag      { data["concept_tag"] = .string(ct) }
+            if let oc = props.occurrenceCount { data["occurrence_count"] = .int(oc) }
+            if let ml = props.masteryLevel    { data["mastery_level"] = .double(ml) }
+            if let ra = props.recommendedAction { data["recommended_action"] = .string(ra) }
+            
+        case .document:
+            if let du = props.documentUrl     { data["document_url"] = .string(du) }
+            if let dt = props.documentType    { data["document_type"] = .string(dt) }
+            if let pc = props.pageCount       { data["page_count"] = .int(pc) }
+            if let cp = props.currentPage     { data["current_page"] = .int(cp) }
+            if let sp = props.summaryPoints   { data["summary_points"] = .array(sp.map { .string($0) }) }
+            
+        default:
+            break
+        }
+        
+        return data.isEmpty ? nil : data
     }
     
     // MARK: - Element Type → Primitive Mapping
