@@ -177,6 +177,10 @@ struct A2UIRenderer: View {
             AnyView(A2UIQuizMultiSelectRenderer(component: comp, context: context, onAction: handleAction))
         case .quizTrueFalse:
             AnyView(A2UIQuizTrueFalseRenderer(component: comp, context: context, onAction: handleAction))
+        case .quizFillBlank:
+            AnyView(A2UIQuizFillBlankRenderer(component: comp, context: context, onAction: handleAction))
+        case .quizShortAnswer:
+            AnyView(A2UIQuizShortAnswerRenderer(component: comp, context: context, onAction: handleAction))
             
         // MARK: - Course
         case .courseCard, .courseRoadmap:
@@ -265,7 +269,9 @@ struct A2UIRenderer: View {
             AnyView(A2UICountdownRenderer(component: comp, context: context, onAction: handleAction))
         case .quote, .weather:
             AnyView(A2UIQuoteRenderer(component: comp, context: context, onAction: handleAction))
-        case .topicSelection, .suggestions, .quickActions, .recentItems, .recommended, .trending, .searchBar, .filterChips, .tagCloud, .calendar:
+        case .topicSelection, .suggestions, .filterChips:
+            AnyView(A2UIChipsRenderer(component: comp, context: context, onAction: handleAction))
+        case .quickActions, .recentItems, .recommended, .trending, .searchBar, .tagCloud, .calendar:
             AnyView(A2UIFallbackRenderer(component: comp, context: context, onAction: handleAction))
 
         // MARK: - Gamification

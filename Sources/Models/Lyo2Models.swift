@@ -125,17 +125,15 @@ struct Lyo2UIBlock: Codable {
 // MARK: - Streaming Response Events
 
 enum Lyo2StreamEvent {
+    /// Shared events (no v1/v2 distinction)
     case skeleton(blocks: [String])
     case clarification(text: String)
     case answer(block: Lyo2UIBlock)
     case artifact(block: Lyo2UIBlock)
-    case actions(blocks: [Lyo2UIBlock])
-    case openClassroom(block: Lyo2UIBlock)
-    case a2ui(block: Lyo2UIBlock)
     case error(message: String)
     case done
     
-    // ── v2 events (LyoResponse envelope) ──
+    /// v2 events (LyoResponse envelope — primary path)
     case lyoUI(response: LyoResponse)
     case lyoCommand(response: LyoResponse)
     case lyoSuggestions(response: LyoResponse)

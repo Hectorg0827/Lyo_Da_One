@@ -98,39 +98,14 @@ struct FocusView: View {
         VStack(alignment: .leading, spacing: 12) {
             if courseStackCards.isEmpty {
                 // Empty state — prompt user to create their first course
-                VStack(spacing: 16) {
-                    Image(systemName: "sparkles.rectangle.stack")
-                        .font(.system(size: 48))
-                        .foregroundStyle(
-                            LinearGradient(colors: [Color(hex: "A855F7"), Color(hex: "6366F1")], startPoint: .top, endPoint: .bottom)
-                        )
-                    
-                    Text("No courses yet")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Text("Ask Lio to generate your first AI course")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    Button {
-                        uiState.isLioChatPresented = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "sparkles")
-                            Text("Start with Lio")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 14)
-                        .background(
-                            LinearGradient(colors: [Color(hex: "8B5CF6"), Color(hex: "6366F1")], startPoint: .leading, endPoint: .trailing)
-                        )
-                        .clipShape(Capsule())
-                    }
+                EmptyStateView(
+                    iconName: "book.closed.fill",
+                    title: "No Courses Yet",
+                    message: "You haven't generated or saved any learning paths. Ask Lio AI to create your first course!",
+                    actionTitle: "Start with Lio"
+                ) {
+                    uiState.isLioChatPresented = true
                 }
-                .frame(maxWidth: .infinity)
                 .padding(.vertical, 60)
             } else {
                 TabView(selection: $activeCourseIndex) {

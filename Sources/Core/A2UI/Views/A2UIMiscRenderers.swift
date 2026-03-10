@@ -266,3 +266,15 @@ struct A2UIStudyGroupCardRenderer: View {
         A2UIStudyGroupCardView(props: component.props, onAction: onAction)
     }
 }
+
+// MARK: - Chips Renderer (Topic Selection, Suggestions, Filter Chips)
+
+struct A2UIChipsRenderer: View {
+    let component: A2UIComponent
+    let context: A2UIRenderContext
+    let onAction: ((A2UIAction) -> Void)?
+
+    var body: some View {
+        A2UISuggestionChipsView(props: component.props, onAction: onAction)
+    }
+}

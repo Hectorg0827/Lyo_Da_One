@@ -404,3 +404,123 @@ struct TrueFalseButton: View {
         return isSelected ? .blue : Color(.systemGray4)
     }
 }
+
+// MARK: - Fill-in-the-Blank Quiz Renderer
+
+struct A2UIQuizFillBlankRenderer: View {
+    let component: A2UIComponent
+    let context: A2UIRenderContext
+    let onAction: ((A2UIAction) -> Void)?
+
+    @State private var userInput: String = ""
+    @State private var hasSubmitted = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(component.props.text ?? "Fill in the blank:")
+                .font(.headline)
+                .padding(.horizontal)
+
+            TextField("Type your answer...", text: $userInput)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .disabled(hasSubmitted)
+                .padding(.horizontal)
+
+            if !hasSubmitted && !userInput.isEmpty {
+                Button("Submit") {
+                    hasSubmitted = true
+                    let action = A2UIAction(
+                        id: "submit-\(component.id)",
+                        trigger: .onSubmit,
+                        type: .submitAnswer,
+                        payload: ["answer": .string(userInput)],
+                        debounceMs: nil,
+                        hapticFeedback: nil
+                    )
+                    onAction?(action)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+            }
+
+            if hasSubmitted, let correct = component.props.correctAnswer?.stringValue {
+                let isCorrect = userInput.lowercased().trimmingCharacters(in: .whitespaces) == correct.lowercased().trimmingCharacters(in: .whitespaces)
+                HStack {
+                    Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(isCorrect ? .green : .red)
+                    Text(isCorrect ? "Correct!" : "The answer is: \(correct)")
+                        .foregroundColor(isCorrect ? .green : .red)
+                }
+                .padding(.horizontal)
+            }
+        }
+        .padding(.vertical, 12)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+}
+
+// MARK: - Short Answer Quiz Renderer
+
+struct A2UIQuizShortAnswerRenderer: View {
+    let component: A2UIComponent
+    let context: A2UIRenderContext
+    let onAction: ((A2UIAction) -> Void)?
+
+    @State private var userInput: String = ""
+    @State private var hasSubmitted = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(component.props.text ?? "Short answer:")
+                .font(.headline)
+                .padding(.horizontal)
+
+            if let hint = component.props.placeholder {
+                Text(hint)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+            }
+
+            TextEditor(text: $userInput)
+                .frame(minHeight: 80, maxHeight: 150)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(.systemGray4), lineWidth: 1)
+                )
+                .disabled(hasSubmitted)
+                .padding(.horizontal)
+
+            if !hasSubmitted && !userInput.isEmpty {
+                Button("Submit") {
+                    hasSubmitted = true
+                    let action = A2UIAction(
+                        id: "submit-\(component.id)",
+                        trigger: .onSubmit,
+                        type: .submitAnswer,
+                        payload: ["answer": .string(userInput)],
+                        debounceMs: nil,
+                        hapticFeedback: nil
+                    )
+                    onAction?(action)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+            }
+
+            if hasSubmitted {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Answer submitted!")
+                        .foregroundColor(.green)
+                }
+                .padding(.horizontal)
+            }
+        }
+        .padding(.vertical, 12)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+}

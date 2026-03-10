@@ -52,6 +52,40 @@ struct Beacon: Identifiable, Codable {
         case level
         case xp
     }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(BeaconType.self, forKey: .type)
+        latitude = try container.decode(Double.self, forKey: .latitude)
+        longitude = try container.decode(Double.self, forKey: .longitude)
+        
+        // Handle heterogeneous ID types (Int for events, UUID String for questions)
+        if let intId = try? container.decode(Int.self, forKey: .id) {
+            id = String(intId)
+        } else {
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+        }
+        
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        locationName = try container.decodeIfPresent(String.self, forKey: .locationName)
+        startTime = try container.decodeIfPresent(Date.self, forKey: .startTime)
+        endTime = try container.decodeIfPresent(Date.self, forKey: .endTime)
+        relevanceScore = try container.decodeIfPresent(Double.self, forKey: .relevanceScore)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        isResolved = try container.decodeIfPresent(Bool.self, forKey: .isResolved)
+        
+        // Handle heterogeneous UserId types
+        if let intUserId = try? container.decode(Int.self, forKey: .userId) {
+            userId = String(intUserId)
+        } else {
+            userId = try container.decodeIfPresent(String.self, forKey: .userId)
+        }
+        
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        recentTopics = try container.decodeIfPresent([String].self, forKey: .recentTopics)
+        level = try container.decodeIfPresent(Int.self, forKey: .level)
+        xp = try container.decodeIfPresent(Int.self, forKey: .xp)
+    }
 }
 
 struct CreateQuestionRequest: Codable {

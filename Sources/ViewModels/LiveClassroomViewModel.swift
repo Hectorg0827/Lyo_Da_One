@@ -503,25 +503,19 @@ final class LiveClassroomViewModel: ObservableObject {
         } catch {
             Log.classroom.error("LiveClassroom: Failed to fetch lesson from API: \(error.localizedDescription)")
             
-            // Only fall back to mock data if explicitly allowed
-            if AppConfig.allowMockFallbacks {
-                Log.classroom.info("   Using mock lesson (LYO_ALLOW_MOCKS=1)")
-                lesson = LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
+            // Surface the real error to user
+            if error is CancellationError {
+                Log.classroom.warning("LiveClassroom: lesson fetch cancelled")
+                if recoverFromLatestGeneratedCourse(courseId: courseId, lessonId: lessonId) {
+                    Log.classroom.info("LiveClassroom: Recovered cancelled fetch from local generated course")
+                }
+            } else if case APIError.unauthorized = error {
+                if isActiveLessonLoad(token: loadToken, key: loadKey) {
+                    errorMessage = "Please log in to access lessons"
+                }
             } else {
-                // Surface the real error to user
-                if error is CancellationError {
-                    Log.classroom.warning("LiveClassroom: lesson fetch cancelled")
-                    if recoverFromLatestGeneratedCourse(courseId: courseId, lessonId: lessonId) {
-                        Log.classroom.info("LiveClassroom: Recovered cancelled fetch from local generated course")
-                    }
-                } else if case APIError.unauthorized = error {
-                    if isActiveLessonLoad(token: loadToken, key: loadKey) {
-                        errorMessage = "Please log in to access lessons"
-                    }
-                } else {
-                    if isActiveLessonLoad(token: loadToken, key: loadKey) {
-                        errorMessage = "Failed to load lesson. Please check your connection."
-                    }
+                if isActiveLessonLoad(token: loadToken, key: loadKey) {
+                    errorMessage = "Failed to load lesson. Please check your connection."
                 }
             }
         }
@@ -1487,17 +1481,49 @@ final class LiveClassroomViewModel: ObservableObject {
         // Add FULL content from nextNodes (not just placeholders)
         for nextNode in playbackState.nextNodes {
             let nodeContent = nextNode.content
-            if let text = nodeContent["text"]?.value as? String, !text.isEmpty {
+            
+            // Map the generic node type to our LessonBlockType
+            let blockType: LessonBlockType
+            switch nextNode.nodeType {
+            case "heading": blockType = .heading
+            case "image": blockType = .image
+            case "code": blockType = .code
+            case "quiz", "interaction": blockType = .quizMcq
+            case "callout": blockType = .callout
+            case "summary": blockType = .summary
+            case "video": blockType = .video
+            default: blockType = .paragraph
+            }
+            
+            if nextNode.nodeType == "interaction" || nextNode.nodeType == "quiz",
+               let prompt = nodeContent["prompt"]?.value as? String,
+               let optionsArray = nodeContent["options"]?.value as? [[String: Any]] {
+                
+                let optionLabels = optionsArray.compactMap { $0["label"] as? String }
+                let correctIdx = optionsArray.firstIndex { ($0["is_correct"] as? Bool) == true }
+                let explanation = nodeContent["explanation"]?.value as? String
+                
                 blocks.append(LessonBlock(
                     id: nextNode.id,
-                    type: .paragraph,
+                    type: .quizMcq,
+                    title: prompt,
+                    options: optionLabels,
+                    correctIndex: correctIdx,
+                    explanation: explanation
+                ))
+            } else if let text = nodeContent["text"]?.value as? String, !text.isEmpty {
+                blocks.append(LessonBlock(
+                    id: nextNode.id,
+                    type: blockType,
                     title: nodeContent["title"]?.value as? String ?? nextNode.title,
-                    content: text
+                    content: text,
+                    imageURL: (nodeContent["imageUrl"]?.value as? String).flatMap { URL(string: $0) },
+                    language: nodeContent["language"]?.value as? String
                 ))
             } else if let narration = nodeContent["narration"]?.value as? String {
                 blocks.append(LessonBlock(
                     id: nextNode.id,
-                    type: .paragraph,
+                    type: blockType,
                     title: nextNode.title,
                     content: narration
                 ))

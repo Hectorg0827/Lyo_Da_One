@@ -249,16 +249,16 @@ final class UnifiedChatService: ObservableObject {
             )
 
             // Safety timeout: if the deep-path pipeline hasn't delivered content
-            // within 90s, clear loading state so the UI isn't stuck forever.
+            // within 45s, clear loading state so the UI isn't stuck forever.
             // The deep path (3-layer multi-agent pipeline) can legitimately take
-            // 40-60s, so 90s gives plenty of headroom.
+            // 20-30s, so 45s gives enough headroom before treating as a failure.
             // This task is CANCELLED by handleLyo2Event when real content arrives.
             streamTimeoutTask?.cancel()
             streamTimeoutTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 90_000_000_000)  // 90 seconds
+                try? await Task.sleep(nanoseconds: 45_000_000_000)  // 45 seconds
                 guard !Task.isCancelled else { return }
                 guard let self, self.isLoading else { return }
-                // Still loading after 90s → stream likely failed silently
+                // Still loading after 45s → stream likely failed silently
                 self.isLoading = false
                 // Replace the skeleton placeholder (if it exists) instead of
                 // appending a duplicate message with the same ID.
@@ -283,7 +283,7 @@ final class UnifiedChatService: ObservableObject {
                     )
                     self.messages.append(timeoutMsg)
                 }
-                Log.ai.warning("⏰ Stream timeout — cleared loading state after 90s")
+                Log.ai.warning("⏰ Stream timeout — cleared loading state after 45s")
             }
 
         case .error(let message):
@@ -752,50 +752,6 @@ final class UnifiedChatService: ObservableObject {
             conversationHistory.append(ConversationMessage(role: "assistant", content: text))
             Task { await saveConversation() }
 
-        case .actions(let blocks):
-            Log.ai.info("️ Actions received: \(blocks.count)")
-            var newSuggestions: [SuggestionChip] = []
-
-            for block in blocks {
-                if block.blockType == .ctaRow {
-                    // Backend sends "actions" array of strings for CTA buttons
-                    if let actions = block.content["actions"]?.value as? [String] {
-                        for label in actions {
-                            newSuggestions.append(
-                                SuggestionChip(
-                                    id: UUID().uuidString,
-                                    text: label,
-                                    icon: Self.iconForChipLabel(label),
-                                    actionType: nil,
-                                    context: nil
-                                ))
-                        }
-                    }
-                    // Also check legacy "buttons" format
-                    if let buttons = block.content["buttons"]?.value as? [[String: Any]] {
-                        for btn in buttons {
-                            if let label = btn["label"] as? String {
-                                newSuggestions.append(
-                                    SuggestionChip(
-                                        id: UUID().uuidString,
-                                        text: label,
-                                        icon: Self.iconForChipLabel(label),
-                                        actionType: btn["action_type"] as? String,
-                                        context: nil
-                                    ))
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !newSuggestions.isEmpty {
-                self.suggestions = newSuggestions
-                Log.ai.info("Set \(newSuggestions.count) suggestion chips")
-            } else {
-                self.suggestions = []
-            }
-
         case .error(let message):
             // ✅ Stream error — cancel the safety timeout
             streamTimeoutTask?.cancel()
@@ -832,113 +788,6 @@ final class UnifiedChatService: ObservableObject {
             }
             self.error = message
             isLoading = false
-
-        case .openClassroom(let block):
-            Log.ai.info(
-                "📋 OPEN_CLASSROOM stream event — showing proposal card (user must tap Start Class)")
-            if let coursePayload = tryDecodeOpenClassroom(from: block) {
-                // Show interactive proposal card — user chooses Start Class / Save to Stack / Refine Course
-                let proposalContent =
-                    "Here's your course proposal! Tap **Start Class** to begin, **Save to Stack** to save for later, or **Refine Course** to adjust. 🎓"
-                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    let proposalMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: messages[idx].sessionId,
-                        content: proposalContent,
-                        isFromUser: false,
-                        timestamp: messages[idx].timestamp,
-                        contentTypes: [.courseProposal(payload: coursePayload)]
-                    )
-                    messages[idx] = proposalMsg
-                } else {
-                    let proposalMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: currentConversationId,
-                        content: proposalContent,
-                        isFromUser: false,
-                        timestamp: Date(),
-                        contentTypes: [.courseProposal(payload: coursePayload)]
-                    )
-                    messages.append(proposalMsg)
-                }
-                Task { await saveConversation() }
-            }
-
-        case .a2ui(let block):
-            Log.ai.info("🎨 A2UI stream event received!")
-            // Decode the A2UI component first — this IS an A2UI event.
-            // Only check for classroom intent if the decoded component signals it
-            // (open_classroom arrives as a SEPARATE SSE event type handled by .openClassroom above).
-            if let a2uiComponent = tryDecodeA2UIComponent(from: block) {
-                // Check if this A2UI component carries an open_classroom intent
-                if let coursePayload = extractCourseFromComponent(a2uiComponent) {
-                    Log.ai.info(
-                        "📋 A2UI component has classroom intent — showing proposal card (no auto-navigate)"
-                    )
-                    if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                        var currentTypes = messages[idx].contentTypes ?? []
-                        currentTypes.removeAll {
-                            if case .processing = $0 { return true } else { return false }
-                        }
-                        currentTypes.append(.courseProposal(payload: coursePayload))
-                        currentTypes = normalizeContentTypes(currentTypes)
-
-                        let proposalMsg = LyoMessage(
-                            id: aiMessageId,
-                            sessionId: messages[idx].sessionId,
-                            content: messages[idx].content,
-                            isFromUser: false,
-                            timestamp: messages[idx].timestamp,
-                            contentTypes: currentTypes
-                        )
-                        messages[idx] = proposalMsg
-                    } else {
-                        let proposalMsg = LyoMessage(
-                            id: aiMessageId,
-                            sessionId: currentConversationId,
-                            content: "",
-                            isFromUser: false,
-                            timestamp: Date(),
-                            contentTypes: [.courseProposal(payload: coursePayload)]
-                        )
-                        messages.append(proposalMsg)
-                    }
-                } else {
-                    // Regular A2UI component (card, quiz, flashcard, etc.)
-                    Log.ai.info("🎨 Rendering A2UI component: type=\(a2uiComponent.type.rawValue)")
-                    if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                        var currentTypes = messages[idx].contentTypes ?? []
-                        currentTypes.removeAll {
-                            if case .processing = $0 { return true } else { return false }
-                        }
-                        currentTypes.append(.a2ui(component: a2uiComponent))
-                        currentTypes = normalizeContentTypes(currentTypes)
-
-                        let a2uiMsg = LyoMessage(
-                            id: aiMessageId,
-                            sessionId: messages[idx].sessionId,
-                            content: messages[idx].content,
-                            isFromUser: false,
-                            timestamp: messages[idx].timestamp,
-                            contentTypes: currentTypes
-                        )
-                        messages[idx] = a2uiMsg
-                    } else {
-                        let a2uiMsg = LyoMessage(
-                            id: aiMessageId,
-                            sessionId: currentConversationId,
-                            content: "",
-                            isFromUser: false,
-                            timestamp: Date(),
-                            contentTypes: [.a2ui(component: a2uiComponent)]
-                        )
-                        messages.append(a2uiMsg)
-                    }
-                }
-                Task { await saveConversation() }
-            } else {
-                Log.ai.warning("🎨 ⚠️ Could not decode A2UI component from block")
-            }
 
         // ── v2 events (LyoResponse envelope) ──────────────────────
 
@@ -1277,38 +1126,6 @@ final class UnifiedChatService: ObservableObject {
         Log.ai.info("🎬 Revealed artifact message: \(id)")
     }
 
-    /// Recursively convert arbitrary Swift values into JSON-serializable Foundation types.
-    /// - Converts dictionaries and arrays recursively.
-    /// - Converts enum `A2UIElementType` values to their raw `String` representation.
-    /// - Leaves String/NSNumber/NSNull as-is. Falls back to `String(describing:)` for others.
-    private func makeJSONSafe(_ value: Any) -> Any {
-        // Handle dictionaries
-        if let dict = value as? [String: Any] {
-            var out: [String: Any] = [:]
-            for (k, v) in dict { out[k] = makeJSONSafe(v) }
-            return out
-        }
-        // Handle arrays
-        if let array = value as? [Any] {
-            return array.map { makeJSONSafe($0) }
-        }
-        // Specific handling for A2UIElementType enum → use rawValue
-        if let elementType = value as? A2UIElementType {
-            return elementType.rawValue
-        }
-        // Pass through JSON primitives
-        if value is String || value is NSNumber || value is NSNull {
-            return value
-        }
-        // Bridge common Swift numeric types to NSNumber
-        if let intVal = value as? Int { return NSNumber(value: intVal) }
-        if let doubleVal = value as? Double { return NSNumber(value: doubleVal) }
-        if let floatVal = value as? Float { return NSNumber(value: floatVal) }
-        if let boolVal = value as? Bool { return NSNumber(value: boolVal) }
-
-        // Fallback: stringify unknown types
-        return String(describing: value)
-    }
 
     /// Try to decode an A2UIComponent from a Lyo2UIBlock's content dictionary.
     ///
@@ -1323,8 +1140,8 @@ final class UnifiedChatService: ObservableObject {
         ]
         for key in possibleKeys {
             if let rawVal = block.content[key]?.value {
-                // Sanitize values (convert enums and non-JSON types to JSON-safe forms)
-                let sanitized = makeJSONSafe(rawVal)
+                // Sanitize values using standard AnyCodable sanitation
+                let sanitized = AnyCodable.sanitizeForJSON(rawVal)
                 if JSONSerialization.isValidJSONObject(sanitized),
                     let data = try? JSONSerialization.data(withJSONObject: sanitized),
                     let component = try? JSONDecoder().decode(A2UIComponent.self, from: data)
@@ -1354,21 +1171,20 @@ final class UnifiedChatService: ObservableObject {
         // Fallback: try decoding the entire content dict directly as an A2UIComponent.
         // The backend sometimes places component fields at the root of "content" without a wrapper key.
         // BUG-B FIX: only require "type" (id is generated by A2UIComponent's custom decoder).
-        let rawContentDict = block.content.mapValues { $0.value }
-        if rawContentDict["type"] != nil {
-            let sanitizedAny = makeJSONSafe(rawContentDict)
-            let sanitized = (sanitizedAny as? [String: Any]) ?? rawContentDict
+        if block.content["type"] != nil {
+            let rawDict = block.content.mapValues { $0.value }
+            let sanitized = AnyCodable.sanitizeForJSON(rawDict)
+            
             if JSONSerialization.isValidJSONObject(sanitized),
-                let data = try? JSONSerialization.data(withJSONObject: sanitized),
-                let component = try? JSONDecoder().decode(A2UIComponent.self, from: data)
-            {
-                Log.ai.info(
-                    "🎨 ✅ Decoded A2UIComponent from root content dict: type=\(component.type.rawValue)"
-                )
+               let data = try? JSONSerialization.data(withJSONObject: sanitized),
+               let component = try? JSONDecoder().decode(A2UIComponent.self, from: data) {
+                Log.ai.info("🎨 ✅ Decoded A2UIComponent from root content dict: type=\(component.type.rawValue)")
                 return component
+            } else {
+                Log.ai.warning("🎨 ⚠️ Root content contained 'type' but failed to decode as A2UIComponent")
             }
         }
-
+        
         return nil
     }
 

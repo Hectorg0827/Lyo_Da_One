@@ -143,8 +143,8 @@ struct CreateStoryRequest: Codable {
 // MARK: - Discovery Models
 
 struct Discovery: Identifiable, Codable {
-    let id: String
-    let userId: String
+    let id: Int
+    let userId: Int
     let userName: String?
     let title: String
     let description: String?
@@ -158,17 +158,17 @@ struct Discovery: Identifiable, Codable {
     
     enum CodingKeys: String, CodingKey {
         case id
-        case userId = "user_id"
-        case userName = "user_name"
+        case userId = "userId"
+        case userName = "authorName"
         case title
         case description
-        case thumbnailURL = "thumbnail_url"
-        case videoURL = "video_url"
-        case likes
-        case views
-        case isLiked = "is_liked"
-        case isSaved = "is_saved"
-        case createdAt = "created_at"
+        case thumbnailURL = "thumbnailURL"
+        case videoURL = "videoURL"
+        case likes = "likeCount"
+        case views = "viewCount"
+        case isLiked = "isLiked"
+        case isSaved = "isSaved"
+        case createdAt = "createdAt"
     }
 }
 
@@ -262,7 +262,8 @@ struct DiscoveriesResponse: Codable {
     enum CodingKeys: String, CodingKey {
         case discoveries
         case items
-        case posts // fallback if backend uses "posts"
+        case posts 
+        case clips // backend use "clips"
         case total
         case hasMore = "has_more"
     }
@@ -277,6 +278,8 @@ struct DiscoveriesResponse: Codable {
             self.discoveries = items
         } else if let posts = try container.decodeIfPresent([Discovery].self, forKey: .posts) {
             self.discoveries = posts
+        } else if let clips = try container.decodeIfPresent([Discovery].self, forKey: .clips) {
+            self.discoveries = clips
         } else {
             self.discoveries = []
         }

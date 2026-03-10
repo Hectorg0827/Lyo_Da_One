@@ -1274,40 +1274,9 @@ class LyoAIViewModel: ObservableObject {
             self.continueCards = []
         } catch {
             Log.ai.error("Error loading course cards: \(error)")
-
-            if AppConfig.allowMockFallbacks {
-                self.startedCards = [
-                    CourseCard(
-                        id: "c1",
-                        title: "Python for Data Science",
-                        description: "Master Python libraries for data analysis",
-                        coverURL: nil,
-                        progress: 0.45,
-                        timeLeft: "2h left",
-                        lastOpened: Date(),
-                        tags: ["Python", "Data"],
-                        status: .started
-                    )
-                ]
-                self.suggestedCards = [
-                    CourseCard(
-                        id: "c2",
-                        title: "SwiftUI Mastery",
-                        description: "Build beautiful iOS apps",
-                        coverURL: nil,
-                        progress: 0,
-                        timeLeft: "10h",
-                        lastOpened: nil,
-                        tags: ["iOS", "Swift"],
-                        status: .suggested
-                    )
-                ]
-                self.continueCards = []
-            } else {
-                self.startedCards = []
-                self.suggestedCards = []
-                self.continueCards = []
-            }
+            self.startedCards = []
+            self.suggestedCards = []
+            self.continueCards = []
         }
     }
 

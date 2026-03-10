@@ -131,9 +131,9 @@ final class DiscoverViewModel: ObservableObject {
         Task { 
             do {
                 if updatedItem.isLiked {
-                    try await DiscoveryService.shared.likeDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.likeDiscovery(discoveryId: Int(item.id) ?? 0)
                 } else {
-                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: Int(item.id) ?? 0)
                 }
             } catch {
                 print("Failed to toggle like: \(error)")
@@ -164,9 +164,9 @@ final class DiscoverViewModel: ObservableObject {
         Task {
             do {
                 if updatedItem.isSaved {
-                    try await DiscoveryService.shared.saveDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.saveDiscovery(discoveryId: Int(item.id) ?? 0)
                 } else {
-                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: Int(item.id) ?? 0)
                 }
             } catch {
                 // Revert on failure

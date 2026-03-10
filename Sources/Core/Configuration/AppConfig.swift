@@ -146,14 +146,15 @@ struct AppConfig {
 
     /// When true, responses using A2UI v2 primitives are rendered via the new
     /// primitive renderer. When false, everything goes through the legacy renderer.
+    /// Phase 5 cutover: v2 is now the default. Set LYO_A2UI_V2=0 to revert.
     static var isA2UIv2Enabled: Bool {
-        ProcessInfo.processInfo.environment["LYO_A2UI_V2"] == "1"
+        ProcessInfo.processInfo.environment["LYO_A2UI_V2"] != "0"
     }
 
     /// When enabled, the app may fall back to local/mock responses on backend failures.
     /// Default is OFF so failures surface during real backend integration.
     static var allowMockFallbacks: Bool {
-        ProcessInfo.processInfo.environment["LYO_ALLOW_MOCKS"] == "1"
+        return false // Forced false for Market Readiness
     }
 
     // Debug-only features

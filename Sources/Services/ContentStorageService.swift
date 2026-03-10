@@ -168,7 +168,7 @@ class ContentStorageService: ObservableObject {
         updateProgress(1.0, "Complete!")
 
         return CreatedContent(
-            id: discovery.id,
+            id: String(discovery.id),
             type: type,
             title: title,
             description: description,

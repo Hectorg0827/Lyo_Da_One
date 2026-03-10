@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E5A1B2C3D4F5A6B7C8D9E0F1 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* EmptyStateView.swift */; };
 		FF5CAE0CC2D3CF01BA931F82 /* VoiceSessionBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9963FF567039D863373AFE /* VoiceSessionBottomSheet.swift */; };
 		84405AC46A6FBCBAAA223FAC /* NotebookOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABEDEF9F76FD2CBA53BB5DFA /* NotebookOverlayView.swift */; };
 		538C08E40130CFAEF0C13343 /* LyoThinkingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44BFAE2341C82D42965A29D5 /* LyoThinkingView.swift */; };
@@ -497,6 +498,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		FF9963FF567039D863373AFE /* VoiceSessionBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionBottomSheet.swift; sourceTree = "<group>"; };
 		ABEDEF9F76FD2CBA53BB5DFA /* NotebookOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookOverlayView.swift; sourceTree = "<group>"; };
 		44BFAE2341C82D42965A29D5 /* LyoThinkingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoThinkingView.swift; sourceTree = "<group>"; };
@@ -1820,6 +1822,7 @@
 		DA02E132759FB6402370DD67 /* Common */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* EmptyStateView.swift */,
 				FCF0A776CE6FEDA447611481 /* DiscoverCardView.swift */,
 				831670FE41E921A471D9CC03 /* DocumentPickerView.swift */,
 				532AD8931650A03C81E366F7 /* FlowLayout.swift */,
@@ -2128,6 +2131,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E5A1B2C3D4F5A6B7C8D9E0F1 /* EmptyStateView.swift in Sources */,
 				440DDF8B0D789E1FD7433FF6 /* InsightsDashboardView.swift in Sources */,
 				B5D4A2123974EEB34B861920 /* GoalsView.swift in Sources */,
 				20D31D61BF6088B22C8A52A3 /* A2UIHomeworkRenderers.swift in Sources */,

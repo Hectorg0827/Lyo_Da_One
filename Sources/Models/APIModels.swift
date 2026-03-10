@@ -620,32 +620,44 @@ struct EmptyResponse: Codable {
 }
 
 struct CommunityEvent: Codable, Identifiable {
-    let id: String
+    let id: Int
     let title: String
     let description: String
     let eventType: String
     let startTime: Date
     let endTime: Date?
     let location: String?
-    let hostId: String?
+    let organizerId: Int?
     let hostName: String?
     let attendeeCount: Int
     let maxAttendees: Int?
     let isOnline: Bool
     let imageUrl: String?
+    let organizerProfile: UserPreview?
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, location
         case eventType = "event_type"
         case startTime = "start_time"
         case endTime = "end_time"
-        case hostId = "host_id"
+        case organizerId = "organizer_id"
         case hostName = "host_name"
         case attendeeCount = "attendee_count"
         case maxAttendees = "max_attendees"
         case isOnline = "is_online"
         case imageUrl = "image_url"
+        case organizerProfile = "organizer_profile"
     }
+    
+    var effectiveHostName: String {
+        return hostName ?? organizerProfile?.name ?? "Unknown"
+    }
+}
+
+struct UserPreview: Codable {
+    let id: Int
+    let name: String
+    let avatar: String?
 }
 
 struct CommunityQuestion: Codable, Identifiable {

@@ -68,7 +68,7 @@ class CourseGenerationService: ObservableObject {
             guard let self else { return }
             
             var fastPollCount = 0
-            let maxPolls = 120 // 120 × 3 sec = 6 min absolute max
+            let maxPolls = 25 // 10×2s + 15×5s = ~95 seconds absolute max
             var pollCount = 0
             
             while !Task.isCancelled && pollCount < maxPolls {

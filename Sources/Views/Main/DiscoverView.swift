@@ -208,31 +208,11 @@ struct DiscoverView: View {
     // MARK: - Empty State
     
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.05))
-                    .frame(width: 100, height: 100)
-                
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white.opacity(0.4))
-            }
-            
-            VStack(spacing: 8) {
-                Text("No results found")
-                    .font(.title3.bold())
-                    .foregroundColor(.white)
-                
-                Text("Try a different search term")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.6))
-            }
-            
-            Spacer()
-        }
+        EmptyStateView(
+            iconName: "magnifyingglass",
+            title: "No results found",
+            message: "Try a different search term or check back later for new discoveries."
+        )
     }
     
     // MARK: - Actions

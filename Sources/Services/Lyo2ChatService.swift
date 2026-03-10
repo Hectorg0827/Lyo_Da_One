@@ -337,54 +337,11 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     Log.ai.warning("Failed to extract block data from artifact event")
                 }
                 
-            case "actions":
-                didReceiveContentEvent = true
-                if let blocksArray = json["blocks"] as? [[String: Any]] {
-                    var blocks: [Lyo2UIBlock] = []
-                    for dict in blocksArray {
-                        if let d = try? JSONSerialization.data(withJSONObject: dict),
-                           let block = try? JSONDecoder().decode(Lyo2UIBlock.self, from: d) {
-                            blocks.append(block)
-                        }
-                    }
-                    if !blocks.isEmpty {
-                        callback?(.actions(blocks: blocks))
-                    }
-                }
-                
             case "error":
                 let msg = json["message"] as? String ?? "Unknown server error"
                 callback?(.error(message: msg))
-                
-            case "open_classroom":
-                // Backend explicitly signals course creation
-                didReceiveContentEvent = true
-                if let blockDict = json["block"],
-                   let blockData = try? JSONSerialization.data(withJSONObject: blockDict) {
-                    do {
-                        let block = try JSONDecoder().decode(Lyo2UIBlock.self, from: blockData)
-                        Log.ai.info("Lyo2 SSE: open_classroom event received")
-                        callback?(.openClassroom(block: block))
-                    } catch {
-                        Log.ai.error("Lyo2 Decoding Error (OpenClassroom): \(error)")
-                    }
-                }
-                
-            case "a2ui":
-                // Backend sends a full A2UI component tree
-                didReceiveContentEvent = true
-                if let blockDict = json["block"],
-                   let blockData = try? JSONSerialization.data(withJSONObject: blockDict) {
-                    do {
-                        let block = try JSONDecoder().decode(Lyo2UIBlock.self, from: blockData)
-                        Log.ai.info("🎨 Lyo2 SSE: a2ui event received")
-                        callback?(.a2ui(block: block))
-                    } catch {
-                        Log.ai.error("Lyo2 Decoding Error (A2UI): \(error)")
-                    }
-                }
 
-            // ── v2 events (LyoResponse envelope) ──────────────────────
+            // ── v2 events (LyoResponse envelope — primary path) ──────
 
             case "lyo_ui":
                 didReceiveContentEvent = true
