@@ -10,6 +10,9 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
     @Published var isSpeaking: Bool = false
     var onSpeechFinished: (() -> Void)?
     
+    private var currentPitchMultiplier: Float = 1.0
+    private var currentRateMultiplier: Float = 1.0
+    
     override init() {
         super.init()
         synthesizer.delegate = self
@@ -20,6 +23,26 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             Log.audio.error("Failed to configure audio session: \(error)")
+        }
+    }
+    
+    func setEmotion(_ emotion: String) {
+        switch emotion.lowercased() {
+        case "warm":
+            currentPitchMultiplier = 1.05
+            currentRateMultiplier = 0.95
+        case "excited":
+            currentPitchMultiplier = 1.15
+            currentRateMultiplier = 1.1
+        case "frustrated":
+            currentPitchMultiplier = 0.9
+            currentRateMultiplier = 0.9
+        case "confused":
+            currentPitchMultiplier = 1.05
+            currentRateMultiplier = 0.85
+        default: // neutral
+            currentPitchMultiplier = 1.0
+            currentRateMultiplier = 1.0
         }
     }
     
@@ -51,8 +74,8 @@ class TextToSpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelega
         let text = speechQueue.removeFirst()
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.pitchMultiplier = 1.0
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * currentRateMultiplier
+        utterance.pitchMultiplier = currentPitchMultiplier
         utterance.volume = 1.0
         
         synthesizer.speak(utterance)

@@ -221,23 +221,8 @@ struct LiveClassroomView: View {
         ZStack {
             if viewModel.isLoading {
                 loadingView
-            } else if let a2uiComp = viewModel.fullA2UIComponent {
-                // Full A2UI Rendering (PRIMARY — server-driven UI with 120+ component types)
-                ScrollView {
-                    A2UIRenderer(
-                        component: a2uiComp,
-                        context: A2UIRenderContext(),
-                        onAction: { action, component in
-                            Task { await viewModel.handleA2UIAction(action.id) }
-                        }
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 20)
-                    .padding(.bottom, 120)
-                }
-                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
             } else if let block = viewModel.currentBlock {
-                // Block-based rendering (FALLBACK — the proven workhorse with 27+ block types)
+                // Block-based rendering (the proven workhorse with 27+ block types)
                 // Takes priority over errorMessage — if we have local content, show it
                 blockContentView(block: block)
                     .id(block.id)
@@ -342,7 +327,7 @@ struct LiveClassroomView: View {
     // MARK: - Block Content View
     
     @ViewBuilder
-    private func blockContentView(block: LessonBlock) -> some View {
+    private func blockContentView(block: LiveLessonBlock) -> some View {
         ScrollView {
             VStack(spacing: 24) {
                 // Glass Card Container

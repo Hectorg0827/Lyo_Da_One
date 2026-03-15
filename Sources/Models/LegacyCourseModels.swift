@@ -60,3 +60,46 @@ struct CourseGenerationRequest: Codable {
         case teachingStyle = "teaching_style"
     }
 }
+
+// MARK: - Legacy Course Types (Compatibility Shim)
+//
+// Consolidated from LegacyCourseTypes.swift to resolve type ambiguity errors.
+
+// MARK: - BackendCourseResult (nested inside CourseGenerationService for backward compatibility)
+
+extension CourseGenerationService {
+    struct BackendCourseResult: Codable {
+        let courseId: String
+        let title: String
+        let description: String
+        let modules: [BackendModule]
+        let estimatedDuration: Int
+        let difficulty: String
+        
+        struct BackendModule: Codable {
+            let id: String
+            let title: String
+            let description: String
+            let lessons: [BackendLesson]
+        }
+        
+        struct BackendLesson: Codable {
+            let id: String
+            let title: String
+            let content: String
+            let durationMinutes: Int
+            
+            enum CodingKeys: String, CodingKey {
+                case id, title, content
+                case durationMinutes = "duration_minutes"
+            }
+        }
+        
+        enum CodingKeys: String, CodingKey {
+            case courseId = "course_id"
+            case title, description, modules
+            case estimatedDuration = "estimated_duration"
+            case difficulty
+        }
+    }
+}

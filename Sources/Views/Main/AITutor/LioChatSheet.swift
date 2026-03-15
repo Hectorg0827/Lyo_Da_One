@@ -11,20 +11,26 @@ struct LioChatSheet: View {
     @State private var errorMessage: String?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showMasteryProfile = false
-    @State private var isArtifactExpanded: Bool = true
-    /// Tracks the ID of the artifact the user explicitly dismissed, so Combine re-firing
-    /// the same component doesn't immediately re-show the pane.
-    @State private var dismissedArtifactId: String? = nil
     
     // Current mode for display
     private var currentModeName: String {
+        if let explicit = viewModel.selectedIntent {
+            switch explicit {
+            case "STUDY_PLAN": return "Study Plan"
+            case "QUIZ": return "Quiz"
+            case "CHAT": return "Chat"
+            case "COURSE": return "Course"
+            default: return "Auto"
+            }
+        }
+        
         // This could be enhanced to reflect actual mode state
         // For now, using the tab context
         switch uiState.currentTab {
         case .focus: return "Study"
         case .discover: return "Explore"
         case .campus: return "Chat"
-        default: return "Study"
+        default: return "Auto"
         }
     }
     
@@ -117,20 +123,6 @@ struct LioChatSheet: View {
             VStack(spacing: 0) {
                 // Custom Header
                 headerView
-
-                // ── Artifact Pane (pinned, collapsible) ─────────────────────
-                if let artifact = viewModel.activeArtifact, artifact.id != dismissedArtifactId {
-                    artifactPane(component: artifact)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isArtifactExpanded)
-                        // Reset dismiss state whenever a brand-new artifact arrives
-                        .onChange(of: artifact.id) { _, newId in
-                            if newId != dismissedArtifactId {
-                                dismissedArtifactId = nil
-                                isArtifactExpanded = true
-                            }
-                        }
-                }
 
                 // Messages area
                 chatMessagesArea
@@ -230,20 +222,11 @@ struct LioChatSheet: View {
             },
             isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
             audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
-            onA2UICourseStart: { course in
-                let payload = CoursePayload(
-                    id: nil,
-                    title: course.title,
-                    topic: course.topic,
-                    level: course.level,
-                    language: nil,
-                    duration: nil,
-                    objectives: course.modules.map { $0.title }
-                )
-                AICommandHandler.shared.executeOpenClassroom(for: payload)
+            onSmartBlockQuizAnswer: { question, selected, isCorrect in
+                viewModel.reportQuizResult(question: question, selectedAnswer: selected, isCorrect: isCorrect)
             },
-            onA2UIQuizAnswer: { question, answerIndex in
-                viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+            onSmartBlockTestPrepScheduled: { date, course, desc, attachmentIds in
+                viewModel.handleTestPrepScheduled(date: date, course: course, description: desc, attachmentIds: attachmentIds)
             },
             mascotNamespace: mascotAnimation
         )
@@ -303,159 +286,6 @@ struct LioChatSheet: View {
         .padding(.top, 16)
         .padding(.bottom, 8)
         .background(Material.thinMaterial)
-    }
-
-    // MARK: - Artifact Pane
-
-    /// Pinned "Claw"-style artifact pane — shows the active A2UI component above the chat stream.
-    /// The user can collapse it to a compact handle or dismiss it entirely.
-    @ViewBuilder
-    private func artifactPane(component: A2UIComponent) -> some View {
-        VStack(spacing: 0) {
-            // Drag handle / collapse row
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundColor(.blue)
-                Text("Artifact")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        isArtifactExpanded.toggle()
-                    }
-                } label: {
-                    Image(systemName: isArtifactExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .padding(6)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-                // Dismiss / clear artifact for this session
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        dismissedArtifactId = component.id
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .padding(6)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(white: 0.1))
-
-            // Expanded content area
-            if isArtifactExpanded {
-                Group {
-                    if component.type.isCourseArtifact {
-                        // Rich course-specific artifact view
-                        CourseArtifactView(
-                            component: component,
-                            onAction: { action in
-                                handleArtifactAction(action)
-                            }
-                        )
-                        .padding(.horizontal, 4)
-                    } else {
-                        ScrollView {
-                            A2UIRenderer(
-                                component: component,
-                                onAction: { action, _ in
-                                    handleArtifactAction(action)
-                                }
-                            )
-                            .padding(12)
-                        }
-                    }
-                }
-                .frame(maxHeight: 320)
-                .background(Color(white: 0.08))
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            Divider().background(Color.white.opacity(0.12))
-        }
-    }
-
-    /// Shared handler for A2UI actions fired from the Artifact Pane.
-    /// Routes action semantics back to the chat or triggers navigation.
-    private func handleArtifactAction(_ action: A2UIAction) {
-        Log.ai.info("🎨 Artifact action tapped: \(action.type.rawValue)")
-
-        // ── COURSE LAUNCH ─────────────────────────────────────────────────────
-        // When the user taps "Start Learning" in CourseArtifactView, fire the
-        // classroom directly instead of routing back through chat.
-        if action.type == .startStudy,
-           let props = viewModel.activeArtifact?.props {
-            let courseTitle = props.title ?? props.courseName ?? "Course"
-            let coursePayload = CoursePayload(
-                id: nil,
-                title: courseTitle,
-                topic: props.courseName ?? props.title ?? courseTitle,
-                level: props.level ?? "beginner",
-                language: nil,
-                duration: props.estimatedDuration.map { "\($0) min" },
-                objectives: props.objectives ?? []
-            )
-            AICommandHandler.shared.executeOpenClassroom(for: coursePayload)
-            // Award XP + show badge on the way out
-            viewModel.pushCompletionBadge(
-                title: "Course Started! 🚀",
-                subtitle: courseTitle,
-                xp: 50
-            )
-            return
-        }
-
-        let messageText: String? = {
-            if let payload = action.payload {
-                if let text = payload["message"]?.value as? String { return text }
-                if let text = payload["label"]?.value as? String { return text }
-                if let text = payload["query"]?.value as? String { return text }
-            }
-            return nil
-        }()
-
-        // ── QUIZ ANSWER ───────────────────────────────────────────────────────
-        // When the user picks a quiz option, award XP before sending to chat.
-        if action.type == .sendMessage,
-           let id = action.payload?["id"]?.value as? String,
-           id.hasPrefix("quiz_") {
-            let isCorrect = action.payload?["is_correct"]?.value as? Bool ?? false
-            viewModel.awardQuizAnswerXP(isCorrect: isCorrect)
-        }
-
-        switch action.type {
-        case .sendMessage, .askAI, .requestHint, .requestExplanation:
-            if let text = messageText, !text.isEmpty {
-                viewModel.inputText = text
-                Task { await viewModel.sendMessage() }
-            }
-        case .startStudy, .navigate:
-            if let text = messageText, !text.isEmpty {
-                viewModel.inputText = text
-                Task { await viewModel.sendMessage() }
-            } else if let courseId = action.payload?["course_id"]?.value as? String {
-                Log.ai.info("🎨 Artifact: navigate to course \(courseId)")
-                NotificationCenter.default.post(
-                    name: .init("OpenClassroomById"),
-                    object: nil,
-                    userInfo: ["courseId": courseId]
-                )
-            }
-        default:
-            if let text = messageText {
-                viewModel.inputText = text
-                Task { await viewModel.sendMessage() }
-            }
-        }
     }
 
     private var modeIndicator: some View {
@@ -708,17 +538,25 @@ struct LioChatSheet: View {
                 
                 // Middle: Mode Selector
                 Menu {
-                    Button(action: { /* Switch to Study mode */ }) {
-                        Label("Study", systemImage: "book.fill")
+                    Button(action: { viewModel.selectedIntent = nil }) {
+                        Label("Auto", systemImage: "sparkles")
+                        if viewModel.selectedIntent == nil { Image(systemName: "checkmark") }
                     }
-                    Button(action: { /* Switch to Quiz mode */ }) {
+                    Button(action: { viewModel.selectedIntent = "STUDY_PLAN" }) {
+                        Label("Study Plan", systemImage: "book.fill")
+                        if viewModel.selectedIntent == "STUDY_PLAN" { Image(systemName: "checkmark") }
+                    }
+                    Button(action: { viewModel.selectedIntent = "QUIZ" }) {
                         Label("Quiz", systemImage: "questionmark.circle")
+                        if viewModel.selectedIntent == "QUIZ" { Image(systemName: "checkmark") }
                     }
-                    Button(action: { /* Switch to Chat mode */ }) {
+                    Button(action: { viewModel.selectedIntent = "CHAT" }) {
                         Label("Chat", systemImage: "message")
+                        if viewModel.selectedIntent == "CHAT" { Image(systemName: "checkmark") }
                     }
-                    Button(action: { /* Switch to Course mode */ }) {
+                    Button(action: { viewModel.selectedIntent = "COURSE" }) {
                         Label("Course", systemImage: "graduationcap")
+                        if viewModel.selectedIntent == "COURSE" { Image(systemName: "checkmark") }
                     }
                 } label: {
                     HStack(spacing: 6) {

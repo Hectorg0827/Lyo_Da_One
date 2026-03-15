@@ -135,26 +135,28 @@ struct ChapterProgressBar: View {
 
 // MARK: - Preview
 
-#Preview {
-    ZStack {
-        Color.black.ignoresSafeArea()
-        
-        VStack {
-            ChapterProgressBar(
-                chapters: [
-                    ChapterSegment(title: "Intro",     color: Color(hex: "42A5F5"), isRecorded: true, duration: 12),
-                    ChapterSegment(title: "Key Point", color: Color(hex: "AB47BC"), isRecorded: true, duration: 18),
-                    ChapterSegment(title: "Action",    color: Color(hex: "66BB6A")),
-                    ChapterSegment(title: "Summary",   color: Color(hex: "FFA726"))
-                ],
-                activeIndex: 2,
-                isRecording: false,
-                onSelectChapter: { _ in },
-                onReRecord: { _ in }
-            )
+struct ChapterProgressBar_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
             
-            Spacer()
+            VStack {
+                ChapterProgressBar(
+                    chapters: [
+                        ChapterSegment(title: "Intro",     color: Color(hex: "42A5F5"), isRecorded: true, duration: 12),
+                        ChapterSegment(title: "Key Point", color: Color(hex: "AB47BC"), isRecorded: true, duration: 18),
+                        ChapterSegment(title: "Action",    color: Color(hex: "66BB6A")),
+                        ChapterSegment(title: "Summary",   color: Color(hex: "FFA726"))
+                    ],
+                    activeIndex: 2,
+                    isRecording: false,
+                    onSelectChapter: { _ in },
+                    onReRecord: { _ in }
+                )
+                
+                Spacer()
+            }
+            .padding(.top, 60)
         }
-        .padding(.top, 60)
     }
 }

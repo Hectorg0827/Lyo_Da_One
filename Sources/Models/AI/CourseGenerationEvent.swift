@@ -16,6 +16,7 @@ enum CourseGenerationEventType: String, Codable {
     case lessonComplete = "lesson_complete"
     case progress
     case costUpdate = "cost_update"
+    case artifactCreated = "artifact_created" // 🌊 NEW
     case completed
     case error
 }
@@ -49,6 +50,7 @@ struct CourseGenerationEventData: Codable {
     let cost: Double?
     let error: String?
     let timestamp: String?
+    let artifact: LyoArtifact? // 🌊 NEW: Streamed content block
     
     enum CodingKeys: String, CodingKey {
         case agent
@@ -59,6 +61,7 @@ struct CourseGenerationEventData: Codable {
         case cost
         case error
         case timestamp
+        case artifact
     }
 }
 

@@ -95,7 +95,17 @@ struct ModuleCardView: View {
         .onTapGesture {
             onTap?()
         }
-        .modifier(module.state == .building ? ShimmerModifier() : IdentityModifier())
+        .overlay {
+            if module.state == .building {
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.3), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .clipped()
+                .allowsHitTesting(false)
+            }
+        }
     }
     
     // MARK: - State Icon
@@ -315,7 +325,7 @@ struct ModuleCardView: View {
 
 // MARK: - Shimmer Effect for Building State
 
-struct ShimmerModifier: ViewModifier {
+struct ModuleShimmerModifier: ViewModifier {
     @State private var phase: CGFloat = 0
     
     func body(content: Content) -> some View {
@@ -339,7 +349,7 @@ struct ShimmerModifier: ViewModifier {
 
 extension View {
     func shimmer() -> some View {
-        modifier(ShimmerModifier())
+        modifier(ModuleShimmerModifier())
     }
 }
 

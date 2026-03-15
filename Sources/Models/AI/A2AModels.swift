@@ -688,18 +688,64 @@ struct A2ATaskOutput: Codable {
         case status, result, artifacts, metrics
     }
 }
+/// Standard artifact types in A2A pipeline
+enum A2APipelineArtifactType: String, Codable {
+    case pedagogy = "pedagogy"
+    case pedagogyAnalysis = "pedagogy_analysis"
+    case courseIntent = "course_intent"
+    case curriculumStructure = "curriculum_structure"
+    case cinematic = "cinematic"
+    case cinematicScene = "cinematic_scene"
+    case module = "module"
+    case courseModule = "course_module"
+    case visuals = "visuals"
+    case voice = "voice"
+    case fullCourse = "full_course"
+    case unknown = "unknown"
+}
 
 struct A2AArtifact: Codable, Identifiable {
     let id: String
     let type: String
     let name: String
     let mimeType: String?
-    let data: String?  // Base64 or JSON string
+    let data: A2AAnyCodableValue? // 🌊 UPDATED: Supports structured JSON
     let metadata: [String: String]?
 
     // Note: No explicit CodingKeys — lyoDecoder's .convertFromSnakeCase
-    // handles mime_type → mimeType automatically. Explicit CodingKeys
-    // would conflict with convertFromSnakeCase (double-conversion).
+    // handles mime_type → mimeType automatically.
+
+    /// Extract a module from the artifact if possible
+    var asModule: LyoModule? {
+        // Handle both raw string and structured data
+        guard type == "module" || type == A2APipelineArtifactType.module.rawValue || type == A2APipelineArtifactType.courseModule.rawValue else { return nil }
+        
+        if let dataValue = data?.value {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: dataValue)
+                return try JSONDecoder.lyoDecoder.decode(LyoModule.self, from: jsonData)
+            } catch {
+                Log.ai.error("Failed to decode module from artifact data: \(error)")
+            }
+        }
+        return nil
+    }
+    
+    /// Extract ALL modules from a cinematic artifact if possible
+    var asModules: [LyoModule] {
+        guard type == A2APipelineArtifactType.cinematicScene.rawValue || type == A2APipelineArtifactType.cinematic.rawValue else { return [] }
+        
+        if let dataValue = data?.value as? [String: Any],
+           let modulesData = dataValue["modules"] as? [[String: Any]] {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: modulesData)
+                return try JSONDecoder.lyoDecoder.decode([LyoModule].self, from: jsonData)
+            } catch {
+                Log.ai.error("Failed to decode modules from cinematic artifact: \(error)")
+            }
+        }
+        return []
+    }
 }
 
 struct A2ATaskMetrics: Codable {

@@ -274,7 +274,7 @@ struct BackendAIChatResponse: Codable {
         case reasoning
         case conversationTone = "conversation_tone"
         case responseTimeMs = "response_time_ms"
-        case tokensUsed = "tokens_used"
+        case tokensUsed = "tokensUsed"
         case costEstimate = "cost_estimate"
         case confidenceScore = "confidence_score"
         case modelVersions = "model_versions"
@@ -282,9 +282,9 @@ struct BackendAIChatResponse: Codable {
         case responseMode = "responseMode"
         case quickExplainer = "quickExplainer"
         case courseProposal = "courseProposal"
-        case studyPlan = "study_plan"
+        case studyPlan = "studyPlan"
         case contentTypes = "contentTypes"
-        case uiComponent = "ui_component"   // backend sends snake_case
+        case uiComponent = "uiComponent"    // backend sends camelCase via serialize_by_alias
         case lyoBlocks = "lyoBlocks"
         case suggestions = "suggestions"
     }
@@ -680,7 +680,7 @@ final class BackendAIService {
         resourceId: String? = nil,
         mode: String = "focus",
         history: [ConversationMessage]? = nil
-    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: AnyCodable?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?, mappedComponents: [A2UIComponent]?) {
+    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: AnyCodable?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -742,16 +742,9 @@ final class BackendAIService {
             conversationHistory = Array(conversationHistory.suffix(10))
         }
         
-        // Detect A2UI command
+        // Detect command
         let wasCommand = chatResponse.type == "OPEN_CLASSROOM"
         let openClassroomPayload = chatResponse.extractedUI
-        
-        // Map A2UI components if uiComponent JSON is present
-        var mappedComponents: [A2UIComponent]? = nil
-        if let uiComp = chatResponse.uiComponent,
-           let jsonData = try? JSONEncoder().encode(uiComp) {
-            mappedComponents = A2IPayloadMapper.mapFromJSON(jsonData)
-        }
         
         return (
             response: chatResponse.responseText,
@@ -759,8 +752,7 @@ final class BackendAIService {
             uiContent: chatResponse.contentTypes,
             uiComponent: chatResponse.uiComponent,
             wasCommand: wasCommand,
-            openClassroomPayload: openClassroomPayload,
-            mappedComponents: mappedComponents
+            openClassroomPayload: openClassroomPayload
         )
     }
     

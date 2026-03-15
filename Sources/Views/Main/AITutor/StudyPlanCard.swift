@@ -113,7 +113,7 @@ struct StudyPlanCard: View {
                 title: plan.title,
                 testDate: plan.testDate,
                 sessions: plan.sessions.map { s in
-                    StudySession(
+                    CalendarStudySession(
                         id: s.id,
                         title: s.title,
                         description: s.description,

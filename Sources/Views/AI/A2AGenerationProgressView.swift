@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import Combine
 import os
 
 // MARK: - A2A Generation Progress View
@@ -29,6 +30,11 @@ struct A2AGenerationProgressView: View {
 
     // Auto-dismiss once course is ready
     @State private var didAutoDismiss = false
+    
+    // 🌊 Progressive Streaming State
+    @State private var cancellables = Set<AnyCancellable>()
+    @State private var hasTriggeredEarlyLaunch = false
+    @State private var streamingRuntime: LyoCourseRuntime?
 
     var body: some View {
         ZStack {
@@ -562,6 +568,54 @@ struct A2AGenerationProgressView: View {
     }
 
     private func startGeneration() {
+        // 1. Create a skeleton runtime for progressive injection
+        let skeletonCourse = LyoCourse(
+            id: "a2a_\(UUIDString.short())",
+            title: topic,
+            targetAudience: "General",
+            learningObjectives: [],
+            modules: [],
+            generationSource: "ai",
+            version: "1.0",
+            metadata: nil
+        )
+        let runtime = LyoCourseRuntime(course: skeletonCourse)
+        self.streamingRuntime = runtime
+        
+        // 2. Subscribe to new modules for "Magical Progressive Launch" 🌊
+        service.newModulePublisher
+            .receive(on: RunLoop.main)
+            .sink { module in
+                Log.ai.info("🌊 Module arrived in ProgressView: \(module.title)")
+                runtime.appendModule(module)
+                
+                // If it's the first module, we can trigger the classroom early!
+                if !hasTriggeredEarlyLaunch {
+                    Log.ai.info("✨ MAGIC: Triggering early classroom launch on first module!")
+                    hasTriggeredEarlyLaunch = true
+                    
+                    // Give it a tiny bit of time to settle
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        // We use the full course conversion once it's done, 
+                        // but for now we signal we're ready with what we have.
+                        let syntheticCourse = A2AGeneratedCourse(
+                            id: skeletonCourse.id,
+                            title: skeletonCourse.title,
+                            description: skeletonCourse.targetAudience,
+                            modules: runtime.course.modules.map { $0.toA2AModule() },
+                            learningObjectives: [],
+                            estimatedDuration: 0,
+                            difficulty: "beginner",
+                            visualAssets: nil,
+                            voiceAssets: nil
+                        )
+                        onComplete(syntheticCourse)
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
+        // 3. Start the actual stream
         service.generateCourseStreaming(
             topic: topic,
             qualityTier: qualityTier,
@@ -570,7 +624,42 @@ struct A2AGenerationProgressView: View {
             enableVoice: true
         ) { event in
             Log.ai.info("📨 \(event.type.rawValue): \(event.message ?? "")")
+            
+            if event.type == .completed || event.type == .pipelineCompleted {
+                // Full generation done
+                if let course = service.generatedCourse, !hasTriggeredEarlyLaunch {
+                    onComplete(course)
+                }
+            }
         }
+    }
+}
+
+// MARK: - Extension for mapping
+extension LyoModule {
+    func toA2AModule() -> A2ACourseModule {
+        A2ACourseModule(
+            id: self.id,
+            title: self.title,
+            description: self.title, // Fallback
+            lessons: self.lessons.map { lesson in
+                A2ACourseLesson(
+                    id: lesson.id,
+                    title: lesson.title,
+                    content: (lesson.artifacts.first?.content.value as? String) ?? "",
+                    durationMinutes: 5,
+                    order: 0,
+                    scenes: nil
+                )
+            },
+            order: 0
+        )
+    }
+}
+
+private enum UUIDString {
+    static func short() -> String {
+        UUID().uuidString.prefix(8).lowercased()
     }
 }
 

@@ -42,3 +42,4 @@ SourcePackages/
 *.dSYM.zip
 *.dSYM
 Pods/
+build_temp*/

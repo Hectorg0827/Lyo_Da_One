@@ -13,8 +13,6 @@ struct LyoOrchestratedResponse: Codable {
     let onboardingHints: [ContextualHint]
     let progressiveFeatures: [String]
     let emotion: LyoEmotion
-    // Mapped renderer components produced by the AI (optional)
-    var mappedComponents: [A2UIComponent]? = nil
 
     init(
         primaryResponse: String,
@@ -23,7 +21,7 @@ struct LyoOrchestratedResponse: Codable {
         suggestedFollowUps: [String] = [],
         onboardingHints: [ContextualHint] = [],
         progressiveFeatures: [String] = [],
-        emotion: LyoEmotion = .friendly, mappedComponents: [A2UIComponent]? = nil
+        emotion: LyoEmotion = .friendly
     ) {
         self.primaryResponse = primaryResponse
         self.actions = actions
@@ -32,7 +30,6 @@ struct LyoOrchestratedResponse: Codable {
         self.onboardingHints = onboardingHints
         self.progressiveFeatures = progressiveFeatures
         self.emotion = emotion
-        self.mappedComponents = mappedComponents
     }
 }
 
@@ -192,9 +189,6 @@ class LyoOrchestrator: ObservableObject {
     @Published var isOffline: Bool = false
     @Published var cachedResponses: [String: LyoOrchestratedResponse] = [:]
 
-    // Latest mapped A2UIComponents produced by the AI (convenience for views)
-    @Published var lastMappedComponents: [A2UIComponent]? = nil
-
     // Added from extension (fixing stored property error)
     @Published var detectedIntents: [LearningIntent] = []
 
@@ -253,10 +247,6 @@ class LyoOrchestrator: ObservableObject {
                 learningLevel: learningLevel,
                 context: enhancedContext
             )
-
-            // Attach mapped renderer components (if the AI produced an OpenClassroom payload)
-            orchestratedResponse.mappedComponents = aiResponse.mappedComponents
-            self.lastMappedComponents = aiResponse.mappedComponents
 
             // 5. Execute orchestrated actions
             await executeOrchestration(orchestratedResponse)

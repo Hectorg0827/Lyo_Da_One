@@ -122,7 +122,7 @@ struct CalendarStudyPlan: Codable, Identifiable {
     let id: String
     let title: String
     let testDate: Date?
-    let sessions: [StudySession]
+    let sessions: [CalendarStudySession]
     
     enum CodingKeys: String, CodingKey {
         case id = "planId"
@@ -132,7 +132,7 @@ struct CalendarStudyPlan: Codable, Identifiable {
     }
 }
 
-struct StudySession: Codable, Identifiable {
+struct CalendarStudySession: Codable, Identifiable {
     let id: String
     let title: String
     let description: String

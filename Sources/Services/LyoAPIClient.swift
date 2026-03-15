@@ -460,7 +460,8 @@ final class LyoAPIClient {
                     hostAvatarURL: event.organizerProfile?.avatar,
                     attendeeCount: event.attendeeCount,
                     maxAttendees: event.maxAttendees,
-                    tags: []
+                    tags: [],
+                    userAttendanceStatus: event.userAttendanceStatus
                 )
             }
             
@@ -501,7 +502,8 @@ final class LyoAPIClient {
                 hostAvatarURL: event.organizerProfile?.avatar,
                 attendeeCount: event.attendeeCount,
                 maxAttendees: event.maxAttendees,
-                tags: []
+                tags: [],
+                userAttendanceStatus: event.userAttendanceStatus
             )
         }
     }
@@ -514,6 +516,24 @@ final class LyoAPIClient {
         case "office_hours", "office": return .office
         default: return .event
         }
+    }
+    
+    // MARK: - Event RSVP (Attendance)
+    
+    func attendEvent(eventId: String) async throws -> EventAttendanceResponse {
+        return try await request(
+            method: "POST",
+            path: "/api/v1/community/events/\(eventId)/attend",
+            body: nil
+        )
+    }
+    
+    func cancelAttendance(eventId: String) async throws -> EmptyResponse {
+        return try await request(
+            method: "DELETE",
+            path: "/api/v1/community/events/\(eventId)/attend",
+            body: nil
+        )
     }
 }
 
@@ -608,7 +628,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 15,
                 maxAttendees: 25,
-                tags: ["AI", "Machine Learning", "Study Group"]
+                tags: ["AI", "Machine Learning", "Study Group"], userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus_2",
@@ -624,7 +644,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 30,
                 maxAttendees: 50,
-                tags: ["Career", "Professional Development"]
+                tags: ["Career", "Professional Development"], userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus_3",
@@ -640,7 +660,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 25,
                 maxAttendees: 40,
-                tags: ["iOS", "Swift", "Development"]
+                tags: ["iOS", "Swift", "Development"], userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus_4",
@@ -656,7 +676,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 8,
                 maxAttendees: 12,
-                tags: ["Math", "Calculus", "Exam Prep"]
+                tags: ["Math", "Calculus", "Exam Prep"], userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus_5",
@@ -672,7 +692,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 0,
                 maxAttendees: 5,
-                tags: ["Computer Science", "Office Hours"]
+                tags: ["Computer Science", "Office Hours"], userAttendanceStatus: nil
             )
         ]
     }
@@ -685,26 +705,31 @@ extension LyoAPIClient {
             title: "Introduction to Programming Concepts",
             subtitle: "Learn the fundamentals",
             blocks: [
-                LessonBlock(
+                LiveLessonBlock(
+                    id: "intro_\(lessonId)",
                     type: .paragraph,
                     title: "What is Programming?",
                     content: "Programming is the process of creating instructions for computers to follow. Think of it like writing a recipe - you're telling the computer exactly what steps to take."
                 ),
-                LessonBlock(
+                LiveLessonBlock(
+                    id: "img_\(lessonId)",
                     type: .image,
                     title: "The Programming Workflow",
                     content: "Here's how programmers typically work:",
                     imageURL: nil
                 ),
-                LessonBlock(
+                LiveLessonBlock(
+                    id: "para_\(lessonId)",
                     type: .paragraph,
                     title: "Your First Code",
                     content: "Let's look at a simple example:\n\n```python\nprint(\"Hello, World!\")\n```\n\nThis code tells the computer to display the text 'Hello, World!' on the screen."
                 ),
-                LessonBlock(
+                LiveLessonBlock(
+                    id: "quiz_\(lessonId)",
                     type: .quizMcq,
                     title: "Quick Check",
-                    question: "What does the print() function do?",
+                    content: "What does the print() function do?",
+                    subtitle: "Quiz",
                     options: [
                         "Sends a document to a printer",
                         "Displays text on the screen",
@@ -714,7 +739,8 @@ extension LyoAPIClient {
                     correctIndex: 1,
                     explanation: "The print() function displays text or data on the screen. It's one of the most basic and commonly used functions in programming!"
                 ),
-                LessonBlock(
+                LiveLessonBlock(
+                    id: "summary_\(lessonId)",
                     type: .summary,
                     title: "Key Takeaways",
                     content: "In this lesson, you learned:\n\n• Programming is writing instructions for computers\n• Code follows a specific syntax (rules)\n• The print() function displays output\n\nGreat job completing your first lesson!"

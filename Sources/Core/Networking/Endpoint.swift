@@ -739,36 +739,6 @@ enum Endpoints {
         }
     }
 
-    // MARK: - A2UI Server-Driven UI
-    /// Endpoints for fetching dynamic server-driven UI component trees.
-    /// Backend: /api/v1/a2ui/* (lyo_app/api/v1/a2ui_routes.py)
-    enum A2UI: Endpoint {
-        /// Fetch a pre-defined screen layout (dashboard, course, quiz, chat)
-        case screen(screenId: String)
-        /// Generate a classroom A2UI component tree for a specific session
-        case classroomScreen(sessionId: String)
-
-        var path: String {
-            switch self {
-            case .screen(let screenId): return "/api/v1/a2ui/screen/\(screenId)"
-            case .classroomScreen(let sessionId): return "/api/v1/a2ui/screen/classroom?session_id=\(sessionId)"
-            }
-        }
-
-        var method: HTTPMethod {
-            switch self {
-            case .screen: return .get
-            case .classroomScreen: return .get
-            }
-        }
-
-        var body: Encodable? { nil }
-
-        var cacheTTL: TimeInterval {
-            return 300 // 5 minute cache for server-driven layouts
-        }
-    }
-
     // MARK: - Course Generation V2
     enum CourseGenerationV2: Endpoint {
         case stream(topic: String, options: CourseGenerationOptions)

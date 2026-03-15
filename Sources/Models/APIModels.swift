@@ -619,6 +619,20 @@ struct EmptyResponse: Codable {
     // Intentionally empty - used for endpoints that return 204 or empty JSON
 }
 
+struct EventAttendanceResponse: Codable {
+    let id: Int
+    let userId: Int
+    let communityEventId: Int
+    let status: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case communityEventId = "community_event_id"
+        case status
+    }
+}
+
 struct CommunityEvent: Codable, Identifiable {
     let id: Int
     let title: String
@@ -634,6 +648,7 @@ struct CommunityEvent: Codable, Identifiable {
     let isOnline: Bool
     let imageUrl: String?
     let organizerProfile: UserPreview?
+    let userAttendanceStatus: String?
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, location
@@ -647,6 +662,7 @@ struct CommunityEvent: Codable, Identifiable {
         case isOnline = "is_online"
         case imageUrl = "image_url"
         case organizerProfile = "organizer_profile"
+        case userAttendanceStatus = "user_attendance_status"
     }
     
     var effectiveHostName: String {

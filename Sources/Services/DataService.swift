@@ -325,7 +325,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 8,
                 maxAttendees: 12,
-                tags: ["SwiftUI", "iOS"]
+                tags: ["SwiftUI", "iOS"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "c2",
@@ -341,7 +342,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 45,
                 maxAttendees: 100,
-                tags: ["Python", "Backend"]
+                tags: ["Python", "Backend"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "c3",
@@ -357,7 +359,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 4,
                 maxAttendees: 6,
-                tags: ["Hackathon", "Team"]
+                tags: ["Hackathon", "Team"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "c4",
@@ -373,7 +376,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 156,
                 maxAttendees: 500,
-                tags: ["Career", "Advice"]
+                tags: ["Career", "Advice"],
+                userAttendanceStatus: nil
             )
         ]
     }
@@ -394,7 +398,8 @@ final class DataService: ObservableObject {
                 maxAttendees: 20,
                 isOnline: true,
                 imageUrl: nil,
-                organizerProfile: nil
+                organizerProfile: nil,
+                userAttendanceStatus: nil
             ),
             CommunityEvent(
                 id: 2,
@@ -410,7 +415,8 @@ final class DataService: ObservableObject {
                 maxAttendees: 15,
                 isOnline: true,
                 imageUrl: nil,
-                organizerProfile: nil
+                organizerProfile: nil,
+                userAttendanceStatus: nil
             )
         ]
     }

@@ -20,7 +20,9 @@ class Lyo2ChatService: ObservableObject {
     func sendMessageStreaming(
         text: String,
         media: [Lyo2MediaRef]? = nil,
+        attachmentIds: [String]? = nil,
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
+        forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         onEvent: @escaping (Lyo2StreamEvent) -> Void
@@ -38,7 +40,9 @@ class Lyo2ChatService: ObservableObject {
             userId: userId,
             text: text,
             media: media,
+            attachmentIds: attachmentIds,
             activeArtifact: activeArtifact,
+            forcedIntent: forcedIntent,
             stateSummary: stateSummary,
             conversationHistory: conversationHistory
         )
@@ -108,7 +112,7 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
     /// "invalid reuse after initialization failure" crashes.
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForRequest = 200 // Increased from 60 to allow for complex planning/execution
         config.httpAdditionalHeaders = [
             "Accept": "text/event-stream",
             "Cache-Control": "no-cache"
@@ -337,9 +341,44 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     Log.ai.warning("Failed to extract block data from artifact event")
                 }
                 
+            case "actions":
+                // v1 backward compat — deployed backend still emits this
+                didReceiveContentEvent = true
+                if let blocksArray = json["blocks"] as? [[String: Any]] {
+                    var blocks: [Lyo2UIBlock] = []
+                    for dict in blocksArray {
+                        if let d = try? JSONSerialization.data(withJSONObject: dict),
+                           let block = try? JSONDecoder().decode(Lyo2UIBlock.self, from: d) {
+                            blocks.append(block)
+                        }
+                    }
+                    if !blocks.isEmpty {
+                        callback?(.actions(blocks: blocks))
+                    }
+                }
+                
             case "error":
                 let msg = json["message"] as? String ?? "Unknown server error"
                 callback?(.error(message: msg))
+                
+            case "open_classroom":
+                // v1 backward compat — deployed backend still emits this
+                didReceiveContentEvent = true
+                if let blockDict = json["block"],
+                   let blockData = try? JSONSerialization.data(withJSONObject: blockDict) {
+                    do {
+                        let block = try JSONDecoder().decode(Lyo2UIBlock.self, from: blockData)
+                        Log.ai.info("Lyo2 SSE: open_classroom event received (v1 compat)")
+                        callback?(.openClassroom(block: block))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (OpenClassroom): \(error)")
+                    }
+                }
+                
+            case "a2ui":
+                // A2UI archived in the UI layer, but still bridge payloads through so
+                // A2UI removed — log and ignore
+                Log.ai.info("🎨 Lyo2 SSE: a2ui event ignored (A2UI removed)")
 
             // ── v2 events (LyoResponse envelope — primary path) ──────
 

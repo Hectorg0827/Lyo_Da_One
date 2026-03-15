@@ -23,10 +23,10 @@ import os
 
 /// The result of routing a message through the appropriate pipeline
 enum ChatRouteResult {
-    /// Fast path completed — single text response with optional Study Plan + context chips + course payload + A2UI components
+    /// Fast path completed — single text response with optional Study Plan + context chips + course payload
     case fastResponse(
         text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?,
-        coursePayload: CoursePayload?, mappedComponents: [A2UIComponent]?)
+        coursePayload: CoursePayload?)
 
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
@@ -75,7 +75,9 @@ final class ChatRouter: ObservableObject {
     /// Returns the route result; for streaming, blocks arrive via the callback.
     func route(
         message: String,
+        attachmentIds: [String] = [],
         mode: String = "chat",
+        forcedIntent: String? = nil,
         conversationHistory: [ConversationMessage] = [],
         onAgentBlock: ((AgentBlock) -> Void)? = nil,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)? = nil
@@ -112,8 +114,10 @@ final class ChatRouter: ObservableObject {
         case .standard, .deep:
             return await handleDeepPath(
                 message: message,
+                attachmentIds: attachmentIds,
                 mode: mode,
                 intent: intent,
+                forcedIntent: forcedIntent,
                 conversationHistory: conversationHistory,
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
@@ -178,17 +182,9 @@ final class ChatRouter: ObservableObject {
                 return nil
             }()
 
-            // Extract A2UI components from ui_component field if present
-            var mappedComponents: [A2UIComponent]? = nil
-            if let uiComp = response.uiComponent,
-               let jsonData = try? JSONEncoder().encode(uiComp) {
-                mappedComponents = A2IPayloadMapper.mapFromJSON(jsonData)
-            }
-
             return .fastResponse(
                 text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency,
-                suggestions: response.suggestions, coursePayload: coursePayload,
-                mappedComponents: mappedComponents)
+                suggestions: response.suggestions, coursePayload: coursePayload)
 
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")
@@ -198,6 +194,7 @@ final class ChatRouter: ObservableObject {
                 message: message,
                 mode: mode,
                 intent: intent,
+                forcedIntent: nil,
                 conversationHistory: conversationHistory,
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
@@ -209,8 +206,10 @@ final class ChatRouter: ObservableObject {
 
     private func handleDeepPath(
         message: String,
+        attachmentIds: [String] = [],
         mode: String,
         intent: ClassifiedIntent,
+        forcedIntent: String? = nil,
         conversationHistory: [ConversationMessage],
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
         startTime: CFAbsoluteTime
@@ -227,6 +226,8 @@ final class ChatRouter: ObservableObject {
         // so this closure runs on the main thread — safe to access @MainActor state directly.
         lyo2Chat.sendMessageStreaming(
             text: message,
+            attachmentIds: attachmentIds,
+            forcedIntent: forcedIntent,
             stateSummary: buildStateSummary(mode: mode, intent: intent),
             conversationHistory: memoryWindow
         ) { event in

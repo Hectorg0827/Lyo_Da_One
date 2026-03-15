@@ -96,7 +96,8 @@ struct CampusView: View {
                     isPresented: $showDetailSheet,
                     onJoin: { joinItem(item) },
                     onSave: { viewModel.saveToStack(item: item) },
-                    onAskLio: { askLioAbout(item) }
+                    onAskLio: { askLioAbout(item) },
+                    onRSVP: { viewModel.toggleAttendance(for: item) }
                 )
                 .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
             }

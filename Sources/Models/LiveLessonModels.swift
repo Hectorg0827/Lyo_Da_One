@@ -12,7 +12,7 @@ struct LiveLesson: Codable {
     let lessonId: String
     let title: String
     let subtitle: String?
-    let blocks: [LessonBlock]
+    let blocks: [LiveLessonBlock]
     let estimatedDuration: Int? // in minutes
     
     init(
@@ -20,7 +20,7 @@ struct LiveLesson: Codable {
         lessonId: String,
         title: String,
         subtitle: String? = nil,
-        blocks: [LessonBlock],
+        blocks: [LiveLessonBlock],
         estimatedDuration: Int? = nil
     ) {
         self.courseId = courseId
@@ -175,6 +175,11 @@ enum LessonBlockType: String, Codable, CaseIterable {
     case progress      // Progress indicator
     case checkpoint    // Save progress here
     
+    // Cinematic Blocks
+    case hook          // Narrative high-impact start
+    case revelation    // Key insight reveal
+    case celebration   // Milestone celebration
+    
     // Fail-safe
     case unknown
     
@@ -227,7 +232,7 @@ enum LessonBlockType: String, Codable, CaseIterable {
 
 /// Complete block model that can represent ANY content type
 /// Designed to be parsed from backend JSON safely
-struct LessonBlock: Identifiable, Codable {
+struct LiveLessonBlock: Identifiable, Codable {
     let id: String
     let type: LessonBlockType
     
@@ -276,6 +281,10 @@ struct LessonBlock: Identifiable, Codable {
     // Styling
     let style: BlockStylePayload?
     
+    // Lyo Persona & Cinematic
+    let lyoCommentary: String? // Meta-commentary/Internal monologue
+    let mood: String?          // "enthusiastic", "serious", etc.
+    
     // Metadata
     let duration: Int?         // Estimated seconds to complete
     let difficulty: String?
@@ -313,6 +322,8 @@ struct LessonBlock: Identifiable, Codable {
         headers: [String]? = nil,
         rows: [[String]]? = nil,
         style: BlockStylePayload? = nil,
+        lyoCommentary: String? = nil,
+        mood: String? = nil,
         duration: Int? = nil,
         difficulty: String? = nil,
         tags: [String]? = nil
@@ -346,6 +357,8 @@ struct LessonBlock: Identifiable, Codable {
         self.headers = headers
         self.rows = rows
         self.style = style
+        self.lyoCommentary = lyoCommentary
+        self.mood = mood
         self.duration = duration
         self.difficulty = difficulty
         self.tags = tags
@@ -353,7 +366,7 @@ struct LessonBlock: Identifiable, Codable {
     
     // MARK: - Safe Accessors
     
-    var body: String? { content ?? title } // Compatibility with old LessonBlock
+    var body: String? { content ?? title } // Compatibility with old LiveLessonBlock
     
     var assetURL: URL? { imageURL ?? videoURL } // Compatibility
     
@@ -399,6 +412,8 @@ struct LessonBlock: Identifiable, Codable {
         case front, back, cards
         case headers, rows
         case style
+        case lyoCommentary = "lyo_commentary"
+        case mood
         case duration, difficulty, tags
     }
     
@@ -454,6 +469,8 @@ struct LessonBlock: Identifiable, Codable {
         self.headers = try? container.decodeIfPresent([String].self, forKey: .headers)
         self.rows = try? container.decodeIfPresent([[String]].self, forKey: .rows)
         self.style = try? container.decodeIfPresent(BlockStylePayload.self, forKey: .style)
+        self.lyoCommentary = try? container.decodeIfPresent(String.self, forKey: .lyoCommentary)
+        self.mood = try? container.decodeIfPresent(String.self, forKey: .mood)
         self.duration = try? container.decodeIfPresent(Int.self, forKey: .duration)
         self.difficulty = try? container.decodeIfPresent(String.self, forKey: .difficulty)
         self.tags = try? container.decodeIfPresent([String].self, forKey: .tags)

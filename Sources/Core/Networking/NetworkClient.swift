@@ -367,9 +367,6 @@ actor NetworkClient: NetworkRequestable {
         // 4. Add API Key (SaaS Auth)
         modifiedRequest.setValue(AppConfig.apiKey, forHTTPHeaderField: "X-API-Key")
 
-        let capabilities = await A2UICapabilityNegotiator.generateClientCapabilities()
-        modifiedRequest.setValue(capabilities, forHTTPHeaderField: "X-Client-Capabilities")
-
 
         return modifiedRequest
     }

@@ -215,6 +215,9 @@ struct GenerationProgressView: View {
             case .error:
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.red)
+            @unknown default:
+                Image(systemName: "questionmark.circle")
+                    .foregroundStyle(.gray)
             }
         }
     }

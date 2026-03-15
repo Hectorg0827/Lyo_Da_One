@@ -48,17 +48,17 @@ class LyoAIViewModel: ObservableObject {
     @Published var aiLiveAudioLevel: Float = 0
     @Published var isAIThinking: Bool = false
     @Published var isAISpeaking: Bool = false
-    @Published var lastLiveTranscript: String = ""
     @Published var activeLiveWidget: [String: Any]?
+    @Published var lastLiveTranscript: String = ""
+    @Published var isAudioOutputEnabled: Bool = true
+    private var lastSentToTTSText: String = ""
+    
+    /// Current AI emotion (warm, excited, neutral, frustrated, confused)
+    @Published var currentEmotion: String = "neutral"
 
     // MARK: - Quiz State
     @Published var activeQuiz: Quiz?
     @Published var isQuizActive: Bool = false
-
-    // MARK: - Artifact Pane State
-    /// The most recently received A2UI component — shown pinned in the Artifact Pane.
-    /// Automatically extracted from the messages stream whenever a new .a2ui message arrives.
-    @Published var activeArtifact: A2UIComponent? = nil
 
     // MARK: - Personalization (NEXR)
     @Published var nextAction: NextActionResponse?
@@ -96,6 +96,9 @@ class LyoAIViewModel: ObservableObject {
     // Course wizard state
     @Published var currentOutline: CourseOutline?
     @Published var isGeneratingCourse: Bool = false
+    
+    /// User's explicit intent choice from the UI (e.g., "COURSE", "QUIZ", "STUDY_PLAN")
+    @Published var selectedIntent: String? = nil
 
     // Persistence
     private let messagesPersistKey = "lyo_ai_messages_v1"
@@ -137,31 +140,27 @@ class LyoAIViewModel: ObservableObject {
             }
         }
 
-        // SYNC WITH UNIFIED CHAT
         unifiedChat.$messages
             .receive(on: RunLoop.main)
             .assign(to: &$messages)
+        
+        // Emotion detection binding
+        unifiedChat.onEmotionDetected = { [weak self] emotion in
+            guard let self = self else { return }
+            Log.ai.info("🎭 LyoAIViewModel: Updating emotion to \(emotion)")
+            self.currentEmotion = emotion
+            self.ttsService.setEmotion(emotion)
+        }
 
-        // Track the latest A2UI component for the pinned Artifact Pane
-        unifiedChat.$messages
-            .receive(on: RunLoop.main)
-            .map { msgs -> A2UIComponent? in
-                msgs.reversed().lazy.compactMap { msg -> A2UIComponent? in
-                    msg.contentTypes?.compactMap { ct -> A2UIComponent? in
-                        if case .a2ui(let c) = ct { return c }
-                        return nil
-                    }.first
-                }.first
-            }
-            .assign(to: &$activeArtifact)
+        // SYNC AI SPEAKING STATE
+        Publishers.Merge(
+            AudioStreamManager.shared.$isAISpeaking,
+            ttsService.$isSpeaking
+        )
+        .receive(on: RunLoop.main)
+        .assign(to: &$isAISpeaking)
 
-        // Also listen for orchestrator-provided mapped components (direct AI responses)
-        LyoOrchestrator.shared.$lastMappedComponents
-            .receive(on: RunLoop.main)
-            .map { comps -> A2UIComponent? in
-                comps?.first
-            }
-            .assign(to: &$activeArtifact)
+        // A2UI artifact tracking removed — classrooms use their own component state
 
         unifiedChat.$isLoading
             .receive(on: RunLoop.main)
@@ -187,10 +186,6 @@ class LyoAIViewModel: ObservableObject {
         AudioStreamManager.shared.$isAIThinking
             .receive(on: RunLoop.main)
             .assign(to: &$isAIThinking)
-
-        AudioStreamManager.shared.$isAISpeaking
-            .receive(on: RunLoop.main)
-            .assign(to: &$isAISpeaking)
 
         AudioStreamManager.shared.$lastTranscript
             .receive(on: RunLoop.main)
@@ -220,6 +215,14 @@ class LyoAIViewModel: ObservableObject {
             .debounce(for: .seconds(2), scheduler: RunLoop.main)
             .sink { [weak self] msgs in
                 self?.persistMessages(msgs)
+            }
+            .store(in: &cancellables)
+
+        // Incremental TTS Streaming
+        unifiedChat.$messages
+            .receive(on: RunLoop.main)
+            .sink { [weak self] msgs in
+                self?.handleTTSStreaming(messages: msgs)
             }
             .store(in: &cancellables)
     }
@@ -257,23 +260,11 @@ class LyoAIViewModel: ObservableObject {
 
     // MARK: - Gamification
 
-    /// Push a `completionBadge` A2UI component into the Artifact Pane.
+    /// Award XP and show a completion badge.
     /// Call this after course start, lesson finish, or quiz perfection.
     func pushCompletionBadge(title: String, subtitle: String, xp: Int) {
-        var props = A2UIProps()
-        props.title = title
-        props.subtitle = subtitle
-        props.text = "+\(xp) XP"
-        props.sfSymbol = "trophy.fill"
-        props.foregroundColor = "#FFD700"
-        let badge = A2UIComponent(
-            id: "badge_\(UUID().uuidString.prefix(6))",
-            type: .completionBadge,
-            props: props
-        )
-        activeArtifact = badge
         GamificationService.shared.awardXP(amount: xp, reason: title)
-        Log.ai.info("🏆 Completion badge shown: \(title) +\(xp) XP")
+        Log.ai.info("🏆 Completion badge: \(title) +\(xp) XP")
     }
 
     /// Award XP for answering a quiz question.
@@ -281,9 +272,64 @@ class LyoAIViewModel: ObservableObject {
         let amount = isCorrect ? 25 : 5
         let reason = isCorrect ? "Correct quiz answer" : "Quiz attempt"
         GamificationService.shared.awardXP(amount: amount, reason: reason)
-        if isCorrect {
-            // Brief badge for correct answers
-            pushCompletionBadge(title: "Correct! ✓", subtitle: "Keep going", xp: amount)
+    }
+
+    /// Report a quiz result to the personalization service.
+    func reportQuizResult(question: String, selectedAnswer: Int, isCorrect: Bool, itemId: String? = nil) {
+        // Award XP locally
+        awardQuizAnswerXP(isCorrect: isCorrect)
+        
+        // Report to backend for mastery tracking
+        Task {
+            let userId = await TokenManager.shared.getUserId() ?? "unknown"
+            
+            // Use provided itemId or fallback to a hash of the question
+            let id = itemId ?? "q_\(abs(question.hashValue))"
+            
+            let trace = KnowledgeTraceRequest(
+                learnerId: userId,
+                skillId: "general", // TODO: Extract from context if available
+                itemId: id,
+                correct: isCorrect,
+                timeTakenSeconds: 0,
+                hintsUsed: 0,
+                attemptNumber: 1
+            )
+            
+            do {
+                try await PersonalizationService.shared.traceKnowledge(trace: trace)
+                Log.ai.info("✅ Knowledge trace reported: \(id) correct=\(isCorrect)")
+            } catch {
+                Log.ai.error("❌ Failed to report knowledge trace: \(error)")
+            }
+        }
+    }
+
+    /// Handle test prep scheduling from the UI card.
+    func handleTestPrepScheduled(date: Date, course: String, description: String, attachmentIds: [String] = []) {
+        Task {
+            // 1. Sync to Calendar
+            let calendarSuccess = await TestPrepService.shared.scheduleExamInCalendar(
+                title: course,
+                date: date,
+                description: description
+            )
+            
+            // 2. Schedule Motivational Message
+            await TestPrepService.shared.scheduleMotivationalMessage(examDate: date, topic: course)
+            
+            // 3. Send metadata to AI to trigger Study Plan
+            let prompt = "I've scheduled my \(course) exam for \(date.formatted(date: .abbreviated, time: .shortened)). Description: \(description). Please create a study plan for me."
+            
+            inputText = prompt
+            
+            // Map IDs back to MessageAttachment objects (stubbed metadata since we only have IDs)
+            let attachments = attachmentIds.map { id in
+                MessageAttachment(id: id, type: .file, url: "upload://\(id)", filename: "Attachment", size: 0, mimeType: "application/octet-stream")
+            }
+            self.attachments = attachments
+            
+            await sendMessage()
         }
     }
 
@@ -569,6 +615,9 @@ class LyoAIViewModel: ObservableObject {
 
         // Capture voice state
         let shouldSpeak = isVoiceActive
+        
+        // Reset TTS buffer for the new response
+        lastSentToTTSText = ""
 
         if isVoiceActive {
             // Stop recording the current utterance
@@ -592,6 +641,7 @@ class LyoAIViewModel: ObservableObject {
             attachments: messageAttachments,
             context: nil,
             mode: mode ?? uiState?.currentAIMode ?? "chat",
+            forcedIntent: selectedIntent,
             speakResponse: shouldSpeak
         )
 
@@ -642,6 +692,68 @@ class LyoAIViewModel: ObservableObject {
         return "beginner"
     }
 
+    // MARK: - Incremental TTS Logic
+
+    private func handleTTSStreaming(messages: [LyoMessage]) {
+        guard isAudioOutputEnabled else { return }
+        
+        // Find the most recent assistant message
+        guard let lastMessage = messages.last else { return }
+        
+        if lastMessage.isFromUser {
+            // User turn started, reset TTS buffer for the next assistant response
+            lastSentToTTSText = ""
+            return
+        }
+        
+        let fullText = lastMessage.content
+        
+        // If the text has shrunk or reset, wait (shouldn't happen in a single stream)
+        guard fullText.count > lastSentToTTSText.count else { return }
+        
+        let newContent = String(fullText.dropFirst(lastSentToTTSText.count))
+        
+        // Extract complete sentences for smoother speech
+        let chunks = extractTTSChunks(from: newContent)
+        
+        for chunk in chunks {
+            Log.ai.debug("🔊 Enqueuing chunk for TTS: \(chunk)")
+            ttsService.enqueue(chunk)
+            lastSentToTTSText += chunk
+        }
+    }
+
+    private func extractTTSChunks(from text: String) -> [String] {
+        var chunks: [String] = []
+        var currentSearchIndex = text.startIndex
+        
+        // We look for sentence terminators followed by whitespace or end of string
+        let terminators: Set<Character> = [".", "!", "?", "\n"]
+        
+        var currentIndex = text.startIndex
+        while currentIndex < text.endIndex {
+            let char = text[currentIndex]
+            
+            if terminators.contains(char) {
+                // Peek ahead to see if it's the end of a sentence
+                let nextIndex = text.index(after: currentIndex)
+                if nextIndex == text.endIndex || text[nextIndex].isWhitespace {
+                    // Found a terminator at end or followed by space
+                    let chunk = String(text[currentSearchIndex...currentIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !chunk.isEmpty {
+                        chunks.append(chunk)
+                    }
+                    currentSearchIndex = nextIndex
+                    currentIndex = nextIndex
+                    continue
+                }
+            }
+            currentIndex = text.index(after: currentIndex)
+        }
+        
+        return chunks
+    }
+
     // MARK: - A2UI Interactions
 
     func onA2UICourseStart(course: CourseCreationData) {
@@ -664,26 +776,6 @@ class LyoAIViewModel: ObservableObject {
         inputText = "My answer to '\(question)' is option \(answerIndex + 1)"
         Task { await sendMessage() }
     }
-
-    // MARK: - A2UI Action Handler (DISABLED - A2UI Parser not currently in build)
-
-    // @MainActor
-    // private func handleA2UIAction(_ action: A2UIAction) async {
-    //     switch action {
-    //     case .openClassroom(let payload):
-    //         print("🎬 A2UI Trigger: Opening Classroom for \(payload.title)")
-    //         // Tell Orchestrator to start the show
-    //         // This triggers the view transition via NotificationCenter
-    //         await CourseOrchestrator.shared.execute(proposal: payload)
-    //
-    //     case .addToStack(let item):
-    //          print("📚 A2UI Trigger: Added to stack \(item.title)")
-    //          // Implementation for stack addition would go here
-    //
-    //     case .navigate(let destination):
-    //          print("🧭 A2UI Trigger: Navigating to \(destination)")
-    //     }
-    // }
 
     private func chatErrorMessage(for error: Error) -> String {
         let lyoError = LyoError.from(error: error)

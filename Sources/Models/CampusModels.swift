@@ -200,6 +200,7 @@ struct CampusItem: Identifiable, Codable {
     let attendeeCount: Int
     let maxAttendees: Int?
     let tags: [String]
+    let userAttendanceStatus: String?
     
     var isLive: Bool {
         let now = Date()
@@ -248,7 +249,8 @@ struct CampusItem: Identifiable, Codable {
                 hostAvatarURL: nil as String?,
                 attendeeCount: 12,
                 maxAttendees: 20,
-                tags: ["SwiftUI", "iOS", "Animation"]
+                tags: ["SwiftUI", "iOS", "Animation"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus-2",
@@ -264,7 +266,8 @@ struct CampusItem: Identifiable, Codable {
                 hostAvatarURL: nil as String?,
                 attendeeCount: 5,
                 maxAttendees: 8,
-                tags: ["Algorithms", "Interview", "LeetCode"]
+                tags: ["Algorithms", "Interview", "LeetCode"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus-3",
@@ -280,7 +283,8 @@ struct CampusItem: Identifiable, Codable {
                 hostAvatarURL: nil as String?,
                 attendeeCount: 18,
                 maxAttendees: nil as Int?,
-                tags: ["iOS", "Networking", "Community"]
+                tags: ["iOS", "Networking", "Community"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus-4",
@@ -296,7 +300,8 @@ struct CampusItem: Identifiable, Codable {
                 hostAvatarURL: nil as String?,
                 attendeeCount: 2,
                 maxAttendees: 6,
-                tags: ["Career", "Mentorship"]
+                tags: ["Career", "Mentorship"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "campus-5",
@@ -312,7 +317,8 @@ struct CampusItem: Identifiable, Codable {
                 hostAvatarURL: nil as String?,
                 attendeeCount: 85,
                 maxAttendees: 200,
-                tags: ["Tech Talk", "Engineering", "Scale"]
+                tags: ["Tech Talk", "Engineering", "Scale"],
+                userAttendanceStatus: nil
             )
         ]
     }

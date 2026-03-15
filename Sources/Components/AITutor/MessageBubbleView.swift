@@ -12,6 +12,10 @@ struct LyoMessageBubbleView: View {
     // A2UI callbacks for rich content interactions
     var onA2UICourseStart: ((CourseCreationData) -> Void)?
     var onA2UIQuizAnswer: ((String, Int) -> Void)?
+    
+    // New Smart Block callbacks
+    var onSmartBlockQuizAnswer: ((String, Int, Bool) -> Void)?
+    var onSmartBlockTestPrepScheduled: ((Date, String, String, [String]) -> Void)?
 
     var mascotNamespace: Namespace.ID?
 
@@ -34,7 +38,6 @@ struct LyoMessageBubbleView: View {
         guard let types = message.contentTypes else { return false }
         return types.contains { contentType in
             switch contentType {
-            case .a2ui: return true
             case .courseProposal: return true
             case .courseRoadmap: return true
             case .quiz: return true
@@ -141,17 +144,16 @@ struct LyoMessageBubbleView: View {
                     // Message content with premium styling
                     // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
                     if shouldRenderPlainText {
-                        VStack(alignment: .leading, spacing: 8) {
-                            // Blinking cursor logic
-                            let displayContent =
-                                message.isStreaming
-                                ? message.content + (showCursor ? "▊" : "") : message.content
-                            markdownText(stripEmojis(displayContent))
-                                .font(DesignTokens.Typography.bodyMedium)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .lineSpacing(4)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        SmartBlockContainerView(
+                            rawResponse: message.content,
+                            isFromUser: message.isFromUser,
+                            showCursor: message.isStreaming ? showCursor : false,
+                            onQuizAnswerSubmitted: { selected, isCorrect in
+                                onSmartBlockQuizAnswer?(message.content, selected, isCorrect)
+                            },
+                            onTestPrepScheduled: onSmartBlockTestPrepScheduled
+                        )
+                        .padding(.bottom, 4)
                     }
 
                     // ==== A2UI RICH CONTENT RENDERING ====
@@ -387,159 +389,12 @@ struct LyoMessageBubbleView: View {
             }
 
         case .recursiveUI(let component):
-            // Use the centralized recursive renderer for rich A2UI components
-            A2UIRecursiveRenderer(component: component) { actionId in
-                onQuickChipTap?(actionId)
+            // DEPRECATED: A2UI components are being replaced by Smart Blocks
+            VStack {
+                Text("Legacy Recursive UI (\(component.id))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-
-        case .studyPlan(let plan):
-            // Inline study plan rendering (compatible with StudyPlan type)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Study Plan")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.7))
-                            .textCase(.uppercase)
-                        Text(plan.title)
-                            .font(.title3.bold())
-                            .foregroundStyle(.white)
-                    }
-                    Spacer()
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.title)
-                        .foregroundStyle(Color.accentColor)
-                }
-                Divider().background(Color.white.opacity(0.2))
-                ForEach(plan.schedule.prefix(3)) { day in
-                    HStack(spacing: 12) {
-                        Text("Day \(day.dayNumber)")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text(day.topic)
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                        Spacer()
-                    }
-                    .padding(8)
-                    .background(Color.white.opacity(0.06))
-                    .cornerRadius(8)
-                }
-                if plan.schedule.count > 3 {
-                    Text("+ \(plan.schedule.count - 3) more days")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .frame(maxWidth: .infinity, alignment: .center)
-                }
-            }
-            .padding()
-            .background(Color(white: 0.1))
-            .cornerRadius(16)
-            
-        case .testPrep(let data):
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Test Prep")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.7))
-                            .textCase(.uppercase)
-                        Text(data.subject)
-                            .font(.title3.bold())
-                            .foregroundStyle(.white)
-                    }
-                    Spacer()
-                    Image(systemName: "pencil.and.list.clipboard")
-                        .font(.title)
-                        .foregroundStyle(Color.accentColor)
-                }
-                Divider().background(Color.white.opacity(0.2))
-                
-                if let topic = data.topic {
-                    HStack {
-                        Text("Topic:")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text(topic)
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                    }
-                }
-                
-                if let date = data.testDate {
-                    HStack {
-                        Text("Date:")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text(date)
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                    }
-                }
-                
-                if let plan = data.studyPlan {
-                    Divider().background(Color.white.opacity(0.2))
-                    Text("Study Plan attached (\(plan.schedule.count) days)")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-            }
-            .padding()
-            .background(Color(white: 0.1))
-            .cornerRadius(16)
-
-        case .suggestions(let title, let options):
-            // Render suggestions as quick chips
-            VStack(alignment: .leading, spacing: 10) {
-                if !title.isEmpty {
-                    Text(title)
-                        .font(.caption.bold())
-                        .foregroundColor(.gray)
-                }
-                FlowLayout(spacing: 8) {
-                    ForEach(options, id: \.self) { option in
-                        Button {
-                            onQuickChipTap?(option)
-                        } label: {
-                            Text(option)
-                                .font(.caption.bold())
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.accentColor.opacity(0.1))
-                                .cornerRadius(20)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
-                                )
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 4)
-
-        case .cinematic(let data):
-            Button {
-                NotificationCenter.default.post(
-                    name: Notification.Name("PlayCinematic"), object: data)
-            } label: {
-                HStack {
-                    Image(systemName: "play.rectangle.fill")
-                    Text("Watch \(data.title)")
-                        .bold()
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(Color.purple.opacity(0.2))
-                .cornerRadius(12)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.purple, lineWidth: 1))
-            }
-
-        case .a2ui(let component):
-            A2UIRenderer(
-                component: component,
-                onAction: { (action: A2UIAction, _ component: A2UIComponent) in
-                    onQuickChipTap?("a2ui-\(action.id)")
-                })
 
         default:
             EmptyView()

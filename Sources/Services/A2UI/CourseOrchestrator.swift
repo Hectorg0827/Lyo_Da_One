@@ -29,7 +29,7 @@ final class CourseOrchestrator: ObservableObject {
         isProcessing = true
         
         // 1. Immediate UI Feedback
-        Log.a2ui.info("🎬 Orchestrator: Starting cinematic sequence for '\(proposal.title)'")
+        Log.classroom.info("🎬 Orchestrator: Starting cinematic sequence for '\(proposal.title)'")
         
         // 2. Optimistic Generation (Fail-Proof Strategy)
         // We start by creating a valid local "shell" course immediately so navigation works 100% of the time.
@@ -82,10 +82,10 @@ final class CourseOrchestrator: ObservableObject {
                 // Hot-swap the content
                 NotificationCenter.default.post(name: .courseDataUpdated, object: nil, userInfo: ["id": realCourse.id])
                 
-                Log.a2ui.info("Orchestrator: Real A2A content ready for \(realCourse.title)")
+                Log.classroom.info("Orchestrator: Real A2A content ready for \(realCourse.title)")
                 
             } catch {
-                Log.a2ui.warning("Orchestrator: A2A generation failed: \(error.localizedDescription), falling back to template content.")
+                Log.classroom.warning("Orchestrator: A2A generation failed: \(error.localizedDescription), falling back to template content.")
                 // We stay on the 'shell' course which is populated with template data
             }
             self.isProcessing = false
@@ -198,7 +198,7 @@ final class CourseOrchestrator: ObservableObject {
 
         Task { @MainActor in
             CourseGenerationService.shared.generatedCourse = stubGenerated
-            Log.a2ui.info("CourseOrchestrator: populated richer GeneratedCourse stub for \(course.id) with \(stubGenerated.modules.count) modules")
+            Log.classroom.info("CourseOrchestrator: populated richer GeneratedCourse stub for \(course.id) with \(stubGenerated.modules.count) modules")
         }
     }
 }

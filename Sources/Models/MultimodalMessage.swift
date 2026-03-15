@@ -30,7 +30,6 @@ enum MessageContentType: Codable, Equatable {
     case studyPlan(plan: StudyPlan)
     case testPrep(data: TestPrepContent)
     case recursiveUI(component: DynamicComponent)
-    case a2ui(component: A2UIComponent)
     case cinematic(data: A2UICinematic)
     case courseProposal(payload: CoursePayload)
     case generativeUI(blocks: [UIBlock])
@@ -131,8 +130,8 @@ enum MessageContentType: Codable, Equatable {
             let component = try container.decode(DynamicComponent.self, forKey: .component)
             self = .recursiveUI(component: component)
         case "a2ui":
-            let component = try container.decode(A2UIComponent.self, forKey: .component)
-            self = .a2ui(component: component)
+            // A2UI removed — decode as plain text fallback
+            self = .text
         case "study_plan":
             let plan = try container.decode(StudyPlan.self, forKey: .studyPlan)
             self = .studyPlan(plan: plan)
@@ -235,9 +234,6 @@ enum MessageContentType: Codable, Equatable {
         case .recursiveUI(let component):
             try container.encode("recursive_ui", forKey: .type)
             try container.encode(component, forKey: .component)
-        case .a2ui(let component):
-            try container.encode("a2ui", forKey: .type)
-            try container.encode(component, forKey: .component)
         case .studyPlan(let plan):
             try container.encode("study_plan", forKey: .type)
             try container.encode(plan, forKey: .studyPlan)
@@ -277,7 +273,6 @@ enum MessageContentType: Codable, Equatable {
         case (.studyPlan(let p1), .studyPlan(let p2)): return p1 == p2
         case (.testPrep(let d1), .testPrep(let d2)): return d1 == d2
         case (.recursiveUI(let c1), .recursiveUI(let c2)): return c1.id == c2.id
-        case (.a2ui(let c1), .a2ui(let c2)): return c1.type == c2.type 
         case (.cinematic(let d1), .cinematic(let d2)): return d1.title == d2.title && d1.mood == d2.mood
         case (.courseProposal(let p1), .courseProposal(let p2)): return p1.title == p2.title && p1.topic == p2.topic
         case (.generativeUI(let b1), .generativeUI(let b2)): return b1 == b2

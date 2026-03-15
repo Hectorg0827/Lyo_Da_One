@@ -8,11 +8,11 @@ import LaTeXSwiftUI
 
 // MARK: - Main Block Renderer
 
-/// Renders ANY LessonBlock type dynamically
+/// Renders ANY LiveLessonBlock type dynamically
 /// This is the SINGLE entry point for all block rendering in the classroom
 /// Production-ready: handles ALL 30+ block types with graceful fallbacks
 struct BlockRendererView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     // Callbacks for interactive blocks (to be wired to ViewModel)
     var onQuizAnswer: ((Int) -> Void)?
@@ -119,11 +119,74 @@ struct BlockRendererView: View {
             case .checkpoint:
                 CheckpointBlockView(block: block, onSave: { onAction?("save_progress") })
                 
+            // MARK: - Cinematic Blocks
+            case .hook:
+                HookView(
+                    title: block.title ?? "",
+                    subtitle: block.subtitle,
+                    lyoCommentary: block.lyoCommentary
+                )
+                
+            case .revelation:
+                RevelationView(
+                    insight: block.content ?? block.title ?? "",
+                    context: block.subtitle
+                )
+                
+            case .celebration:
+                CelebrationView(
+                    title: block.title ?? "Achievement Unlocked!",
+                    message: block.safeContent
+                )
+                
             case .unknown:
                 UnknownBlockView(block: block)
             }
         }
         .padding(.horizontal)
+        .overlay(alignment: .topTrailing) {
+            // Meta-commentary overlay for standard blocks (Cinematic blocks handle it internally)
+            if let lyo = block.lyoCommentary, block.type != .hook {
+                LyoBadgeView(text: lyo)
+                    .padding(.top, -10)
+                    .padding(.trailing, 10)
+            }
+        }
+        .onAppear {
+            // Auto-narration for Lyo persona beats (Phase 22)
+            if let lyo = block.lyoCommentary {
+                LyoVoiceService.shared.narrate(lyo, mood: block.mood)
+            }
+        }
+    }
+}
+
+// MARK: - Lyo Components
+
+struct LyoBadgeView: View {
+    let text: String
+    
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: .purple.opacity(0.3), radius: 4)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            )
     }
 }
 
@@ -167,7 +230,7 @@ struct HeadingBlockView: View {
 }
 
 struct CalloutBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -301,7 +364,7 @@ struct CodeBlockView: View {
 }
 
 struct QuizMCQBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onAnswer: ((Int) -> Void)?
     
     var body: some View {
@@ -321,7 +384,7 @@ struct QuizMCQBlockView: View {
 // MARK: - Summary Block
 
 struct SummaryBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -497,7 +560,7 @@ struct AnimationBlockView: View {
 // MARK: - Quiz True/False Block
 
 struct QuizTrueFalseBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onAnswer: ((Bool) -> Void)?
     
     @State private var selectedAnswer: Bool?
@@ -570,7 +633,7 @@ struct QuizTrueFalseBlockView: View {
 // MARK: - Quiz Fill Blank Block
 
 struct QuizFillBlankBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onSubmit: ((String) -> Void)?
     
     @State private var answer = ""
@@ -625,7 +688,7 @@ struct QuizFillBlankBlockView: View {
 // MARK: - Text Input Block
 
 struct TextInputBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onSubmit: ((String) -> Void)?
     
     @State private var text = ""
@@ -670,7 +733,7 @@ struct TextInputBlockView: View {
 // MARK: - Poll Block
 
 struct PollBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onVote: ((Int) -> Void)?
     
     @State private var selectedIndex: Int?
@@ -719,13 +782,13 @@ struct PollBlockView: View {
 // MARK: - Code Playground Block
 
 struct CodePlaygroundBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onRun: (() -> Void)?
     
     @State private var code: String
     @State private var output = ""
     
-    init(block: LessonBlock, onRun: (() -> Void)?) {
+    init(block: LiveLessonBlock, onRun: (() -> Void)?) {
         self.block = block
         self.onRun = onRun
         self._code = State(initialValue: block.code ?? "")
@@ -821,7 +884,7 @@ struct TerminalBlockView: View {
 // MARK: - Chart Block
 
 struct ChartBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -909,7 +972,7 @@ struct ChartBlockView: View {
 }
 
 struct ChartPlaceholderView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack {
@@ -930,7 +993,7 @@ struct ChartPlaceholderView: View {
 // MARK: - Diagram Block
 
 struct DiagramBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1122,7 +1185,7 @@ struct FlashcardDeckBlockView: View {
 // MARK: - Timeline Block
 
 struct TimelineBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1166,7 +1229,7 @@ struct TimelineBlockView: View {
 // MARK: - Comparison Block
 
 struct ComparisonBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1218,7 +1281,7 @@ struct ComparisonBlockView: View {
 // MARK: - Step by Step Block
 
 struct StepByStepBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     @State private var currentStep = 0
     
@@ -1285,7 +1348,7 @@ struct StepByStepBlockView: View {
 // MARK: - Progress Block
 
 struct ProgressBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1323,7 +1386,7 @@ struct ProgressBlockView: View {
 // MARK: - Checkpoint Block
 
 struct CheckpointBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onSave: (() -> Void)?
     
     @State private var saved = false
@@ -1364,7 +1427,7 @@ struct CheckpointBlockView: View {
 // MARK: - Unknown Block (Graceful Fallback)
 
 struct UnknownBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

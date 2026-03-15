@@ -1,17 +1,14 @@
 import Foundation
+import FirebaseAnalytics
 
 /// A singleton tracker that captures interaction telemetry and reports it back to the backend.
 public class LyoAnalyticsManager: ObservableObject {
     public static let shared = LyoAnalyticsManager()
     
     // Configurable endpoint (use local for development)
+    // Base endpoint for backend telemetry
     private var backendEndpoint: String {
-        #if targetEnvironment(simulator)
-        return "http://127.0.0.1:8000/api/v1/classroom/analytics/event"
-        #else
-        // Use your real network IP or production URL here
-        return "http://localhost:8000/api/v1/classroom/analytics/event"
-        #endif
+        return AppConfig.baseURL + "/api/v1/classroom/analytics/event"
     }
     
     // Active session metadata
@@ -40,7 +37,22 @@ public class LyoAnalyticsManager: ObservableObject {
         }
     }
     
-    // MARK: - Event Triggers
+    // MARK: - Public API
+    
+    public func trackEvent(_ name: String, parameters: [String: Any]? = nil) {
+        var payload: [String: Any] = ["event_type": name]
+        if let params = parameters {
+            payload.merge(params) { (_, new) in new }
+        }
+        sendEvent(payload: payload)
+        
+        // Firebase Mirror
+        let firebaseParams = parameters?.mapValues { value -> Any in
+            if let date = value as? Date { return date.timeIntervalSince1970 }
+            return value
+        }
+        Analytics.logEvent(name, parameters: firebaseParams)
+    }
     
     public func trackCardView(cardId: String, duration: TimeInterval) {
         let payload: [String: Any] = [
@@ -50,6 +62,13 @@ public class LyoAnalyticsManager: ObservableObject {
             "duration_seconds": duration
         ]
         sendEvent(payload: payload)
+        
+        // Firebase Mirror
+        Analytics.logEvent("card_viewed", parameters: [
+            "card_id": cardId,
+            "topic": currentTopic ?? "Unknown",
+            "duration": duration
+        ])
     }
     
     public func trackQuizAttempt(cardId: String, isCorrect: Bool) {
@@ -63,6 +82,13 @@ public class LyoAnalyticsManager: ObservableObject {
             "is_correct": isCorrect
         ]
         sendEvent(payload: payload)
+        
+        // Firebase Mirror
+        Analytics.logEvent("quiz_answered", parameters: [
+            "card_id": cardId,
+            "topic": currentTopic ?? "Unknown",
+            "is_correct": isCorrect ? 1 : 0
+        ])
     }
     
     public func trackReflection(cardId: String, wordCount: Int) {
@@ -73,6 +99,13 @@ public class LyoAnalyticsManager: ObservableObject {
             "word_count": wordCount
         ]
         sendEvent(payload: payload)
+        
+        // Firebase Mirror
+        Analytics.logEvent("reflection_submitted", parameters: [
+            "card_id": cardId,
+            "topic": currentTopic ?? "Unknown",
+            "word_count": wordCount
+        ])
     }
     
     // MARK: - Network Dispatch

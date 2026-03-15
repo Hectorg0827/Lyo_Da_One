@@ -10,7 +10,7 @@ packages:
     from: 7.0.0
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
-    from: 10.0.0
+    from: 11.0.0
   
 targets:
   Lyo:
@@ -21,6 +21,7 @@ targets:
       - path: Sources
         excludes:
           - Tests/**
+          - A2UI_Archive/Tests/**
       - path: PrivacyInfo.xcprivacy
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.lyo.app
@@ -47,6 +48,10 @@ targets:
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseCrashlytics
+      - package: Firebase
+        product: FirebaseAnalytics
+      - package: Firebase
+        product: FirebaseCore
 
   LyoTests:
     type: bundle.unit-test

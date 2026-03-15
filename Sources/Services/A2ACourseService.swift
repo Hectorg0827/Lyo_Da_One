@@ -31,6 +31,12 @@ final class A2ACourseService: ObservableObject {
     @Published var currentPipelineId: String?
     @Published var streamingState: StreamingState = .idle
     
+    /// Publisher for progressively arrived modules 🌊
+    private let newModuleSubject = PassthroughSubject<LyoModule, Never>()
+    var newModulePublisher: AnyPublisher<LyoModule, Never> {
+        newModuleSubject.eraseToAnyPublisher()
+    }
+    
     // MARK: - Private
     
     private var streamingTask: Task<Void, Never>?
@@ -737,6 +743,18 @@ extension A2ACourseService {
             Log.ai.debug("🤔 Thinking: \(event.thinkingContent?.prefix(50) ?? "")")
         case .artifactCreated:
             Log.ai.info("🎨 Artifact Created: \(event.artifact?.name ?? "Unknown")")
+            
+            // 🌊 PROGRESSIVE UNLOCKING: If this is a single module, emit it!
+            if let module = event.artifact?.asModule {
+                Log.ai.info("📦 Streamed Module Received: \(module.title)")
+                self.newModuleSubject.send(module)
+            }
+            
+            // 🎬 CINEMATIC PROGRESSIVE UNLOCKING: If this contains multiple modules, emit all!
+            for module in event.artifact?.asModules ?? [] {
+                Log.ai.info("📦 Streamed Module Received (Cinematic): \(module.title)")
+                self.newModuleSubject.send(module)
+            }
         case .unknown:
             Log.ai.debug("❓ Unknown event: \(event.message ?? "")")
         default:

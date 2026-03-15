@@ -1,93 +1,187 @@
 import Foundation
 import SwiftUI
-import Combine
 
-struct NotebookEntry: Identifiable, Codable {
+struct NotebookEntry: Identifiable, Codable, Equatable {
     let id: String
-    let userId: String
-    let title: String?
+    let conversationId: String
+    let messageId: String
     let text: String
     let sourceContext: String?
-    let tags: [String]
     let color: String
     let createdAt: Date
     let updatedAt: Date
 }
 
+struct ChatHighlight: Identifiable, Codable, Equatable {
+    let id: String
+    let messageId: String
+    let selectedText: String
+    let location: Int
+    let length: Int
+    let color: String
+    let createdAt: Date
+}
+
+private struct NotebookPersistenceSnapshot: Codable {
+    var notesByConversation: [String: [NotebookEntry]]
+    var highlightsByConversation: [String: [String: [ChatHighlight]]]
+}
+
 @MainActor
 class NotebookStore: ObservableObject {
-    @Published var notes: [NotebookEntry] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String? = nil
-    
-    // In Lyo architecture, we use AppConfig.baseURL
-    private var apiBase: String { "\(AppConfig.baseURL)/api/v1/notebook" }
-    
-    func fetchNotes(userId: String = "test_user") async {
-        self.isLoading = true
-        guard let url = URL(string: "\(apiBase)/\(userId)") else { return }
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let decoder = JSONDecoder()
-            // Backend uses ISO8601 formatting and snake_case
-            decoder.dateDecodingStrategy = .iso8601
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let fetchedNotes = try decoder.decode([NotebookEntry].self, from: data)
-            self.notes = fetchedNotes
-        } catch {
-            print("Failed to fetch notes: \(error)")
-        }
-        self.isLoading = false
+    @Published private(set) var notes: [NotebookEntry] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var errorMessage: String? = nil
+    @Published private(set) var activeConversationId: String?
+    @Published private(set) var activeHighlightsByMessage: [String: [ChatHighlight]] = [:]
+
+    private let persistenceKey = "lyo_chat_annotations_v2"
+    private var notesByConversation: [String: [NotebookEntry]] = [:]
+    private var highlightsByConversation: [String: [String: [ChatHighlight]]] = [:]
+
+    init() {
+        restore()
     }
-    
-    func saveNote(text: String, sourceContext: String? = nil, tags: [String] = [], userId: String = "test_user") async {
-        guard let url = URL(string: apiBase) else { return }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Use snake_case for the payload to match backend Pydantic model
-        let payload: [String: Any] = [
-            "user_id": userId,
-            "text": text,
-            "source_context": sourceContext ?? "Chat Highlight",
-            "tags": tags,
-            "color": "#FBBF24"
-        ]
-        
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-            let (data, _) = try await URLSession.shared.data(for: request)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let newNote = try decoder.decode(NotebookEntry.self, from: data)
-            
-            self.notes.insert(newNote, at: 0)
-        } catch {
-            print("Failed to save note: \(error)")
-            // Optimistic update fallback for prototype smoothness if backend is down
-            let placeholder = NotebookEntry(
-                id: UUID().uuidString, userId: userId, title: nil, text: text,
-                sourceContext: sourceContext, tags: tags, color: "#FBBF24",
-                createdAt: Date(), updatedAt: Date()
+
+    var hasNotesInActiveConversation: Bool {
+        !notes.isEmpty
+    }
+
+    func activateConversation(_ conversationId: String) {
+        activeConversationId = conversationId
+        notes = notesByConversation[conversationId, default: []]
+            .sorted { $0.createdAt > $1.createdAt }
+        activeHighlightsByMessage = highlightsByConversation[conversationId, default: [:]]
+        errorMessage = nil
+    }
+
+    func highlights(for messageId: String) -> [ChatHighlight] {
+        activeHighlightsByMessage[messageId, default: []]
+            .sorted { lhs, rhs in
+                if lhs.location == rhs.location {
+                    return lhs.length < rhs.length
+                }
+                return lhs.location < rhs.location
+            }
+    }
+
+    func saveNote(
+        text: String,
+        messageId: String,
+        sourceContext: String? = nil,
+        color: String = "#34D399"
+    ) {
+        guard let conversationId = activeConversationId else {
+            errorMessage = "No active conversation for note."
+            return
+        }
+
+        let trimmed = sanitize(text)
+        guard !trimmed.isEmpty else { return }
+
+        let now = Date()
+        let entry = NotebookEntry(
+            id: UUID().uuidString,
+            conversationId: conversationId,
+            messageId: messageId,
+            text: trimmed,
+            sourceContext: sourceContext,
+            color: color,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        var conversationNotes = notesByConversation[conversationId, default: []]
+        conversationNotes.insert(entry, at: 0)
+        notesByConversation[conversationId] = conversationNotes
+        notes = conversationNotes
+        persist()
+    }
+
+    func saveHighlight(
+        text: String,
+        range: NSRange,
+        messageId: String,
+        color: String = "#FBBF24"
+    ) {
+        guard let conversationId = activeConversationId else {
+            errorMessage = "No active conversation for highlight."
+            return
+        }
+
+        let trimmed = sanitize(text)
+        guard !trimmed.isEmpty, range.location != NSNotFound, range.length > 0 else { return }
+
+        var conversationHighlights = highlightsByConversation[conversationId, default: [:]]
+        var messageHighlights = conversationHighlights[messageId, default: []]
+
+        let alreadyExists = messageHighlights.contains {
+            $0.location == range.location && $0.length == range.length && $0.selectedText == trimmed
+        }
+        guard !alreadyExists else { return }
+
+        messageHighlights.append(
+            ChatHighlight(
+                id: UUID().uuidString,
+                messageId: messageId,
+                selectedText: trimmed,
+                location: range.location,
+                length: range.length,
+                color: color,
+                createdAt: Date()
             )
-            self.notes.insert(placeholder, at: 0)
+        )
+
+        conversationHighlights[messageId] = messageHighlights
+        highlightsByConversation[conversationId] = conversationHighlights
+        activeHighlightsByMessage = conversationHighlights
+        persist()
+    }
+
+    func deleteNote(noteId: String) {
+        guard let conversationId = activeConversationId else { return }
+
+        var conversationNotes = notesByConversation[conversationId, default: []]
+        conversationNotes.removeAll { $0.id == noteId }
+        notesByConversation[conversationId] = conversationNotes
+        notes = conversationNotes
+        persist()
+    }
+
+    private func sanitize(_ text: String) -> String {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+    }
+
+    private func restore() {
+        guard let data = UserDefaults.standard.data(forKey: persistenceKey) else { return }
+
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let snapshot = try decoder.decode(NotebookPersistenceSnapshot.self, from: data)
+            notesByConversation = snapshot.notesByConversation
+            highlightsByConversation = snapshot.highlightsByConversation
+        } catch {
+            errorMessage = "Unable to restore chat notes."
+            print("❌ Failed to restore chat annotations: \(error)")
         }
     }
-    
-    func deleteNote(noteId: String) async {
-        guard let url = URL(string: "\(apiBase)/\(noteId)") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        
+
+    private func persist() {
         do {
-            _ = try await URLSession.shared.data(for: request)
-            self.notes.removeAll(where: { $0.id == noteId })
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let snapshot = NotebookPersistenceSnapshot(
+                notesByConversation: notesByConversation,
+                highlightsByConversation: highlightsByConversation
+            )
+            let data = try encoder.encode(snapshot)
+            UserDefaults.standard.set(data, forKey: persistenceKey)
         } catch {
-            print("Failed to delete note: \(error)")
+            errorMessage = "Unable to save chat notes."
+            print("❌ Failed to persist chat annotations: \(error)")
         }
     }
 }

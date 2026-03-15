@@ -22,6 +22,8 @@ struct EnhancedMessageBubble: View {
     let onModuleSelect: ((CourseModule) -> Void)?
     let onSuggestionSelect: ((String) -> Void)?
     let onCinematicPlay: ((A2UICinematic) -> Void)?
+    let highlights: [ChatHighlight]
+    let onTextSelectionAction: ((TextSelectionAction) -> Void)?
     
     @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
@@ -35,7 +37,9 @@ struct EnhancedMessageBubble: View {
         onTopicSelect: ((TopicOption) -> Void)? = nil,
         onModuleSelect: ((CourseModule) -> Void)? = nil,
         onSuggestionSelect: ((String) -> Void)? = nil,
-        onCinematicPlay: ((A2UICinematic) -> Void)? = nil
+        onCinematicPlay: ((A2UICinematic) -> Void)? = nil,
+        highlights: [ChatHighlight] = [],
+        onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil
     ) {
         self.message = message
         self.onTTSToggle = onTTSToggle
@@ -45,6 +49,8 @@ struct EnhancedMessageBubble: View {
         self.onModuleSelect = onModuleSelect
         self.onSuggestionSelect = onSuggestionSelect
         self.onCinematicPlay = onCinematicPlay
+        self.highlights = highlights
+        self.onTextSelectionAction = onTextSelectionAction
     }
     
     /// True when contentTypes contains rich content that should suppress raw text rendering
@@ -52,7 +58,6 @@ struct EnhancedMessageBubble: View {
     private var hasRichContent: Bool {
         message.contentTypes.contains { contentType in
             switch contentType {
-            case .a2ui: return true
             case .courseProposal: return true
             case .courseRoadmap: return true
             case .quiz: return true
@@ -131,22 +136,18 @@ struct EnhancedMessageBubble: View {
                         
                         switch contentType {
                         case .text:
-                            // Suppress raw text when rich content (A2UI, courseProposal, quiz, etc.) is present
+                            // Suppress raw text when rich content (courseProposal, quiz, etc.) is present
                             if !hasRichContent && !message.content.isEmpty {
-                                #if canImport(LaTeXSwiftUI)
-                                LaTeX(stripEmojis(message.content))
-                                    .parsingMode(.all)
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white.opacity(0.9))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .lineSpacing(4)
-                                #else
-                                styledMarkdownText(stripEmojis(message.content))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .lineSpacing(4)
-                                #endif
+                                SelectableTextView(
+                                    content: stripEmojis(message.content),
+                                    messageId: message.id,
+                                    highlights: highlights,
+                                    onAction: { action in
+                                        onTextSelectionAction?(action)
+                                    }
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
                             }
                             
                         case .processing(let step, let progress):
@@ -250,14 +251,6 @@ struct EnhancedMessageBubble: View {
                                 }
                             )
                             .padding(.horizontal, -8)
-
-                        case .a2ui(let component):
-                            A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ childComponent: A2UIComponent) in
-                                let actionId = action.payload?["id"]?.stringValue ?? action.id
-                                handleA2UIAction(actionId, rootComponent: childComponent)
-                            })
-                            .padding(.horizontal, -14) // fully negate parent padding so A2UI fills ~99% width
-                            .environment(\.colorScheme, .dark) // force dark so semantic colors blend with bubble bg
 
                         case .cinematic(let data):
                             // Render a "Trailer" card that invites the user to tap
@@ -377,11 +370,15 @@ struct EnhancedMessageBubble: View {
             Spacer(minLength: 60)
             
             VStack(alignment: .trailing, spacing: 8) {
-                // Main content
-                Text(LocalizedStringKey(message.content))
-                    .font(.body)
-                    .foregroundColor(.white)
-                    .textSelection(.enabled)
+                // Main content — user bubbles still use native text selection
+                SelectableTextView(
+                    content: message.content,
+                    messageId: message.id,
+                    highlights: [],
+                    onAction: { action in
+                        onTextSelectionAction?(action)
+                    }
+                )
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Color.accentColor)
@@ -492,7 +489,7 @@ struct EnhancedMessageBubble: View {
         }
     }
 
-    // MARK: - A2UI Action Handling
+    // MARK: - Action Handling
     
     /// Strips emoji characters from text for cleaner UI presentation
     private func stripEmojis(_ text: String) -> String {
@@ -549,25 +546,16 @@ struct EnhancedMessageBubble: View {
         return Text(styled)
     }
 
-    private func handleA2UIAction(_ actionId: String, rootComponent: A2UIComponent? = nil) {
-        Log.ai.info("A2UI Action triggered: \(actionId)")
+    private func handleA2UIAction(_ actionId: String) {
+        Log.ai.info("Action triggered: \(actionId)")
         HapticManager.shared.light()
 
         // Parse action and route to appropriate handler
         if actionId == "create_course_from_topic" {
-            // Extract title and topic from the root component if possible
-            var title = "AI Generated Course"
-            var topic = "AI Generated Course"
-            
-            if let root = rootComponent {
-                title = root.props.title ?? title
-                topic = root.props.subtitle ?? root.props.hint ?? title
-            }
-            
             let payload = CoursePayload(
                 id: nil,
-                title: title,
-                topic: topic,
+                title: "AI Generated Course",
+                topic: "AI Generated Course",
                 level: "Beginner",
                 language: nil,
                 duration: nil,

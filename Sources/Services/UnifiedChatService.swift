@@ -5,7 +5,7 @@
 //  SINGLE SOURCE OF TRUTH for all AI chat functionality across the app.
 //  This service handles:
 //  - Message sending/receiving via BackendAIService
-//  - A2UI protocol parsing and rendering
+//  - Lyo protocol parsing and rendering
 //  - Course creation flow
 //  - Conversation persistence
 //  - Stack integration
@@ -53,6 +53,9 @@ final class UnifiedChatService: ObservableObject {
 
     /// Suggestions from last response
     @Published var suggestions: [SuggestionChip] = []
+    
+    /// Callback triggered when an emotion brick is detected in the stream
+    var onEmotionDetected: ((String) -> Void)?
 
     // MARK: - Private Properties
 
@@ -103,7 +106,8 @@ final class UnifiedChatService: ObservableObject {
         _ text: String,
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
-        mode: String = "chat"
+        mode: String = "chat",
+        forcedIntent: String? = nil
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -143,10 +147,15 @@ final class UnifiedChatService: ObservableObject {
         // 5. Prepare placeholder AI message ID for streaming
         let aiMessageId = UUID().uuidString
 
-        // 6. Route through ChatRouter (Two-Speed Engine)
+        // 6. Extract attachment IDs for RAG pipeline
+        let attachmentIds = attachments.map { $0.id }
+
+        // 7. Route through ChatRouter (Two-Speed Engine)
         let result = await chatRouter.route(
             message: trimmedText,
+            attachmentIds: attachmentIds,
             mode: mode,
+            forcedIntent: forcedIntent,
             conversationHistory: conversationHistory,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
@@ -174,8 +183,13 @@ final class UnifiedChatService: ObservableObject {
             await saveConversation()
             Log.ai.info("⚡ Instant response served on-device")
 
-        case .fastResponse(let text, let studyPlan, let latencyMs, let chips, let coursePayload, let mappedComponents):
+        case .fastResponse(let text, let studyPlan, let latencyMs, let chips, let coursePayload):
             // Single-agent non-streaming response
+            let trimmedFastText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let loweredFastText = trimmedFastText.lowercased()
+            let isGenericBackendFallback = loweredFastText.contains("encountered an issue generating a response")
+                || loweredFastText == "please try again."
+
             var contentTypes: [MessageContentType] = [.text]
             // Note: studyPlan is TestPrepData, but contentType expects StudyPlan.
             // Bridge the types if a plan is present.
@@ -201,19 +215,12 @@ final class UnifiedChatService: ObservableObject {
                     "🏫 Fast path: showing course proposal card for '\(coursePayload.title)' — awaiting user action"
                 )
                 contentTypes = [.courseProposal(payload: coursePayload)]
-            } else if let components = mappedComponents, !components.isEmpty {
-                // A2UI components decoded from backend ui_component field — use for rich rendering
-                // Keep .text first so it still shows the text bubble, then append A2UI widgets
-                for component in components {
-                    contentTypes.append(.a2ui(component: component))
-                }
-                Log.ai.info("🎨 Fast path: \(components.count) A2UI component(s) added to chat bubble")
             }
 
             let fastMsg = LyoMessage(
                 id: aiMessageId,
                 sessionId: currentConversationId,
-                content: text,
+                content: isGenericBackendFallback ? "" : text,
                 isFromUser: false,
                 timestamp: Date(),
                 contentTypes: contentTypes,
@@ -249,16 +256,16 @@ final class UnifiedChatService: ObservableObject {
             )
 
             // Safety timeout: if the deep-path pipeline hasn't delivered content
-            // within 45s, clear loading state so the UI isn't stuck forever.
+            // within 145s, clear loading state so the UI isn't stuck forever.
             // The deep path (3-layer multi-agent pipeline) can legitimately take
-            // 20-30s, so 45s gives enough headroom before treating as a failure.
+            // 90-120s, so 145s gives enough headroom before treating as a failure.
             // This task is CANCELLED by handleLyo2Event when real content arrives.
             streamTimeoutTask?.cancel()
             streamTimeoutTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 45_000_000_000)  // 45 seconds
+                try? await Task.sleep(nanoseconds: 145_000_000_000)  // 145 seconds
                 guard !Task.isCancelled else { return }
                 guard let self, self.isLoading else { return }
-                // Still loading after 45s → stream likely failed silently
+                // Still loading after 145s → stream likely failed silently
                 self.isLoading = false
                 // Replace the skeleton placeholder (if it exists) instead of
                 // appending a duplicate message with the same ID.
@@ -358,10 +365,11 @@ final class UnifiedChatService: ObservableObject {
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
         mode: String = "chat",
+        forcedIntent: String? = nil,
         speakResponse: Bool = false
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
-        _ = await sendMessage(text, attachments: attachments, context: context, mode: mode)
+        _ = await sendMessage(text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent)
     }
 
     // MARK: - Conversation Memory Window
@@ -487,15 +495,8 @@ final class UnifiedChatService: ObservableObject {
                     return true
                 }
 
-                // --- Generative UI Block parsing ---
-                let parsedResponse = AIResponseParser.shared.parse(answerText)
-                if let blocks = parsedResponse.uiBlocks, !blocks.isEmpty {
-                    finalTypes.append(.generativeUI(blocks: blocks))
-                    if let newText = parsedResponse.displayText {
-                        answerText = newText
-                    }
-                }
-
+                // --- Generative UI Block parsing is now handled by SmartBlockContainerView in the UI layer ---
+                
                 if !finalTypes.contains(.text) {
                     finalTypes.append(.text)
                 }
@@ -520,16 +521,8 @@ final class UnifiedChatService: ObservableObject {
             } else {
                 // No skeleton existed — append as new message
 
-                // --- Generative UI Block parsing ---
-                var finalTypes: [MessageContentType] = []
-                let parsedResponse = AIResponseParser.shared.parse(answerText)
-                if let blocks = parsedResponse.uiBlocks, !blocks.isEmpty {
-                    finalTypes.append(.generativeUI(blocks: blocks))
-                    if let newText = parsedResponse.displayText {
-                        answerText = newText
-                    }
-                }
-
+                // --- Generative UI Block parsing is now handled by SmartBlockContainerView in the UI layer ---
+                var finalTypes: [MessageContentType] = [.text]
                 if !finalTypes.contains(.text) {
                     finalTypes.append(.text)
                 }
@@ -647,47 +640,7 @@ final class UnifiedChatService: ObservableObject {
                 Task { await saveConversation() }
             }
 
-            // 2. Try to decode A2UI component from artifact content
-            else if let a2uiComponent = tryDecodeA2UIComponent(from: block) {
-                Log.ai.info(
-                    "🎨 A2UI component decoded from artifact: \(String(describing: a2uiComponent.type))"
-                )
-                // Replace existing answer message with A2UI content to avoid duplicate bubbles
-                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    // Merge types
-                    var currentTypes = messages[idx].contentTypes ?? []
-                    // Remove processing
-                    currentTypes.removeAll {
-                        if case .processing = $0 { return true } else { return false }
-                    }
-                    // Add new component
-                    currentTypes.append(.a2ui(component: a2uiComponent))
-                    currentTypes = normalizeContentTypes(currentTypes)
-
-                    let a2uiMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: messages[idx].sessionId,
-                        content: messages[idx].content,  // Keep existing text
-                        isFromUser: false,
-                        timestamp: messages[idx].timestamp,
-                        contentTypes: currentTypes
-                    )
-                    messages[idx] = a2uiMsg
-                } else {
-                    let a2uiMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: currentConversationId,
-                        content: "",
-                        isFromUser: false,
-                        timestamp: Date(),
-                        contentTypes: [.a2ui(component: a2uiComponent)]
-                    )
-                    messages.append(a2uiMsg)
-                }
-                Task { await saveConversation() }
-            }
-
-            // 3. Check if artifact contains OPEN_CLASSROOM payload → render proposal card
+            // 2. Check if artifact contains OPEN_CLASSROOM payload → render proposal card
             else if let coursePayload = tryDecodeOpenClassroom(from: block) {
                 Log.ai.info(
                     "📋 OPEN_CLASSROOM detected in artifact — showing proposal card (user must tap Start Class)"
@@ -789,44 +742,135 @@ final class UnifiedChatService: ObservableObject {
             self.error = message
             isLoading = false
 
+        // ── v1 backward-compat events (deployed backend still emits these) ──
+
+        case .actions(let blocks):
+            Log.ai.info("️ Actions received (v1 compat): \(blocks.count)")
+            var newSuggestions: [SuggestionChip] = []
+
+            for block in blocks {
+                if block.blockType == .ctaRow {
+                    if let actions = block.content["actions"]?.value as? [String] {
+                        for label in actions {
+                            newSuggestions.append(
+                                SuggestionChip(
+                                    id: UUID().uuidString,
+                                    text: label,
+                                    icon: Self.iconForChipLabel(label),
+                                    actionType: nil,
+                                    context: nil
+                                ))
+                        }
+                    }
+                    if let buttons = block.content["buttons"]?.value as? [[String: Any]] {
+                        for btn in buttons {
+                            if let label = btn["label"] as? String {
+                                newSuggestions.append(
+                                    SuggestionChip(
+                                        id: UUID().uuidString,
+                                        text: label,
+                                        icon: Self.iconForChipLabel(label),
+                                        actionType: btn["action_type"] as? String,
+                                        context: nil
+                                    ))
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !newSuggestions.isEmpty {
+                self.suggestions = newSuggestions
+                Log.ai.info("Set \(newSuggestions.count) suggestion chips (v1 compat)")
+            } else {
+                self.suggestions = []
+            }
+
+        case .openClassroom(let block):
+            Log.ai.info(
+                "📋 OPEN_CLASSROOM stream event (v1 compat) — showing proposal card")
+            if let coursePayload = tryDecodeOpenClassroom(from: block) {
+                let proposalContent =
+                    "Here's your course proposal! Tap **Start Class** to begin, **Save to Stack** to save for later, or **Refine Course** to adjust. 🎓"
+                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    let proposalMsg = LyoMessage(
+                        id: aiMessageId,
+                        sessionId: messages[idx].sessionId,
+                        content: proposalContent,
+                        isFromUser: false,
+                        timestamp: messages[idx].timestamp,
+                        contentTypes: [.courseProposal(payload: coursePayload)]
+                    )
+                    messages[idx] = proposalMsg
+                } else {
+                    let proposalMsg = LyoMessage(
+                        id: aiMessageId,
+                        sessionId: currentConversationId,
+                        content: proposalContent,
+                        isFromUser: false,
+                        timestamp: Date(),
+                        contentTypes: [.courseProposal(payload: coursePayload)]
+                    )
+                    messages.append(proposalMsg)
+                }
+                Task { await saveConversation() }
+            }
+
         // ── v2 events (LyoResponse envelope) ──────────────────────
 
         case .lyoUI(let response):
             Log.ai.info("🎨 v2 lyo_ui event received")
-            // Decode the v2 UI component from the LyoResponse
+            // Extract plain text from the v2 UI component
             if let uiComponent = response.ui {
-                // Convert LyoUIComponent → A2UIComponent for rendering via existing pipeline
-                // The v2 renderer will be triggered by the variant field presence
-                let a2uiComponent = lyoUIComponentToA2UI(uiComponent)
-                if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                    var currentTypes = messages[idx].contentTypes ?? []
-                    currentTypes.removeAll {
-                        if case .processing = $0 { return true } else { return false }
+                // Handle Emotion bricks separately (they don't render a bubble)
+                if uiComponent.type == "emotion" {
+                    if let emotion = uiComponent.content?.text {
+                        Log.ai.info("🎭 Emotion detected: \(emotion)")
+                        onEmotionDetected?(emotion)
                     }
-                    currentTypes.append(.a2ui(component: a2uiComponent))
-                    currentTypes = normalizeContentTypes(currentTypes)
-
-                    let a2uiMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: messages[idx].sessionId,
-                        content: messages[idx].content,
-                        isFromUser: false,
-                        timestamp: messages[idx].timestamp,
-                        contentTypes: currentTypes
-                    )
-                    messages[idx] = a2uiMsg
-                } else {
-                    let a2uiMsg = LyoMessage(
-                        id: aiMessageId,
-                        sessionId: currentConversationId,
-                        content: "",
-                        isFromUser: false,
-                        timestamp: Date(),
-                        contentTypes: [.a2ui(component: a2uiComponent)]
-                    )
-                    messages.append(a2uiMsg)
+                    return
                 }
-                Task { await saveConversation() }
+
+                // Extract text content from the component
+                let textContent = uiComponent.content?.text
+                    ?? uiComponent.content?.body
+                    ?? uiComponent.content?.title
+                    ?? ""
+                if !textContent.isEmpty {
+                    if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                        var currentTypes = messages[idx].contentTypes ?? []
+                        currentTypes.removeAll {
+                            if case .processing = $0 { return true } else { return false }
+                        }
+                        if !currentTypes.contains(.text) {
+                            currentTypes.append(.text)
+                        }
+                        currentTypes = normalizeContentTypes(currentTypes)
+
+                        let existingContent = messages[idx].content
+                        let separator = existingContent.isEmpty ? "" : "\n\n"
+                        let updatedMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: messages[idx].sessionId,
+                            content: existingContent + separator + textContent,
+                            isFromUser: false,
+                            timestamp: messages[idx].timestamp,
+                            contentTypes: currentTypes
+                        )
+                        messages[idx] = updatedMsg
+                    } else {
+                        let textMsg = LyoMessage(
+                            id: aiMessageId,
+                            sessionId: currentConversationId,
+                            content: textContent,
+                            isFromUser: false,
+                            timestamp: Date(),
+                            contentTypes: [.text]
+                        )
+                        messages.append(textMsg)
+                    }
+                    Task { await saveConversation() }
+                }
             }
 
         case .lyoCommand(let response):
@@ -901,35 +945,6 @@ final class UnifiedChatService: ObservableObject {
                 Log.ai.warning(
                     "⚠️ Replaced orphaned skeleton with fallback message (no answer received)")
             }
-            // If the orchestrator produced mapped A2UI components for this response,
-            // attach them to the final message so the UI renders them inline.
-            if let mapped = LyoOrchestrator.shared.lastMappedComponents,
-                !mapped.isEmpty,
-                let idx = messages.firstIndex(where: { $0.id == aiMessageId })
-            {
-                var currentTypes = messages[idx].contentTypes ?? []
-                // Remove any processing placeholders
-                currentTypes.removeAll {
-                    if case .processing = $0 { return true } else { return false }
-                }
-                // Append each mapped component as an A2UI type
-                for comp in mapped {
-                    currentTypes.append(.a2ui(component: comp))
-                }
-                currentTypes = normalizeContentTypes(currentTypes)
-                let updated = LyoMessage(
-                    id: messages[idx].id,
-                    sessionId: messages[idx].sessionId,
-                    content: messages[idx].content,
-                    isFromUser: messages[idx].isFromUser,
-                    timestamp: messages[idx].timestamp,
-                    contentTypes: currentTypes,
-                    isRevealed: messages[idx].isRevealed
-                )
-                messages[idx] = updated
-                Task { await saveConversation() }
-            }
-
             isLoading = false
         }
     }
@@ -1025,7 +1040,7 @@ final class UnifiedChatService: ObservableObject {
     private func normalizeContentTypes(_ types: [MessageContentType]) -> [MessageContentType] {
         let hasRichContent = types.contains { contentType in
             switch contentType {
-            case .a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep,
+            case .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep,
                 .recursiveUI, .cinematic, .generativeUI:
                 return true
             default:
@@ -1068,7 +1083,7 @@ final class UnifiedChatService: ObservableObject {
         return (isSimplePrompt || isGreetingOrAck) && genericCount >= 2
     }
 
-    // MARK: - A2UI / Course Bridge Helpers
+    // MARK: - Course Bridge Helpers
 
     // MARK: - Suggestion Chip Helpers
 
@@ -1127,67 +1142,6 @@ final class UnifiedChatService: ObservableObject {
     }
 
 
-    /// Try to decode an A2UIComponent from a Lyo2UIBlock's content dictionary.
-    ///
-    /// Sanitizes the raw `[String: Any]` dict produced by AnyCodable before calling
-    /// JSONSerialization — Swift Void `()` (decoded from JSON null) is not a valid
-    /// ObjC-bridgeable type and causes JSONSerialization.data(withJSONObject:) to throw,
-    /// which was the primary silent-failure path that fell back to plain text.
-    private func tryDecodeA2UIComponent(from block: Lyo2UIBlock) -> A2UIComponent? {
-        // Expanded key list — backend may use any of these
-        let possibleKeys = [
-            "a2ui", "component", "ui", "a2ui_component", "uiComponent", "ui_component", "a2ui_tree",
-        ]
-        for key in possibleKeys {
-            if let rawVal = block.content[key]?.value {
-                // Sanitize values using standard AnyCodable sanitation
-                let sanitized = AnyCodable.sanitizeForJSON(rawVal)
-                if JSONSerialization.isValidJSONObject(sanitized),
-                    let data = try? JSONSerialization.data(withJSONObject: sanitized),
-                    let component = try? JSONDecoder().decode(A2UIComponent.self, from: data)
-                {
-                    Log.ai.info(
-                        "🎨 ✅ Decoded A2UIComponent from key '\(key)': type=\(component.type.rawValue)"
-                    )
-                    return component
-                } else {
-                    // Log decode error for diagnostics
-                    if JSONSerialization.isValidJSONObject(sanitized) {
-                        do {
-                            let data = try JSONSerialization.data(withJSONObject: sanitized)
-                            _ = try JSONDecoder().decode(A2UIComponent.self, from: data)
-                        } catch {
-                            Log.ai.warning("🎨 ⚠️ Decode failed for key '\(key)': \(error)")
-                        }
-                    } else {
-                        Log.ai.warning(
-                            "🎨 ⚠️ Value for key '\(key)' is not a valid JSON object after sanitization"
-                        )
-                    }
-                }
-            }
-        }
-
-        // Fallback: try decoding the entire content dict directly as an A2UIComponent.
-        // The backend sometimes places component fields at the root of "content" without a wrapper key.
-        // BUG-B FIX: only require "type" (id is generated by A2UIComponent's custom decoder).
-        if block.content["type"] != nil {
-            let rawDict = block.content.mapValues { $0.value }
-            let sanitized = AnyCodable.sanitizeForJSON(rawDict)
-            
-            if JSONSerialization.isValidJSONObject(sanitized),
-               let data = try? JSONSerialization.data(withJSONObject: sanitized),
-               let component = try? JSONDecoder().decode(A2UIComponent.self, from: data) {
-                Log.ai.info("🎨 ✅ Decoded A2UIComponent from root content dict: type=\(component.type.rawValue)")
-                return component
-            } else {
-                Log.ai.warning("🎨 ⚠️ Root content contained 'type' but failed to decode as A2UIComponent")
-            }
-        }
-        
-        return nil
-    }
-
     /// Try to decode an OPEN_CLASSROOM / CoursePayload from artifact content.
     ///
     /// Supports three detection strategies (checked in order):
@@ -1237,34 +1191,11 @@ final class UnifiedChatService: ObservableObject {
             }
         }
 
-        // ── Strategy 2: A2UI component tree with intent-based routing ──
-        // The backend may send: content: { "component": { type: "card", props: { intent: "open_classroom", title: "..." } } }
-        let componentKeys = ["component", "a2ui", "ui", "a2ui_component"]
-        for key in componentKeys {
-            guard let componentDict = block.content[key]?.value else { continue }
-            Log.ai.info("🏫 Found '\(key)' in content, attempting A2UI component decode")
-            do {
-                let sanitized = AnyCodable.sanitizeForJSON(componentDict)
-                let data = try JSONSerialization.data(withJSONObject: sanitized)
-                let component = try JSONDecoder().decode(A2UIComponent.self, from: data)
-
-                // Check for intent in the component tree (root or first-level children)
-                if let course = extractCourseFromComponent(component) {
-                    Log.ai.info(
-                        "🏫 ✅ Extracted CoursePayload from A2UI component tree: \(course.title)")
-                    return course
-                }
-                Log.ai.info("🏫 A2UI component decoded but no classroom intent/course data found")
-            } catch {
-                Log.ai.warning("🏫 Failed to decode A2UIComponent from '\(key)': \(error)")
-            }
-        }
-
-        // ── Strategy 3: Flat content fields (title + topic heuristic) ──
+        // ── Strategy 2: Flat content fields (title + topic heuristic) ──
         // BUG-C FIX: Guard this strategy to ONLY fire for blocks that are explicitly
-        // identified as classroom-intent. Without this guard, any A2UI card/component
+        // identified as classroom-intent. Without this guard, any component
         // that carries a "title" prop at the root of its content dict would be falsely
-        // captured here and routed to .courseProposal instead of .a2ui.
+        // captured here and routed to .courseProposal.
         let hasExplicitClassroomIntent: Bool = {
             if block.blockType == .openClassroomBlock { return true }
             if let typeStr = block.content["type"]?.value as? String,
@@ -1330,185 +1261,6 @@ final class UnifiedChatService: ObservableObject {
 
         Log.ai.warning("🏫 ❌ Could not decode any CoursePayload from block")
         return nil
-    }
-
-    /// Extract CoursePayload from an A2UIComponent tree.
-    /// Walks the root component and its children looking for:
-    /// 1. `intent: "open_classroom"` in props → synthesize CoursePayload from props
-    /// 2. Props containing `title` + `subtitle` (treated as topic) → heuristic match
-    private func extractCourseFromComponent(_ component: A2UIComponent) -> CoursePayload? {
-        // Check root component props
-        if let course = coursePayloadFromProps(component.props) {
-            return course
-        }
-
-        // Check first-level children
-        if let children = component.children {
-            for child in children {
-                if let course = coursePayloadFromProps(child.props) {
-                    return course
-                }
-                // Check second-level children (e.g. card > vstack > content)
-                if let grandchildren = child.children {
-                    for grandchild in grandchildren {
-                        if let course = coursePayloadFromProps(grandchild.props) {
-                            return course
-                        }
-                    }
-                }
-            }
-        }
-
-        return nil
-    }
-
-    /// Try to build a CoursePayload from A2UI component props.
-    /// Returns non-nil if the props contain `intent == "open_classroom"` OR
-    /// have enough course-like fields (title + subtitle/hint with course keywords).
-    private func coursePayloadFromProps(_ props: A2UIProps) -> CoursePayload? {
-        let hasClassroomIntent = props.intent?.lowercased() == "open_classroom"
-
-        // Must have at least a title (either from explicit intent or heuristic)
-        // When intent is present but title is missing, try subtitle/hint/label, then last user message.
-        let resolvedTitle: String?
-        if let explicitTitle = props.title {
-            resolvedTitle = explicitTitle
-        } else if hasClassroomIntent {
-            // 1st fallback: any available descriptive field
-            if let fieldFallback = props.subtitle ?? props.hint ?? props.label {
-                resolvedTitle = fieldFallback
-                Log.ai.info("🏫 open_classroom: no title in props, using field fallback: \(fieldFallback)")
-            } else if let lastUserMsg = messages.last(where: { $0.isFromUser })?.content,
-                      !lastUserMsg.isEmpty {
-                // 2nd fallback: last user message is almost always the requested topic
-                resolvedTitle = lastUserMsg
-                Log.ai.info("🏫 open_classroom: no title in props, using last user message: \(lastUserMsg.prefix(60))")
-            } else {
-                resolvedTitle = nil
-                Log.ai.warning("🏫 Found open_classroom intent but no title in props and no user messages")
-            }
-        } else {
-            resolvedTitle = nil
-        }
-
-        guard let title = resolvedTitle else {
-            return nil
-        }
-
-        if hasClassroomIntent {
-            // Intent-based: trust the backend's signal
-            let topic = props.subtitle ?? props.hint ?? title
-            let level = props.label ?? "Beginner"
-            Log.ai.info("🏫 Intent-based: building CoursePayload from props (intent=open_classroom)")
-            return CoursePayload(
-                id: nil,
-                title: title,
-                topic: topic,
-                level: level,
-                language: nil,
-                duration: nil,
-                objectives: []
-            )
-        }
-
-        // Strategy 4: Heuristic fallback (if intent is missing but content strongly suggests a course)
-        // Look for keywords in title/subtitle that strongly imply a generated course outline
-        let heuristicKeywords = [
-            "course outline", "learning path", "curriculum", "modules", "syllabus",
-        ]
-        let combinedText = (title + " " + (props.subtitle ?? "")).lowercased()
-
-        if heuristicKeywords.contains(where: { combinedText.contains($0) }) {
-            Log.ai.info("🏫 Heuristic-based: inferred CoursePayload from props (found keywords)")
-            return CoursePayload(
-                id: nil,
-                title: title,
-                topic: props.subtitle ?? title,
-                level: props.label ?? "Beginner",
-                language: nil,
-                duration: nil,
-                objectives: []
-            )
-        }
-
-        // No explicit intent — don't heuristically guess (avoids false positives)
-        return nil
-    }
-
-    // MARK: - v2 Helpers
-
-    /// Convert a LyoUIComponent (v2) back to an A2UIComponent for rendering.
-    /// The variant field on the A2UIComponent enables the v2 renderer path.
-    private func lyoUIComponentToA2UI(_ lyoComponent: LyoUIComponent) -> A2UIComponent {
-        // Build props from content + style
-        var props = A2UIProps()
-        if let content = lyoComponent.content {
-            props.text = content.text ?? content.body
-            props.title = content.title
-            props.subtitle = content.subtitle
-            props.label = content.label
-            props.hint = content.hint
-            if let iconName = content.icon {
-                props.icon = iconName
-            }
-            if let imgUrl = content.imageUrl {
-                props.imageUrl = imgUrl
-            }
-        }
-        if let style = lyoComponent.style {
-            props.foregroundColor = style.foreground
-            props.backgroundColor = style.background
-            props.spacing = style.spacing
-            props.borderRadius = style.radius
-            if let alignStr = style.alignment {
-                props.alignment = A2UIAlignment(rawValue: alignStr)
-            }
-            if let fs = style.fontSize {
-                props.fontSize = fs
-            }
-            props.fontWeight = style.fontWeight
-        }
-
-        // Map primitive type to A2UIElementType
-        let elementType: A2UIElementType
-        switch lyoComponent.type {
-        case .text: elementType = .text
-        case .media: elementType = .image
-        case .divider: elementType = .divider
-        case .input: elementType = .textInput
-        case .button: elementType = .button
-        case .container: elementType = .vStack
-        case .card: elementType = .card
-        case .list: elementType = .lessonList
-        case .nav: elementType = .tabs
-        case .quiz: elementType = .quizMcq
-        case .quizResult: elementType = .gradeDisplay
-        case .course: elementType = .course
-        case .flashcard: elementType = .flashcard
-        case .plan: elementType = .card
-        case .tracker: elementType = .progressBar
-        case .assignment: elementType = .card
-        case .document: elementType = .card
-        case .progress: elementType = .progressBar
-        case .aiBubble: elementType = .text
-        case .social: elementType = .card
-        case .alert: elementType = .card
-        case .skeleton: elementType = .skeleton
-        }
-
-        // Recursively convert children
-        var children: [A2UIComponent]? = nil
-        if let lyoChildren = lyoComponent.children, !lyoChildren.isEmpty {
-            children = lyoChildren.map { lyoUIComponentToA2UI($0) }
-        }
-
-        return A2UIComponent(
-            id: lyoComponent.id,
-            type: elementType,
-            props: props,
-            children: children,
-            variant: lyoComponent.variant
-        )
     }
 
     /// Try to decode a CoursePayload from a raw dictionary (used by v2 lyo_command events).
@@ -1757,7 +1509,7 @@ final class UnifiedChatService: ObservableObject {
             sessionId: msg.sessionId,
             role: msg.isFromUser ? .user : .assistant,
             content: msg.content,
-            contentTypes: msg.contentTypes ?? [.text],  // Preserve A2UI widgets
+            contentTypes: msg.contentTypes ?? [.text],
             timestamp: msg.timestamp,
             isStreaming: false
         )

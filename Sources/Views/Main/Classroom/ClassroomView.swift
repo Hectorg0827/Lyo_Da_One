@@ -34,32 +34,8 @@ struct ClassroomView: View {
                 }
                 
                 // Main Content
-                if let component = viewModel.a2uiComponent {
-                     A2UIRenderer(
-                        component: component,
-                        onAction: { action, _ in
-                             // Handle classroom-specific actions from A2UI
-                             Log.classroom.info("A2UI Action Triggered: \(action.id)")
-                             
-                             switch action.id {
-                             case "next_slide", "next":
-                                 withAnimation { viewModel.nextSlide() }
-                             case "prev_slide", "previous", "back":
-                                 withAnimation { viewModel.previousSlide() }
-                             case "exit", "close":
-                                 dismiss()
-                             case "toggle_tutor":
-                                 isTutorModePresented.toggle()
-                             case "show_grid":
-                                 withAnimation { viewModel.showModuleGrid = true }
-                             default:
-                                 // Forward other actions to generic handler or log
-                                 Log.classroom.info("Unhandled A2UI Action: \(action.id)")
-                             }
-                        }
-                     )
-                } else if let session = viewModel.session {
-                    ModuleCardView(
+                if let session = viewModel.session {
+                    ClassroomModuleCardView(
                         module: session.modules[viewModel.currentModuleIndex],
                         slideIndex: viewModel.currentSlideIndex,
                         settings: viewModel.settings,
@@ -85,7 +61,7 @@ struct ClassroomView: View {
                     
                     // Progress bar at top
                     VStack {
-                        ProgressBarView(
+                        ClassroomProgressBar(
                             slideProgress: viewModel.slideProgress,
                             moduleProgress: viewModel.moduleProgress,
                             currentSlide: viewModel.currentSlideIndex + 1,
@@ -271,13 +247,6 @@ struct ClassroomView: View {
                     progress: progress,
                     completedLessons: viewModel.currentModuleIndex
                 )
-                
-                // Sync State
-                A2UIStateObserver.shared.updateState(
-                    screenId: "classroom",
-                    componentId: session.modules[viewModel.currentModuleIndex].id,
-                    metadata: ["progress": String(format: "%.2f", progress)]
-                )
             }
         }
     }
@@ -311,7 +280,7 @@ struct ClassroomView: View {
 
 // MARK: - Progress Bar
 
-struct ProgressBarView: View {
+struct ClassroomProgressBar: View {
     let slideProgress: Double
     let moduleProgress: Double
     let currentSlide: Int

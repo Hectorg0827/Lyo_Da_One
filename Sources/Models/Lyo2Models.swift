@@ -12,7 +12,9 @@ struct Lyo2RouterRequest: Codable {
     let userId: String
     let text: String?
     let media: [Lyo2MediaRef]?
+    let attachmentIds: [String]?
     let activeArtifact: Lyo2ActiveArtifactContext?
+    let forcedIntent: String?
     let stateSummary: [String: AnyCodable]
     /// Recent conversation history so the AI maintains context across turns.
     let conversationHistory: [Lyo2ConversationTurn]?
@@ -21,7 +23,9 @@ struct Lyo2RouterRequest: Codable {
         case userId = "user_id"
         case text
         case media
+        case attachmentIds = "attachment_ids"
         case activeArtifact = "active_artifact"
+        case forcedIntent = "forced_intent"
         case stateSummary = "state_summary"
         case conversationHistory = "conversation_history"
     }
@@ -30,14 +34,18 @@ struct Lyo2RouterRequest: Codable {
         userId: String,
         text: String?,
         media: [Lyo2MediaRef]? = nil,
+        attachmentIds: [String]? = nil,
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
+        forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
         conversationHistory: [Lyo2ConversationTurn]? = nil
     ) {
         self.userId = userId
         self.text = text
         self.media = media
+        self.attachmentIds = attachmentIds
         self.activeArtifact = activeArtifact
+        self.forcedIntent = forcedIntent
         self.stateSummary = stateSummary
         self.conversationHistory = conversationHistory
     }
@@ -47,11 +55,13 @@ struct Lyo2MediaRef: Codable {
     let modality: String // TEXT, IMAGE, AUDIO, VIDEO, PDF
     let uri: String
     let mimeType: String
+    let durationMs: Int?
     
     enum CodingKeys: String, CodingKey {
         case modality
         case uri
         case mimeType = "mime_type"
+        case durationMs = "duration_ms"
     }
 }
 
@@ -77,7 +87,6 @@ enum Lyo2UIBlockType: String, Codable {
     case code = "CodeBlock"
     case ctaRow = "CTARow"
     case skeleton = "Skeleton"
-    case a2uiComponent = "A2UIComponent"
     case openClassroomBlock = "OpenClassroomBlock"
     case unknown
     
@@ -132,6 +141,10 @@ enum Lyo2StreamEvent {
     case artifact(block: Lyo2UIBlock)
     case error(message: String)
     case done
+    
+    /// v1 backward-compat events (still emitted by deployed backend)
+    case actions(blocks: [Lyo2UIBlock])
+    case openClassroom(block: Lyo2UIBlock)
     
     /// v2 events (LyoResponse envelope — primary path)
     case lyoUI(response: LyoResponse)

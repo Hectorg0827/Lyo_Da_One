@@ -15,7 +15,7 @@ import UIKit
 public class LyoCourseRuntime: ObservableObject {
     
     // MARK: - Input
-    public let course: LyoCourse
+    @Published public var course: LyoCourse
     
     // MARK: - Published State
     @Published public var session: LyoRuntimeSession
@@ -78,6 +78,47 @@ public class LyoCourseRuntime: ObservableObject {
                 lastActiveTime: Date()
             )
         }
+    }
+    
+    // MARK: - Progressive Updates
+    
+    /// Append a newly generated module to the course runtime
+    public func appendModule(_ module: LyoModule) {
+        // 1. Update the course data
+        var updatedModules = course.modules
+        // Avoid duplicates if SSE sends multiple updates
+        guard !updatedModules.contains(where: { $0.id == module.id }) else { return }
+        updatedModules.append(module)
+        
+        let newCourse = LyoCourse(
+            id: course.id,
+            title: course.title,
+            targetAudience: course.targetAudience,
+            learningObjectives: course.learningObjectives,
+            modules: updatedModules,
+            generationSource: course.generationSource,
+            version: course.version,
+            metadata: course.metadata
+        )
+        
+        self.course = newCourse
+        
+        // 2. Append to sequence
+        var newItems: [SequenceItem] = []
+        for les in module.lessons {
+            for art in les.artifacts {
+                newItems.append(SequenceItem(module: module, lesson: les, artifact: art))
+            }
+        }
+        
+        self.sequence.append(contentsOf: newItems)
+        
+        // 3. If we were waiting at the end of an empty course, move to first item
+        if activeArtifact == nil, let firstNew = newItems.first {
+            transitionTo(item: firstNew)
+        }
+        
+        Log.ui.info("📦 Appended module \(module.title) to runtime (\(newItems.count) artifacts)")
     }
     
     // MARK: - Core Navigation

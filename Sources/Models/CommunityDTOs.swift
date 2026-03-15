@@ -383,7 +383,7 @@ struct CourseSocialStats: Codable {
 
 // MARK: - Beacon DTOs
 
-enum APIBeacon: Codable, Identifiable {
+enum APIBeacon: Identifiable, Decodable, Encodable {
     case event(APIEventBeacon)
     case user(APIUserActivityBeacon)
     case question(APIQuestionBeacon)

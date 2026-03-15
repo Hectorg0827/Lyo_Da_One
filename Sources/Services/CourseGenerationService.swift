@@ -130,10 +130,15 @@ class CourseGenerationService: ObservableObject {
                 }
             }
             
-            if pollCount >= maxPolls {
-                print("🚨 Polling timed out after \\(maxPolls) attempts")
+            if pollCount >= maxPolls && self.generationState != .complete {
+                print("🚨 Polling timed out after \(maxPolls) attempts")
                 // Safety net: fetch whatever the server has
                 await fetchFinalTruth(courseId: courseId)
+                
+                // If it's still not complete after final truth, explicitly fail to avoid hanging UI
+                if self.generationState != .complete {
+                    self.generationState = .failed("Course generation timed out. Please try again.")
+                }
             }
         }
     }
@@ -454,9 +459,9 @@ class CourseGenerationService: ObservableObject {
     
     /// Converts a ProgressiveLesson into a LiveLesson for the classroom ViewModel.
     func createLiveLessonFromGenerated(lesson: ProgressiveLesson, moduleTitle: String) -> LiveLesson {
-        var blocks: [LessonBlock] = []
+        var blocks: [LiveLessonBlock] = []
         
-        blocks.append(LessonBlock(
+        blocks.append(LiveLessonBlock(
             id: "intro_\(lesson.id)",
             type: .paragraph,
             title: lesson.title ?? "Lesson",
@@ -465,7 +470,7 @@ class CourseGenerationService: ObservableObject {
         
         if let practice = lesson.miniPractice, !practice.isEmpty {
             for (i, question) in practice.enumerated() {
-                blocks.append(LessonBlock(
+                blocks.append(LiveLessonBlock(
                     id: "practice_\(lesson.id)_\(i)",
                     type: .paragraph,
                     title: "Practice \(i + 1)",
@@ -474,7 +479,7 @@ class CourseGenerationService: ObservableObject {
             }
         }
         
-        blocks.append(LessonBlock(
+        blocks.append(LiveLessonBlock(
             id: "summary_\(lesson.id)",
             type: .summary,
             title: "✅ Lesson Complete",

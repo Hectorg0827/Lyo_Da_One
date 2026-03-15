@@ -157,9 +157,7 @@ struct EnhancedLyoHomeView: View {
             // Composer with attached avatar
             if !isAvatarFloating {
                 EnhancedComposerBar(
-                    text: $viewModel.inputText,
-                    isLoading: viewModel.isLoading,
-                    showAvatar: true,
+                    viewModel: viewModel,
                     onSend: {
                         Task {
                             await viewModel.sendMessage()
@@ -1034,9 +1032,7 @@ struct PremiumTabBarButtonStyle: ButtonStyle {
 }
 
 struct EnhancedComposerBar: View {
-    @Binding var text: String
-    let isLoading: Bool
-    let showAvatar: Bool
+    @ObservedObject var viewModel: LyoAIViewModel
     let onSend: () -> Void
     
     @FocusState private var isFocused: Bool
@@ -1045,38 +1041,44 @@ struct EnhancedComposerBar: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
             // Avatar (attached to composer)
-            if showAvatar {
-                EnhancedAnimatedLyoAvatar(state: isFocused ? .listening : .idle, size: 56)
-            }
+            EnhancedAnimatedLyoAvatar(
+                state: viewModel.isAISpeaking ? .speaking : (viewModel.isAIThinking ? .thinking : (viewModel.isVoiceActive ? .listening : .idle)),
+                size: 56
+            )
             
             // Input field
             HStack(spacing: 8) {
-                // Camera button
-                Button(action: {}) {
-                    Image(systemName: "camera")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color("LyoTextSecondary"))
+                // Speaker toggle
+                Button(action: {
+                    HapticManager.shared.light()
+                    viewModel.isAudioOutputEnabled.toggle()
+                }) {
+                    Image(systemName: viewModel.isAudioOutputEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(viewModel.isAudioOutputEnabled ? Color("LyoAccent") : Color("LyoTextSecondary"))
                 }
                 
                 // Text input
                 ZStack(alignment: .leading) {
-                    if text.isEmpty {
+                    if viewModel.inputText.isEmpty {
                         Text("Ask anything… or say 'build me a 2-week course'")
                             .font(.system(size: 15))
                             .foregroundColor(Color("LyoTextSecondary"))
                     }
                     
-                    TextField("", text: $text)
+                    TextField("", text: $viewModel.inputText)
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                         .focused($isFocused)
                 }
                 
-                // Gallery button
-                Button(action: {}) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color("LyoTextSecondary"))
+                // Camera button (Optional: only show if not recording)
+                if !viewModel.isVoiceActive {
+                    Button(action: {}) {
+                        Image(systemName: "camera")
+                            .font(.system(size: 18))
+                            .foregroundColor(Color("LyoTextSecondary"))
+                    }
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
@@ -1084,17 +1086,18 @@ struct EnhancedComposerBar: View {
             .glassmorphic(cornerRadius: DesignTokens.Radius.md)
             
             // Voice / Send button
-            if text.isEmpty {
+            if viewModel.inputText.isEmpty {
                 Button(action: {
                     HapticManager.shared.light()
+                    viewModel.toggleVoiceMode()
                 }) {
-                    Image(systemName: "mic.fill")
+                    Image(systemName: viewModel.isVoiceActive ? "stop.fill" : "mic.fill")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 44, height: 44)
                         .background(
                             Circle()
-                                .fill(DesignTokens.Colors.accentGradient)
+                                .fill(AnyShapeStyle(viewModel.isVoiceActive ? AnyShapeStyle(Color.red.gradient) : AnyShapeStyle(DesignTokens.Colors.accentGradient)))
                         )
                         .applyShadow(DesignTokens.Shadow.glow)
                 }
