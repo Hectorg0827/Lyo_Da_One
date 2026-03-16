@@ -1424,6 +1424,90 @@ struct CheckpointBlockView: View {
     }
 }
 
+// MARK: - Cinematic Blocks
+
+struct HookView: View {
+    let title: String
+    var subtitle: String?
+    var lyoCommentary: String?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(title)
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let lyo = lyoCommentary {
+                Text(lyo)
+                    .font(.caption)
+                    .italic()
+                    .foregroundStyle(.purple)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.vertical, 8)
+    }
+}
+
+struct RevelationView: View {
+    let insight: String
+    var context: String?
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lightbulb.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.yellow)
+            Text(insight)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+            if let context {
+                Text(context)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.vertical, 8)
+    }
+}
+
+struct CelebrationView: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "party.popper.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.orange)
+            Text(title)
+                .font(.title3.bold())
+            if !message.isEmpty {
+                Text(message)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.vertical, 8)
+    }
+}
+
 // MARK: - Unknown Block (Graceful Fallback)
 
 struct UnknownBlockView: View {

@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Dedicated service for Lyo's persona narration
+@MainActor
 class LyoVoiceService {
     static let shared = LyoVoiceService()
     

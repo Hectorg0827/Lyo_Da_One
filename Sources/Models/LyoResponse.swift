@@ -106,11 +106,7 @@ struct LyoUIComponent: Codable, Identifiable, Equatable {
         style    = try? c.decodeIfPresent(LyoStyleProps.self, forKey: .style)
         data     = try? c.decodeIfPresent([String: AnyCodableValue].self, forKey: .data)
         
-        if let childWrappers = try? c.decodeIfPresent([SafeDecodable<LyoUIComponent>].self, forKey: .children) {
-            children = childWrappers.compactMap { $0.value }
-        } else {
-            children = nil
-        }
+        children = try? c.decodeIfPresent([LyoUIComponent].self, forKey: .children)
         
         meta       = try? c.decodeIfPresent(LyoMetaProps.self, forKey: .meta)
     }

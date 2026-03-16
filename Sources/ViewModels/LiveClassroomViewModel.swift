@@ -172,14 +172,6 @@ final class LiveClassroomViewModel: ObservableObject {
             return selected == correctIndex
         }
         
-        // Case 2: A2UI Quiz (Fallback for dynamic elements)
-        if let a2ui = a2uiComponent,
-           case .quiz(let quiz) = a2ui.payload,
-           let selected = selectedQuizOption,
-           selected < quiz.options.count {
-            return selected == quiz.correctIndex
-        }
-        
         return false
     }
     

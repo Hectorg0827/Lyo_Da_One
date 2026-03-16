@@ -68,10 +68,7 @@ struct LiveClassroomView: View {
         .navigationBarHidden(true)
         .statusBar(hidden: true)
         .task {
-            // Load both in parallel — block content + A2UI rendering
-            async let blockLoad: () = viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
-            async let a2uiLoad: () = viewModel.loadLessonUI(lessonId)
-            _ = await (blockLoad, a2uiLoad)
+            await viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
         }
         .sheet(isPresented: $viewModel.showTranscriptSheet) {
             TranscriptSheet(transcript: viewModel.transcript)

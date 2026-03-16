@@ -11,12 +11,12 @@ import SwiftUI
 // MARK: - Supporting Data Types
 
 /// Data for quiz cards - local type to avoid conflicts
-struct QuizData: Identifiable {
+struct ChatQuizData: Identifiable {
     let id: String
     let title: String
-    let questions: [QuizQuestionData]
+    let questions: [ChatQuizQuestionData]
     
-    init(id: String = UUID().uuidString, title: String, questions: [QuizQuestionData]) {
+    init(id: String = UUID().uuidString, title: String, questions: [ChatQuizQuestionData]) {
         self.id = id
         self.title = title
         self.questions = questions
@@ -24,7 +24,7 @@ struct QuizData: Identifiable {
 }
 
 /// Single quiz question - local type
-struct QuizQuestionData: Identifiable {
+struct ChatQuizQuestionData: Identifiable {
     let id: String
     let question: String
     let options: [String]
@@ -38,8 +38,8 @@ struct QuizQuestionData: Identifiable {
     }
 }
 
-/// Data for flashcard stacks
-struct FlashcardData: Identifiable {
+/// Data for flashcard stacks (chat-local, distinct from LessonBlock.FlashcardData)
+struct ChatFlashcardData: Identifiable {
     let id: String
     let title: String
     let cards: [FlashcardItem]
@@ -227,7 +227,7 @@ struct CourseRoadmapCardView: View {
 // NOTE: The canonical QuizCardView is in Sources/Views/Cards/QuizCardView.swift
 
 struct A2UIQuizCardView: View {
-    let quiz: QuizData
+    let quiz: ChatQuizData
     let onAnswer: ((String, Int) -> Void)?
     
     @State private var currentIndex = 0
@@ -235,7 +235,7 @@ struct A2UIQuizCardView: View {
     @State private var showResult = false
     @State private var correctCount = 0
     
-    private var currentQuestion: QuizQuestionData? {
+    private var currentQuestion: ChatQuizQuestionData? {
         guard currentIndex < quiz.questions.count else { return nil }
         return quiz.questions[currentIndex]
     }
@@ -379,7 +379,7 @@ struct A2UIQuizCardView: View {
 // MARK: - Flashcards Card
 
 struct FlashcardsCardView: View {
-    let flashcards: FlashcardData
+    let flashcards: ChatFlashcardData
     @State private var currentIndex = 0
     
     private var currentCard: FlashcardItem? {
@@ -719,17 +719,17 @@ struct TopicSelectionView: View {
             )
 
             A2UIQuizCardView(
-                quiz: QuizData(
+                quiz: ChatQuizData(
                     title: "Python Basics Quiz",
                     questions: [
-                        QuizQuestionData(id: "1", question: "What is Python?", options: ["A snake", "A programming language", "A movie", "A food"], correctAnswer: "A programming language")
+                        ChatQuizQuestionData(id: "1", question: "What is Python?", options: ["A snake", "A programming language", "A movie", "A food"], correctAnswer: "A programming language")
                     ]
                 ),
                 onAnswer: { _, _ in }
             )
 
             FlashcardsCardView(
-                flashcards: FlashcardData(
+                flashcards: ChatFlashcardData(
                     title: "Python Vocabulary",
                     cards: [
                         FlashcardItem(id: "1", front: "What is a variable?", back: "A container for storing data values")

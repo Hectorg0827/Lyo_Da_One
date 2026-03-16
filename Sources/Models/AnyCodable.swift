@@ -119,3 +119,82 @@ private struct AnyEncodableWrapper: Encodable {
         try _encode(encoder)
     }
 }
+
+// MARK: - Typed JSON value enum
+
+enum AnyCodableValue: Codable, Equatable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case array([AnyCodableValue])
+    case dictionary([String: AnyCodableValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let bool = try? container.decode(Bool.self) {
+            self = .bool(bool)
+        } else if let int = try? container.decode(Int.self) {
+            self = .int(int)
+        } else if let double = try? container.decode(Double.self) {
+            self = .double(double)
+        } else if let string = try? container.decode(String.self) {
+            self = .string(string)
+        } else if let array = try? container.decode([AnyCodableValue].self) {
+            self = .array(array)
+        } else if let dict = try? container.decode([String: AnyCodableValue].self) {
+            self = .dictionary(dict)
+        } else {
+            self = .null
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .dictionary(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+
+    var stringValue: String? {
+        if case .string(let s) = self { return s }
+        return nil
+    }
+
+    var intValue: Int? {
+        if case .int(let i) = self { return i }
+        return nil
+    }
+
+    var doubleValue: Double? {
+        if case .double(let d) = self { return d }
+        if case .int(let i) = self { return Double(i) }
+        return nil
+    }
+
+    var boolValue: Bool? {
+        if case .bool(let b) = self { return b }
+        return nil
+    }
+
+    var value: Any {
+        switch self {
+        case .string(let s): return s
+        case .int(let i): return i
+        case .double(let d): return d
+        case .bool(let b): return b
+        case .array(let arr): return arr.map { $0.value }
+        case .dictionary(let dict): return dict.mapValues { $0.value }
+        case .null: return NSNull()
+        }
+    }
+}

@@ -50,8 +50,9 @@ class LyoAIViewModel: ObservableObject {
     @Published var isAISpeaking: Bool = false
     @Published var activeLiveWidget: [String: Any]?
     @Published var lastLiveTranscript: String = ""
-    @Published var isAudioOutputEnabled: Bool = true
+    @Published var isAudioOutputEnabled: Bool = false
     private var lastSentToTTSText: String = ""
+    private var shouldAutoSpeakCurrentResponse: Bool = false
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -135,7 +136,7 @@ class LyoAIViewModel: ObservableObject {
             guard let self = self else { return }
             self.currentlyPlayingMessageId = nil  // Reset playing state
 
-            if self.isVoiceActive {
+            if self.isVoiceActive && !self.sttService.isRecording {
                 self.startListening()
             }
         }
@@ -378,6 +379,11 @@ class LyoAIViewModel: ObservableObject {
         // For barge-in, we don't stop TTS here. We let it play.
         // If user speaks, onSpeechDetected will stop TTS.
 
+        guard !sttService.isRecording else {
+            isVoiceActive = true
+            return
+        }
+
         sttService.checkPermissions()
         Task {
             do {
@@ -408,14 +414,8 @@ class LyoAIViewModel: ObservableObject {
 
     func speak(text: String, messageId: String? = nil) {
         ttsService.speak(text: text)
-        // Update state if a specific message is being read
         if let messageId = messageId {
             currentlyPlayingMessageId = messageId
-        }
-
-        // Ensure we are listening for barge-in
-        if !sttService.isRecording {
-            startListening()
         }
     }
 
@@ -614,10 +614,12 @@ class LyoAIViewModel: ObservableObject {
         attachments = []
 
         // Capture voice state
-        let shouldSpeak = isVoiceActive
+        let shouldResumeListening = isVoiceActive
+        let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         
         // Reset TTS buffer for the new response
         lastSentToTTSText = ""
+        shouldAutoSpeakCurrentResponse = shouldSpeak
 
         if isVoiceActive {
             // Stop recording the current utterance
@@ -646,7 +648,7 @@ class LyoAIViewModel: ObservableObject {
         )
 
         // If we were in voice mode, restart listening immediately (Barge-in ready)
-        if shouldSpeak {
+        if shouldResumeListening {
             startListening()
         }
     }
@@ -695,7 +697,7 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Incremental TTS Logic
 
     private func handleTTSStreaming(messages: [LyoMessage]) {
-        guard isAudioOutputEnabled else { return }
+        guard shouldAutoSpeakCurrentResponse else { return }
         
         // Find the most recent assistant message
         guard let lastMessage = messages.last else { return }

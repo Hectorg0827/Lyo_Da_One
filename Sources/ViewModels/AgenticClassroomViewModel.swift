@@ -334,7 +334,6 @@ final class AgenticClassroomViewModel: ObservableObject {
         sessionId = UUID().uuidString
         messages = []
         visibleBlocks = []
-        currentComponent = nil
         conversationHistory = []
         error = nil
         isProcessing = false
