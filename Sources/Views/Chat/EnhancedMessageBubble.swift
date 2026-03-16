@@ -21,7 +21,6 @@ struct EnhancedMessageBubble: View {
     let onTopicSelect: ((TopicOption) -> Void)?
     let onModuleSelect: ((CourseModule) -> Void)?
     let onSuggestionSelect: ((String) -> Void)?
-    let onCinematicPlay: ((A2UICinematic) -> Void)?
     let highlights: [ChatHighlight]
     let onTextSelectionAction: ((TextSelectionAction) -> Void)?
     
@@ -37,7 +36,6 @@ struct EnhancedMessageBubble: View {
         onTopicSelect: ((TopicOption) -> Void)? = nil,
         onModuleSelect: ((CourseModule) -> Void)? = nil,
         onSuggestionSelect: ((String) -> Void)? = nil,
-        onCinematicPlay: ((A2UICinematic) -> Void)? = nil,
         highlights: [ChatHighlight] = [],
         onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil
     ) {
@@ -48,7 +46,6 @@ struct EnhancedMessageBubble: View {
         self.onTopicSelect = onTopicSelect
         self.onModuleSelect = onModuleSelect
         self.onSuggestionSelect = onSuggestionSelect
-        self.onCinematicPlay = onCinematicPlay
         self.highlights = highlights
         self.onTextSelectionAction = onTextSelectionAction
     }
@@ -63,8 +60,6 @@ struct EnhancedMessageBubble: View {
             case .quiz: return true
             case .flashcards: return true
             case .studyPlan: return true
-            case .recursiveUI: return true
-            case .cinematic: return true
             default: return false
             }
         }
@@ -212,11 +207,6 @@ struct EnhancedMessageBubble: View {
                                 onSuggestionSelect?(selected)
                             }
 
-                        case .recursiveUI(let component):
-                            A2UIRecursiveRenderer(component: component) { actionId in
-                                handleA2UIAction(actionId)
-                            }
-
                         case .courseProposal(let payload):
                             ChatInteractiveCardView(
                                 type: .course(
@@ -250,51 +240,6 @@ struct EnhancedMessageBubble: View {
                                     HapticManager.shared.playSuccess()
                                 }
                             )
-                            .padding(.horizontal, -8)
-
-                        case .cinematic(let data):
-                            // Render a "Trailer" card that invites the user to tap
-                            Button {
-                                // Trigger callback
-                                onCinematicPlay?(data)
-                            } label: {
-                                ZStack {
-                                    Color.black
-                                    
-                                    // Placeholder Gradient
-                                    LinearGradient(colors: [.purple, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                        .opacity(0.6)
-                                    
-                                    VStack(spacing: 16) {
-                                        Image(systemName: "play.circle.fill")
-                                            .font(.system(size: 48))
-                                            .foregroundColor(.white)
-                                            .shadow(radius: 10)
-                                        
-                                        VStack(spacing: 4) {
-                                            Text(data.title.uppercased())
-                                                .font(.headline)
-                                                .fontWeight(.bold)
-                                                .foregroundColor(.white)
-                                                .multilineTextAlignment(.center)
-                                            
-                                            if let subtitle = data.subtitle {
-                                                Text(subtitle)
-                                                    .font(.caption)
-                                                    .foregroundColor(.white.opacity(0.8))
-                                                    .multilineTextAlignment(.center)
-                                            }
-                                        }
-                                    }
-                                    .padding()
-                                }
-                                .frame(height: 180)
-                                .cornerRadius(12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                            }
                             .padding(.horizontal, -8)
 
                         case .studyPlan(let plan):
@@ -546,55 +491,6 @@ struct EnhancedMessageBubble: View {
         return Text(styled)
     }
 
-    private func handleA2UIAction(_ actionId: String) {
-        Log.ai.info("Action triggered: \(actionId)")
-        HapticManager.shared.light()
-
-        // Parse action and route to appropriate handler
-        if actionId == "create_course_from_topic" {
-            let payload = CoursePayload(
-                id: nil,
-                title: "AI Generated Course",
-                topic: "AI Generated Course",
-                level: "Beginner",
-                language: nil,
-                duration: nil,
-                objectives: []
-            )
-            
-            AICommandHandler.shared.executeOpenClassroom(for: payload)
-        } else if actionId.hasPrefix("quiz_answer_") {
-            if let indexString = actionId.components(separatedBy: "_").last,
-               let index = Int(indexString) {
-                onQuizAnswer?(index)
-            }
-        } else if actionId.hasPrefix("start_module_") {
-            if let moduleId = actionId.components(separatedBy: "_").last {
-                // Create a CourseModule for the callback (simplified)
-                let module = CourseModule(
-                    id: moduleId,
-                    title: "Module \(moduleId)",
-                    duration: "30 min",
-                    isCompleted: false,
-                    isLocked: false
-                )
-                onModuleSelect?(module)
-            }
-        } else if actionId.hasPrefix("start_topic_") {
-            if let topicId = actionId.components(separatedBy: "_").last {
-                // Create a TopicOption for the callback
-                let topic = TopicOption(
-                    title: "Topic \(topicId)",
-                    icon: "book.fill",
-                    gradientColors: ["#3B82F6", "#8B5CF6"]
-                )
-                onTopicSelect?(topic)
-            }
-        } else {
-            // Handle other actions as suggestions
-            onSuggestionSelect?(actionId)
-        }
-    }
 }
 
 

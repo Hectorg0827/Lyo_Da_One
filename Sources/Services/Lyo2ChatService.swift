@@ -99,7 +99,7 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
     private var buffer = Data()
     private var callback: ((Lyo2StreamEvent) -> Void)?
     
-    /// Tracks whether the stream delivered any real content events (answer, artifact, clarification, a2ui, etc.).
+    /// Tracks whether the stream delivered any real content events (answer, artifact, clarification, etc.).
     /// When the stream completes with zero content events, we surface an error instead of a silent blank.
     private var didReceiveContentEvent = false
     
@@ -376,9 +376,8 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 }
                 
             case "a2ui":
-                // A2UI archived in the UI layer, but still bridge payloads through so
-                // A2UI removed — log and ignore
-                Log.ai.info("🎨 Lyo2 SSE: a2ui event ignored (A2UI removed)")
+                // Stale event type — log and ignore
+                Log.ai.info("🎨 Lyo2 SSE: stale event type received — ignoring")
 
             // ── v2 events (LyoResponse envelope — primary path) ──────
 

@@ -1036,12 +1036,11 @@ final class UnifiedChatService: ObservableObject {
     }
 
     /// Remove plain `.text` content type whenever rich widgets are present.
-    /// This prevents duplicate rendering (text bubble + A2UI/course card) for a single AI turn.
+    /// This prevents duplicate rendering (text bubble + course card) for a single AI turn.
     private func normalizeContentTypes(_ types: [MessageContentType]) -> [MessageContentType] {
         let hasRichContent = types.contains { contentType in
             switch contentType {
-            case .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep,
-                .recursiveUI, .cinematic, .generativeUI:
+            case .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep:
                 return true
             default:
                 return false
@@ -1123,7 +1122,6 @@ final class UnifiedChatService: ObservableObject {
         if joined.contains("openclassroom") || joined.contains("course") {
             return "Setting up your classroom…"
         }
-        if joined.contains("a2ui") { return "Designing your experience…" }
         if joined.contains("skeleton") { return "Thinking deeply…" }
 
         // Fallback: if blocks contain only "TutorMessageBlock", it's a simple text answer
@@ -1146,7 +1144,7 @@ final class UnifiedChatService: ObservableObject {
     ///
     /// Supports three detection strategies (checked in order):
     /// 1. Explicit `type: "OPEN_CLASSROOM"` marker in block content (legacy backend format)
-    /// 2. A2UI component tree with `intent: "open_classroom"` in root/child props (intent-based routing)
+    /// 2. Component tree with `intent: "open_classroom"` in root/child props (intent-based routing)
     /// 3. Flat content fields containing `title` + `topic` (heuristic fallback)
     private func tryDecodeOpenClassroom(from block: Lyo2UIBlock) -> CoursePayload? {
         Log.ai.info("🏫 tryDecodeOpenClassroom — block keys: \(block.content.keys.sorted())")

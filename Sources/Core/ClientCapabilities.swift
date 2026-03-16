@@ -31,7 +31,7 @@ class ClientCapabilities {
     
     // MARK: - Supported Components
     
-    /// All A2UI component types this client can render.
+    /// All component types this client can render.
     /// When adding new components, add them here so backend knows we support them.
     let supportedComponents: [String] = [
         // Layout

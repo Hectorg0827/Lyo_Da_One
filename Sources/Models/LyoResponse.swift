@@ -47,8 +47,8 @@ struct LyoResponse: Codable {
 
 // MARK: - Lyo UI Component (v2)
 
-/// Lightweight SSE UI component node. A2UI rendering has been removed;
-/// this struct now only extracts text/emotion metadata for the chat pipeline.
+/// Lightweight SSE UI component node.
+/// This struct now only extracts text/emotion metadata for the chat pipeline.
 struct LyoUIComponent: Codable, Identifiable, Equatable {
     let id: String
     let type: String

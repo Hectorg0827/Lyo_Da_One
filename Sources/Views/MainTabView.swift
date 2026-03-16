@@ -451,7 +451,7 @@ extension MainTabView {
                     let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
                     let shouldGenerate = userInfo["shouldGenerateCourse"] as? Bool ?? false
 
-                    // Prepend GENERATE: for new A2UI-originated courses
+                    // Prepend GENERATE: for new AI-originated courses
                     if let topic = userInfo["topic"] as? String,
                        shouldGenerate || courseId.starts(with: "gen_") {
                         courseId = "GENERATE:\(topic)"

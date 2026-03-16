@@ -74,8 +74,7 @@ actor NetworkClient: NetworkRequestable {
         // 6. Decode response
         #if DEBUG
         if let urlPath = request.url?.path, urlPath.contains("/course/") {
-            let rawString = String(data: processedResponse.data, encoding: .utf8) ?? "<non-UTF8>"
-            print("🌐 RAW RESPONSE [\\(urlPath)]: \\(rawString.prefix(2000))")
+            print("🌐 RAW RESPONSE [\\(urlPath)]: \\((String(data: processedResponse.data, encoding: .utf8) ?? \"<non-UTF8>\").prefix(2000))")
         }
         #endif
         
@@ -525,3 +524,4 @@ extension URLRequest {
         return request
     }
 }
+

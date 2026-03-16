@@ -363,7 +363,7 @@ final class LiveClassroomViewModel: ObservableObject {
         if let cached = contentStore.retrieve(id: cacheKey) {
             Log.classroom.info("⚡ Cache hit for \(courseId)/\(lessonId) — serving instantly")
             
-            // If we have A2UI component JSON, we could use it in the future
+            // If we have cached component JSON, we could use it in the future
             // For now, use the agent blocks or raw content to build the lesson
             if let agentBlocks = cached.agentBlocks, !agentBlocks.isEmpty {
                 let blocks = agentBlocks.map { agentBlock in

@@ -108,7 +108,7 @@ class DiscoveryService: ObservableObject {
     
     func likeDiscovery(discoveryId: Int) async throws {
         // Assume discoveryId maps to a Post ID (backend might expect String or Int, request() handles both)
-        try await apiClient.likePost(id: String(discoveryId))
+        _ = try await apiClient.likePost(id: String(discoveryId))
         
         // Optimistically update local state if present
         if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {

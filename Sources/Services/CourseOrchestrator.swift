@@ -2,7 +2,7 @@
 //  CourseOrchestrator.swift
 //  Lyo
 //
-//  Google A2UI Protocol - Optimistic Course Orchestrator
+//  Optimistic Course Orchestrator
 //
 
 import Foundation
@@ -10,7 +10,7 @@ import Combine
 import SwiftUI
 import os
 
-/// Orchestrates the "Cinematic View" creation from A2UI triggers.
+/// Orchestrates the course creation flow.
 /// Ensures 0% failure rate by using caching and template fallbacks.
 @MainActor
 final class CourseOrchestrator: ObservableObject {
@@ -24,7 +24,7 @@ final class CourseOrchestrator: ObservableObject {
     
     private init() {}
     
-    /// The Main Entry Point for the A2UI Protocol
+    /// The Main Entry Point for Course Creation
     func execute(proposal: CoursePayload) async {
         isProcessing = true
         

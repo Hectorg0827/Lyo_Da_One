@@ -174,11 +174,8 @@ final class ChatRouter: ObservableObject {
                         id: nil, title: c.title, topic: c.topic, level: c.level,
                         language: c.language, duration: c.duration, objectives: c.objectives)
                 }
-                // 2. Check extractedUI (regex-based extraction from response text)
-                if let extracted = response.extractedUI {
-                    Log.ai.info("🏫 Fast path: extractedUI from response text")
-                    return extracted.course
-                }
+                // 2. Try to extract course payload from the response text (heuristic)
+                // Rely on explicit payload above
                 return nil
             }()
 

@@ -161,7 +161,7 @@ class LyoAIViewModel: ObservableObject {
         .receive(on: RunLoop.main)
         .assign(to: &$isAISpeaking)
 
-        // A2UI artifact tracking removed — classrooms use their own component state
+        // Artifact tracking removed — classrooms use their own component state
 
         unifiedChat.$isLoading
             .receive(on: RunLoop.main)
@@ -756,10 +756,10 @@ class LyoAIViewModel: ObservableObject {
         return chunks
     }
 
-    // MARK: - A2UI Interactions
+    // MARK: - Course Interactions
 
-    func onA2UICourseStart(course: CourseCreationData) {
-        Log.ai.info("LyoAIViewModel: Starting A2UI course -> \(course.title)")
+    func onCourseStart(course: CourseCreationData) {
+        Log.ai.info("LyoAIViewModel: Starting course -> \(course.title)")
         HapticManager.shared.playSuccess()
         // Save to Focus stack before opening classroom
         UIStackStore.shared.upsertCourse(
@@ -771,7 +771,7 @@ class LyoAIViewModel: ObservableObject {
         unifiedChat.triggerCourseNavigation()
     }
 
-    func onA2UIQuizAnswer(question: String, answerIndex: Int) {
+    func onQuizAnswer(question: String, answerIndex: Int) {
         Log.ai.info("✍️ LyoAIViewModel: Quiz answer -> \(answerIndex)")
         HapticManager.shared.playLightImpact()
         // Send answer to AI

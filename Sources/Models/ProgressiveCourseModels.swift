@@ -155,7 +155,7 @@ struct ProgressiveLesson: Codable, Identifiable, Equatable {
     }
 }
 
-// MARK: - Chat-UI Course Module (used by CourseRoadmapBubbleView, EnhancedMessageBubble, A2UIParser)
+// MARK: - Chat-UI Course Module (used by CourseRoadmapBubbleView, EnhancedMessageBubble)
 
 struct CourseModule: Codable, Identifiable, Equatable {
     let id: String

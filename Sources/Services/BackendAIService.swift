@@ -49,8 +49,6 @@ struct BackendAIChatRequest: Encodable {
     }
 }
 
-// MARK: - A2UI Models 
-
 // NOTE: We use the shared OpenClassroomPayload from Models/LyoChat.swift 
 // and StackItemPayload/CoursePayload from Models/AICommandResponse.swift
 // to avoid ambiguity.
@@ -61,180 +59,15 @@ private struct OpenClassroomEnvelope: Codable {
     let payload: OpenClassroomPayload
 }
 
-/// A2UI Content payload from backend - supports multiple widget types
-struct A2UIContent: Codable {
-    let type: A2UIContentType
-    
-    // Course Roadmap Widget (nested structure)
-    let courseRoadmap: A2UICourseRoadmap?
-    
-    // Quiz Widget (nested structure)
-    let quiz: A2UIQuiz?
-    
-    // Topic Selection Widget
-    let title: String?
-    let topics: [A2UITopicOption]?
-    
-    // Flashcards Widget
-    let cards: [A2UIFlashcard]?
-    
-    // Flat course roadmap fields (backwards compatibility)
-    let modules: [A2UIFlatModule]?
-    let totalModules: Int?
-    let completedModules: Int?
-    
-    // Suggestions Widget (fallback for engagement)
-    let suggestions: [String]?
-    
-    // Cinematic Widget (Immersive)
-    let cinematic: A2UICinematic?
-    
-    // Generative UI Layout Hint (New)
-    let layout: A2UILayout?
-    
-    enum CodingKeys: String, CodingKey {
-        case type
-        case courseRoadmap = "course_roadmap"
-        case quiz
-        case title
-        case topics
-        case cards
-        case modules
-        case totalModules
-        case completedModules
-        case suggestions
-        case cinematic
-        case layout
-    }
-}
-
-enum A2UILayout: String, Codable {
-    case standard, split, overlay, grid, hero
-}
-
-enum A2UIContentType: String, Codable {
-    case text
-    case processing
-    case topicSelection = "topic_selection"
-    case courseRoadmap = "course_roadmap"
-    case flashcards
-    case quiz
-    case suggestions
-    case cinematic
-    case unknown
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let value = try container.decode(String.self)
-        self = A2UIContentType(rawValue: value) ?? .unknown
-    }
-}
-
-// MARK: - Cinematic Models
-struct A2UICinematic: Codable, Identifiable {
-    var id: String { title }
-    let title: String
-    let subtitle: String?
-    let mood: String
-    let videoUrl: String?
-    let audioTrack: String?
-    let hapticPattern: String?
-}
-
-// MARK: - Course Roadmap Models
-struct A2UICourseRoadmap: Codable {
-    let title: String
-    let topic: String
-    let level: String
-    let modules: [A2UIModule]
-}
-
-struct A2UIModule: Codable {
-    let title: String
-    let description: String?
-    let lessons: [A2UILesson]?
-    
-    // Memberwise initializer for manual construction
-    init(title: String, description: String? = nil, lessons: [A2UILesson]? = nil) {
-        self.title = title
-        self.description = description
-        self.lessons = lessons
-    }
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        title = try container.decode(String.self, forKey: .title)
-        description = try container.decodeIfPresent(String.self, forKey: .description)
-        lessons = try container.decodeIfPresent([A2UILesson].self, forKey: .lessons)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case title, description, lessons
-    }
-}
-
-struct A2UILesson: Codable {
-    let title: String
-    let duration: String?
-}
-
-// Flat module for backwards compatibility
-struct A2UIFlatModule: Codable {
-    let id: String?
-    let title: String
-    let duration: String?
-    let isCompleted: Bool?
-    let isLocked: Bool?
-}
-
-// MARK: - Quiz Models
-struct A2UIQuiz: Codable {
-    let title: String
-    let questions: [A2UIQuestion]
-}
-
-struct A2UIQuestion: Codable {
-    let question: String
-    let options: [String]
-    let correctAnswer: String
-    
-    enum CodingKeys: String, CodingKey {
-        case question
-        case options
-        case correctAnswer = "correct_answer"
-    }
-}
-
-// MARK: - Topic Selection Models
-struct A2UITopicOption: Codable {
-    let title: String
-    let icon: String?
-    let gradientColors: [String]?
-}
-
-// MARK: - Flashcard Models
-struct A2UIFlashcard: Codable {
-    let front: String
-    let back: String
-    let hint: String?
-}
-
-// Response from /api/v1/chat (Chat Module with A2UI support)
-// Backend returns: { "response": "...", "type": "OPEN_CLASSROOM", "payload": {...}, "conversationHistory": [...] }
+// Response from /api/v1/chat
 struct BackendAIChatResponse: Codable {
     // Primary fields from backend ChatResponse
-    let response: String?  // Backend's main response field
+    let response: String?
     let conversationHistory: [ConversationMessage]?
-    let contentTypes: [A2UIContent]?
     
-    /// Flexible A2UI Component container. Supports both single DynamicComponent 
-    /// and arrays of legacy/hybrid components to prevent decoding failures.
-    let uiComponent: AnyCodable? 
-
-    
-    // A2UI Command fields (OPEN_CLASSROOM, etc.)
-    let type: String?  // e.g. "OPEN_CLASSROOM"
-    let payload: OpenClassroomCommand.OpenClassroomPayload?  // The course/classroom payload
+    // Command fields (OPEN_CLASSROOM, etc.)
+    let type: String?
+    let payload: OpenClassroomCommand.OpenClassroomPayload?
     
     // Legacy fields for backward compatibility (may not be present anymore)
     let content: String?  // Some endpoints still use this
@@ -283,8 +116,6 @@ struct BackendAIChatResponse: Codable {
         case quickExplainer = "quickExplainer"
         case courseProposal = "courseProposal"
         case studyPlan = "studyPlan"
-        case contentTypes = "contentTypes"
-        case uiComponent = "uiComponent"    // backend sends camelCase via serialize_by_alias
         case lyoBlocks = "lyoBlocks"
         case suggestions = "suggestions"
     }
@@ -297,63 +128,6 @@ struct BackendAIChatResponse: Codable {
     // Computed property for AI source (with fallback)
     var aiSource: String {
         return primaryAi ?? "gemini"
-    }
-    
-    // MARK: - A2UI Extractor (The Markdown Trap Fix)
-    /// Robustly extracts A2UI JSON payloads even if wrapped in Markdown code blocks
-    /// Pre-compiled regex for extracting OPEN_CLASSROOM JSON from response text (compiled once)
-    private static let openClassroomRegex: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: #"(?s)\{.*"type"\s*:\s*"OPEN_CLASSROOM".*\}"#, options: [])
-    }()
-    
-    var extractedUI: OpenClassroomPayload? {
-        let text = responseText
-        
-        // 1. Fast check: text must contain the type identifier
-        guard text.contains("OPEN_CLASSROOM") else { return nil }
-        
-        // 2. Try to find JSON block pattern using cached regex
-        guard let regex = BackendAIChatResponse.openClassroomRegex else { return nil }
-        let nsString = text as NSString
-        let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
-        
-        // Check finding
-        for match in results {
-            let jsonString = nsString.substring(with: match.range)
-            
-            // Clean up potentially persistent markdown markers inside the match? 
-            // Usually the regex above grabs the brace-to-brace content.
-            // But if there are markdown ticks inside, we might need a stricter clean.
-            // A common case: ```json\n{...}\n```. The regex above matches { to }.
-            
-            do {
-                if let data = jsonString.data(using: .utf8) {
-                    let envelope = try JSONDecoder().decode(OpenClassroomEnvelope.self, from: data)
-                    return envelope.payload
-                }
-            } catch {
-                Log.ai.error("Failed to decode JSON string: \(error.localizedDescription)")
-            }
-
-            // Fallback: Clean markdown code blocks and retry decoding
-            let cleaned = text
-                .replacingOccurrences(of: "```json", with: "")
-                .replacingOccurrences(of: "```", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            do {
-                if let data = cleaned.data(using: .utf8) {
-                    let envelope = try JSONDecoder().decode(OpenClassroomEnvelope.self, from: data)
-                    return envelope.payload
-                }
-            } catch {
-                Log.ai.error("Failed to decode cleaned JSON string: \(error.localizedDescription)")
-            }
-
-            return nil
-        }
-        
-        return nil
     }
 }
 
@@ -680,7 +454,7 @@ final class BackendAIService {
         resourceId: String? = nil,
         mode: String = "focus",
         history: [ConversationMessage]? = nil
-    ) async throws -> (response: String, source: String, uiContent: [A2UIContent]?, uiComponent: AnyCodable?, wasCommand: Bool, openClassroomPayload: OpenClassroomPayload?) {
+    ) async throws -> (response: String, source: String, wasCommand: Bool, openClassroomPayload: OpenClassroomCommand.OpenClassroomPayload?) {
         
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -721,9 +495,7 @@ final class BackendAIService {
             modeHint: chatModeHint(for: mode)
         )
         
-        // CRITICAL: Use /api/v1/chat (Chat Module) NOT /api/v1/ai/chat (AI Study)
-        // The Chat Module returns A2UI payloads with type: "OPEN_CLASSROOM" and payload fields
-        // that trigger classroom navigation in the iOS app
+        // Use /api/v1/chat (Chat Module)
         let endpoint = "\(baseURL)/api/v1/chat"
         
         let dynamicEndpoint = DynamicEndpoint(
@@ -744,15 +516,12 @@ final class BackendAIService {
         
         // Detect command
         let wasCommand = chatResponse.type == "OPEN_CLASSROOM"
-        let openClassroomPayload = chatResponse.extractedUI
         
         return (
             response: chatResponse.responseText,
             source: chatResponse.aiSource,
-            uiContent: chatResponse.contentTypes,
-            uiComponent: chatResponse.uiComponent,
             wasCommand: wasCommand,
-            openClassroomPayload: openClassroomPayload
+            openClassroomPayload: chatResponse.payload
         )
     }
     

@@ -226,8 +226,8 @@ struct DiagramNodeView: View {
         }
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible ? scale : 0.01)
-        .onChange(of: isVisible) { visible in
-            if visible {
+        .onChange(of: isVisible) { oldValue, newValue in
+            if newValue {
                 // Pulse once on appear
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
                     scale = 1.2

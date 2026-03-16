@@ -84,7 +84,7 @@ struct ChatMessage: Identifiable, Codable {
     }
 }
 
-// MARK: - Generative UI Blocks (A2UI)
+// MARK: - Generative UI Blocks
 enum UIBlock: Codable, Identifiable, Equatable {
     case map(lat: Double, lng: Double, title: String, subtitle: String?)
     case image(url: String, altText: String?, aspectRatio: Double?)

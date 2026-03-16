@@ -29,10 +29,7 @@ enum MessageContentType: Codable, Equatable {
     case suggestions(title: String, options: [String])
     case studyPlan(plan: StudyPlan)
     case testPrep(data: TestPrepContent)
-    case recursiveUI(component: DynamicComponent)
-    case cinematic(data: A2UICinematic)
     case courseProposal(payload: CoursePayload)
-    case generativeUI(blocks: [UIBlock])
     
     enum CodingKeys: String, CodingKey {
         case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
@@ -41,9 +38,7 @@ enum MessageContentType: Codable, Equatable {
         case step, progress, topics
         case modules, totalModules, completedModules, sections
         case cards, component, studyPlan, testPrepData
-        case cinematicData
         case coursePayload
-        case generativeBlocks
     }
     
     init(from decoder: Decoder) throws {
@@ -126,11 +121,8 @@ enum MessageContentType: Codable, Equatable {
             let title = try container.decode(String.self, forKey: .title)
             let options = try container.decode([String].self, forKey: .options)
             self = .suggestions(title: title, options: options)
-        case "recursive_ui":
-            let component = try container.decode(DynamicComponent.self, forKey: .component)
-            self = .recursiveUI(component: component)
-        case "a2ui":
-            // A2UI removed — decode as plain text fallback
+        case "recursive_ui", "a2ui":
+            // Legacy types removed — decode as plain text fallback
             self = .text
         case "study_plan":
             let plan = try container.decode(StudyPlan.self, forKey: .studyPlan)
@@ -139,14 +131,14 @@ enum MessageContentType: Codable, Equatable {
             let data = try container.decode(TestPrepContent.self, forKey: .testPrepData)
             self = .testPrep(data: data)
         case "cinematic":
-            let data = try container.decode(A2UICinematic.self, forKey: .cinematicData)
-            self = .cinematic(data: data)
+            // Cinematic removed — decode as plain text fallback
+            self = .text
         case "course_proposal":
             let payload = try container.decode(CoursePayload.self, forKey: .coursePayload)
             self = .courseProposal(payload: payload)
         case "generative_ui":
-            let blocks = try container.decode([UIBlock].self, forKey: .generativeBlocks)
-            self = .generativeUI(blocks: blocks)
+            // Generative UI removed — decode as plain text fallback
+            self = .text
         default:
             self = .text
         }
@@ -231,24 +223,15 @@ enum MessageContentType: Codable, Equatable {
             try container.encode("suggestions", forKey: .type)
             try container.encode(title, forKey: .title)
             try container.encode(options, forKey: .options)
-        case .recursiveUI(let component):
-            try container.encode("recursive_ui", forKey: .type)
-            try container.encode(component, forKey: .component)
         case .studyPlan(let plan):
             try container.encode("study_plan", forKey: .type)
             try container.encode(plan, forKey: .studyPlan)
         case .testPrep(let data):
             try container.encode("test_prep", forKey: .type)
             try container.encode(data, forKey: .testPrepData)
-        case .cinematic(let data):
-            try container.encode("cinematic", forKey: .type)
-            try container.encode(data, forKey: .cinematicData)
         case .courseProposal(let payload):
             try container.encode("course_proposal", forKey: .type)
             try container.encode(payload, forKey: .coursePayload)
-        case .generativeUI(let blocks):
-            try container.encode("generative_ui", forKey: .type)
-            try container.encode(blocks, forKey: .generativeBlocks)
         }
     }
     
@@ -272,10 +255,7 @@ enum MessageContentType: Codable, Equatable {
         case (.suggestions(let t1, let o1), .suggestions(let t2, let o2)): return t1 == t2 && o1 == o2
         case (.studyPlan(let p1), .studyPlan(let p2)): return p1 == p2
         case (.testPrep(let d1), .testPrep(let d2)): return d1 == d2
-        case (.recursiveUI(let c1), .recursiveUI(let c2)): return c1.id == c2.id
-        case (.cinematic(let d1), .cinematic(let d2)): return d1.title == d2.title && d1.mood == d2.mood
         case (.courseProposal(let p1), .courseProposal(let p2)): return p1.title == p2.title && p1.topic == p2.topic
-        case (.generativeUI(let b1), .generativeUI(let b2)): return b1 == b2
         default: return false
         }
     }

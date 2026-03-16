@@ -9,9 +9,9 @@ struct LyoMessageBubbleView: View {
     var isPlayingAudio: Bool = false
     var audioProgress: Double = 0
 
-    // A2UI callbacks for rich content interactions
-    var onA2UICourseStart: ((CourseCreationData) -> Void)?
-    var onA2UIQuizAnswer: ((String, Int) -> Void)?
+    // Course interaction callbacks
+    var onCourseStart_A2A: ((CourseCreationData) -> Void)?
+    var onQuizAnswer_A2A: ((String, Int) -> Void)?
     
     // New Smart Block callbacks
     var onSmartBlockQuizAnswer: ((String, Int, Bool) -> Void)?
@@ -27,7 +27,7 @@ struct LyoMessageBubbleView: View {
     ]
     private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
-    /// True when contentTypes contains rich content (.a2ui, .courseProposal, .courseRoadmap, .quiz, .flashcards)
+    /// True when contentTypes contains rich content (.courseProposal, .courseRoadmap, .quiz, .flashcards)
     /// — hides raw text so the rich component renders exclusively without duplication
     private var hasRichContent: Bool {
         // Also treat non-chat response modes (like course/explainer) as rich content
@@ -44,8 +44,6 @@ struct LyoMessageBubbleView: View {
             case .flashcards: return true
             case .studyPlan: return true
             case .testPrep: return true
-            case .recursiveUI: return true
-            case .cinematic: return true
             default: return false
             }
         }
@@ -142,7 +140,7 @@ struct LyoMessageBubbleView: View {
                     spacing: DesignTokens.Spacing.xs
                 ) {
                     // Message content with premium styling
-                    // Hide raw text when rich content is present (A2UI/quiz/course/flashcards render their own UI)
+                    // Hide raw text when rich content is present (quiz/course/flashcards render their own UI)
                     if shouldRenderPlainText {
                         SmartBlockContainerView(
                             rawResponse: message.content,
@@ -156,8 +154,7 @@ struct LyoMessageBubbleView: View {
                         .padding(.bottom, 4)
                     }
 
-                    // ==== A2UI RICH CONTENT RENDERING ====
-                    // This renders Course Roadmaps, Quizzes, Flashcards inline
+                    // Rich content rendering
                     if let contentTypes = message.contentTypes, !contentTypes.isEmpty {
                         VStack(spacing: 12) {
                             ForEach(Array(contentTypes.enumerated()), id: \.offset) {
@@ -273,7 +270,7 @@ struct LyoMessageBubbleView: View {
         }
     }
 
-    // MARK: - A2UI Content Type Rendering
+    // MARK: - Content Type Rendering
 
     @ViewBuilder
     private func renderContentType(_ contentType: MessageContentType) -> some View {
@@ -302,7 +299,7 @@ struct LyoMessageBubbleView: View {
                         title: courseData.title,
                         subtitle: courseData.topic
                     )
-                    onA2UICourseStart?(courseData)
+                    onCourseStart_A2A?(courseData)
                 },
                 onAdjust: {
                     let refinePrompt = "Refine this course on \(payload.topic) for a \(payload.level.lowercased()) learner. Keep the title '\(payload.title)' but make the first module more hands-on, add a better project arc, and tighten the learning outcomes."
@@ -328,7 +325,7 @@ struct LyoMessageBubbleView: View {
                         difficultyLevel: "intermediate",
                         instructorId: "default"
                     )
-                    onA2UICourseStart?(courseData)
+                    onCourseStart_A2A?(courseData)
                 },
                 onRefine: { onQuickChipTap?("refine_course") },
                 onSave: { onQuickChipTap?("save_course") }
@@ -339,7 +336,7 @@ struct LyoMessageBubbleView: View {
                 type: .quiz(title: "Quick Quiz", questionCount: 1, imageURL: nil),
                 onStart: {
                     // Start quiz UI action
-                    onA2UIQuizAnswer?(question, correctIndex)
+                    onQuizAnswer_A2A?(question, correctIndex)
                 },
                 onRefine: { onQuickChipTap?("refine_quiz") },
                 onSave: { onQuickChipTap?("save_quiz") }
@@ -386,14 +383,6 @@ struct LyoMessageBubbleView: View {
         case .topicSelection(let title, let topics):
             TopicSelectionView(title: title, topics: topics) { topic in
                 onQuickChipTap?(topic.id)
-            }
-
-        case .recursiveUI(let component):
-            // DEPRECATED: A2UI components are being replaced by Smart Blocks
-            VStack {
-                Text("Legacy Recursive UI (\(component.id))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
         default:

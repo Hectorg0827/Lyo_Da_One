@@ -134,11 +134,11 @@ struct EnhancedLyoHomeView: View {
                     onActionTap: { action in
                         handleAction(action)
                     },
-                    onA2UICourseStart: { course in
-                        viewModel.onA2UICourseStart(course: course)
+                    onCourseStart_A2A: { course in
+                        viewModel.onCourseStart(course: course)
                     },
-                    onA2UIQuizAnswer: { question, answerIndex in
-                        viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+                    onQuizAnswer_A2A: { question, answerIndex in
+                        viewModel.onQuizAnswer(question: question, answerIndex: answerIndex)
                     }
                 )
             }

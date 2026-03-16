@@ -271,7 +271,7 @@ struct QuickActionsBar: View {
     .padding()
 }
 
-// MARK: - Inline Suggestions View (A2UI)
+// MARK: - Inline Suggestions View
 /// Renders suggestions directly inline within a message bubble
 /// Used by EnhancedMessageBubble for .suggestions content type
 

@@ -2,12 +2,12 @@
 //  CourseModels.swift
 //  Lyo
 //
-//  Shared course creation and A2UI content models used across the app.
+//  Shared course creation and content models used across the app.
 //
 
 import Foundation
 
-// MARK: - Course Creation Data (A2UI Protocol)
+// MARK: - Course Creation Data
 /// Data structure for AI-generated course proposals that can be displayed in chat
 struct CourseCreationData: Identifiable, Codable, Equatable {
     let id: String
@@ -64,7 +64,7 @@ struct CourseLessonData: Identifiable, Codable, Equatable {
 // NOTE: CardAction and TopicOption are defined in MultimodalMessage.swift
 // Do not duplicate them here to avoid ambiguous type errors
 
-// MARK: - OPEN_CLASSROOM Command (A2UI Protocol)
+// MARK: - OPEN_CLASSROOM Command
 /// JSON command structure for triggering classroom navigation from AI responses
 struct OpenClassroomCommand: Codable {
     let type: String
@@ -78,7 +78,7 @@ struct OpenClassroomCommand: Codable {
     struct OpenClassroomPayload: Codable {
         let stackItem: StackItemPayload?  // Optional - backend may not include it
         let course: CoursePayload
-        // New: A2UI components for rich UI (renamed to avoid collision with renderer type)
+        // New: components for rich UI (renamed to avoid collision with renderer type)
         var components: [OpenClassroomComponent]? = nil
 
         enum CodingKeys: String, CodingKey {
@@ -88,7 +88,7 @@ struct OpenClassroomCommand: Codable {
         }
     }
 
-    // MARK: - A2UI Components
+    // MARK: - Components
     enum OpenClassroomComponent: Codable {
         case text(TextComponent)
         case image(ImageComponent)

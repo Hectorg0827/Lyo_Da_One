@@ -20,7 +20,7 @@ struct StoredContentEntry: Codable {
     let title: String
     let content: String                        // Raw markdown/text
     let agentBlocks: [AgentBlock]?             // Multipart agent blocks (if available)
-    let a2uiComponentJSON: Data?               // Serialized A2UI DynamicComponent tree
+    let a2uiComponentJSON: Data?               // Serialized component tree (legacy, unused)
     let createdAt: Date
     let lastAccessedAt: Date
     let metadata: [String: String]?
