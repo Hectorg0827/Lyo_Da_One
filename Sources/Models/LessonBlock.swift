@@ -4,12 +4,12 @@ public enum LegacyLessonBlock: Identifiable, Equatable {
     public var id: UUID {
         switch self {
         case .text(let content): return UUID(uuidString: content.prefix(36).padding(toLength: 36, withPad: "0", startingAt: 0)) ?? UUID()
-        case .quiz(let data): return UUID() // Placeholder: ideally derived from content
-        case .testPrep(let data): return UUID()
-        case .studyPlan(let data): return UUID()
-        case .agentCard(let data): return UUID()
-        case .cinematicHook(let data): return UUID()
-        case .masteryMap(let data): return UUID()
+        case .quiz(_): return UUID() // Placeholder: ideally derived from content
+        case .testPrep(_): return UUID()
+        case .studyPlan(_): return UUID()
+        case .agentCard(_): return UUID()
+        case .cinematicHook(_): return UUID()
+        case .masteryMap(_): return UUID()
         default: return UUID()
         }
     }

@@ -33,7 +33,7 @@ public struct SmartBlockQuizCard: View {
                 
                 Spacer()
                 
-                if let hint = data.hint, !hasSubmitted {
+                if data.hint != nil, !hasSubmitted {
                     Button {
                         // Action for hint (e.g. show alert or expand)
                     } label: {

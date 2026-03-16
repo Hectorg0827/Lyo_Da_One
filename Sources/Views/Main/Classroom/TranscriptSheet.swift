@@ -215,7 +215,7 @@ struct AskQuestionSheet: View {
                     }
                 }
                 .padding(.horizontal)
-                .onChange(of: voiceService.transcript) { newValue in
+                .onChange(of: voiceService.transcript) { _, newValue in
                     if !newValue.isEmpty {
                         question = newValue
                     }

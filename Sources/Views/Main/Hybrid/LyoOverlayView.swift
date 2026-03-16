@@ -496,7 +496,7 @@ struct LyoOverlayView: View {
             UIPasteboard.general.string = text
             HapticManager.shared.playLightImpact()
             
-        case .note(let selectedText, let range):
+        case .note(let selectedText, _):
             let context = isFromUser ? "My Question" : "Lyo's Explanation"
             notebookStore.saveNote(
                 text: selectedText,

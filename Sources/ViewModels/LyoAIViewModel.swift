@@ -310,7 +310,7 @@ class LyoAIViewModel: ObservableObject {
     func handleTestPrepScheduled(date: Date, course: String, description: String, attachmentIds: [String] = []) {
         Task {
             // 1. Sync to Calendar
-            let calendarSuccess = await TestPrepService.shared.scheduleExamInCalendar(
+            _ = await TestPrepService.shared.scheduleExamInCalendar(
                 title: course,
                 date: date,
                 description: description

@@ -67,7 +67,7 @@ public struct ReflectCardView: View {
                         .onTapGesture {
                             isTextFieldFocused = true
                         }
-                        .onChange(of: isTextFieldFocused) { focused in
+                        .onChange(of: isTextFieldFocused) { _, focused in
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 isFocusing = focused
                             }

@@ -216,12 +216,14 @@ struct WaitingRoomView: View {
     
     private func startAdRotation() {
         Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { timer in
-            if hasCompleted {
-                timer.invalidate()
-                return
-            }
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                adIndex = (adIndex + 1) % max(1, adService.availableAds.count)
+            Task { @MainActor in
+                if hasCompleted {
+                    timer.invalidate()
+                    return
+                }
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    adIndex = (adIndex + 1) % max(1, adService.availableAds.count)
+                }
             }
         }
     }

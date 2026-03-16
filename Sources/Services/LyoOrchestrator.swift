@@ -242,7 +242,7 @@ class LyoOrchestrator: ObservableObject {
             )
 
             // 4. Parse and enhance the response
-            var orchestratedResponse = try parseAndEnhanceResponse(
+            let orchestratedResponse = try parseAndEnhanceResponse(
                 aiResponse.response,
                 learningLevel: learningLevel,
                 context: enhancedContext

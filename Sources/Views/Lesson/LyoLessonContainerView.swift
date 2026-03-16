@@ -181,12 +181,12 @@ public struct LyoLessonContainerView: View {
             LyoParallaxManager.shared.stopTracking()
             audioEngine.stop()
         }
-        .onChange(of: currentCardIndex) { newIndex in
+        .onChange(of: currentCardIndex) { _, _ in
             trackCurrentCardDuration()
             cardAppearanceTime = Date()
             playAudioForCurrentCard()
         }
-        .onChange(of: service.cards.count) { count in
+        .onChange(of: service.cards.count) { _, count in
             if count == 1 && currentCardIndex == 0 {
                 cardAppearanceTime = Date()
                 playAudioForCurrentCard()
