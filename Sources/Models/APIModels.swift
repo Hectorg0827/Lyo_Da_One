@@ -442,9 +442,20 @@ struct FeedResponse: Codable {
     let hasNext: Bool
     
     enum CodingKeys: String, CodingKey {
-        case posts, total, page
-        case perPage = "per_page"
-        case hasNext = "has_next"
+        case posts = "items"
+        case total
+        case page = "offset"
+        case perPage = "limit"
+        case hasNext = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.posts = try container.decodeIfPresent([SocialPost].self, forKey: .posts) ?? []
+        self.total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 0
+        self.perPage = try container.decodeIfPresent(Int.self, forKey: .perPage) ?? 10
+        self.hasNext = try container.decodeIfPresent(Bool.self, forKey: .hasNext) ?? false
     }
 }
 
