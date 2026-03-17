@@ -99,6 +99,9 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
     private var buffer = Data()
     private var callback: ((Lyo2StreamEvent) -> Void)?
     
+    /// Last SSE event ID received — used for reconnection replay
+    private(set) var lastEventId: String?
+    
     /// Tracks whether the stream delivered any real content events (answer, artifact, clarification, etc.).
     /// When the stream completes with zero content events, we surface an error instead of a silent blank.
     private var didReceiveContentEvent = false
@@ -272,6 +275,9 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
         for line in lines {
             if line.hasPrefix("data: ") {
                 data = String(line.dropFirst(6))
+            } else if line.hasPrefix("id: ") {
+                // Track event ID for potential reconnection replay
+                lastEventId = String(line.dropFirst(4))
             }
         }
         
@@ -417,6 +423,21 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                         callback?(.lyoSuggestions(response: response))
                     } catch {
                         Log.ai.error("Lyo2 Decoding Error (lyo_suggestions): \(error)")
+                    }
+                }
+
+            case "smart_blocks":
+                didReceiveContentEvent = true
+                if let blocksArray = json["blocks"],
+                   let blocksData = try? JSONSerialization.data(withJSONObject: blocksArray) {
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    do {
+                        let blocks = try decoder.decode([SmartBlock].self, from: blocksData)
+                        Log.ai.info("🧱 Lyo2 SSE: decoded \(blocks.count) SmartBlocks")
+                        callback?(.smartBlocks(blocks: blocks))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (smart_blocks): \(error)")
                     }
                 }
                 

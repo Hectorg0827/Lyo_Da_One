@@ -34,6 +34,11 @@ struct LyoMessageBubbleView: View {
         if let mode = message.responseMode, mode != .chat {
             return true
         }
+        
+        // SmartBlocks v2 rich content (quiz, flashcard, dataViz, etc.) counts as rich
+        if let blocks = message.smartBlocks, blocks.contains(where: { $0.type != .text }) {
+            return true
+        }
 
         guard let types = message.contentTypes else { return false }
         return types.contains { contentType in
@@ -160,6 +165,22 @@ struct LyoMessageBubbleView: View {
                             ForEach(Array(contentTypes.enumerated()), id: \.offset) {
                                 index, contentType in
                                 renderContentType(contentType)
+                            }
+                        }
+                        .padding(.top, shouldRenderPlainText ? 8 : 0)
+                    }
+                    
+                    // SmartBlock v2 rendering — preferred format from backend
+                    if let smartBlocks = message.smartBlocks, !smartBlocks.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(smartBlocks) { block in
+                                UnifiedBlockRenderer(
+                                    block: block,
+                                    context: .chat,
+                                    onQuizAnswer: { index in
+                                        onSmartBlockQuizAnswer?(message.content, index, false)
+                                    }
+                                )
                             }
                         }
                         .padding(.top, shouldRenderPlainText ? 8 : 0)

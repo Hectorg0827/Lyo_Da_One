@@ -153,7 +153,7 @@ struct MultimodalMessageBubble: View {
     // MARK: - Text Bubble
     
     private var textBubble: some View {
-        Text(LocalizedStringKey(message.content))
+        Text(message.content)
             .font(.body)
             .foregroundColor(message.role == .user ? .white : .primary)
             .textSelection(.enabled)

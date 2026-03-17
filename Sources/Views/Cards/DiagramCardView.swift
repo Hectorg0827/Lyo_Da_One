@@ -139,7 +139,7 @@ public struct DiagramCardView: View {
         // 1. Nodes appear one by one with spring
         for (index, node) in card.nodes.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.4) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                _ = withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
                     visibleNodes.insert(node.id)
                 }
                 LyoHapticManager.shared.playCardArrival()

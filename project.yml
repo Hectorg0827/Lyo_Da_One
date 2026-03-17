@@ -22,6 +22,9 @@ targets:
         excludes:
           - Tests/**
           - A2UI_Archive/Tests/**
+          - Components/Common/EmptyStateView.swift
+          - Views/Course/ModuleCardView.swift
+          - Models/LegacyCourseModels.swift
       - path: PrivacyInfo.xcprivacy
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.lyo.app

@@ -150,4 +150,7 @@ enum Lyo2StreamEvent {
     case lyoUI(response: LyoResponse)
     case lyoCommand(response: LyoResponse)
     case lyoSuggestions(response: LyoResponse)
+    
+    /// v2 unified block format (SmartBlock)
+    case smartBlocks(blocks: [SmartBlock])
 }

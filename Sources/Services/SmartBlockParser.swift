@@ -176,6 +176,10 @@ public class SmartBlockParser {
             ))
             
         case "mastery_map":
+            // Try JSON-first parsing (LLM sometimes emits JSON despite key-value prompt)
+            if let jsonBlock = tryParseMasteryMapJSON(props: props) {
+                return jsonBlock
+            }
             let nodesStr = props["nodes"] ?? ""
             let nodes = parseMasteryNodes(nodesStr)
             return .masteryMap(MasteryMapData(
@@ -256,7 +260,47 @@ public class SmartBlockParser {
         return sessions
     }
     
+    /// Attempts to parse the entire mastery_map block content as JSON.
+    /// Handles LLM output like: {"title": "...", "nodes": [{"id":"n1","title":"Variables","status":"completed"}]}
+    private static func tryParseMasteryMapJSON(props: [String: String]) -> LegacyLessonBlock? {
+        // Reconstruct the full block content for JSON detection
+        // The props parser may have split JSON across multiple keys due to colons in JSON
+        let allValues = props.values.joined(separator: "\n")
+        let candidates = [allValues] + Array(props.values)
+        
+        for candidate in candidates {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else { continue }
+            guard let data = trimmed.data(using: .utf8) else { continue }
+            
+            if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let title = dict["title"] as? String ?? "Course"
+                let nodesArray = dict["nodes"] as? [[String: Any]] ?? []
+                let nodes = nodesArray.compactMap { nodeDict -> MasteryNode? in
+                    guard let nodeTitle = nodeDict["title"] as? String else { return nil }
+                    let status = (nodeDict["status"] as? String)?.lowercased() ?? "locked"
+                    let mastery = nodeDict["mastery"] as? Double ?? nodeDict["masteryLevel"] as? Double ?? 0.0
+                    return MasteryNode(title: nodeTitle, status: status, masteryLevel: mastery > 1.0 ? mastery / 100.0 : mastery)
+                }
+                return .masteryMap(MasteryMapData(courseTitle: title, nodes: nodes))
+            }
+        }
+        return nil
+    }
+    
     private static func parseMasteryNodes(_ text: String) -> [MasteryNode] {
+        // Try JSON array parse first (handles LLM JSON output)
+        if let data = text.data(using: .utf8) {
+            if let jsonNodes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                return jsonNodes.compactMap { dict -> MasteryNode? in
+                    guard let title = dict["title"] as? String else { return nil }
+                    let status = (dict["status"] as? String)?.lowercased() ?? "locked"
+                    let mastery = dict["mastery"] as? Double ?? dict["level"] as? Double ?? dict["masteryLevel"] as? Double ?? 0.0
+                    return MasteryNode(title: title, status: status, masteryLevel: mastery > 1.0 ? mastery / 100.0 : mastery)
+                }
+            }
+        }
+        // Fall back to key-value parsing
         var nodes: [MasteryNode] = []
         let components = text.components(separatedBy: "- title:")
         guard components.count > 1 else { return [] }

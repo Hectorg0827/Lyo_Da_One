@@ -533,6 +533,7 @@ final class LiveClassroomViewModel: ObservableObject {
             title: lesson.title,
             content: lesson.blocks.compactMap { $0.content }.joined(separator: "\n\n"),
             agentBlocks: nil,
+            smartBlocks: nil,
             a2uiComponentJSON: nil,
             createdAt: Date(),
             lastAccessedAt: Date(),

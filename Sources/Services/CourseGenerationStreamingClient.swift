@@ -16,6 +16,10 @@ class CourseGenerationStreamingClient: ObservableObject {
     @Published var errorMessage: String?  // Changed from Error? to String?
     
     private var task: Task<Void, Never>?
+    private var lastEventId: String?
+    
+    /// Max reconnection attempts before giving up
+    private let maxReconnectAttempts = 3
     
     var isStreaming: Bool {
         state.isActive
@@ -28,12 +32,13 @@ class CourseGenerationStreamingClient: ObservableObject {
     ) {
         // Cancel any existing stream
         stopStreaming()
+        lastEventId = nil
         
         state = .connecting
         
         task = Task {
             do {
-                try await streamGeneration(topic: topic, options: options, onEvent: onEvent)
+                try await streamWithReconnect(topic: topic, options: options, onEvent: onEvent)
             } catch {
                 await MainActor.run {
                     self.errorMessage = error.localizedDescription
@@ -48,6 +53,42 @@ class CourseGenerationStreamingClient: ObservableObject {
         task = nil
         if state.isActive {
             state = .cancelled
+        }
+    }
+    
+    /// Stream with automatic reconnection on transient failures
+    private func streamWithReconnect(
+        topic: String,
+        options: CourseGenerationOptions,
+        onEvent: @escaping (CourseGenerationEvent) -> Void
+    ) async throws {
+        var attempt = 0
+        
+        while attempt <= maxReconnectAttempts {
+            if Task.isCancelled { return }
+            
+            if attempt > 0 {
+                let backoff = UInt64(pow(2.0, Double(attempt))) * 1_000_000_000 // 2s, 4s, 8s
+                Log.course.info("🔄 SSE reconnecting (attempt \(attempt)/\(self.maxReconnectAttempts)) with lastEventId=\(self.lastEventId ?? "nil")")
+                try await Task.sleep(nanoseconds: backoff)
+            }
+            
+            do {
+                try await streamGeneration(topic: topic, options: options, onEvent: onEvent)
+                return // Completed normally
+            } catch is CancellationError {
+                return
+            } catch {
+                let nsError = error as NSError
+                let isTransient = nsError.code == NSURLErrorTimedOut
+                    || nsError.code == NSURLErrorNetworkConnectionLost
+                    || nsError.code == NSURLErrorNotConnectedToInternet
+                
+                if !isTransient || attempt >= maxReconnectAttempts {
+                    throw error
+                }
+                attempt += 1
+            }
         }
     }
     
@@ -132,6 +173,9 @@ class CourseGenerationStreamingClient: ObservableObject {
                 // Backend might send event type separately
                 let eventType = String(line.dropFirst(7))
                 Log.course.info("SSE Event Type: \(eventType)")
+            } else if line.hasPrefix("id: ") {
+                // Track last event ID for reconnection replay
+                lastEventId = String(line.dropFirst(4))
             }
         }
         

@@ -40,6 +40,9 @@ struct LyoMessage: Identifiable, Codable, Equatable {
     /// When true, content is still being streamed from the backend (SSE).
     /// Used by MessageBubbleView to show a blinking cursor and trigger haptics.
     var isStreaming: Bool = false
+    
+    /// v2 unified block format — decoded from the backend's `smart_blocks` SSE event.
+    var smartBlocks: [SmartBlock]?
 
     // Exclude ephemeral animation state from Codable
     enum CodingKeys: String, CodingKey {
@@ -64,6 +67,7 @@ struct LyoMessage: Identifiable, Codable, Equatable {
             && lhs.isRevealed == rhs.isRevealed
             && lhs.shouldAnimate == rhs.shouldAnimate
             && lhs.isStreaming == rhs.isStreaming
+            && lhs.smartBlocks?.count == rhs.smartBlocks?.count
     }
 }
 
