@@ -25,16 +25,12 @@ struct AppConfig {
     static var baseURL: String {
         switch Environment.current {
         case .development:
-            // Default: Cloud Run backend (stable, always reachable)
-            // Set LYO_USE_LOCALHOST=1 in Xcode scheme env vars to use local backend
-            if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
-                return "http://localhost:8000"
-            }
-            return "https://lyo-backend-830162750094.us-central1.run.app"
+            // Force Cloud Run backend to fix "Connection Refused" on local simulator
+            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
         case .staging:
-            return "https://lyo-backend-830162750094.us-central1.run.app"
+            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
         case .production:
-            return "https://lyo-backend-830162750094.us-central1.run.app"
+            return "https://lyo-backend-production-5oq7jszolq-uc.a.run.app"
         }
     }
 
@@ -78,14 +74,12 @@ struct AppConfig {
     static var wsURL: String {
         switch Environment.current {
         case .development:
-            if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
-                return "ws://localhost:8000/ws"
-            }
-            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
+            // Force Cloud Run WebSocket (WSS)
+            return "wss://lyo-backend-production-5oq7jszolq-uc.a.run.app/ws"
         case .staging:
-            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
+            return "wss://lyo-backend-production-5oq7jszolq-uc.a.run.app/ws"
         case .production:
-            return "wss://lyo-backend-830162750094.us-central1.run.app/ws"
+            return "wss://lyo-backend-production-5oq7jszolq-uc.a.run.app/ws"
         }
     }
 

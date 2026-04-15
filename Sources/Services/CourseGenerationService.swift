@@ -42,7 +42,7 @@ class CourseGenerationService: ObservableObject {
                 Endpoints.CourseGen.start(topic: topic, level: level)
             )
             
-            print("✅ Phase A: Instant payload received — job: \\(response.jobId)")
+            print("✅ Phase A: Instant payload received — job: \(response.jobId)")
             
             // Build initial course from instant payload
             let course = buildCourseFromInstant(response)
@@ -53,8 +53,8 @@ class CourseGenerationService: ObservableObject {
             startPolling(jobId: response.jobId, courseId: response.instant.courseId)
             
         } catch {
-            print("🚨 Phase A FAILED: \\(error)")
-            self.generationState = .failed("Could not start course generation: \\(error.localizedDescription)")
+            print("🚨 Phase A FAILED: \(error)")
+            self.generationState = .failed("Could not start course generation: \(error.localizedDescription)")
         }
     }
     
@@ -83,7 +83,7 @@ class CourseGenerationService: ObservableObject {
                         Endpoints.CourseGen.status(jobId: jobId)
                     )
                     
-                    print("📡 Poll #\\(pollCount): state=\\(status.state) progress=\\(status.progress ?? 0)")
+                    print("📡 Poll #\(pollCount): state=\(status.state) progress=\(status.progress ?? 0)")
                     self.progress = status.progress ?? 0
                     
                     // Fetch any newly-ready modules
@@ -125,7 +125,7 @@ class CourseGenerationService: ObservableObject {
                     }
                     
                 } catch {
-                    print("⚠️ Poll error (will retry): \\(error.localizedDescription)")
+                    print("⚠️ Poll error (will retry): \(error.localizedDescription)")
                     // Don't break — polling is resilient. Next poll will try again.
                 }
             }
@@ -232,7 +232,8 @@ class CourseGenerationService: ObservableObject {
                     state: effectiveState,
                     title: updatedTitle,
                     lessons: currentModule.lessons,
-                    summary: currentModule.summary
+                    summary: currentModule.summary,
+                    hook: currentModule.hook
                 )
             }
         }

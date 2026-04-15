@@ -101,6 +101,7 @@ struct ProgressiveModule: Codable, Identifiable, Equatable {
     let title: String
     var lessons: [ProgressiveLesson]?
     var summary: String?
+    var hook: String?
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -110,15 +111,17 @@ struct ProgressiveModule: Codable, Identifiable, Equatable {
         self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Module \(index)"
         self.lessons = try container.decodeIfPresent([ProgressiveLesson].self, forKey: .lessons)
         self.summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        self.hook = try container.decodeIfPresent(String.self, forKey: .hook)
     }
     
-    init(id: String, index: Int, state: ModuleState, title: String, lessons: [ProgressiveLesson]? = nil, summary: String? = nil) {
+    init(id: String, index: Int, state: ModuleState, title: String, lessons: [ProgressiveLesson]? = nil, summary: String? = nil, hook: String? = nil) {
         self.id = id
         self.index = index
         self.state = state
         self.title = title
         self.lessons = lessons
         self.summary = summary
+        self.hook = hook
     }
     
     static func == (lhs: ProgressiveModule, rhs: ProgressiveModule) -> Bool {
@@ -132,6 +135,19 @@ struct ProgressiveLesson: Codable, Identifiable, Equatable {
     let content: String?
     let summary: String?
     let miniPractice: [String]?
+    let quiz: LessonQuiz?
+    
+    struct LessonQuiz: Codable, Equatable {
+        let question: String
+        let options: [String]
+        let correctIndex: Int
+        let explanation: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case question, options, explanation
+            case correctIndex = "correct_index"
+        }
+    }
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -140,18 +156,20 @@ struct ProgressiveLesson: Codable, Identifiable, Equatable {
         self.content = try container.decodeIfPresent(String.self, forKey: .content)
         self.summary = try container.decodeIfPresent(String.self, forKey: .summary)
         self.miniPractice = try container.decodeIfPresent([String].self, forKey: .miniPractice)
+        self.quiz = try container.decodeIfPresent(LessonQuiz.self, forKey: .quiz)
     }
     
-    init(id: String, title: String?, content: String?, summary: String?, miniPractice: [String]?) {
+    init(id: String, title: String?, content: String?, summary: String?, miniPractice: [String]?, quiz: LessonQuiz? = nil) {
         self.id = id
         self.title = title
         self.content = content
         self.summary = summary
         self.miniPractice = miniPractice
+        self.quiz = quiz
     }
     
     enum CodingKeys: String, CodingKey {
-        case id, title, content, summary, miniPractice
+        case id, title, content, summary, miniPractice, quiz
     }
 }
 

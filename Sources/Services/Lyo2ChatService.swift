@@ -381,9 +381,6 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     }
                 }
                 
-            case "a2ui":
-                // Stale event type — log and ignore
-                Log.ai.info("🎨 Lyo2 SSE: stale event type received — ignoring")
 
             // ── v2 events (LyoResponse envelope — primary path) ──────
 
@@ -428,17 +425,21 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
 
             case "smart_blocks":
                 didReceiveContentEvent = true
-                if let blocksArray = json["blocks"],
-                   let blocksData = try? JSONSerialization.data(withJSONObject: blocksArray) {
-                    let decoder = JSONDecoder()
-                    decoder.keyDecodingStrategy = .convertFromSnakeCase
-                    do {
-                        let blocks = try decoder.decode([SmartBlock].self, from: blocksData)
-                        Log.ai.info("🧱 Lyo2 SSE: decoded \(blocks.count) SmartBlocks")
-                        callback?(.smartBlocks(blocks: blocks))
-                    } catch {
-                        Log.ai.error("Lyo2 Decoding Error (smart_blocks): \(error)")
+                // Decode SmartBlock array directly from the original JSON data.
+                // IMPORTANT: Do NOT use JSONSerialization.data(withJSONObject: json["blocks"])
+                // because the deserialized Any values may contain __SwiftValue types
+                // that crash when re-serialized by JSONSerialization.
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                do {
+                    struct SmartBlocksEnvelope: Decodable {
+                        let blocks: [SmartBlock]
                     }
+                    let envelope = try decoder.decode(SmartBlocksEnvelope.self, from: jsonData)
+                    Log.ai.info("🧱 Lyo2 SSE: decoded \(envelope.blocks.count) SmartBlocks")
+                    callback?(.smartBlocks(blocks: envelope.blocks))
+                } catch {
+                    Log.ai.error("Lyo2 Decoding Error (smart_blocks): \(error)")
                 }
                 
             default:

@@ -39,9 +39,6 @@ targets:
       OTHER_LDFLAGS: $(inherited) -Xlinker -no_warn_duplicate_libraries
     entitlements:
       path: Lyo.entitlements
-      properties:
-        com.apple.developer.applesignin:
-          - Default
     dependencies:
       - sdk: AVFoundation.framework
       - sdk: AVKit.framework

@@ -24,7 +24,30 @@ struct LyoHomeView: View {
                         } else {
                             LazyVStack(spacing: 16) {
                                 ForEach(viewModel.messages) { message in
-                                    LyoMessageBubbleView(message: message)
+                                    LyoMessageBubbleView(
+                                        message: message,
+                                        onActionTap: { action in
+                                            viewModel.executeAction(action)
+                                        },
+                                        onQuickChipTap: { chip in
+                                            viewModel.inputText = chip
+                                            Task { await viewModel.sendMessage() }
+                                        },
+                                        onCourseStart: { data in
+                                            let payload = CoursePayload(
+                                                id: nil, title: data.title, topic: data.subtext,
+                                                level: data.summary, language: nil, duration: nil,
+                                                objectives: data.modules
+                                            )
+                                            AICommandHandler.shared.executeOpenClassroom(for: payload)
+                                        },
+                                        onCourseStart_A2A: { course in
+                                            viewModel.onCourseStart(course: course)
+                                        },
+                                        onQuizAnswer_A2A: { question, answerIndex in
+                                            viewModel.onQuizAnswer(question: question, answerIndex: answerIndex)
+                                        }
+                                    )
                                         .id(message.id)
                                 }
                                 

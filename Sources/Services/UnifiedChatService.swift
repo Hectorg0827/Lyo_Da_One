@@ -878,7 +878,7 @@ final class UnifiedChatService: ObservableObject {
             if let command = response.command {
                 if command.action == "open_classroom",
                    let payload = command.payload,
-                   let payloadData = try? JSONSerialization.data(withJSONObject: payload),
+                   let payloadData = try? JSONSerialization.data(withJSONObject: payload.mapValues { $0.value }),
                    let courseDict = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
                    let coursePayload = tryDecodeOpenClassroomDict(courseDict) {
                     let proposalContent =

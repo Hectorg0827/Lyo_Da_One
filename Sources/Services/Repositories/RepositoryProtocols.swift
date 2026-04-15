@@ -411,6 +411,29 @@ struct RepoFeedResponse: Codable {
     let posts: [RepoPost]
     let nextPage: Int?
     let hasMore: Bool
+
+    // Backend returns: { "items": [...], "has_more": true/false, "total": N, "offset": N, "limit": N }
+    // Swift's synthesized decoder looks for "posts" literally — it doesn't exist — so we need CodingKeys.
+    enum CodingKeys: String, CodingKey {
+        case posts     = "items"      // backend sends "items", we store as posts
+        case hasMore   = "has_more"
+        case nextPage  = "offset"     // offset is the closest analog to nextPage
+        // Ignore "total" and "limit" — not needed by the UI layer
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Use decodeIfPresent so an empty feed (items:[]) doesn't crash
+        posts    = (try? container.decodeIfPresent([RepoPost].self, forKey: .posts)) ?? []
+        hasMore  = (try? container.decodeIfPresent(Bool.self,      forKey: .hasMore)) ?? false
+        nextPage = try? container.decodeIfPresent(Int.self,        forKey: .nextPage)
+    }
+
+    init(posts: [RepoPost] = [], nextPage: Int? = nil, hasMore: Bool = false) {
+        self.posts = posts
+        self.nextPage = nextPage
+        self.hasMore = hasMore
+    }
 }
 
 struct RepoPost: Codable, Identifiable {

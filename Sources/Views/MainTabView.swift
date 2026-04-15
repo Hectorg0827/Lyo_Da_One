@@ -265,15 +265,12 @@ struct MainTabView: View {
         }
         .fullScreenCover(isPresented: $isLiveClassroomPresented) {
             if let data = liveClassroomData {
-                LiveClassroomView(
+                LivingClassroomView(
                     courseId: data.courseId,
-                    lessonId: data.lessonId,
-                    courseTitle: data.courseTitle,
-                    lessonTitle: data.lessonTitle
+                    courseTitle: data.courseTitle
                 )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)
-                .environmentObject(aiViewModel)
             }
         }
         .fullScreenCover(isPresented: $isVideoRecorderPresented) {
@@ -355,11 +352,15 @@ struct MainTabView: View {
             let lessonId: String = courseItem.lessonId ?? "lesson-1"
             let courseTitle: String = courseItem.title
             let lessonTitle: String = courseItem.subtitle ?? "Lesson"
-            pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
+            
+            // SKIPPING GATE: Directly open the classroom
+            liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
+            withAnimation { isLiveClassroomPresented = true }
+            Log.ui.info("MainTabView: Bypassing gate for Course Nav: \(courseTitle)")
         } else {
-            pendingClassroomFromGate = (courseId, "lesson-1", "Shared Course", "Introduction")
+            liveClassroomData = (courseId, "lesson-1", "Shared Course", "Introduction")
+            withAnimation { isLiveClassroomPresented = true }
         }
-        withAnimation { isCourseGatePresented = true }
     }
     
     // MARK: - Deep Link Handler Logic
@@ -372,8 +373,10 @@ struct MainTabView: View {
             navigateToCourse(id)
             
         case .openLesson(let courseId, let lessonId):
-            pendingClassroomFromGate = (courseId, lessonId, "Shared Course", "Lesson")
-            withAnimation { isCourseGatePresented = true }
+            // SKIPPING GATE: Directly open the classroom
+            liveClassroomData = (courseId, lessonId, "Shared Course", "Lesson")
+            withAnimation { isLiveClassroomPresented = true }
+            Log.ui.info("MainTabView: Bypassing gate for Deep Link Lesson")
             
         case .openProfile:
             selectedTab = .profile
@@ -423,9 +426,12 @@ extension MainTabView {
                         let courseId = userInfo["courseId"] as? String ?? "GENERATE:\(userInfo["topic"] as? String ?? "Course")"
                         let courseTitle = userInfo["courseTitle"] as? String ?? userInfo["topic"] as? String ?? "Course"
                         let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
-                        pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
+                        
+                        // SKIPPING GATE: Directly open the classroom
+                        liveClassroomData = (courseId, "lesson-1", courseTitle, lessonTitle)
+                        withAnimation { isLiveClassroomPresented = true }
+                        Log.ui.info("MainTabView: Bypassing gate for Live Lesson: \(courseTitle)")
                     }
-                    withAnimation { isCourseGatePresented = true }
                 }
             }
             .onReceive(openClassroomPublisher) { notification in
@@ -438,35 +444,28 @@ extension MainTabView {
                     uiState.isLioChatPresented = false
                 }
 
-                // Wait for any chat-sheet / overlay dismiss animation to finish
+                // Directly open the classroom after a short delay to allow sheet dismissal
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     guard let userInfo = notification.userInfo,
                           var courseId = userInfo["courseId"] as? String else {
-                        Log.ui.warning("🎬 openClassroom notification missing courseId — aborting gate")
+                        Log.ui.warning("🎬 openClassroom notification missing courseId — aborting")
                         return
                     }
 
                     let lessonId    = userInfo["lessonId"]    as? String ?? "intro_1"
                     let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
                     let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
-                    let shouldGenerate = userInfo["shouldGenerateCourse"] as? Bool ?? false
 
-                    // Prepend GENERATE: for new AI-originated courses
                     if let topic = userInfo["topic"] as? String,
-                       shouldGenerate || courseId.starts(with: "gen_") {
-                        courseId = "GENERATE:\(topic)"
+                       courseId.starts(with: "gen_") {
+                        courseId = topic
                     }
 
-                    // Store the destination; the gate's onProceed will open the classroom
-                    self.pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
-
-                    Log.ui.info("🎬 MainTabView: pendingClassroomFromGate set — courseId=\(courseId) title=\(courseTitle)")
-                    Log.ui.info("🎬 MainTabView: isCourseGatePresented → true (chat sheet open: \(self.uiState.isLioChatPresented))")
-
-                    DispatchQueue.main.async {
-                        withAnimation {
-                            self.isCourseGatePresented = true
-                        }
+                    Log.ui.info("🎬 MainTabView: Opening classroom immediately — courseId=\(courseId) title=\(courseTitle)")
+                    
+                    self.liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
+                    withAnimation {
+                        self.isLiveClassroomPresented = true
                     }
                 }
             }
