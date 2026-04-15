@@ -137,6 +137,7 @@ struct AppConfig {
     static var isVisionEnabled: Bool { true }
     static var isTTSEnabled: Bool { true }
     static var isCommunityEnabled: Bool { true }
+    static var isLivingClassroomEnabled: Bool { true } // Real-time WebSocket classroom mode
 
     /// When enabled, the app may fall back to local/mock responses on backend failures.
     /// Default is OFF so failures surface during real backend integration.

@@ -191,6 +191,9 @@ final class LiveClassroomViewModel: ObservableObject {
         // Observe progressive course generation: when CourseGenerationService
         // updates generatedCourse with newly-ready modules, rebuild lesson blocks.
         observeProgressiveGeneration()
+
+        // Observe scene-based classroom events from A2ACourseService
+        observeSceneBlocks()
     }
     
     /// Whether this lesson was loaded via the GENERATE: flow
@@ -251,6 +254,24 @@ final class LiveClassroomViewModel: ObservableObject {
                 default:
                     break
                 }
+            }
+            .store(in: &cancellables)
+    }
+    
+    /// Observe scene-based classroom blocks from A2ACourseService
+    private func observeSceneBlocks() {
+        A2ACourseService.shared.sceneBlocksPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] blocks in
+                guard let self else { return }
+                Log.classroom.info("🎬 Scene blocks received: \(blocks.count) blocks")
+                self.lesson = LiveLesson(
+                    courseId: self.lesson?.courseId ?? "scene",
+                    lessonId: self.lesson?.lessonId ?? "scene_lesson",
+                    title: self.lesson?.title ?? "Live Scene",
+                    blocks: blocks
+                )
+                self.currentBlockIndex = 0
             }
             .store(in: &cancellables)
     }

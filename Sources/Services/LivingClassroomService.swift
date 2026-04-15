@@ -16,6 +16,11 @@ class LivingClassroomService: ObservableObject {
     private var sessionId: String = ""
     private let logger = Logger(subsystem: "com.lyo.app", category: "LivingClassroomService")
 
+    deinit {
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        urlSession?.invalidateAndCancel()
+    }
+
     /// Connects to the real-time Server-Driven UI WebSockets
     func connect(sessionId: String) {
         guard webSocketTask == nil, !isConnecting else {
@@ -55,7 +60,7 @@ class LivingClassroomService: ObservableObject {
                 guard
                     let url = URL(
                         string:
-                            "\(wsBaseString)/api/v1/classroom/ws/connect?session_id=\(encodedSessionId)&token=\(token)"
+                            "\(wsBaseString)/api/v1/classroom/ws/connect?session_id=\(encodedSessionId)"
                     )
                 else {
                     self.logger.error("Invalid WebSocket URL")
@@ -67,9 +72,13 @@ class LivingClassroomService: ObservableObject {
                 let session = URLSession(configuration: .default)
                 self.urlSession = session
 
-                self.webSocketTask = session.webSocketTask(with: url)
+                var request = URLRequest(url: url)
+                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+                self.webSocketTask = session.webSocketTask(with: request)
                 self.webSocketTask?.resume()
                 self.isConnected = true
+                self.isConnecting = false
                 self.error = nil
 
                 self.receiveMessages()
@@ -77,6 +86,8 @@ class LivingClassroomService: ObservableObject {
                 self.logger.error("Failed to connect: \(error.localizedDescription)")
                 self.error = error
                 self.isConnected = false
+                self.isConnecting = false
+                self.webSocketTask = nil
             }
         }
     }
@@ -120,10 +131,12 @@ class LivingClassroomService: ObservableObject {
         }
 
         task.send(.string(jsonString)) { [weak self] error in
-            if let error = error {
-                self?.logger.error("Failed to send user action: \(error.localizedDescription)")
-            } else {
-                self?.logger.info("📤 Sent user action: \(actionIntent)")
+            Task { @MainActor in
+                if let error = error {
+                    self?.logger.error("Failed to send user action: \(error.localizedDescription)")
+                } else {
+                    self?.logger.info("📤 Sent user action: \(actionIntent)")
+                }
             }
         }
     }
@@ -156,7 +169,9 @@ class LivingClassroomService: ObservableObject {
                 case .failure(let error):
                     self.logger.error("WebSocket receiving error: \(error.localizedDescription)")
                     self.isConnected = false
+                    self.isConnecting = false
                     self.error = error
+                    self.webSocketTask = nil
                 }
             }
         }

@@ -193,6 +193,7 @@ struct LivingClassroomView: View {
             sessionTimer.start()
         }
         .onDisappear {
+            narrationWork?.cancel()
             service.disconnect()
             sessionTimer.stop()
         }

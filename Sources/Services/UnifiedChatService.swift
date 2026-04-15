@@ -954,6 +954,17 @@ final class UnifiedChatService: ObservableObject {
                 messages[idx] = msg
             }
 
+        case .sceneStart(let scene):
+            Log.ai.info("🎬 Scene start received in chat: \(scene.sceneId) type=\(scene.sceneType)")
+            NotificationCenter.default.post(
+                name: .openLivingClassroom,
+                object: nil,
+                userInfo: [
+                    "courseId": scene.sceneId,
+                    "courseTitle": scene.metadata?["title"]?.value as? String ?? "Live Session"
+                ]
+            )
+
         case .done:
             // ✅ Stream completed — cancel the safety timeout
             streamTimeoutTask?.cancel()
