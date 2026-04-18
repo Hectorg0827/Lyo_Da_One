@@ -205,6 +205,7 @@
 		7A82AF5BD6C0A8AC20610F4B /* LioOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F36D9DE49A9D8074894B3F3 /* LioOrbView.swift */; };
 		7ADD0B293730E22AA964BE3A /* AudioPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBE43245268077516778778A /* AudioPlaybackService.swift */; };
 		7B16B0E0C56081EA2D2BE95B /* CourseLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456FEC78D3CDE12275B7850B /* CourseLibraryService.swift */; };
+		7BA6199DB5FC4263E9E8A3EE /* IntentRefinementEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE2DE2B43128C40B5EC0657 /* IntentRefinementEngineTests.swift */; };
 		7BBF64C4AC4419945F5E1055 /* EducationalOverlayTray.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857B39FB8F08ED8F22456E4B /* EducationalOverlayTray.swift */; };
 		7C03F2A9DA0A0A592DF0FFD5 /* UserContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DF143EAF4E7F34753ABB6B /* UserContextService.swift */; };
 		7C46A3688CA3D2CBBB62D7D4 /* OfflineIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A3A444E9CB775199AA1726 /* OfflineIndicator.swift */; };
@@ -620,6 +621,7 @@
 		5B7FE58F191D8D4D95236510 /* FlashcardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlashcardView.swift; sourceTree = "<group>"; };
 		5C607707E9BA92F8A63DC137 /* MonetizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationService.swift; sourceTree = "<group>"; };
 		5CC8E7D4E0B5A1F0F81E5A67 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		5CE2DE2B43128C40B5EC0657 /* IntentRefinementEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentRefinementEngineTests.swift; sourceTree = "<group>"; };
 		5E5358D1FC02F51C1306217D /* ProgressBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBarView.swift; sourceTree = "<group>"; };
 		5ED6E10C492CF8A2EB7FD181 /* LyoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LyoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5F0692C4C5FE5F88B3347F32 /* LiveClassroomViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveClassroomViewModel.swift; sourceTree = "<group>"; };
@@ -1573,6 +1575,7 @@
 				5827DE22041B89BD829EFA4A /* A2ATaskManagerTests.swift */,
 				AD39E691BBAA153D927666D9 /* Info.plist */,
 				9233AEE641B86878B0A75829 /* IntegrationTests.swift */,
+				5CE2DE2B43128C40B5EC0657 /* IntentRefinementEngineTests.swift */,
 				9561F9EA5F1B44D3BC985BD3 /* LyoAITests.swift */,
 				56F9C5C7694E048C6522E1F1 /* MarkdownToBlocksParserTests.swift */,
 				277EBE51110A2BA1195E6FA6 /* MentorModeTests.swift */,
@@ -2385,6 +2388,7 @@
 				151AC067D89EBAF6F33507E0 /* A2AServiceTests.swift in Sources */,
 				AC27D8063F0EFAD0DF73719C /* A2ATaskManagerTests.swift in Sources */,
 				BC850AF0FB4AF29D6F103242 /* IntegrationTests.swift in Sources */,
+				7BA6199DB5FC4263E9E8A3EE /* IntentRefinementEngineTests.swift in Sources */,
 				A43814C61E13B77FC2D2E818 /* LyoAITests.swift in Sources */,
 				94075BC795BB2F15014CFEA9 /* MarkdownToBlocksParserTests.swift in Sources */,
 				D466269A1DA9C13EAA3A8239 /* MentorModeTests.swift in Sources */,
