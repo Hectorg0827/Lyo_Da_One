@@ -107,6 +107,21 @@ class CourseGenerationService: ObservableObject {
         prewarmTask?.cancel()
         prewarmTask = nil
         prewarmedKey = nil
+        // Sprint 15 — if we cancel a prewarm mid-flight, drop any state it
+        // already published so the next gate doesn't pick up a stale
+        // .startingGeneration / .failed leaked by the cancelled URLSession.
+        // Only roll back states owned by the prewarm path; preserve
+        // user-initiated states like .complete / .pollingForModules with
+        // a real generatedCourse so concurrent live flows aren't disturbed.
+        switch generationState {
+        case .startingGeneration, .engagementBridge, .failed:
+            if generatedCourse == nil {
+                generationState = .idle
+            }
+        default:
+            break
+        }
+        LyoAnalyticsManager.shared.trackEvent("course_prewarm_reset", parameters: [:])
     }
 
     private static func prewarmKey(topic: String, level: String) -> String {
@@ -138,6 +153,18 @@ class CourseGenerationService: ObservableObject {
             startPolling(jobId: response.jobId, courseId: response.instant.courseId)
 
         } catch {
+            // Sprint 15 — a cancelled Task (e.g. user tapped Adjust on the
+            // proposal card during prewarm) raises CancellationError or a
+            // URLError(.cancelled). Treat both as a clean abort, not a real
+            // backend failure that should surface in the gate's failure
+            // overlay or trigger course_prewarm_failed analytics.
+            if Task.isCancelled
+                || (error as? CancellationError) != nil
+                || (error as? URLError)?.code == .cancelled
+            {
+                print("⏹️ Phase A cancelled — swallowing without state change")
+                return
+            }
             print("🚨 Phase A FAILED: \(error)")
             self.generationState = .failed(
                 "Could not start course generation: \(error.localizedDescription)")
