@@ -98,6 +98,20 @@ struct LiveClassroomView: View {
                 subtitle: lessonTitle
             )
         }
+        .onReceive(NotificationCenter.default.publisher(for: .classroomAdvance)) { _ in
+            // Sprint 6 — parity with LivingClassroomView. The same Continue
+            // chord (`Notification.Name.classroomAdvance`) advances either
+            // a SDUI lesson (LivingClassroomView) or a block-based one (here).
+            HapticManager.shared.light()
+            withAnimation { viewModel.advanceToNextBlock() }
+            LyoAnalyticsManager.shared.trackEvent(
+                "classroom_advance_tapped",
+                parameters: [
+                    "courseId": courseId,
+                    "lessonId": lessonId,
+                    "view": "LiveClassroomView"
+                ])
+        }
         .sheet(isPresented: $showShareSheet) {
             if let url = shareURL {
                 ClassroomShareSheet(activityItems: ["Check out this course on Lyo!", url])
