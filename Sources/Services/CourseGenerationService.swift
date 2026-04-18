@@ -130,6 +130,31 @@ class CourseGenerationService: ObservableObject {
         return "\(t)|\(l)"
     }
 
+    /// Sprint 16 — per-card readiness check. The proposal card's badge must
+    /// only light up when *this* (topic, level) is the one that's been
+    /// prewarmed; otherwise older proposal cards in chat scrollback will
+    /// falsely flash "Ready" when a newer card's prewarm completes.
+    func isPrewarmReady(topic: String, level: String) -> Bool {
+        guard prewarmedKey == Self.prewarmKey(topic: topic, level: level) else {
+            return false
+        }
+        switch generationState {
+        case .engagementBridge, .pollingForModules, .complete:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Sprint 16 — per-card failure check, mirrors `isPrewarmReady`.
+    func isPrewarmFailed(topic: String, level: String) -> Bool {
+        guard prewarmedKey == Self.prewarmKey(topic: topic, level: level) else {
+            return false
+        }
+        if case .failed = generationState { return true }
+        return false
+    }
+
     // MARK: - Phase A: Instant Payload
 
     /// Kicks off generation. Returns in < 5 seconds with syllabus + preview.

@@ -83,23 +83,19 @@ struct CourseProposalCardView: View {
         previewObjectives.first
     }
 
-    /// True once prewarm has crossed Phase A for *some* topic. We don't try to
-    /// match the exact (topic|level) here — prewarm is keyed inside the service
-    /// and we only ever prewarm once per card, so this is a safe proxy.
+    /// True once prewarm has crossed Phase A *for this card's* (topic, level).
+    /// Sprint 16 — keyed check via the service so older proposal cards in
+    /// chat scrollback don't falsely light up when a newer card's prewarm
+    /// completes against a different topic.
     private var isPrewarmReady: Bool {
-        switch generationService.generationState {
-        case .engagementBridge, .pollingForModules, .complete:
-            return true
-        default:
-            return false
-        }
+        generationService.isPrewarmReady(topic: payload.topic, level: payload.level)
     }
 
     /// Sprint 12 — prewarm hit `.failed`. Surface a quiet retry affordance on
     /// the card instead of silently letting the user tap into full-latency.
+    /// Sprint 16 — also keyed to this card's (topic, level).
     private var isPrewarmFailed: Bool {
-        if case .failed = generationService.generationState { return true }
-        return false
+        generationService.isPrewarmFailed(topic: payload.topic, level: payload.level)
     }
 
     var body: some View {
