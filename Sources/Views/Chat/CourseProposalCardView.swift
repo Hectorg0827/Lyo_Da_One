@@ -205,6 +205,22 @@ struct CourseProposalCardView: View {
                 if let onAdjust {
                     Button(action: {
                         HapticManager.shared.light()
+                        // Sprint 13 — user is rejecting this exact proposal.
+                        // Cancel the in-flight prewarm so we don't burn backend
+                        // budget on a course they no longer want, AND so the
+                        // refined proposal that comes back next is free to
+                        // prewarm again instead of being dedup-skipped.
+                        let wasReady = isPrewarmReady
+                        let wasFailed = isPrewarmFailed
+                        generationService.resetPrewarm()
+                        LyoAnalyticsManager.shared.trackEvent(
+                            "course_proposal_adjusted",
+                            parameters: [
+                                "topic": payload.topic,
+                                "level": payload.level,
+                                "was_prewarm_ready": wasReady,
+                                "was_prewarm_failed": wasFailed,
+                            ])
                         onAdjust()
                     }) {
                         HStack(spacing: 6) {
