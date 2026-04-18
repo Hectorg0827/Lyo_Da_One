@@ -101,6 +101,9 @@ final class UnifiedChatService: ObservableObject {
         // 5. Clear any in-progress intent refinement
         IntentRefinementEngine.shared.reset()
 
+        // 6. Drop any prewarmed course generation tied to the previous chat
+        CourseGenerationService.shared.resetPrewarm()
+
         Log.ai.info("🆕 Started new chat session: \(self.currentConversationId)")
     }
 

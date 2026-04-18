@@ -20,6 +20,8 @@ class CourseGenerationService: ObservableObject {
     @Published var progress: Double = 0.0
     
     private var pollingTask: Task<Void, Never>?
+    private var prewarmTask: Task<Void, Never>?
+    private var prewarmedKey: String?
     
     enum GenerationState: Equatable {
         case idle
@@ -30,6 +32,49 @@ class CourseGenerationService: ObservableObject {
         case failed(String)
     }
     
+    // MARK: - Pre-warm (Sprint 2: seamless paced handoff)
+
+    /// Kick off Phase A generation in the background as soon as a proposal card
+    /// appears in chat. Idempotent — safe to call repeatedly with the same
+    /// (topic, level). When the user finally taps "Start Course", Phase A is
+    /// already in flight (or done), so the CourseStartGateView countdown
+    /// overlaps with real backend work instead of a fake animation.
+    func prewarm(topic: String, level: String = "beginner") {
+        let key = Self.prewarmKey(topic: topic, level: level)
+
+        // Already prewarmed (or in progress) for this exact request → no-op.
+        if prewarmedKey == key { return }
+
+        // If we're already generating something else, don't clobber it.
+        switch generationState {
+        case .startingGeneration, .engagementBridge, .pollingForModules:
+            return
+        default:
+            break
+        }
+
+        prewarmedKey = key
+        print("🔥 Prewarm: kicking off generation for \(key)")
+        prewarmTask?.cancel()
+        prewarmTask = Task { [weak self] in
+            await self?.startCourseGeneration(topic: topic, level: level)
+        }
+    }
+
+    /// Reset prewarm tracking. Call when a chat is cleared or a new
+    /// conversation starts so stale generations don't block fresh ones.
+    func resetPrewarm() {
+        prewarmTask?.cancel()
+        prewarmTask = nil
+        prewarmedKey = nil
+    }
+
+    private static func prewarmKey(topic: String, level: String) -> String {
+        let t = topic.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let l = level.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "\(t)|\(l)"
+    }
+
     // MARK: - Phase A: Instant Payload
     
     /// Kicks off generation. Returns in < 5 seconds with syllabus + preview.

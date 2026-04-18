@@ -13,17 +13,17 @@ struct CourseProposalCardView: View {
     let payload: CoursePayload
     let onStart: () -> Void
     let onAdjust: (() -> Void)?
-    
+
     @State private var isExpanded = false
     @State private var isGenerating = false
-    
+
     /// Convenience init matching older call sites
     init(coursePayload: CoursePayload, onStartLearning: @escaping () -> Void) {
         self.payload = coursePayload
         self.onStart = onStartLearning
         self.onAdjust = nil
     }
-    
+
     /// Full init with adjust support (EnhancedMessageBubble)
     init(payload: CoursePayload, onStart: @escaping () -> Void, onAdjust: (() -> Void)? = nil) {
         self.payload = payload
@@ -76,16 +76,16 @@ struct CourseProposalCardView: View {
     private var firstModuleTitle: String? {
         previewObjectives.first
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             heroCard
             statRow
-            
+
             if let firstModuleTitle {
                 firstLessonPreview(title: firstModuleTitle)
             }
-            
+
             // Learning Objectives (expandable)
             if !payload.objectives.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -104,10 +104,11 @@ struct CourseProposalCardView: View {
                                 .foregroundColor(.white.opacity(0.6))
                         }
                     }
-                    
+
                     if isExpanded {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(Array(payload.objectives.prefix(6).enumerated()), id: \.offset) { index, objective in
+                            ForEach(Array(payload.objectives.prefix(6).enumerated()), id: \.offset)
+                            { index, objective in
                                 HStack(alignment: .top, spacing: 8) {
                                     ZStack {
                                         Circle()
@@ -118,7 +119,7 @@ struct CourseProposalCardView: View {
                                             .foregroundColor(Color(hex: "C4B5FD"))
                                     }
                                     .padding(.top, 1)
-                                    
+
                                     Text(objective)
                                         .font(.caption)
                                         .foregroundColor(.white.opacity(0.8))
@@ -130,7 +131,7 @@ struct CourseProposalCardView: View {
                     }
                 }
             }
-            
+
             // CTA Buttons
             HStack(spacing: 12) {
                 Button(action: {
@@ -157,7 +158,10 @@ struct CourseProposalCardView: View {
                     .background(
                         LinearGradient(
                             colors: isGenerating
-                                ? [Color(hex: "6366F1").opacity(0.6), Color(hex: "8B5CF6").opacity(0.6)]
+                                ? [
+                                    Color(hex: "6366F1").opacity(0.6),
+                                    Color(hex: "8B5CF6").opacity(0.6),
+                                ]
                                 : [Color(hex: "6366F1"), Color(hex: "8B5CF6")],
                             startPoint: .leading,
                             endPoint: .trailing
@@ -166,7 +170,7 @@ struct CourseProposalCardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .disabled(isGenerating)
-                
+
                 if let onAdjust {
                     Button(action: {
                         HapticManager.shared.light()
@@ -199,7 +203,10 @@ struct CourseProposalCardView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(
                             LinearGradient(
-                                colors: [Color(hex: "8B5CF6").opacity(0.45), Color(hex: "6366F1").opacity(0.2)],
+                                colors: [
+                                    Color(hex: "8B5CF6").opacity(0.45),
+                                    Color(hex: "6366F1").opacity(0.2),
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -216,6 +223,16 @@ struct CourseProposalCardView: View {
                 .background(Color.white.opacity(0.08))
                 .clipShape(Capsule())
                 .padding(12)
+        }
+        .task {
+            // Sprint 2 — Pre-warm course generation the moment this proposal
+            // appears in chat. By the time the user taps "Start Course", Phase A
+            // is already in flight (or done), so the CourseStartGateView's 10s
+            // countdown overlaps real backend work instead of a fake animation.
+            CourseGenerationService.shared.prewarm(
+                topic: payload.topic,
+                level: payload.level
+            )
         }
     }
 
@@ -268,7 +285,9 @@ struct CourseProposalCardView: View {
                 HStack(spacing: 8) {
                     heroChip(icon: "chart.bar.fill", text: payload.level)
                     heroChip(icon: "clock.fill", text: payload.duration ?? lessonEstimateText)
-                    heroChip(icon: "list.bullet.rectangle.portrait.fill", text: "\(max(1, payload.objectives.count)) outcomes")
+                    heroChip(
+                        icon: "list.bullet.rectangle.portrait.fill",
+                        text: "\(max(1, payload.objectives.count)) outcomes")
                 }
             }
             .padding(18)
@@ -300,10 +319,12 @@ struct CourseProposalCardView: View {
                     .font(.subheadline.bold())
                     .foregroundColor(.white)
 
-                Text("You’ll begin with the core mental model, a guided walkthrough, and a quick checkpoint before moving deeper.")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.76))
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "You’ll begin with the core mental model, a guided walkthrough, and a quick checkpoint before moving deeper."
+                )
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
