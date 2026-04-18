@@ -178,6 +178,19 @@ struct LivingClassroomView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     .zIndex(101)
             }
+
+            // Sprint 18 — Reconnect banner. Surfaces when the WebSocket drops
+            // so the user is never left staring at a frozen, blank classroom.
+            if !service.isConnected, service.error != nil {
+                VStack {
+                    reconnectBanner
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(102)
+            }
         }
         .preferredColorScheme(.dark)
         .navigationBarHidden(true)
@@ -1331,6 +1344,54 @@ struct LivingClassroomView: View {
             .clipShape(Capsule())
             .overlay(Capsule().stroke(borderColor, lineWidth: 1))
         }
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - RECONNECT BANNER
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// Shown when the WebSocket has dropped. Gives the user a clear, tappable
+    /// recovery path so the classroom never silently freezes.
+    private var reconnectBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(liveRed)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Classroom disconnected")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text("Tap to reconnect and continue.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            Spacer(minLength: 8)
+            Button {
+                service.reconnect()
+            } label: {
+                Text("Reconnect")
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(accentBlue)
+                    )
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reconnect to classroom")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(bgPanel.opacity(0.95))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(liveRed.opacity(0.6), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 4)
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

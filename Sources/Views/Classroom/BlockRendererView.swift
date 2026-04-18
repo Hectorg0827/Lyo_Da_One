@@ -300,14 +300,13 @@ struct ImageBlockView: View {
                             .cornerRadius(12)
                             .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                     case .failure:
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                            .foregroundColor(.gray)
-                            .frame(height: 200)
+                        mediaUnavailable(icon: "photo.badge.exclamationmark", label: "Image unavailable")
                     @unknown default:
                         EmptyView()
                     }
                 }
+            } else {
+                mediaUnavailable(icon: "photo", label: "Image unavailable")
             }
             
             if let caption = caption {
@@ -318,6 +317,25 @@ struct ImageBlockView: View {
             }
         }
         .padding(.vertical, 12)
+    }
+
+    private func mediaUnavailable(icon: String, label: String) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.12))
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 32, weight: .regular))
+                    .foregroundColor(.gray)
+                Text(label)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+        }
+        .aspectRatio(16/9, contentMode: .fit)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 }
 
@@ -531,19 +549,13 @@ struct AnimationBlockView: View {
                             .aspectRatio(contentMode: .fit)
                             .cornerRadius(12)
                     case .failure:
-                        Image(systemName: "film")
-                            .font(.largeTitle)
-                            .foregroundColor(.gray)
-                            .frame(height: 150)
+                        animationUnavailable
                     @unknown default:
                         EmptyView()
                     }
                 }
             } else {
-                Image(systemName: "film")
-                    .font(.system(size: 50))
-                    .foregroundColor(.gray)
-                    .frame(height: 150)
+                animationUnavailable
             }
             
             if let caption = caption {
@@ -554,6 +566,25 @@ struct AnimationBlockView: View {
             }
         }
         .padding(.vertical, 12)
+    }
+
+    private var animationUnavailable: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.12))
+            VStack(spacing: 8) {
+                Image(systemName: "film.stack")
+                    .font(.system(size: 32, weight: .regular))
+                    .foregroundColor(.gray)
+                Text("Animation unavailable")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+        }
+        .aspectRatio(16/9, contentMode: .fit)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Animation unavailable")
     }
 }
 
