@@ -7,6 +7,7 @@ extension Notification.Name {
     static let triggerTutorMode = Notification.Name("TriggerTutorMode")
     static let triggerLiveLesson = Notification.Name("TriggerLiveLesson")
     static let saveCourseToLibrary = Notification.Name("SaveCourseToLibrary")
+    static let classroomAdvance = Notification.Name("ClassroomAdvance")
     
     // MARK: - UI Navigation
     static let triggerLioChat = Notification.Name("TriggerLioChat")

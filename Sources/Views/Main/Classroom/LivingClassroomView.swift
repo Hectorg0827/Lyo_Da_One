@@ -136,6 +136,11 @@ struct LivingClassroomView: View {
 
     @State private var narrationWork: DispatchWorkItem? = nil
 
+    // Sprint 3 — minimalist 4-zone shell (Stage / Pulse / ActionBar / Drawer).
+    // Default ON; persisted so power users who flip to expert mode keep it.
+    @AppStorage("classroom.minimalMode") private var minimalMode: Bool = true
+    @State private var showDrawer: Bool = false
+
     // Design tokens
     private let bgDeep = Color(hexString: "080C14")
     private let bgPanel = Color(hexString: "0F1520")
@@ -149,26 +154,10 @@ struct LivingClassroomView: View {
             // Full-bleed dark background
             bgDeep.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // === TOP BAR ===
-                classroomTopBar
-
-                // === MAIN CONTENT: Left Panel | Whiteboard | Right Toolbar ===
-                HStack(spacing: 0) {
-                    agentPanel
-                        .frame(width: 80)
-
-                    // Central whiteboard
-                    whiteboardArea
-
-                    // Right toolbar
-                    rightToolbar
-                        .frame(width: 44)
-                }
-                .frame(maxHeight: .infinity)
-
-                // === BOTTOM PANEL ===
-                bottomPanel
+            if minimalMode {
+                minimalLayout
+            } else {
+                expertLayout
             }
 
             // Narration overlay
@@ -212,6 +201,283 @@ struct LivingClassroomView: View {
                 transcript: service.renderedComponents
                     .filter { $0.type == .teacherMessage || $0.type == .studentPrompt }
                     .map { TranscriptMessage(isUser: $0.type == .studentPrompt, text: $0.content) }
+            )
+        }
+        .sheet(isPresented: $showDrawer) {
+            classroomDrawerSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(bgPanel)
+                .preferredColorScheme(.dark)
+        }
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - SPRINT 3 — MINIMAL 4-ZONE SHELL (Stage / Pulse / ActionBar / Drawer)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// New minimalist layout: one focused stage + slim pulse strip + 3-button
+    /// action bar. All non-essential chrome (agent rail, tools, tabs, transcript)
+    /// lives behind the swipe-up drawer.
+    private var minimalLayout: some View {
+        VStack(spacing: 0) {
+            classroomPulseStrip
+            whiteboardArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            classroomMinimalActionBar
+        }
+    }
+
+    /// Legacy expert layout — preserved unchanged so power users can opt back in.
+    private var expertLayout: some View {
+        VStack(spacing: 0) {
+            classroomTopBar
+            HStack(spacing: 0) {
+                agentPanel
+                    .frame(width: 80)
+                whiteboardArea
+                rightToolbar
+                    .frame(width: 44)
+            }
+            .frame(maxHeight: .infinity)
+            bottomPanel
+        }
+    }
+
+    /// Pulse strip — single thin row showing close, active agent, title,
+    /// progress, and a drawer toggle. Replaces the full top bar in minimal mode.
+    private var classroomPulseStrip: some View {
+        HStack(spacing: 10) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 32, height: 32)
+                    .background(bgSurface.opacity(0.6))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("Close classroom")
+
+            // Active agent dot
+            Circle()
+                .fill((activeAgent ?? .professor).accentColor)
+                .frame(width: 8, height: 8)
+                .overlay(
+                    Circle()
+                        .stroke(.white.opacity(0.25), lineWidth: 1)
+                )
+                .shadow(color: (activeAgent ?? .professor).accentColor.opacity(0.6),
+                        radius: 4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(courseTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(pulseSubtitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(sessionTimer.formattedElapsed)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.55))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            bgPanel.opacity(0.92)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundStyle(borderColor),
+                    alignment: .bottom
+                )
+        )
+    }
+
+    private var pulseSubtitle: String {
+        let agentName = (activeAgent ?? .professor).name
+        let count = service.renderedComponents.count
+        if count == 0 { return "\(agentName) • Preparing…" }
+        return "\(agentName) • \(count) cards"
+    }
+
+    /// Minimal 3-button action bar — the only persistent surface besides the
+    /// stage. Continue advances the lesson; Ask opens the existing askOverlay;
+    /// More opens the drawer with everything else.
+    private var classroomMinimalActionBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                HapticManager.shared.playMediumImpact()
+                NotificationCenter.default.post(name: .classroomAdvance, object: nil)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Continue")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hexString: "3B82F6"), Color(hexString: "6366F1")],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: accentBlue.opacity(0.35), radius: 8, y: 2)
+            }
+
+            Button {
+                HapticManager.shared.playMediumImpact()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    showAskSheet = true
+                }
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(width: 48, height: 48)
+                    .background(bgSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+            }
+            .accessibilityLabel("Ask Lio")
+
+            Button {
+                HapticManager.shared.playLightImpact()
+                showDrawer = true
+            } label: {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(width: 48, height: 48)
+                    .background(bgSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+            }
+            .accessibilityLabel("More tools")
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(
+            bgPanel.opacity(0.92)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundStyle(borderColor),
+                    alignment: .top
+                )
+        )
+    }
+
+    /// Drawer sheet — hosts everything that used to be permanently visible:
+    /// outline / notes / quiz / discussion tabs, plus a tools row and the
+    /// minimal/expert mode toggle.
+    private var classroomDrawerSheet: some View {
+        VStack(spacing: 0) {
+            // Tab strip — reuse existing
+            bottomTabBar
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    bottomExpandedContent
+                        .frame(minHeight: 200)
+
+                    Divider().background(borderColor)
+
+                    Text("Tools")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 14)
+
+                    HStack(spacing: 10) {
+                        drawerToolButton(icon: "pencil.tip", label: "Annotate")
+                        drawerToolButton(icon: "highlighter", label: "Highlight")
+                        drawerToolButton(icon: "bookmark.fill", label: "Save")
+                        drawerTranscriptButton {
+                            showDrawer = false
+                            showTranscript = true
+                        }
+                    }
+                    .padding(.horizontal, 14)
+
+                    Divider().background(borderColor)
+
+                    Toggle(isOn: $minimalMode) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Minimalist mode")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text("Hide chrome — focus on the lesson")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                    }
+                    .tint(accentBlue)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 24)
+                }
+                .padding(.top, 12)
+            }
+        }
+    }
+
+    private func drawerToolButton(icon: String, label: String) -> some View {
+        Button {
+            HapticManager.shared.playLightImpact()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundStyle(.white.opacity(0.75))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(bgSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+        }
+    }
+
+    private func drawerTranscriptButton(action: @escaping () -> Void) -> some View {
+        Button {
+            HapticManager.shared.playLightImpact()
+            action()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 16, weight: .medium))
+                Text("Transcript")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundStyle(.white.opacity(0.75))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(bgSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(borderColor, lineWidth: 1)
             )
         }
     }
