@@ -200,10 +200,27 @@ struct LivingClassroomView: View {
             // Sprint 5 — minimalist Continue button posts .classroomAdvance.
             // Forward to the WebSocket so the backend advances the lesson.
             service.sendUserAction(actionIntent: "advance", componentId: "classroom_continue")
-            LyoAnalyticsManager.shared.trackEvent("classroom_advance_tapped", parameters: [
-                "courseId": courseId,
-                "card_count": service.renderedComponents.count
-            ])
+            LyoAnalyticsManager.shared.trackEvent(
+                "classroom_advance_tapped",
+                parameters: [
+                    "courseId": courseId,
+                    "card_count": service.renderedComponents.count,
+                ])
+        }
+        .onChange(of: showDrawer) { _, isOpen in
+            // Sprint 9 — drawer-aware narration. The narration overlay sits in
+            // the bottom half and would fight the sheet for real estate.
+            // When the drawer opens, dismiss any active narration; new ones
+            // are suppressed inside showNarration() while showDrawer is true.
+            if isOpen {
+                dismissNarration()
+                LyoAnalyticsManager.shared.trackEvent(
+                    "classroom_drawer_opened",
+                    parameters: [
+                        "courseId": courseId,
+                        "narration_was_active": narrationText != nil
+                    ])
+            }
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(
@@ -257,7 +274,9 @@ struct LivingClassroomView: View {
     /// progress, and a drawer toggle. Replaces the full top bar in minimal mode.
     private var classroomPulseStrip: some View {
         HStack(spacing: 10) {
-            Button { dismiss() } label: {
+            Button {
+                dismiss()
+            } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.7))
@@ -275,8 +294,9 @@ struct LivingClassroomView: View {
                     Circle()
                         .stroke(.white.opacity(0.25), lineWidth: 1)
                 )
-                .shadow(color: (activeAgent ?? .professor).accentColor.opacity(0.6),
-                        radius: 4)
+                .shadow(
+                    color: (activeAgent ?? .professor).accentColor.opacity(0.6),
+                    radius: 4)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(courseTitle)
@@ -1532,6 +1552,8 @@ struct LivingClassroomView: View {
     }
 
     private func showNarration(text: String, agent: ClassroomAgent) {
+        // Sprint 9 — don't compete with the drawer sheet.
+        guard !showDrawer else { return }
         narrationWork?.cancel()
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             narrationText = text
