@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 class CourseGenerationService: ObservableObject {
     static let shared = CourseGenerationService()
-    
+
     @Published var generatedCourse: GeneratedCourse?
     @Published var generationState: GenerationState = .idle {
         didSet {
@@ -18,21 +18,21 @@ class CourseGenerationService: ObservableObject {
         }
     }
     @Published var progress: Double = 0.0
-    
+
     private var pollingTask: Task<Void, Never>?
     private var prewarmTask: Task<Void, Never>?
     private var prewarmedKey: String?
     private var prewarmStartedAt: Date?
-    
+
     enum GenerationState: Equatable {
         case idle
-        case startingGeneration       // POST /generate in flight
-        case engagementBridge          // Phase B: quiz / voice playing
-        case pollingForModules         // Phase C: polling loop active
+        case startingGeneration  // POST /generate in flight
+        case engagementBridge  // Phase B: quiz / voice playing
+        case pollingForModules  // Phase C: polling loop active
         case complete
         case failed(String)
     }
-    
+
     // MARK: - Pre-warm (Sprint 2: seamless paced handoff)
 
     /// Kick off Phase A generation in the background as soon as a proposal card
@@ -45,18 +45,22 @@ class CourseGenerationService: ObservableObject {
 
         // Already prewarmed (or in progress) for this exact request → no-op.
         if prewarmedKey == key {
-            LyoAnalyticsManager.shared.trackEvent("course_prewarm_skip", parameters: [
-                "reason": "duplicate", "topic": topic, "level": level
-            ])
+            LyoAnalyticsManager.shared.trackEvent(
+                "course_prewarm_skip",
+                parameters: [
+                    "reason": "duplicate", "topic": topic, "level": level,
+                ])
             return
         }
 
         // If we're already generating something else, don't clobber it.
         switch generationState {
         case .startingGeneration, .engagementBridge, .pollingForModules:
-            LyoAnalyticsManager.shared.trackEvent("course_prewarm_skip", parameters: [
-                "reason": "in_progress", "topic": topic, "level": level
-            ])
+            LyoAnalyticsManager.shared.trackEvent(
+                "course_prewarm_skip",
+                parameters: [
+                    "reason": "in_progress", "topic": topic, "level": level,
+                ])
             return
         default:
             break
@@ -65,17 +69,34 @@ class CourseGenerationService: ObservableObject {
         prewarmedKey = key
         prewarmStartedAt = Date()
         print("🔥 Prewarm: kicking off generation for \(key)")
-        LyoAnalyticsManager.shared.trackEvent("course_prewarm_start", parameters: [
-            "topic": topic, "level": level
-        ])
+        LyoAnalyticsManager.shared.trackEvent(
+            "course_prewarm_start",
+            parameters: [
+                "topic": topic, "level": level,
+            ])
         prewarmTask?.cancel()
         prewarmTask = Task { [weak self] in
             await self?.startCourseGeneration(topic: topic, level: level)
-            if let started = await self?.prewarmStartedAt {
+            guard let self else { return }
+            if case .failed(let msg) = self.generationState {
+                // Sprint 12 — clear the prewarm key on failure so the next
+                // user-initiated tap (or a re-render of the proposal card) can
+                // retry from a clean slate instead of being silently no-op'd.
+                self.prewarmedKey = nil
+                LyoAnalyticsManager.shared.trackEvent(
+                    "course_prewarm_failed",
+                    parameters: [
+                        "topic": topic, "level": level, "error": msg,
+                    ])
+                return
+            }
+            if let started = self.prewarmStartedAt {
                 let elapsed = Date().timeIntervalSince(started)
-                LyoAnalyticsManager.shared.trackEvent("course_prewarm_complete", parameters: [
-                    "topic": topic, "level": level, "elapsed_seconds": elapsed
-                ])
+                LyoAnalyticsManager.shared.trackEvent(
+                    "course_prewarm_complete",
+                    parameters: [
+                        "topic": topic, "level": level, "elapsed_seconds": elapsed,
+                    ])
             }
         }
     }
@@ -95,64 +116,68 @@ class CourseGenerationService: ObservableObject {
     }
 
     // MARK: - Phase A: Instant Payload
-    
+
     /// Kicks off generation. Returns in < 5 seconds with syllabus + preview.
     func startCourseGeneration(topic: String, level: String = "beginner") async {
         generationState = .startingGeneration
         failedModuleFetches.removeAll()
-        
+
         do {
             let response: InstantCourseResponse = try await NetworkClient.shared.request(
                 Endpoints.CourseGen.start(topic: topic, level: level)
             )
-            
+
             print("✅ Phase A: Instant payload received — job: \(response.jobId)")
-            
+
             // Build initial course from instant payload
             let course = buildCourseFromInstant(response)
             self.generatedCourse = course
             self.generationState = .engagementBridge
-            
+
             // Phase C: Begin polling immediately
             startPolling(jobId: response.jobId, courseId: response.instant.courseId)
-            
+
         } catch {
             print("🚨 Phase A FAILED: \(error)")
-            self.generationState = .failed("Could not start course generation: \(error.localizedDescription)")
+            self.generationState = .failed(
+                "Could not start course generation: \(error.localizedDescription)")
         }
     }
-    
+
     // MARK: - Phase C: Polling Loop
-    
+
     private func startPolling(jobId: String, courseId: String) {
         pollingTask?.cancel()
         generationState = .pollingForModules
-        
+
         pollingTask = Task { [weak self] in
             guard let self else { return }
-            
+
             var fastPollCount = 0
-            let maxPolls = 25 // 10×2s + 15×5s = ~95 seconds absolute max
+            let maxPolls = 25  // 10×2s + 15×5s = ~95 seconds absolute max
             var pollCount = 0
-            
+
             while !Task.isCancelled && pollCount < maxPolls {
                 // Adaptive interval: 2 sec for first 10 polls, then 5 sec
                 let interval: UInt64 = fastPollCount < 10 ? 2_000_000_000 : 5_000_000_000
                 try? await Task.sleep(nanoseconds: interval)
                 fastPollCount += 1
                 pollCount += 1
-                
+
                 do {
                     let status: CourseStatus = try await NetworkClient.shared.request(
                         Endpoints.CourseGen.status(jobId: jobId)
                     )
-                    
-                    print("📡 Poll #\(pollCount): state=\(status.state) progress=\(status.progress ?? 0)")
+
+                    print(
+                        "📡 Poll #\(pollCount): state=\(status.state) progress=\(status.progress ?? 0)"
+                    )
                     self.progress = status.progress ?? 0
-                    
+
                     // Fetch any newly-ready modules
                     for moduleStatus in status.modules where moduleStatus.state == .ready {
-                        let _ = await fetchModuleIfNeeded(courseId: courseId, index: moduleStatus.index)
+                        let _ = await fetchModuleIfNeeded(
+                            courseId: courseId, index: moduleStatus.index)
                     }
 
                     // Retry any previously failed fetches
@@ -168,7 +193,7 @@ class CourseGenerationService: ObservableObject {
 
                     // Update states for building/failed modules in local model
                     updateModuleStates(from: status)
-                    
+
                     // Terminal states
                     if status.state == "complete" {
                         print("🎉 All modules ready!")
@@ -187,18 +212,18 @@ class CourseGenerationService: ObservableObject {
                         self.generationState = .failed("Course generation failed on server")
                         break
                     }
-                    
+
                 } catch {
                     print("⚠️ Poll error (will retry): \(error.localizedDescription)")
                     // Don't break — polling is resilient. Next poll will try again.
                 }
             }
-            
+
             if pollCount >= maxPolls && self.generationState != .complete {
                 print("🚨 Polling timed out after \(maxPolls) attempts")
                 // Safety net: fetch whatever the server has
                 await fetchFinalTruth(courseId: courseId)
-                
+
                 // If it's still not complete after final truth, explicitly fail to avoid hanging UI
                 if self.generationState != .complete {
                     self.generationState = .failed("Course generation timed out. Please try again.")
@@ -206,7 +231,7 @@ class CourseGenerationService: ObservableObject {
             }
         }
     }
-    
+
     // MARK: - Fetch Individual Module
 
     /// Track module indices that failed to fetch so we can retry during hydration
@@ -215,7 +240,8 @@ class CourseGenerationService: ObservableObject {
     private func fetchModuleIfNeeded(courseId: String, index: Int) async -> Bool {
         // Don't re-fetch if already ready locally WITH lessons
         if let existingModule = generatedCourse?.modules.first(where: { $0.index == index }),
-           existingModule.state == .ready, existingModule.lessons?.isEmpty == false {
+            existingModule.state == .ready, existingModule.lessons?.isEmpty == false
+        {
             return true
         }
 
@@ -256,7 +282,11 @@ class CourseGenerationService: ObservableObject {
 
     private func updateModuleStates(from status: CourseStatus) {
         for moduleStatus in status.modules {
-            guard let idx = generatedCourse?.modules.firstIndex(where: { $0.index == moduleStatus.index }) else { continue }
+            guard
+                let idx = generatedCourse?.modules.firstIndex(where: {
+                    $0.index == moduleStatus.index
+                })
+            else { continue }
 
             let currentModule = generatedCourse!.modules[idx]
 
@@ -272,7 +302,9 @@ class CourseGenerationService: ObservableObject {
                 } else if failedModuleFetches.contains(moduleStatus.index) {
                     // Fetch failed — keep as building so UI shows progress, not empty "complete"
                     effectiveState = .building
-                    print("⚠️ Module \(moduleStatus.index) reported ready by server but fetch failed — keeping as .building")
+                    print(
+                        "⚠️ Module \(moduleStatus.index) reported ready by server but fetch failed — keeping as .building"
+                    )
                 } else {
                     // Fetch succeeded and set state already — trust it
                     effectiveState = .ready
@@ -285,7 +317,8 @@ class CourseGenerationService: ObservableObject {
             if currentModule.state != effectiveState || currentModule.state != .ready {
                 let updatedTitle: String
                 if let statusTitle = moduleStatus.title, !statusTitle.isEmpty,
-                   currentModule.title.hasPrefix("Module ") {
+                    currentModule.title.hasPrefix("Module ")
+                {
                     updatedTitle = statusTitle
                 } else {
                     updatedTitle = currentModule.title
@@ -351,12 +384,12 @@ class CourseGenerationService: ObservableObject {
             self.generationState = .failed("Could not retrieve course")
         }
     }
-    
+
     // MARK: - Build Course from Instant Payload
-    
+
     private func buildCourseFromInstant(_ response: InstantCourseResponse) -> GeneratedCourse {
         let instant = response.instant
-        
+
         // Build module placeholders from syllabus
         var modules: [ProgressiveModule] = instant.syllabus.enumerated().map { idx, title in
             ProgressiveModule(
@@ -366,18 +399,21 @@ class CourseGenerationService: ObservableObject {
                 title: title
             )
         }
-        
+
         // Enrich Module 1 with preview data
-        if let preview = instant.modulePreview, let firstIdx = modules.firstIndex(where: { $0.index == preview.moduleIndex }) {
+        if let preview = instant.modulePreview,
+            let firstIdx = modules.firstIndex(where: { $0.index == preview.moduleIndex })
+        {
             var previewLesson: [ProgressiveLesson] = []
             if let lp = preview.lessonPreview {
-                previewLesson.append(ProgressiveLesson(
-                    id: UUID().uuidString,
-                    title: lp.title,
-                    content: nil,
-                    summary: lp.summary,
-                    miniPractice: lp.miniPractice
-                ))
+                previewLesson.append(
+                    ProgressiveLesson(
+                        id: UUID().uuidString,
+                        title: lp.title,
+                        content: nil,
+                        summary: lp.summary,
+                        miniPractice: lp.miniPractice
+                    ))
             }
             modules[firstIdx] = ProgressiveModule(
                 id: modules[firstIdx].id,
@@ -388,7 +424,7 @@ class CourseGenerationService: ObservableObject {
                 summary: preview.lessonPreview?.summary
             )
         }
-        
+
         return GeneratedCourse(
             id: instant.courseId,
             jobId: response.jobId,
@@ -399,26 +435,26 @@ class CourseGenerationService: ObservableObject {
             schemaVersion: response.schemaVersion
         )
     }
-    
+
     // MARK: - Cleanup
-    
+
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
     }
-    
+
     func reset() {
         stopPolling()
         generatedCourse = nil
         generationState = .idle
         progress = 0.0
     }
-    
+
     // MARK: - Compatibility Helpers
-    
+
     /// Legacy convenience — human-readable step description
     @Published var currentStep: String = "Preparing..."
-    
+
     /// Legacy convenience — true while any generation is in progress
     var isGenerating: Bool {
         switch generationState {
@@ -428,12 +464,12 @@ class CourseGenerationService: ObservableObject {
             return false
         }
     }
-    
+
     /// Smart Review: generates a quick review course from struggle items
     func generateSmartReview(struggles: [StruggleItem]) async throws -> GeneratedCourseResponse {
         let topic = struggles.map(\.topic).joined(separator: ", ")
         await startCourseGeneration(topic: "Review: \(topic)", level: "adaptive")
-        
+
         // Return a lightweight GeneratedCourseResponse for callers that expect the old API
         let modules = struggles.enumerated().map { idx, item in
             GenerationCourseModule(
@@ -452,7 +488,7 @@ class CourseGenerationService: ObservableObject {
                 order: idx + 1
             )
         }
-        
+
         return GeneratedCourseResponse(
             courseId: generatedCourse?.id ?? UUID().uuidString,
             title: "Smart Review",
@@ -462,9 +498,9 @@ class CourseGenerationService: ObservableObject {
             difficulty: "adaptive"
         )
     }
-    
+
     // MARK: - Legacy Compatibility: generateCourse
-    
+
     /// Wraps the new progressive generation into the old blocking API signature.
     /// Used by InteractiveCinemaService and other legacy callers.
     func generateCourse(
@@ -474,7 +510,7 @@ class CourseGenerationService: ObservableObject {
         teachingStyle: String = "interactive"
     ) async throws -> GeneratedCourseResponse {
         await startCourseGeneration(topic: topic, level: level)
-        
+
         // Wait for generation to progress past instant payload (max 60 seconds)
         var attempts = 0
         while generationState != .complete && attempts < 60 {
@@ -484,16 +520,18 @@ class CourseGenerationService: ObservableObject {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             attempts += 1
         }
-        
+
         guard let course = generatedCourse else {
             throw CourseGenerationError.noContent
         }
-        
+
         return convertToLegacyResponse(course, level: level)
     }
-    
+
     /// Convert a GeneratedCourse to the legacy GeneratedCourseResponse type
-    private func convertToLegacyResponse(_ course: GeneratedCourse, level: String = "beginner") -> GeneratedCourseResponse {
+    private func convertToLegacyResponse(_ course: GeneratedCourse, level: String = "beginner")
+        -> GeneratedCourseResponse
+    {
         GeneratedCourseResponse(
             courseId: course.id,
             title: course.title,
@@ -519,38 +557,42 @@ class CourseGenerationService: ObservableObject {
             difficulty: level
         )
     }
-    
+
     // MARK: - Legacy Compatibility: createLiveLessonFromGenerated
-    
+
     /// Converts a ProgressiveLesson into a LiveLesson for the classroom ViewModel.
-    func createLiveLessonFromGenerated(lesson: ProgressiveLesson, moduleTitle: String) -> LiveLesson {
+    func createLiveLessonFromGenerated(lesson: ProgressiveLesson, moduleTitle: String) -> LiveLesson
+    {
         var blocks: [LiveLessonBlock] = []
-        
-        blocks.append(LiveLessonBlock(
-            id: "intro_\(lesson.id)",
-            type: .paragraph,
-            title: lesson.title ?? "Lesson",
-            content: lesson.content ?? lesson.summary ?? ""
-        ))
-        
+
+        blocks.append(
+            LiveLessonBlock(
+                id: "intro_\(lesson.id)",
+                type: .paragraph,
+                title: lesson.title ?? "Lesson",
+                content: lesson.content ?? lesson.summary ?? ""
+            ))
+
         if let practice = lesson.miniPractice, !practice.isEmpty {
             for (i, question) in practice.enumerated() {
-                blocks.append(LiveLessonBlock(
-                    id: "practice_\(lesson.id)_\(i)",
-                    type: .paragraph,
-                    title: "Practice \(i + 1)",
-                    content: question
-                ))
+                blocks.append(
+                    LiveLessonBlock(
+                        id: "practice_\(lesson.id)_\(i)",
+                        type: .paragraph,
+                        title: "Practice \(i + 1)",
+                        content: question
+                    ))
             }
         }
-        
-        blocks.append(LiveLessonBlock(
-            id: "summary_\(lesson.id)",
-            type: .summary,
-            title: "✅ Lesson Complete",
-            content: lesson.summary ?? "You've finished this lesson in \(moduleTitle)."
-        ))
-        
+
+        blocks.append(
+            LiveLessonBlock(
+                id: "summary_\(lesson.id)",
+                type: .summary,
+                title: "✅ Lesson Complete",
+                content: lesson.summary ?? "You've finished this lesson in \(moduleTitle)."
+            ))
+
         return LiveLesson(
             courseId: generatedCourse?.id ?? "unknown",
             lessonId: lesson.id,

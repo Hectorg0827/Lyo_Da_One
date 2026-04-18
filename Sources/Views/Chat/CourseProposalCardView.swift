@@ -95,6 +95,13 @@ struct CourseProposalCardView: View {
         }
     }
 
+    /// Sprint 12 — prewarm hit `.failed`. Surface a quiet retry affordance on
+    /// the card instead of silently letting the user tap into full-latency.
+    private var isPrewarmFailed: Bool {
+        if case .failed = generationService.generationState { return true }
+        return false
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             heroCard
@@ -167,6 +174,9 @@ struct CourseProposalCardView: View {
                         } else if isPrewarmReady {
                             Image(systemName: "checkmark.circle.fill")
                             Text("Open Course")
+                        } else if isPrewarmFailed {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Retry")
                         } else {
                             Image(systemName: "play.fill")
                             Text("Start Course")
@@ -251,6 +261,20 @@ struct CourseProposalCardView: View {
                     .background(Color(hex: "065F46").opacity(0.55))
                     .clipShape(Capsule())
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if isPrewarmFailed {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(Color(hex: "FCA5A5"))
+                        Text("Tap to retry")
+                            .font(.caption2.bold())
+                            .foregroundColor(Color(hex: "FECACA"))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color(hex: "7F1D1D").opacity(0.55))
+                    .clipShape(Capsule())
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
                 Text("AI Draft")
                     .font(.caption2.bold())
@@ -261,6 +285,7 @@ struct CourseProposalCardView: View {
                     .clipShape(Capsule())
             }
             .animation(.easeInOut(duration: 0.25), value: isPrewarmReady)
+            .animation(.easeInOut(duration: 0.25), value: isPrewarmFailed)
             .padding(12)
         }
         .task {
