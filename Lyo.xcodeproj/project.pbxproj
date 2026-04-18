@@ -380,6 +380,7 @@
 		D76DC1079E911F42CE4FBF81 /* CourseGenerationEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB58CE6F4F26F5F147D76E48 /* CourseGenerationEvent.swift */; };
 		D7D5EB0ED4854D9A993EC97E /* CreateCommunityItemSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4B5A97D947BF68A7B3113D /* CreateCommunityItemSheet.swift */; };
 		D8467585FF4000F7E0B6780A /* ChallengesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF907342E2CA311B323D6AA5 /* ChallengesViewModel.swift */; };
+		D94D3621766F3A3F36768073 /* CourseGenerationServicePrewarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5824C979F655315FFBB127F2 /* CourseGenerationServicePrewarmTests.swift */; };
 		D999327E6D91C449CF55DA1F /* CommunityDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718B6B904DF16EF4669CB66D /* CommunityDTOs.swift */; };
 		DA605159B802E86354F1D10B /* CourseCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE53D23E02BC53FC4D5E5296 /* CourseCardView.swift */; };
 		DAC3132E4C56CE57A04D7C24 /* TranscriptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C3E2493103E3F4088BEB92 /* TranscriptSheet.swift */; };
@@ -609,6 +610,7 @@
 		53385204FBD32F17238B87A6 /* PersonalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationService.swift; sourceTree = "<group>"; };
 		56F9C5C7694E048C6522E1F1 /* MarkdownToBlocksParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownToBlocksParserTests.swift; sourceTree = "<group>"; };
 		576187781DD9B1E403DEC6F7 /* AppNotification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotification.swift; sourceTree = "<group>"; };
+		5824C979F655315FFBB127F2 /* CourseGenerationServicePrewarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseGenerationServicePrewarmTests.swift; sourceTree = "<group>"; };
 		5827DE22041B89BD829EFA4A /* A2ATaskManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2ATaskManagerTests.swift; sourceTree = "<group>"; };
 		583894E89D97399DE1EFDB32 /* StreakCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakCalendarView.swift; sourceTree = "<group>"; };
 		585EA76E6AA059BDB41557FB /* DiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryService.swift; sourceTree = "<group>"; };
@@ -1573,6 +1575,7 @@
 				B8B903E7E7D3F11E9D6CD546 /* A2AIntegrationTests.swift */,
 				9A0C745637FDFBE89C1C0563 /* A2AServiceTests.swift */,
 				5827DE22041B89BD829EFA4A /* A2ATaskManagerTests.swift */,
+				5824C979F655315FFBB127F2 /* CourseGenerationServicePrewarmTests.swift */,
 				AD39E691BBAA153D927666D9 /* Info.plist */,
 				9233AEE641B86878B0A75829 /* IntegrationTests.swift */,
 				5CE2DE2B43128C40B5EC0657 /* IntentRefinementEngineTests.swift */,
@@ -2387,6 +2390,7 @@
 				47B73E6919AA41037370A987 /* A2AIntegrationTests.swift in Sources */,
 				151AC067D89EBAF6F33507E0 /* A2AServiceTests.swift in Sources */,
 				AC27D8063F0EFAD0DF73719C /* A2ATaskManagerTests.swift in Sources */,
+				D94D3621766F3A3F36768073 /* CourseGenerationServicePrewarmTests.swift in Sources */,
 				BC850AF0FB4AF29D6F103242 /* IntegrationTests.swift in Sources */,
 				7BA6199DB5FC4263E9E8A3EE /* IntentRefinementEngineTests.swift in Sources */,
 				A43814C61E13B77FC2D2E818 /* LyoAITests.swift in Sources */,
