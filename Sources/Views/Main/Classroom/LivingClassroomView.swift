@@ -141,6 +141,11 @@ struct LivingClassroomView: View {
     @AppStorage("classroom.minimalMode") private var minimalMode: Bool = true
     @State private var showDrawer: Bool = false
 
+    // Sprint 10 — debounce Continue. WebSocket sendUserAction is fire-and-
+    // forget; without a cooldown a fast double-tap would skip two cards.
+    @State private var lastAdvanceAt: Date? = nil
+    private let advanceCooldown: TimeInterval = 0.6
+
     // Design tokens
     private let bgDeep = Color(hexString: "080C14")
     private let bgPanel = Color(hexString: "0F1520")
@@ -341,8 +346,7 @@ struct LivingClassroomView: View {
     private var classroomMinimalActionBar: some View {
         HStack(spacing: 10) {
             Button {
-                HapticManager.shared.playMediumImpact()
-                NotificationCenter.default.post(name: .classroomAdvance, object: nil)
+                requestAdvance()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.right")
@@ -361,7 +365,11 @@ struct LivingClassroomView: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .shadow(color: accentBlue.opacity(0.35), radius: 8, y: 2)
+                .opacity(isAdvanceCoolingDown ? 0.55 : 1.0)
             }
+            .disabled(isAdvanceCoolingDown)
+            .accessibilityLabel("Continue")
+            .accessibilityHint(isAdvanceCoolingDown ? "Advancing\u{2026}" : "Advance to the next card")
 
             Button {
                 HapticManager.shared.playMediumImpact()
@@ -1534,6 +1542,30 @@ struct LivingClassroomView: View {
         if last.type == .quizCard {
             HapticManager.shared.playQuizSelection()
         }
+    }
+
+    // MARK: - Sprint 10 — debounced advance
+
+    /// True while the Continue button should be visually disabled.
+    private var isAdvanceCoolingDown: Bool {
+        guard let t = lastAdvanceAt else { return false }
+        return Date().timeIntervalSince(t) < advanceCooldown
+    }
+
+    /// Posts `.classroomAdvance` exactly once per cooldown window. The
+    /// notification handler does the actual `sendUserAction` + analytics work,
+    /// so any subscriber (this view or a future Live overlay) goes through
+    /// the same code path.
+    private func requestAdvance() {
+        if isAdvanceCoolingDown {
+            LyoAnalyticsManager.shared.trackEvent(
+                "classroom_advance_debounced",
+                parameters: ["courseId": courseId])
+            return
+        }
+        lastAdvanceAt = Date()
+        HapticManager.shared.playMediumImpact()
+        NotificationCenter.default.post(name: .classroomAdvance, object: nil)
     }
 
     private func agentForComponent(_ component: SDUIComponent) -> ClassroomAgent {
