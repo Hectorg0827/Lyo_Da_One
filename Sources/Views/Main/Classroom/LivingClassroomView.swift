@@ -196,6 +196,15 @@ struct LivingClassroomView: View {
         .onChange(of: service.renderedComponents.count) { _, _ in
             handleNewComponent()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .classroomAdvance)) { _ in
+            // Sprint 5 — minimalist Continue button posts .classroomAdvance.
+            // Forward to the WebSocket so the backend advances the lesson.
+            service.sendUserAction(actionIntent: "advance", componentId: "classroom_continue")
+            LyoAnalyticsManager.shared.trackEvent("classroom_advance_tapped", parameters: [
+                "courseId": courseId,
+                "card_count": service.renderedComponents.count
+            ])
+        }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(
                 transcript: service.renderedComponents

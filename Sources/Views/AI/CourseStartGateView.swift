@@ -22,6 +22,8 @@ struct CourseStartGateView: View {
     @StateObject private var createViewModel = CreateViewModel()
 
     @StateObject private var monetization = MonetizationService.shared
+    @ObservedObject private var generationService = CourseGenerationService.shared
+    @State private var hasProceeded = false
     @Environment(\.presentationMode) var presentationMode
 
     // ── Ad-gate state ──────────────────────────────────────────────────
@@ -98,14 +100,61 @@ struct CourseStartGateView: View {
         }
         .onAppear {
             Log.ai.info("🎬 CourseStartGateView onAppear — isPremium: \(monetization.isPremium), courseId: \(courseId)")
+            // If prewarm already finished Phase A while the user was reading the
+            // proposal card, skip the gate immediately.
+            if isGenerationReady(generationService.generationState) {
+                Log.ai.info("🔥 CourseStartGateView: prewarm already ready — fast-forwarding gate")
+                LyoAnalyticsManager.shared.trackEvent("course_gate_prewarm_hit", parameters: [
+                    "courseId": courseId,
+                    "state": String(describing: generationService.generationState)
+                ])
+                proceedOnce(after: 0.6)
+                return
+            }
             if monetization.isPremium {
                 startPremiumAnimation()
             } else {
                 startAdCountdown()
             }
         }
+        .onChange(of: generationService.generationState) { _, newState in
+            // Real backend state passed Phase A while the gate was running —
+            // collapse remaining fake animation steps and proceed early.
+            guard isGenerationReady(newState), !hasProceeded else { return }
+            Log.ai.info("🔥 CourseStartGateView: generation reached \(String(describing: newState)) — fast-forwarding")
+            LyoAnalyticsManager.shared.trackEvent("course_gate_prewarm_late_hit", parameters: [
+                "courseId": courseId,
+                "state": String(describing: newState)
+            ])
+            withAnimation(.easeInOut(duration: 0.3)) {
+                stepsDone = Array(repeating: true, count: premiumSteps.count)
+                stepIndex = premiumSteps.count - 1
+                canSkip = true
+            }
+            proceedOnce(after: 0.6)
+        }
         .onDisappear {
             countdownTimer?.invalidate()
+        }
+    }
+
+    // MARK: - Prewarm hook
+
+    private func isGenerationReady(_ state: CourseGenerationService.GenerationState) -> Bool {
+        switch state {
+        case .engagementBridge, .pollingForModules, .complete:
+            return true
+        case .idle, .startingGeneration, .failed:
+            return false
+        }
+    }
+
+    private func proceedOnce(after delay: TimeInterval) {
+        guard !hasProceeded else { return }
+        hasProceeded = true
+        countdownTimer?.invalidate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            onProceed()
         }
     }
 
@@ -120,7 +169,7 @@ struct CourseStartGateView: View {
                     .foregroundColor(.white.opacity(0.45))
                 Spacer()
                 if canSkip {
-                    Button(action: onProceed) {
+                    Button(action: { proceedOnce(after: 0) }) {
                         Text("Skip  ›")
                             .font(.caption.weight(.semibold))
                             .foregroundColor(Color(hex: "A78BFA"))
@@ -263,7 +312,7 @@ struct CourseStartGateView: View {
                                     }
 
                                     Button(action: {
-                                        if canSkip { onProceed() }
+                                        if canSkip { proceedOnce(after: 0) }
                                     }) {
                                         Text(canSkip ? "Continue" : "Wait…")
                                             .font(.subheadline.weight(.semibold))
@@ -518,9 +567,7 @@ struct CourseStartGateView: View {
                 t.invalidate()
                 Log.ai.info("🎬 CourseStartGateView: Ad countdown done — proceeding to classroom")
                 withAnimation { canSkip = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    onProceed()
-                }
+                proceedOnce(after: 0.45)
             }
         }
     }
@@ -545,7 +592,7 @@ struct CourseStartGateView: View {
         // Proceed once all steps are marked done (+ 0.6 s buffer)
         let totalTime = stepDuration * Double(premiumSteps.count) + 0.6
         DispatchQueue.main.asyncAfter(deadline: .now() + totalTime) {
-            onProceed()
+            proceedOnce(after: 0)
         }
     }
 
