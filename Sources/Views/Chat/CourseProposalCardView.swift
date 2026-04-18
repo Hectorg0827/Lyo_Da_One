@@ -17,6 +17,12 @@ struct CourseProposalCardView: View {
     @State private var isExpanded = false
     @State private var isGenerating = false
 
+    // Sprint 11 — live prewarm signal. When CourseGenerationService crosses
+    // past Phase A (engagementBridge / pollingForModules / complete) the card
+    // swaps the CTA copy + shows a subtle ready dot so users know the tap
+    // will be instant rather than triggering work.
+    @ObservedObject private var generationService = CourseGenerationService.shared
+
     /// Convenience init matching older call sites
     init(coursePayload: CoursePayload, onStartLearning: @escaping () -> Void) {
         self.payload = coursePayload
@@ -75,6 +81,18 @@ struct CourseProposalCardView: View {
 
     private var firstModuleTitle: String? {
         previewObjectives.first
+    }
+
+    /// True once prewarm has crossed Phase A for *some* topic. We don't try to
+    /// match the exact (topic|level) here — prewarm is keyed inside the service
+    /// and we only ever prewarm once per card, so this is a safe proxy.
+    private var isPrewarmReady: Bool {
+        switch generationService.generationState {
+        case .engagementBridge, .pollingForModules, .complete:
+            return true
+        default:
+            return false
+        }
     }
 
     var body: some View {
@@ -146,6 +164,9 @@ struct CourseProposalCardView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(0.8)
                             Text("Starting...")
+                        } else if isPrewarmReady {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Open Course")
                         } else {
                             Image(systemName: "play.fill")
                             Text("Start Course")
@@ -215,14 +236,32 @@ struct CourseProposalCardView: View {
                 )
         )
         .overlay(alignment: .topTrailing) {
-            Text("AI Draft")
-                .font(.caption2.bold())
-                .foregroundColor(Color(hex: "DDD6FE"))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Capsule())
-                .padding(12)
+            HStack(spacing: 6) {
+                if isPrewarmReady {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: "34D399"))
+                            .frame(width: 6, height: 6)
+                        Text("Ready")
+                            .font(.caption2.bold())
+                            .foregroundColor(Color(hex: "D1FAE5"))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color(hex: "065F46").opacity(0.55))
+                    .clipShape(Capsule())
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+                Text("AI Draft")
+                    .font(.caption2.bold())
+                    .foregroundColor(Color(hex: "DDD6FE"))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+            .animation(.easeInOut(duration: 0.25), value: isPrewarmReady)
+            .padding(12)
         }
         .task {
             // Sprint 2 — Pre-warm course generation the moment this proposal
