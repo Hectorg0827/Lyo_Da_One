@@ -86,6 +86,12 @@ public final class IntentRefinementEngine: ObservableObject {
     /// interpreted as an answer to the last clarification. Otherwise the message
     /// is classified fresh.
     public func process(message: String) -> RefinementOutcome {
+        let outcome = _process(message: message)
+        emitTelemetry(for: outcome, message: message)
+        return outcome
+    }
+
+    private func _process(message: String) -> RefinementOutcome {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .notACourseRequest }
 
@@ -343,4 +349,39 @@ public final class IntentRefinementEngine: ObservableObject {
         "cooking":   ["Quick weeknight meals", "Baking", "World cuisines", "Knife skills & technique"],
         "investing": ["Investing 101", "Stocks & ETFs", "Real estate", "Crypto"]
     ]
+
+    // MARK: - Telemetry (Sprint 4)
+
+    /// Emit a single analytics event per process() call so we can measure
+    /// in production: how often we ask for clarification, on which topics,
+    /// how many rounds, and what level we infer. Backed by LyoAnalyticsManager
+    /// (already wired to backend + Firebase mirror).
+    private func emitTelemetry(for outcome: RefinementOutcome, message: String) {
+        let preview = String(message.prefix(80))
+        switch outcome {
+        case .notACourseRequest:
+            // Don't spam analytics for every chat message — only log once we
+            // know the engine made a real decision.
+            return
+        case .needsClarification(let prompt):
+            LyoAnalyticsManager.shared.trackEvent("intent_refinement_clarification", parameters: [
+                "dimension": prompt.dimension.rawValue,
+                "round": roundsAsked,
+                "topic": pendingTopic ?? "",
+                "chip_count": prompt.chips.count,
+                "message_preview": preview
+            ])
+        case .ready(let refined):
+            LyoAnalyticsManager.shared.trackEvent("intent_refinement_ready", parameters: [
+                "topic": refined.topic,
+                "normalized_topic": refined.normalizedTopic,
+                "level": refined.level.backendLevel,
+                "scope": refined.scope ?? "",
+                "goal": refined.goal.rawValue,
+                "format": refined.format.rawValue,
+                "rounds_asked": roundsAsked,
+                "confidence": refined.confidence
+            ])
+        }
+    }
 }

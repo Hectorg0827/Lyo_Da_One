@@ -22,6 +22,7 @@ class CourseGenerationService: ObservableObject {
     private var pollingTask: Task<Void, Never>?
     private var prewarmTask: Task<Void, Never>?
     private var prewarmedKey: String?
+    private var prewarmStartedAt: Date?
     
     enum GenerationState: Equatable {
         case idle
@@ -43,21 +44,39 @@ class CourseGenerationService: ObservableObject {
         let key = Self.prewarmKey(topic: topic, level: level)
 
         // Already prewarmed (or in progress) for this exact request → no-op.
-        if prewarmedKey == key { return }
+        if prewarmedKey == key {
+            LyoAnalyticsManager.shared.trackEvent("course_prewarm_skip", parameters: [
+                "reason": "duplicate", "topic": topic, "level": level
+            ])
+            return
+        }
 
         // If we're already generating something else, don't clobber it.
         switch generationState {
         case .startingGeneration, .engagementBridge, .pollingForModules:
+            LyoAnalyticsManager.shared.trackEvent("course_prewarm_skip", parameters: [
+                "reason": "in_progress", "topic": topic, "level": level
+            ])
             return
         default:
             break
         }
 
         prewarmedKey = key
+        prewarmStartedAt = Date()
         print("🔥 Prewarm: kicking off generation for \(key)")
+        LyoAnalyticsManager.shared.trackEvent("course_prewarm_start", parameters: [
+            "topic": topic, "level": level
+        ])
         prewarmTask?.cancel()
         prewarmTask = Task { [weak self] in
             await self?.startCourseGeneration(topic: topic, level: level)
+            if let started = await self?.prewarmStartedAt {
+                let elapsed = Date().timeIntervalSince(started)
+                LyoAnalyticsManager.shared.trackEvent("course_prewarm_complete", parameters: [
+                    "topic": topic, "level": level, "elapsed_seconds": elapsed
+                ])
+            }
         }
     }
 
