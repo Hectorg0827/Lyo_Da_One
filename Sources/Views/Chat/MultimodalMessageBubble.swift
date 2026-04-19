@@ -188,29 +188,24 @@ struct MultimodalMessageBubble: View {
     // MARK: - Image Bubble
     
     private func imageBubble(url: URL) -> some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .empty:
-                ProgressView()
-                    .frame(width: 200, height: 150)
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: 250, maxHeight: 300)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .onTapGesture {
-                        selectedImageURL = url
-                        showFullImage = true
-                    }
-            case .failure:
-                Image(systemName: "photo")
-                    .font(.largeTitle)
-                    .foregroundColor(.secondary)
-                    .frame(width: 200, height: 150)
-            @unknown default:
-                EmptyView()
-            }
+        LyoImage(url: url) { image in
+            image
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(maxWidth: 250, maxHeight: 300)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .onTapGesture {
+                    selectedImageURL = url
+                    showFullImage = true
+                }
+        } placeholder: {
+            ProgressView()
+                .frame(width: 200, height: 150)
+        } failure: {
+            Image(systemName: "photo")
+                .font(.largeTitle)
+                .foregroundColor(.secondary)
+                .frame(width: 200, height: 150)
         }
     }
     
