@@ -11,6 +11,9 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: 11.0.0
+  Nuke:
+    url: https://github.com/kean/Nuke
+    from: 12.8.0
   
 targets:
   Lyo:
@@ -52,6 +55,10 @@ targets:
         product: FirebaseAnalytics
       - package: Firebase
         product: FirebaseCore
+      - package: Nuke
+        product: Nuke
+      - package: Nuke
+        product: NukeUI
 
   LyoTests:
     type: bundle.unit-test

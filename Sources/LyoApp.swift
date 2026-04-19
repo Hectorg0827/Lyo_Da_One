@@ -32,7 +32,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Configure Crashlytics
         configureCrashlytics()
-        
+
+        // Bump Nuke's image cache well above iOS defaults so feed scrolling
+        // actually keeps images warm. Replaces SwiftUI's default URLCache-only path.
+        LyoImagePipeline.configure()
+
         setupAppearance()
         configureGoogleSignIn()
         configurePushNotifications()

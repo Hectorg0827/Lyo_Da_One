@@ -98,6 +98,7 @@
 		3C2949641FCF1473BBF519C2 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6297CA1DC713DB88D501FFC /* HomeView.swift */; };
 		3C3247C44F956869E3AB24CB /* CampusItemDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC511E206CE6BC76BAE1EADE /* CampusItemDetailSheet.swift */; };
 		3CC75E4EE47CB42D2EA7BEB8 /* LiveClassroomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F660E75765DF39F0AFE4CB38 /* LiveClassroomView.swift */; };
+		3D8ED0FFA34E62355EA6D309 /* LyoImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C860DF68AE7A98A4D061AF /* LyoImage.swift */; };
 		3E80D96B253F0E3C749E548F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1D3B396EA4C9DC1DCABD0167 /* FirebaseCore */; };
 		3F340098ACB913FA2E863D1F /* RichTextBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB69FA5DBAC3A4969AAAFF3 /* RichTextBubble.swift */; };
 		3F60B55798B6ED41F7A009CD /* BookingCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7AC0746094A529BA516EB89 /* BookingCalendarView.swift */; };
@@ -227,6 +228,7 @@
 		80E2B3E3FBC2DAE97F9FFDB1 /* SaaSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E5A8068990D3907216BED86 /* SaaSService.swift */; };
 		80F9B0C9EDA09491A35F9798 /* WaitingRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF98AE3741521975558112F1 /* WaitingRoomView.swift */; };
 		82024170D27B870F3D5459A5 /* AgenticClassroomViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21AF4CDF73F93BEEAAE65C5C /* AgenticClassroomViewModel.swift */; };
+		8292334A848A680B02B4893E /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = D56581B2C4D4A62219B57E53 /* Nuke */; };
 		83999C46BAD9236AC1A9EE2A /* CourseSocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA14CFBF3106F28DD5414A0 /* CourseSocialService.swift */; };
 		85243333C7F49D4D09021092 /* OpenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C559270D45A48F2DA435BE /* OpenAIService.swift */; };
 		856FF00C8F7F1ED561B43ECC /* ConceptCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43F2A933EB95998F4FBF6F3D /* ConceptCardView.swift */; };
@@ -426,6 +428,7 @@
 		FBB7DF1DFB7FC81030F6B7A5 /* SoftSkillsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C98B5B4523D1A9A5240C0C /* SoftSkillsService.swift */; };
 		FD0CBD9B839599F768254FDF /* SaaSHeaders.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD5EA152238C21A5C6963193 /* SaaSHeaders.swift */; };
 		FD7D9A6DC1DF8243A873AA0E /* LivingClassroomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E74F895B65814BCA590DF0 /* LivingClassroomView.swift */; };
+		FEE96548FE1EA64A526CE02B /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = ED9A17952FEE3DC1655CBD0D /* NukeUI */; };
 		FF59FD4E4FD473E074D15F96 /* StoriesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84EBBFBB28F780BA3F596317 /* StoriesViewModel.swift */; };
 		FF930857197F0EB72964A3F8 /* TestPrepService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703CD7916A82CAE86FA0175B /* TestPrepService.swift */; };
 		FFAB4E615F66D208D401C826 /* LyoAnimatedAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EAA341E6A5636A5E4E343F9 /* LyoAnimatedAvatarView.swift */; };
@@ -667,6 +670,7 @@
 		84EBBFBB28F780BA3F596317 /* StoriesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoriesViewModel.swift; sourceTree = "<group>"; };
 		857B39FB8F08ED8F22456E4B /* EducationalOverlayTray.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EducationalOverlayTray.swift; sourceTree = "<group>"; };
 		8594F42AF0B6B73E6E4F450A /* ImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePicker.swift; sourceTree = "<group>"; };
+		85C860DF68AE7A98A4D061AF /* LyoImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoImage.swift; sourceTree = "<group>"; };
 		86ED42BF1E86CD0A6942BEC3 /* ClassroomModuleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassroomModuleCardView.swift; sourceTree = "<group>"; };
 		8906B73F509FB8DC3AE7C0EA /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		89622DC3E07FE16633ABA444 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
@@ -877,6 +881,8 @@
 				CF0CB0AE456C9D615990E7ED /* FirebaseCrashlytics in Frameworks */,
 				882DCEB2C34AA6F8C2DBD7E5 /* FirebaseAnalytics in Frameworks */,
 				3E80D96B253F0E3C749E548F /* FirebaseCore in Frameworks */,
+				8292334A848A680B02B4893E /* Nuke in Frameworks */,
+				FEE96548FE1EA64A526CE02B /* NukeUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1662,6 +1668,7 @@
 				831670FE41E921A471D9CC03 /* DocumentPickerView.swift */,
 				532AD8931650A03C81E366F7 /* FlowLayout.swift */,
 				CA52D1C086191FD1CF3BE08B /* GlassmorphicCard.swift */,
+				85C860DF68AE7A98A4D061AF /* LyoImage.swift */,
 				5004B8458934FF689A0B295D /* MascotParticles.swift */,
 				41E16E63D11D726BDD723A04 /* StackCardView.swift */,
 			);
@@ -1893,6 +1900,8 @@
 				C1B47ED436EB5DFB5FD9F850 /* FirebaseCrashlytics */,
 				B791F3D14175C3B061ECCF8A /* FirebaseAnalytics */,
 				1D3B396EA4C9DC1DCABD0167 /* FirebaseCore */,
+				D56581B2C4D4A62219B57E53 /* Nuke */,
+				ED9A17952FEE3DC1655CBD0D /* NukeUI */,
 			);
 			productName = Lyo;
 			productReference = DB7E1D60D8537B1725823FB3 /* Lyo.app */;
@@ -1938,6 +1947,7 @@
 			packageReferences = (
 				72A699931B4B701B09D3DE89 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				874868FB395DDC488B695DBC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				F8A0D5876219973A70B79B28 /* XCRemoteSwiftPackageReference "Nuke" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -2201,6 +2211,7 @@
 				7F7B49C5D0CB10B6A4C0EAFA /* LyoErrorViews.swift in Sources */,
 				CC2C09061BF1772C4D23284F /* LyoHapticManager.swift in Sources */,
 				6A00D4DB215BB65065B18C64 /* LyoHomeView.swift in Sources */,
+				3D8ED0FFA34E62355EA6D309 /* LyoImage.swift in Sources */,
 				F8B123C11543E5BBC85EF253 /* LyoLogger.swift in Sources */,
 				88378618CE7CF391D96D7714 /* LyoModels.swift in Sources */,
 				4C304B23E4E976DDC2968FBE /* LyoOnboardingSystem.swift in Sources */,
@@ -2652,6 +2663,14 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		F8A0D5876219973A70B79B28 /* XCRemoteSwiftPackageReference "Nuke" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kean/Nuke";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.8.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -2674,6 +2693,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 72A699931B4B701B09D3DE89 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
+		};
+		D56581B2C4D4A62219B57E53 /* Nuke */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F8A0D5876219973A70B79B28 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = Nuke;
+		};
+		ED9A17952FEE3DC1655CBD0D /* NukeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F8A0D5876219973A70B79B28 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = NukeUI;
 		};
 		FF34AD9B78C1183EAAF40EA4 /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
