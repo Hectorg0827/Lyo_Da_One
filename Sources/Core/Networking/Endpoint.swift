@@ -372,25 +372,31 @@ enum Endpoints {
             switch self {
             case .chat(let message, let provider, let context):
                 // Format for /api/v1/ai/chat endpoint (conversational)
+                // `tier: "fast"` is a forward-compatible routing hint so the
+                // backend can use Gemini Flash (~95% cheaper than Pro) for
+                // chat-style turns. Reasoning / course-gen / A2UI go through
+                // dedicated endpoints which keep the smart tier.
                 struct AIChatRequest: Encodable {
                     let message: String
                     let stream: Bool
                     let provider: String
+                    let tier: String
                     let context: [String: String]?
                 }
-                
+
                 let providerId = provider == .openai ? "openai" : "gemini"
-                
+
                 var contextDict: [String: String] = [:]
                 if let ctx = context {
                     if let courseId = ctx.courseId { contextDict["course_id"] = courseId }
                     if let lessonId = ctx.lessonId { contextDict["lesson_id"] = lessonId }
                 }
-                
+
                 return AIChatRequest(
                     message: message,
                     stream: false, // Default to non-streaming for v1 chat endpoint
                     provider: providerId,
+                    tier: "fast",
                     context: contextDict.isEmpty ? nil : contextDict
                 )
 
@@ -512,15 +518,19 @@ enum Endpoints {
 
             case .chatStream(let message, let context):
                 // Matches backend ChatRequest schema: message, conversationHistory, context (String)
+                // `tier: "fast"` is a forward-compatible routing hint so the backend
+                // can use Gemini Flash for streaming chat (~95% cheaper than Pro).
                 struct ChatStreamRequest: Encodable {
                     let message: String
                     let context: String?  // Backend expects string, not dictionary
+                    let tier: String
                 }
                 // Convert context dictionary to a string representation
                 let contextString = context?.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
                 return ChatStreamRequest(
                     message: message,
-                    context: contextString
+                    context: contextString,
+                    tier: "fast"
                 )
 
             case .generateCourseContent(let prompt, let topic, let level):
