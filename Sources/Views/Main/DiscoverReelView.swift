@@ -16,38 +16,91 @@ struct DiscoverReelView: View {
     @State private var isLiked = false
     @State private var isSaved = false
     @State private var player: AVPlayer?
-    
+
+    // Lifecycle handles — must be released on disappear to avoid leaks.
+    @State private var endObserver: NSObjectProtocol?
+    @State private var timeObserver: Any?
+    @State private var statusObserver: NSKeyValueObservation?
+
+    // True after the first frame has rendered. Used to fade the poster out.
+    @State private var isPlayingFirstFrame: Bool = false
+
+    // True when the video URL fails to load. Surfaces a clear error state to the user.
+    @State private var loadFailed: Bool = false
+
     // Quiz State
     @State private var showQuiz = false
     @State private var currentQuiz: QuizMoment?
     @State private var videoPausedForQuiz = false
-    
+
     var body: some View {
         ZStack {
             // MARK: - 1. Media Layer
             GeometryReader { proxy in
-                if let videoURL = item.videoURL {
-                    VideoPlayer(player: player)
-                        .disabled(true)
-                        .onAppear {
-                            setupPlayer(url: videoURL)
+                ZStack {
+                    if let videoURL = item.videoURL {
+                        // Poster: shown immediately so swipes feel instant. Fades out
+                        // once the player produces its first frame.
+                        if let thumb = item.thumbnailURL {
+                            AsyncImage(url: thumb) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Rectangle().fill(Color.black)
+                            }
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                            .opacity(isPlayingFirstFrame ? 0 : 1)
+                            .animation(.easeOut(duration: 0.25), value: isPlayingFirstFrame)
+                        } else {
+                            Rectangle().fill(Color.black)
+                                .frame(width: proxy.size.width, height: proxy.size.height)
                         }
-                        .onDisappear {
-                            player?.pause()
+
+                        VideoPlayer(player: player)
+                            .disabled(true)
+                            .onAppear {
+                                setupPlayer(url: videoURL)
+                            }
+                            .onDisappear {
+                                teardownPlayer()
+                            }
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+
+                        // Surface load failures so the user is never staring at a frozen black frame.
+                        if loadFailed {
+                            VStack(spacing: 10) {
+                                Image(systemName: "wifi.exclamationmark")
+                                    .font(.system(size: 28, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                Text("Video unavailable")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Button("Retry") {
+                                    loadFailed = false
+                                    setupPlayer(url: videoURL)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.white.opacity(0.2))
+                                .foregroundStyle(.white)
+                            }
+                            .padding(20)
+                            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Video failed to load. Tap retry.")
+                        }
+                    } else if let thumbnailURL = item.thumbnailURL {
+                        AsyncImage(url: thumbnailURL) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Rectangle().fill(Color.black)
                         }
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
-                } else if let thumbnailURL = item.thumbnailURL {
-                    AsyncImage(url: thumbnailURL) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Rectangle().fill(Color.black)
+                    } else {
+                        LinearGradient(colors: [.blue.opacity(0.3), .purple.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            .background(Color.black)
                     }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
-                } else {
-                    LinearGradient(colors: [.blue.opacity(0.3), .purple.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .background(Color.black)
                 }
             }
             .ignoresSafeArea()
@@ -108,22 +161,70 @@ struct DiscoverReelView: View {
             isLiked = item.isLiked
             isSaved = item.isSaved
         }
-        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
-            checkQuizTrigger()
-        }
     }
     
     // MARK: - Logic
     
     private func setupPlayer(url: URL) {
-        player = AVPlayer(url: url)
-        player?.play()
-        
-        // Loop
-        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player?.currentItem, queue: .main) { _ in
-            player?.seek(to: .zero)
-            player?.play()
+        // Tear down any prior session before creating a new one (defensive — handles retry).
+        teardownPlayer()
+
+        let newPlayer = AVPlayer(url: url)
+        player = newPlayer
+        newPlayer.play()
+
+        // Loop on end. Capture the token so we can remove the observer on disappear.
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: newPlayer.currentItem,
+            queue: .main
+        ) { [weak newPlayer] _ in
+            newPlayer?.seek(to: .zero)
+            newPlayer?.play()
         }
+
+        // Replace the polling Timer with AVPlayer's own time observer — fires on the
+        // playback clock, stops automatically when the player is released, and is
+        // removable via removeTimeObserver. Half-second cadence matches the old behavior.
+        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+        timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+            checkQuizTrigger(currentTime: time.seconds)
+            // First-frame poster fade trigger.
+            if !isPlayingFirstFrame, time.seconds > 0 {
+                isPlayingFirstFrame = true
+            }
+        }
+
+        // Surface load failures via KVO on the item's status.
+        statusObserver = newPlayer.currentItem?.observe(\.status, options: [.new]) { item, _ in
+            DispatchQueue.main.async {
+                if item.status == .failed {
+                    loadFailed = true
+                }
+            }
+        }
+    }
+
+    /// Releases every long-lived resource the player owns. Must be called from
+    /// `.onDisappear` or before re-creating the player; otherwise observers and
+    /// AVPlayer instances accumulate per swipe and the app eventually crashes.
+    private func teardownPlayer() {
+        if let token = endObserver {
+            NotificationCenter.default.removeObserver(token)
+            endObserver = nil
+        }
+        if let observer = timeObserver, let player = player {
+            player.removeTimeObserver(observer)
+        }
+        timeObserver = nil
+        statusObserver?.invalidate()
+        statusObserver = nil
+
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
+
+        isPlayingFirstFrame = false
     }
     
     private func togglePlayback() {
@@ -135,11 +236,9 @@ struct DiscoverReelView: View {
         }
     }
     
-    private func checkQuizTrigger() {
+    private func checkQuizTrigger(currentTime: TimeInterval) {
         guard let customPlayer = player, customPlayer.timeControlStatus == .playing, !showQuiz else { return }
-        
-        let currentTime = customPlayer.currentTime().seconds
-        
+
         // Check for quiz moments within 0.5s window
         if let quiz = item.quizMoments.first(where: { abs($0.timestamp - currentTime) < 0.5 }) {
             // Trigger Quiz
