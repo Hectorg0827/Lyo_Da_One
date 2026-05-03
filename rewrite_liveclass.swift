@@ -86,7 +86,7 @@ struct LiveClassroomView: View {
                 Color.clear.frame(height: 0)
             }
             
-            // Floating Lio Mascot
+            // Floating Lyo Mascot
             VStack {
                 Spacer()
                 HStack {
@@ -155,13 +155,18 @@ struct LiveClassroomView: View {
     // MARK: - Floating Mascot
     
     private var floatingMascot: some View {
-        Image("LyoAvatar")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 64, height: 64)
-            .shadow(color: Color.black.opacity(0.2), radius: 10, y: 5)
-            .offset(y: viewModel.lioState == .idle ? -5 : 0)
-            .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: viewModel.lioState == .idle)
+        ZStack {
+            Circle()
+                .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 56, height: 56)
+                .shadow(color: .purple.opacity(0.4), radius: 10, y: 5)
+            
+            Image(systemName: viewModel.lioState.icon)
+                .font(.title2)
+                .foregroundColor(.white)
+        }
+        .offset(y: viewModel.lioState == .idle ? -5 : 0)
+        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: viewModel.lioState == .idle)
     }
     
     // MARK: - Drawer Area
@@ -329,7 +334,24 @@ struct LiveClassroomView: View {
     }
 }
 
-// MARK: - Lesson Completion View 
+// Corner radius modifier helper
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
+    }
+}
+
+// MARK: - Lesson Completion View (unchanged from original but styled lightly if needed)
 struct LessonCompletionView: View {
     let courseTitle: String
     let lessonTitle: String

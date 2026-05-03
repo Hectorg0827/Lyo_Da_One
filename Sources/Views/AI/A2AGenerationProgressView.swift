@@ -7,8 +7,8 @@
 //  vertical timeline, live event feed, and auto-dismiss on completion.
 //
 
-import SwiftUI
 import Combine
+import SwiftUI
 import os
 
 // MARK: - A2A Generation Progress View
@@ -30,7 +30,7 @@ struct A2AGenerationProgressView: View {
 
     // Auto-dismiss once course is ready
     @State private var didAutoDismiss = false
-    
+
     // 🌊 Progressive Streaming State
     @State private var cancellables = Set<AnyCancellable>()
     @State private var hasTriggeredEarlyLaunch = false
@@ -125,12 +125,16 @@ struct A2AGenerationProgressView: View {
 
             // Live feed toggle
             Button(action: { withAnimation { showLiveFeed.toggle() } }) {
-                Image(systemName: showLiveFeed ? "antenna.radiowaves.left.and.right.circle.fill" : "antenna.radiowaves.left.and.right.circle")
-                    .font(.system(size: 20))
-                    .foregroundColor(showLiveFeed ? Color(hex: "6366F1") : .white.opacity(0.4))
-                    .padding(10)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
+                Image(
+                    systemName: showLiveFeed
+                        ? "antenna.radiowaves.left.and.right.circle.fill"
+                        : "antenna.radiowaves.left.and.right.circle"
+                )
+                .font(.system(size: 20))
+                .foregroundColor(showLiveFeed ? Color(hex: "6366F1") : .white.opacity(0.4))
+                .padding(10)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Circle())
             }
         }
         .padding(.horizontal, 20)
@@ -154,7 +158,8 @@ struct A2AGenerationProgressView: View {
                         .frame(width: CGFloat(90 + i * 22), height: CGFloat(90 + i * 22))
                         .scaleEffect(orbPulse ? 1.06 : 0.97)
                         .animation(
-                            .easeInOut(duration: 1.6).repeatForever(autoreverses: true).delay(Double(i) * 0.2),
+                            .easeInOut(duration: 1.6).repeatForever(autoreverses: true).delay(
+                                Double(i) * 0.2),
                             value: orbPulse
                         )
                 }
@@ -163,7 +168,9 @@ struct A2AGenerationProgressView: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [Color(hex: "818CF8"), Color(hex: "6366F1"), Color(hex: "4F46E5")],
+                            colors: [
+                                Color(hex: "818CF8"), Color(hex: "6366F1"), Color(hex: "4F46E5"),
+                            ],
                             center: .center,
                             startRadius: 0,
                             endRadius: 44
@@ -176,7 +183,8 @@ struct A2AGenerationProgressView: View {
                 Circle()
                     .trim(from: 0, to: 0.35)
                     .stroke(
-                        AngularGradient(colors: [Color.white.opacity(0.6), Color.clear], center: .center),
+                        AngularGradient(
+                            colors: [Color.white.opacity(0.6), Color.clear], center: .center),
                         style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                     )
                     .frame(width: 100, height: 100)
@@ -222,7 +230,9 @@ struct A2AGenerationProgressView: View {
                                 )
                             )
                             .frame(width: geo.size.width * CGFloat(service.progress) / 100)
-                            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: service.progress)
+                            .animation(
+                                .spring(response: 0.4, dampingFraction: 0.8),
+                                value: service.progress)
                     }
                 }
                 .frame(height: 6)
@@ -282,7 +292,8 @@ struct A2AGenerationProgressView: View {
                                     .frame(width: 6, height: 6)
                                     .scaleEffect(orbPulse ? 1.3 : 0.7)
                                     .animation(
-                                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true).delay(Double(i) * 0.18),
+                                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true)
+                                            .delay(Double(i) * 0.18),
                                         value: orbPulse
                                     )
                             }
@@ -290,7 +301,8 @@ struct A2AGenerationProgressView: View {
                     }
 
                     // Live message from last streaming event
-                    if let msg = service.streamingEvents.last(where: { $0.message != nil })?.message {
+                    if let msg = service.streamingEvents.last(where: { $0.message != nil })?.message
+                    {
                         Text(msg)
                             .font(.caption)
                             .foregroundColor(.white.opacity(0.65))
@@ -358,7 +370,11 @@ struct A2AGenerationProgressView: View {
                         // Connector line
                         if !isLast {
                             Rectangle()
-                                .fill(status == .completed ? Color(hex: "6366F1").opacity(0.5) : Color.white.opacity(0.1))
+                                .fill(
+                                    status == .completed
+                                        ? Color(hex: "6366F1").opacity(0.5)
+                                        : Color.white.opacity(0.1)
+                                )
                                 .frame(width: 2, height: 36)
                         }
                     }
@@ -367,7 +383,9 @@ struct A2AGenerationProgressView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 8) {
                             Text(phase.displayName)
-                                .font(.subheadline.weight(status == .running ? .semibold : .regular))
+                                .font(
+                                    .subheadline.weight(status == .running ? .semibold : .regular)
+                                )
                                 .foregroundColor(status == .pending ? .white.opacity(0.35) : .white)
 
                             if status == .running {
@@ -427,7 +445,10 @@ struct A2AGenerationProgressView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(service.streamingEvents.suffix(12).reversed().enumerated()), id: \.offset) { _, event in
+                        ForEach(
+                            Array(service.streamingEvents.suffix(12).reversed().enumerated()),
+                            id: \.offset
+                        ) { _, event in
                             EventRowView(event: event)
                         }
                     }
@@ -465,13 +486,15 @@ struct A2AGenerationProgressView: View {
                 .foregroundColor(.white)
 
             HStack(spacing: 16) {
-                MetricCard(icon: "book.closed.fill", value: "\(course.modules.count)", label: "Modules")
+                MetricCard(
+                    icon: "book.closed.fill", value: "\(course.modules.count)", label: "Modules")
                 MetricCard(
                     icon: "doc.text.fill",
                     value: "\(course.modules.flatMap { $0.lessons }.count)",
                     label: "Lessons"
                 )
-                MetricCard(icon: "clock.fill", value: "\(course.estimatedDuration)m", label: "Est. Time")
+                MetricCard(
+                    icon: "clock.fill", value: "\(course.estimatedDuration)m", label: "Est. Time")
             }
 
             Text("Opening your classroom…")
@@ -521,7 +544,10 @@ struct A2AGenerationProgressView: View {
                             .cornerRadius(16)
                     }
                 } else if service.isGenerating {
-                    Button(action: { service.cancelGeneration(); onCancel() }) {
+                    Button(action: {
+                        service.cancelGeneration()
+                        onCancel()
+                    }) {
                         Label("Cancel", systemImage: "xmark.circle")
                             .font(.subheadline.weight(.medium))
                             .foregroundColor(.white.opacity(0.5))
@@ -581,22 +607,22 @@ struct A2AGenerationProgressView: View {
         )
         let runtime = LyoCourseRuntime(course: skeletonCourse)
         self.streamingRuntime = runtime
-        
+
         // 2. Subscribe to new modules for "Magical Progressive Launch" 🌊
         service.newModulePublisher
             .receive(on: RunLoop.main)
             .sink { module in
                 Log.ai.info("🌊 Module arrived in ProgressView: \(module.title)")
                 runtime.appendModule(module)
-                
+
                 // If it's the first module, we can trigger the classroom early!
                 if !hasTriggeredEarlyLaunch {
                     Log.ai.info("✨ MAGIC: Triggering early classroom launch on first module!")
                     hasTriggeredEarlyLaunch = true
-                    
+
                     // Give it a tiny bit of time to settle
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        // We use the full course conversion once it's done, 
+                        // We use the full course conversion once it's done,
                         // but for now we signal we're ready with what we have.
                         let syntheticCourse = A2AGeneratedCourse(
                             id: skeletonCourse.id,
@@ -624,7 +650,7 @@ struct A2AGenerationProgressView: View {
             enableVoice: true
         ) { event in
             Log.ai.info("📨 \(event.type.rawValue): \(event.message ?? "")")
-            
+
             if event.type == .completed || event.type == .pipelineCompleted {
                 // Full generation done
                 if let course = service.generatedCourse, !hasTriggeredEarlyLaunch {
@@ -641,7 +667,7 @@ extension LyoModule {
         A2ACourseModule(
             id: self.id,
             title: self.title,
-            description: self.title, // Fallback
+            description: self.title,  // Fallback
             lessons: self.lessons.map { lesson in
                 A2ACourseLesson(
                     id: lesson.id,
@@ -730,7 +756,7 @@ extension A2APipelinePhase {
         case .finalization: return Color(hex: "22C55E")
         }
     }
-    
+
     var agentName: String {
         switch self {
         case .initialization: return "Orchestrator"
@@ -767,6 +793,9 @@ extension A2AEventType {
         case .progress: return "📊"
         case .completed: return "🎉"
         case .costUpdate: return "💰"
+        case .sceneStart: return "🎬"
+        case .sceneUpdate: return "🎥"
+        case .sceneComplete: return "🎞️"
         case .unknown: return "❓"
         }
     }
@@ -779,7 +808,7 @@ extension A2AEventType {
         topic: "Introduction to Machine Learning",
         qualityTier: .standard,
         onComplete: { _ in },
-        onCancel: { }
+        onCancel: {}
     )
     .preferredColorScheme(.dark)
 }

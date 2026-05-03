@@ -53,7 +53,7 @@ final class UnifiedChatService: ObservableObject {
 
     /// Suggestions from last response
     @Published var suggestions: [SuggestionChip] = []
-    
+
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
@@ -187,7 +187,8 @@ final class UnifiedChatService: ObservableObject {
             // Single-agent non-streaming response
             let trimmedFastText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             let loweredFastText = trimmedFastText.lowercased()
-            let isGenericBackendFallback = loweredFastText.contains("encountered an issue generating a response")
+            let isGenericBackendFallback =
+                loweredFastText.contains("encountered an issue generating a response")
                 || loweredFastText == "please try again."
 
             var contentTypes: [MessageContentType] = [.text]
@@ -369,7 +370,9 @@ final class UnifiedChatService: ObservableObject {
         speakResponse: Bool = false
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
-        _ = await sendMessage(text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent)
+        _ = await sendMessage(
+            text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent
+        )
     }
 
     // MARK: - Conversation Memory Window
@@ -496,7 +499,7 @@ final class UnifiedChatService: ObservableObject {
                 }
 
                 // --- Generative UI Block parsing is now handled by SmartBlockContainerView in the UI layer ---
-                
+
                 if !finalTypes.contains(.text) {
                     finalTypes.append(.text)
                 }
@@ -832,7 +835,8 @@ final class UnifiedChatService: ObservableObject {
                 }
 
                 // Extract text content from the component
-                let textContent = uiComponent.content?.text
+                let textContent =
+                    uiComponent.content?.text
                     ?? uiComponent.content?.body
                     ?? uiComponent.content?.title
                     ?? ""
@@ -877,10 +881,12 @@ final class UnifiedChatService: ObservableObject {
             Log.ai.info("🎨 v2 lyo_command event received")
             if let command = response.command {
                 if command.action == "open_classroom",
-                   let payload = command.payload,
-                   let payloadData = try? JSONSerialization.data(withJSONObject: payload),
-                   let courseDict = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-                   let coursePayload = tryDecodeOpenClassroomDict(courseDict) {
+                    let payload = command.payload,
+                    let payloadData = try? JSONSerialization.data(withJSONObject: payload),
+                    let courseDict = try? JSONSerialization.jsonObject(with: payloadData)
+                        as? [String: Any],
+                    let coursePayload = tryDecodeOpenClassroomDict(courseDict)
+                {
                     let proposalContent =
                         "Here's your course proposal! Tap **Start Class** to begin. 🎓"
                     if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -918,6 +924,19 @@ final class UnifiedChatService: ObservableObject {
                     Log.ai.info("Set \(newSuggestions.count) v2 suggestion chips")
                 }
             }
+
+        case .sceneStart(let scene):
+            Log.ai.info("🎬 Scene start received in chat: \(scene.sceneId) type=\(scene.sceneType)")
+            // Scene events are primarily consumed by LivingClassroomService via WebSocket.
+            // If received in the chat stream, post a notification so the UI can route to the classroom.
+            NotificationCenter.default.post(
+                name: .openLivingClassroom,
+                object: nil,
+                userInfo: [
+                    "courseId": scene.sceneId,
+                    "courseTitle": scene.metadata?["title"]?.value as? String ?? "Live Session",
+                ]
+            )
 
         case .done:
             // ✅ Stream completed — cancel the safety timeout
@@ -1139,7 +1158,6 @@ final class UnifiedChatService: ObservableObject {
         Log.ai.info("🎬 Revealed artifact message: \(id)")
     }
 
-
     /// Try to decode an OPEN_CLASSROOM / CoursePayload from artifact content.
     ///
     /// Supports three detection strategies (checked in order):
@@ -1244,7 +1262,8 @@ final class UnifiedChatService: ObservableObject {
         if hasExplicitClassroomIntent {
             let lastUserText = messages.last(where: { $0.isFromUser })?.content
             if let topic = lastUserText, !topic.isEmpty {
-                Log.ai.info("🏫 ✅ Falling back to last user message as course topic: \(topic.prefix(60))")
+                Log.ai.info(
+                    "🏫 ✅ Falling back to last user message as course topic: \(topic.prefix(60))")
                 return CoursePayload(
                     id: nil,
                     title: topic,

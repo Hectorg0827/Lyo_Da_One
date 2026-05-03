@@ -26,6 +26,8 @@ struct MainTabView: View {
     @State private var isTutorModePresented = false
     @State private var isLiveClassroomPresented = false
     @State private var liveClassroomData: (courseId: String, lessonId: String, courseTitle: String, lessonTitle: String)? = nil
+    @State private var isLivingClassroomPresented = false
+    @State private var livingClassroomData: (courseId: String, courseTitle: String)? = nil
     
     // App Drawer State
     @State private var isAppDrawerOpen = false
@@ -59,7 +61,7 @@ struct MainTabView: View {
         if isLyoOverlayPresented { return false }
         
         // Hide when Classroom/Tutor is open
-        if isLiveClassroomPresented || isTutorModePresented { return false }
+        if isLiveClassroomPresented || isLivingClassroomPresented || isTutorModePresented { return false }
         
         return true
     }
@@ -247,9 +249,17 @@ struct MainTabView: View {
                 isCourseGatePresented = false
                 if let finalData = pendingClassroomFromGate {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        liveClassroomData = finalData
-                        withAnimation { isLiveClassroomPresented = true }
-                        Log.ui.info("MainTabView: Gate done → LiveClassroomView for \(finalData.courseTitle)")
+                        // Route: GENERATE: courses → LiveClassroomView (offline-capable)
+                        //        Real-time sessions → LivingClassroomView (WebSocket)
+                        if finalData.courseId.hasPrefix("GENERATE:") || !AppConfig.isLivingClassroomEnabled {
+                            liveClassroomData = finalData
+                            withAnimation { isLiveClassroomPresented = true }
+                            Log.ui.info("MainTabView: Gate done → LiveClassroomView for \(finalData.courseTitle)")
+                        } else {
+                            livingClassroomData = (finalData.courseId, finalData.courseTitle)
+                            withAnimation { isLivingClassroomPresented = true }
+                            Log.ui.info("MainTabView: Gate done → LivingClassroomView for \(finalData.courseTitle)")
+                        }
                     }
                 } else {
                     Log.ui.error("MainTabView: Gate done but pendingClassroomFromGate is STILL nil")
@@ -274,6 +284,16 @@ struct MainTabView: View {
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)
                 .environmentObject(aiViewModel)
+            }
+        }
+        .fullScreenCover(isPresented: $isLivingClassroomPresented) {
+            if let data = livingClassroomData {
+                LivingClassroomView(
+                    courseId: data.courseId,
+                    courseTitle: data.courseTitle
+                )
+                .environmentObject(uiStackStore)
+                .environmentObject(uiState)
             }
         }
         .fullScreenCover(isPresented: $isVideoRecorderPresented) {
@@ -396,6 +416,7 @@ struct MainTabView: View {
     private let tutorModePublisher = NotificationCenter.default.publisher(for: .triggerTutorMode)
     private let liveLessonPublisher = NotificationCenter.default.publisher(for: .triggerLiveLesson)
     private let openClassroomPublisher = NotificationCenter.default.publisher(for: .openClassroom)
+    private let openLivingClassroomPublisher = NotificationCenter.default.publisher(for: .openLivingClassroom)
     private let dismissOverlayPublisher = NotificationCenter.default.publisher(for: .dismissLyoOverlay)
 }
 
@@ -477,6 +498,23 @@ extension MainTabView {
                 uiState.isLioChatPresented = false
                 withAnimation(.easeOut(duration: 0.3)) {
                     isLyoOverlayPresented = false
+                }
+            }
+            .onReceive(openLivingClassroomPublisher) { notification in
+                Log.ui.info("🎬 MainTabView: Received openLivingClassroom notification")
+                if uiState.isLioChatPresented {
+                    uiState.isLioChatPresented = false
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    guard let userInfo = notification.userInfo,
+                          let courseId = userInfo["courseId"] as? String else {
+                        Log.ui.warning("🎬 openLivingClassroom missing courseId — aborting")
+                        return
+                    }
+                    let courseTitle = userInfo["courseTitle"] as? String ?? "Live Session"
+                    self.livingClassroomData = (courseId, courseTitle)
+                    withAnimation { self.isLivingClassroomPresented = true }
+                    Log.ui.info("🎬 LivingClassroomView opened for: \(courseTitle)")
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .saveCourseToLibrary)) { notification in
