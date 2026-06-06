@@ -636,15 +636,22 @@ struct CommunityPinDetailSheet: View {
             
             Divider()
             
-            // Placeholder Actions
             HStack(spacing: 20) {
-                Button(action: {}) {
+                Button(action: {
+                    let mapItem = MKMapItem(placemark: MKPlacemark(coordinate: pin.coordinate))
+                    mapItem.name = pin.title
+                    mapItem.openInMaps(launchOptions: [
+                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                    ])
+                }) {
                     Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                
-                Button(action: {}) {
+
+                Button(action: {
+                    HapticManager.shared.playLightImpact()
+                }) {
                     Label("View Details", systemImage: "info.circle")
                         .frame(maxWidth: .infinity)
                 }

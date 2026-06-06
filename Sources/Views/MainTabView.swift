@@ -536,6 +536,30 @@ extension MainTabView {
             .onReceive(NotificationCenter.default.publisher(for: .triggerLioChat)) { _ in
                 uiState.isLioChatPresented = true
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LyoNavigation"))) { notification in
+                guard let destination = notification.userInfo?["destination"] as? String else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    switch destination {
+                    case "discover", "clips": selectedTab = .clips
+                    case "community": selectedTab = .community
+                    case "profile": selectedTab = .profile
+                    case "messages": selectedTab = .messages
+                    case "focus": selectedTab = .focus
+                    default: break
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TriggerCourseCreation"))) { notification in
+                let topic = notification.userInfo?["topic"] as? String
+                uiState.isLioChatPresented = true
+                if let topic {
+                    Task {
+                        try? await Task.sleep(nanoseconds: 400_000_000)
+                        LyoAIViewModel.shared.inputText = "Create a course about \(topic)"
+                        await LyoAIViewModel.shared.sendMessage()
+                    }
+                }
+            }
     }
 }
 

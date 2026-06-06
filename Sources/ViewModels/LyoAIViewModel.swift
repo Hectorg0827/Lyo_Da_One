@@ -230,6 +230,23 @@ class LyoAIViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Flush any remaining text not yet spoken when the stream finishes.
+        // extractTTSChunks only queues complete sentences; this catches trailing
+        // partial sentences that don't end with a terminator character.
+        $isLoading
+            .receive(on: RunLoop.main)
+            .filter { !$0 }
+            .sink { [weak self] _ in
+                guard let self, self.shouldAutoSpeakCurrentResponse else { return }
+                guard let lastMsg = self.messages.last(where: { !$0.isFromUser }) else { return }
+                let remaining = String(lastMsg.content.dropFirst(self.lastSentToTTSText.count))
+                if !remaining.isEmpty {
+                    self.ttsService.enqueue(remaining)
+                    self.lastSentToTTSText = lastMsg.content
+                }
+            }
+            .store(in: &cancellables)
+
         // Test prep state bridge
         TestPrepOrchestrator.shared.$state
             .receive(on: RunLoop.main)
@@ -637,12 +654,13 @@ class LyoAIViewModel: ObservableObject {
         shouldAutoSpeakCurrentResponse = shouldSpeak
 
         if isVoiceActive {
-            // Stop recording the current utterance
-            // We manually manage the restart below to ensure continuous conversation
             sttService.stopRecording()
             isVoiceActive = false
             stopSpeaking()
         }
+
+        // Restart listening on all exit paths (normal completion, test prep early returns, errors).
+        defer { if shouldResumeListening { startListening() } }
 
         // Update affect signals (debounced)
         if Date().timeIntervalSince(lastAffectUpdate) > 30 {
@@ -681,10 +699,6 @@ class LyoAIViewModel: ObservableObject {
             speakResponse: shouldSpeak
         )
 
-        // If we were in voice mode, restart listening immediately (Barge-in ready)
-        if shouldResumeListening {
-            startListening()
-        }
     }
 
     private var currentConversationId: String {

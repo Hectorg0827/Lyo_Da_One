@@ -112,14 +112,18 @@ struct PostActionButton: View {
     let icon: String
     let count: Int
     let color: Color
-    
+    var onTap: (() -> Void)? = nil
+
     var body: some View {
-        Button(action: {}) {
+        Button(action: {
+            HapticManager.shared.playLightImpact()
+            onTap?()
+        }) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
                     .foregroundColor(color)
-                
+
                 if count > 0 {
                     Text("\(count)")
                         .font(.system(size: 14, weight: .medium))
