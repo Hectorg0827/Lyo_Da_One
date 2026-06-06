@@ -1,0 +1,361 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Xcodebuild iOS Simulator",
+			"type": "shell",
+			"command": "xcodebuild",
+			"args": [
+				"-project",
+				"Lyo.xcodeproj",
+				"-scheme",
+				"Lyo",
+				"-destination",
+				"platform=iOS Simulator,name=iPhone 17",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build+Install Lyo (Simulator)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\nSIM_UDID=AC0C3BCA-A0DB-4C35-A14D-D5A8E9FA3E35\nxcrun simctl bootstatus \"$SIM_UDID\" -b\nrm -rf /tmp/lyo_sim_dd\nxcodebuild -project \"/Users/hectorgarcia/LYO_Da_ONE/Lyo.xcodeproj\" -scheme Lyo -configuration Debug -destination \"id=$SIM_UDID\" -derivedDataPath /tmp/lyo_sim_dd build\nAPP=$(find /tmp/lyo_sim_dd/Build/Products -maxdepth 2 -type d -name 'Lyo.app' | head -1)\necho \"APP=$APP\"\nxcrun simctl install \"$SIM_UDID\" \"$APP\"\nxcrun simctl launch \"$SIM_UDID\" com.lyo.app"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Inspect /tmp/lyo_sim_dd",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"ls -la /tmp/lyo_sim_dd || true; find /tmp/lyo_sim_dd -maxdepth 4 -type d -name '*.app' | head -20; find /tmp/lyo_sim_dd -maxdepth 3 -type f -name '*.xcactivitylog' | head -10"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build+Install Lyo (Simulator, Workspace DD)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nSIM_UDID=AC0C3BCA-A0DB-4C35-A14D-D5A8E9FA3E35\nxcrun simctl bootstatus \"$SIM_UDID\" -b\nrm -rf build/lyo_sim_dd\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -configuration Debug -destination \"id=$SIM_UDID\" -derivedDataPath build/lyo_sim_dd build | tee build/sim_build.log\nAPP=$(find build/lyo_sim_dd/Build/Products -maxdepth 3 -type d -name 'Lyo.app' | head -1)\necho \"APP=$APP\"\nif [ -z \"$APP\" ]; then echo 'No .app produced'; exit 2; fi\nxcrun simctl install \"$SIM_UDID\" \"$APP\"\nxcrun simctl launch \"$SIM_UDID\" com.lyo.app"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nmkdir -p build\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination 'platform=iOS Simulator,name=iPhone 17' build | tee build/last_build.log"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (no log)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination 'platform=iOS Simulator,name=iPhone 17' build"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Parse Xcode build log",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nfor f in build/sim_dd/Logs/Build/*.xcactivitylog; do\n  echo \"--- $f ---\"\n  python3 build/parse_xcactivitylog.py \"$f\" || true\n  echo\n done"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Decode xcactivitylog",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nfor f in build/sim_dd/Logs/Build/*.xcactivitylog; do\n  echo \"--- $f ---\"\n  xcrun xcactivitylog \"$f\" | tail -200\n  echo\n done"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check pbxproj A2UI paths",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 - <<'PY'\nfrom pathlib import Path\ntext = Path('Lyo.xcodeproj/project.pbxproj').read_text()\nfor needle in ['Sources/Core/A2UI', 'Sources/Core/Sources/Core/A2UI']:\n    count = text.count(needle)\n    print(needle, count)\nPY"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check pbxproj A2UI paths (bytes)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 - <<'PY'\nfrom pathlib import Path\ntext = Path('Lyo.xcodeproj/project.pbxproj').read_bytes()\nfor needle in [b'Sources/Core/A2UI', b'Sources/Core/Sources/Core/A2UI']:\n    count = text.count(needle)\n    print(needle.decode(), count)\nPY"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check pbxproj A2UI paths (script)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/check_pbxproj_paths.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Find build errors in sim_build.log",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/find_build_errors.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (capture stderr)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination 'platform=iOS Simulator,name=iPhone 17' build 2>&1 | tee build/sim_build.log"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Check xcactivitylog tool",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\nxcrun --find xcactivitylog"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log file)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nmkdir -p build\n(xcodebuild -project Lyo.xcodeproj -scheme Lyo -destination 'platform=iOS Simulator,name=iPhone 17' build) > build/last_build.log 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log file)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nmkdir -p build\n(xcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"platform=iOS Simulator,name=iPhone 17\" build) > build/last_build.log 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log file 2)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nmkdir -p build\n(xcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"platform=iOS Simulator,name=iPhone 17\" build) > build/last_build.log 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Decode xcactivitylog (absolute)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nTOOL=/Users/hectorgarcia/Downloads/Xcode.app/Contents/Developer/usr/bin/xcactivitylog\nfor f in build/sim_dd/Logs/Build/*.xcactivitylog; do\n  echo \"--- $f ---\"\n  \"$TOOL\" \"$f\" | tail -200\n  echo\n done"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check xcactivitylog path",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\nls -la /Users/hectorgarcia/Downloads/Xcode.app/Contents/Developer/usr/bin/xcactivitylog"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log file clean)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nmkdir -p build\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"platform=iOS Simulator,name=iPhone 17\" build > build/last_build.log 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Find pbxproj anomalies",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/find_pbxproj_anomalies.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Lint pbxproj",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nplutil -lint Lyo.xcodeproj/project.pbxproj"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check pbxproj conflict markers",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 - <<'PY'\nfrom pathlib import Path\ntext = Path('Lyo.xcodeproj/project.pbxproj').read_text(errors='ignore')\nmarkers = ['<<<<<<<', '=======', '>>>>>>>']\nfound = False\nfor m in markers:\n    if m in text:\n        print('Found', m)\n        found = True\nif not found:\n    print('No conflict markers found')\nPY"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check pbxproj conflict markers (script)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/check_pbxproj_conflicts.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check pbxproj balance",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/check_pbxproj_balance.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Find pbxproj brace issues",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/find_pbxproj_brace_issues.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Find pbxproj file ref outside section",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npython3 build/find_pbxproj_file_reference_outside_section.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check xcodebuild version",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nxcodebuild -version > build/last_build.log 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log text)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nmkdir -p build\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"platform=iOS Simulator,name=iPhone 17\" build > build/last_build.txt 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Xcodebuild iOS Simulator (log file DD)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -configuration Debug -destination \"id=AC0C3BCA-A0DB-4C35-A14D-D5A8E9FA3E35\" -derivedDataPath build/lyo_sim_dd build > build/last_build.txt 2>&1 || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Agent Isolated Lyo Build",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -euo pipefail\ncd /Users/hectorgarcia/LYO_Da_ONE\npkill -f xcodebuild 2>/dev/null || true\nxcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"id=3243647D-F0AA-4D63-8F57-E22B543D5545\" -derivedDataPath /tmp/lyo_agent_task_dd -skipPackageUpdates -disableAutomaticPackageResolution build"
+			],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

@@ -1,0 +1,1324 @@
+import SwiftUI
+
+// MARK: - Enhanced Main Tab View with AI Context
+
+/// Enhanced MainTabView with mobile optimization and AI-driven context awareness
+struct EnhancedMainTabView: View {
+    @EnvironmentObject var rootViewModel: RootViewModel
+    @EnvironmentObject var uiState: AppUIState
+    @EnvironmentObject var uiStackStore: UIStackStore
+    @EnvironmentObject var orchestrator: LyoOrchestrator
+
+    @StateObject private var stackService = StackService()
+    @StateObject private var aiViewModel = LyoAIViewModel()
+
+    @State private var selectedTab: Tab = .focus
+    @State private var isStackDrawerOpen = false
+    @State private var isStackPanelPresented = false
+    @State private var reachabilityMode: Bool = false
+    @State private var lastInteractionTime = Date()
+
+    // Lyo Overlay State
+    @State private var isLyoOverlayPresented = false
+    @State private var lyoButtonFrame: CGRect = .zero
+
+    // Navigation states
+    @State private var navigateToCourseId: String? = nil
+    @State private var navigateToTutor: (courseId: String, lessonId: String)? = nil
+    @State private var isTutorModePresented = false
+    @State private var isLiveClassroomPresented = false
+    @State private var liveClassroomData: (courseId: String, lessonId: String, courseTitle: String, lessonTitle: String)? = nil
+
+    // App Drawer State
+    @State private var isAppDrawerOpen = false
+
+    // Creation Flow State
+    @State private var isCreationSheetPresented = false
+    @State private var isVideoRecorderPresented = false
+    @State private var isPostEditorPresented = false
+
+    // New Drawer Screens
+    @State private var isNotificationsPresented = false
+    @State private var isSearchPresented = false
+    @State private var recorderMode: CreationOption = .story
+
+    // Screen size and orientation
+    @State private var screenSize: CGSize = .zero
+    @State private var orientation: UIDeviceOrientation = .portrait
+
+    enum Tab {
+        case focus
+        case clips
+        case create
+        case community
+        case profile
+
+        var toAppTab: AppTab {
+            switch self {
+            case .focus: return .focus
+            case .clips: return .discover
+            case .create: return .campus
+            case .community: return .campus
+            case .profile: return .profile
+            }
+        }
+    }
+
+    // Computed properties for adaptive UI
+    private var isCompactDevice: Bool {
+        screenSize.width <= 375 // iPhone SE, iPhone 12 mini
+    }
+
+    private var shouldShowAppDrawer: Bool {
+        if selectedTab == .profile { return false }
+        if isLyoOverlayPresented { return false }
+        if isLiveClassroomPresented || isTutorModePresented { return false }
+        return true
+    }
+
+    private var adaptiveTabBarHeight: CGFloat {
+        if reachabilityMode {
+            return isCompactDevice ? 70 : 80
+        } else {
+            return isCompactDevice ? 60 : 70
+        }
+    }
+
+    init() {
+        UITabBar.appearance().isHidden = true
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background with context-aware color
+                contextAwareBackground
+                    .ignoresSafeArea()
+
+                // Main Content
+                TabView(selection: $selectedTab) {
+                    FocusView()
+                        .tag(Tab.focus)
+
+                    DiscoverView()
+                        .tag(Tab.clips)
+
+                    Color.clear
+                        .tag(Tab.create)
+
+                    Group {
+                        if #available(iOS 17.0, *) {
+                            CommunityMapView()
+                        } else {
+                            CommunityMapFallbackView()
+                        }
+                    }
+                    .tag(Tab.community)
+
+                    ProfileView()
+                        .tag(Tab.profile)
+                }
+                .environmentObject(stackService)
+                .environmentObject(uiState)
+                .environmentObject(orchestrator)
+                .toolbar(.hidden, for: .tabBar)
+                .onChange(of: selectedTab) { _, newValue in
+                    handleTabChange(newValue)
+                }
+                .onChange(of: uiState.currentTab) { _, newTab in
+                    syncExternalTabChanges(newTab)
+                }
+
+                // Enhanced Navigation with AI Context
+                VStack {
+                    Spacer()
+
+                    AIContextualNavigationBar(
+                        selectedTab: $selectedTab,
+                        onLyoTap: {
+                            handleLyoTap()
+                        },
+                        lyoButtonFrame: $lyoButtonFrame,
+                        isCreationSheetPresented: $isCreationSheetPresented,
+                        isReachabilityMode: reachabilityMode,
+                        screenSize: geometry.size,
+                        activeContext: orchestrator.activeContext
+                    )
+                    .offset(y: isLyoOverlayPresented ? 200 : 0)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isLyoOverlayPresented)
+                }
+
+                // Enhanced Lyo Overlay
+                if isLyoOverlayPresented {
+                    LyoOverlayView(
+                        isPresented: $isLyoOverlayPresented,
+                        startFrame: lyoButtonFrame
+                    )
+                    .zIndex(100)
+                }
+
+                // Stack Drawer with Context
+                StackDrawerView(isPresented: $isStackDrawerOpen)
+                    .environmentObject(stackService)
+
+                // Notification listeners and handlers
+                notificationListeners
+
+                // Enhanced App Drawer
+                if shouldShowAppDrawer {
+                    AppDrawerOverlay(
+                        isPresented: $isAppDrawerOpen,
+                        selectedTab: $selectedTab,
+                        isNotificationsPresented: $isNotificationsPresented,
+                        isSearchPresented: $isSearchPresented
+                    )
+                }
+
+                // Reachability Mode Toggle (Hidden accessibility feature)
+                if reachabilityMode {
+                    ReachabilityModeIndicator(onDisable: {
+                        toggleReachabilityMode()
+                    })
+                }
+            }
+        }
+        .environmentObject(aiViewModel)
+        .environmentObject(orchestrator)
+        .detectOffline()
+        .onAppear {
+            aiViewModel.uiState = uiState
+            setupGestureHandlers()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            updateOrientation()
+        }
+
+        // MARK: - Sheet Presentations
+        .sheet(isPresented: $uiState.isLioChatPresented) {
+            LioChatSheet(isPresented: $uiState.isLioChatPresented)
+                .environmentObject(uiState)
+                .environmentObject(aiViewModel)
+                .environmentObject(orchestrator)
+        }
+        .sheet(isPresented: $isStackPanelPresented) {
+            StackPanelView(
+                onClose: { isStackPanelPresented = false },
+                onNavigate: { action in handleStackNavigation(action) }
+            )
+            .environmentObject(uiStackStore)
+            .environmentObject(uiState)
+        }
+        .sheet(isPresented: $isTutorModePresented) {
+            if let tutor = navigateToTutor {
+                TutorModeView(
+                    courseId: tutor.courseId,
+                    lessonId: tutor.lessonId,
+                    onClose: { isTutorModePresented = false }
+                )
+                .environmentObject(uiState)
+            }
+        }
+        .fullScreenCover(isPresented: $isLiveClassroomPresented) {
+            if let data = liveClassroomData {
+                LiveClassroomView(
+                    courseId: data.courseId,
+                    lessonId: data.lessonId,
+                    courseTitle: data.courseTitle,
+                    lessonTitle: data.lessonTitle
+                )
+                .environmentObject(uiStackStore)
+            }
+        }
+        .fullScreenCover(isPresented: $isVideoRecorderPresented) {
+            VideoRecorderView(isPresented: $isVideoRecorderPresented, mode: recorderMode)
+        }
+        .sheet(isPresented: $isPostEditorPresented) {
+            PostEditorView(isPresented: $isPostEditorPresented)
+        }
+        .sheet(isPresented: $isNotificationsPresented) {
+            NotificationsView()
+        }
+        .sheet(isPresented: $isSearchPresented) {
+            GlobalSearchView()
+        }
+        .fullScreenCover(isPresented: $isCreationSheetPresented) {
+            CreateHubView()
+        }
+    }
+
+    // MARK: - Context-Aware Background
+
+    private var contextAwareBackground: some View {
+        Group {
+            if let context = orchestrator.activeContext {
+                contextualBackground(for: context)
+            } else {
+                defaultBackground
+            }
+        }
+    }
+
+    private func contextualBackground(for context: LearningContext) -> some View {
+        let colors: [Color]
+
+        switch context.contentType {
+        case .course:
+            colors = [Color(hex: "1E293B"), Color(hex: "0F172A"), Color(hex: "334155")]
+        case .quiz:
+            colors = [Color(hex: "FED7D7"), Color(hex: "F56565"), Color(hex: "C53030")].map { $0.opacity(0.1) }
+        case .video:
+            colors = [Color(hex: "E9D5FF"), Color(hex: "A78BFA"), Color(hex: "8B5CF6")].map { $0.opacity(0.1) }
+        case .conversation:
+            colors = [Color(hex: "DBEAFE"), Color(hex: "60A5FA"), Color(hex: "3B82F6")].map { $0.opacity(0.1) }
+        case .explainer:
+            colors = [Color(hex: "FEF3C7"), Color(hex: "F59E0B"), Color(hex: "D97706")].map { $0.opacity(0.1) }
+        }
+
+        return LinearGradient(
+            colors: colors,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var defaultBackground: some View {
+        Color(hex: "0f172a")
+    }
+
+    // MARK: - Gesture and Interaction Handlers
+
+    private func setupGestureHandlers() {
+        // Shake gesture for accessibility features
+        NotificationCenter.default.addObserver(
+            forName: UIDevice.deviceDidShakeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            handleShakeGesture()
+        }
+
+        // Inactivity monitoring
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            resetInactivityTimer()
+        }
+    }
+
+    private func handleShakeGesture() {
+        HapticManager.shared.heavy()
+
+        // Toggle reachability mode
+        toggleReachabilityMode()
+
+        // Announce for accessibility
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: reachabilityMode ? "One-handed mode enabled" : "One-handed mode disabled"
+        )
+    }
+
+    private func toggleReachabilityMode() {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            reachabilityMode.toggle()
+        }
+
+        HapticManager.shared.light()
+    }
+
+    private func handleLyoTap() {
+        HapticManager.shared.medium()
+        resetInactivityTimer()
+
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            isLyoOverlayPresented = true
+        }
+    }
+
+    private func handleTabChange(_ newTab: Tab) {
+        HapticManager.shared.light()
+        resetInactivityTimer()
+        uiState.currentTab = newTab.toAppTab
+
+        // Update AI context based on tab
+        Task {
+            await updateAIContext(for: newTab)
+        }
+    }
+
+    private func syncExternalTabChanges(_ newTab: AppTab) {
+        switch newTab {
+        case .focus: selectedTab = .focus
+        case .discover: selectedTab = .clips
+        case .campus: selectedTab = .community
+        case .profile: selectedTab = .profile
+        default: break
+        }
+    }
+
+    private func resetInactivityTimer() {
+        lastInteractionTime = Date()
+    }
+
+    private func updateOrientation() {
+        orientation = UIDevice.current.orientation
+    }
+
+    // MARK: - AI Context Updates
+
+    private func updateAIContext(for tab: Tab) async {
+        let contextType: LearningContext.ContentType
+        let contextTopic: String
+
+        switch tab {
+        case .focus:
+            contextType = .conversation
+            contextTopic = "focused_learning"
+        case .clips:
+            contextType = .video
+            contextTopic = "content_discovery"
+        case .create:
+            contextType = .conversation
+            contextTopic = "content_creation"
+        case .community:
+            contextType = .conversation
+            contextTopic = "community_interaction"
+        case .profile:
+            contextType = .conversation
+            contextTopic = "profile_management"
+        }
+
+        let context = LearningContext(
+            topic: contextTopic,
+            learningLevel: .intermediate, // Could be determined from user data
+            contentType: contextType,
+            source: .chat,
+            timestamp: Date(),
+            clipId: nil,
+            complexity: .moderate
+        )
+
+        orchestrator.activeContext = context
+    }
+
+    // MARK: - Stack Navigation
+
+    private func handleStackNavigation(_ action: StackNavigationAction) {
+        isStackPanelPresented = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.performStackNavigation(action)
+        }
+    }
+
+    private func performStackNavigation(_ action: StackNavigationAction) {
+        switch action {
+        case .openCourse(let courseId):
+            navigateToCourse(courseId)
+        case .openTutor(let courseId, let lessonId):
+            navigateToTutor = (courseId, lessonId)
+            isTutorModePresented = true
+        case .openCollab(let roomId):
+            uiState.currentCollabRoomId = roomId
+        case .openChat:
+            uiState.isLioChatPresented = true
+        }
+    }
+
+    private func navigateToCourse(_ courseId: String) {
+        if let courseItem = uiStackStore.items.first(where: { $0.id == courseId && $0.type == .course }) {
+            let lessonId: String = courseItem.lessonId ?? "lesson-1"
+            let courseTitle: String = courseItem.title
+            let lessonTitle: String = courseItem.subtitle ?? "Lesson"
+            liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
+        } else {
+            liveClassroomData = (courseId, "lesson-1", "Course", "Lesson")
+        }
+        isLiveClassroomPresented = true
+    }
+
+    // MARK: - Notification Handlers
+
+    private let tutorModePublisher = NotificationCenter.default.publisher(for: NSNotification.Name("TriggerTutorMode"))
+    private let liveLessonPublisher = NotificationCenter.default.publisher(for: NSNotification.Name("TriggerLiveLesson"))
+}
+
+// MARK: - Notification Listeners Extension
+
+extension EnhancedMainTabView {
+    var notificationListeners: some View {
+        EmptyView()
+            .onReceive(tutorModePublisher) { notification in
+                if let userInfo = notification.userInfo,
+                   let _ = userInfo["topic"] as? String {
+                    navigateToTutor = (courseId: "calculus_101", lessonId: "intro")
+                    isTutorModePresented = true
+                }
+            }
+            .onReceive(liveLessonPublisher) { notification in
+                if let userInfo = notification.userInfo,
+                   let lessonId = userInfo["lessonId"] as? String {
+
+                    if lessonId == "intro_1", let topic = userInfo["topic"] as? String {
+                        liveClassroomData = ("GENERATE:\(topic)", lessonId, topic, "Introduction")
+                    } else {
+                        liveClassroomData = ("calculus_101", lessonId, "Calculus", "Introduction")
+                    }
+                    isLiveClassroomPresented = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SaveCourseToLibrary"))) { notification in
+                if let userInfo = notification.userInfo,
+                   let topic = userInfo["topic"] as? String {
+                    print("📚 Saving course stack: \(topic)")
+                    Task {
+                        await stackService.createStackItem(
+                            type: .course,
+                            refId: UUID().uuidString,
+                            tags: ["AI Generated"],
+                            contextData: ["title": topic, "topic": topic]
+                        )
+                        HapticManager.shared.success()
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("TriggerLioChat"))) { _ in
+                uiState.isLioChatPresented = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("LyoNavigation"))) { notification in
+                handleLyoNavigation(notification)
+            }
+    }
+
+    private func handleLyoNavigation(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let destination = userInfo["destination"] as? String else { return }
+
+        switch destination {
+        case "course_creation":
+            isCreationSheetPresented = true
+        case "discover":
+            selectedTab = .clips
+        case "community":
+            selectedTab = .community
+        case "profile":
+            selectedTab = .profile
+        default:
+            break
+        }
+    }
+}
+
+// MARK: - AI Contextual Navigation Bar
+
+struct AIContextualNavigationBar: View {
+    @Binding var selectedTab: EnhancedMainTabView.Tab
+    let onLyoTap: () -> Void
+    @Binding var lyoButtonFrame: CGRect
+    @Binding var isCreationSheetPresented: Bool
+    let isReachabilityMode: Bool
+    let screenSize: CGSize
+    let activeContext: LearningContext?
+
+    private var isCompactDevice: Bool {
+        screenSize.width <= 375
+    }
+
+    private var touchTargetSize: CGFloat {
+        if let context = activeContext {
+            return context.complexity.touchTargetSize + (isCompactDevice ? 0 : 4)
+        }
+        return isCompactDevice ? 44 : 48
+    }
+
+    private var navigationBarHeight: CGFloat {
+        isReachabilityMode ? (isCompactDevice ? 70 : 80) : (isCompactDevice ? 60 : 70)
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // Adaptive Navigation Bar Background
+            AdaptiveNavigationBackground(
+                height: navigationBarHeight,
+                isReachabilityMode: isReachabilityMode,
+                activeContext: activeContext
+            )
+
+            // Navigation Controls
+            HStack(spacing: 0) {
+                // Left Group
+                HStack(spacing: isCompactDevice ? 20 : 30) {
+                    AIContextualTabButton(
+                        tab: .focus,
+                        icon: "target",
+                        isSelected: selectedTab == .focus,
+                        size: touchTargetSize,
+                        context: activeContext
+                    ) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedTab = .focus
+                        }
+                    }
+
+                    AIContextualTabButton(
+                        tab: .clips,
+                        icon: "play.rectangle.fill",
+                        isSelected: selectedTab == .clips,
+                        size: touchTargetSize,
+                        context: activeContext
+                    ) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedTab = .clips
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.trailing, 40)
+
+                // Right Group
+                HStack(spacing: isCompactDevice ? 20 : 30) {
+                    AIContextualTabButton(
+                        tab: .community,
+                        icon: "person.3.fill",
+                        isSelected: selectedTab == .community,
+                        size: touchTargetSize,
+                        context: activeContext
+                    ) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedTab = .community
+                        }
+                    }
+
+                    AIContextualTabButton(
+                        tab: .create,
+                        icon: "plus.app",
+                        isSelected: selectedTab == .create,
+                        size: touchTargetSize,
+                        context: activeContext
+                    ) {
+                        HapticManager.shared.medium()
+                        isCreationSheetPresented = true
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.leading, 40)
+            }
+            .frame(height: navigationBarHeight)
+            .padding(.bottom, 10)
+
+            // Enhanced Lyo Avatar FAB
+            GeometryReader { geo in
+                AccessibleLyoAvatar(
+                    onTap: onLyoTap,
+                    lyoButtonFrame: $lyoButtonFrame
+                )
+                .position(
+                    x: geo.size.width / 2,
+                    y: isReachabilityMode ? 25 : 15
+                )
+                .onAppear {
+                    DispatchQueue.main.async {
+                        lyoButtonFrame = geo.frame(in: .global)
+                    }
+                }
+            }
+            .frame(height: navigationBarHeight)
+        }
+        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+// MARK: - AI Contextual Tab Button
+
+struct AIContextualTabButton: View {
+    let tab: EnhancedMainTabView.Tab
+    let icon: String
+    let isSelected: Bool
+    let size: CGFloat
+    let context: LearningContext?
+    let action: () -> Void
+
+    private var buttonColor: Color {
+        if isSelected {
+            if let context = context {
+                switch context.contentType {
+                case .course:
+                    return Color(hex: "3B82F6") // Blue
+                case .quiz:
+                    return Color(hex: "F59E0B") // Orange
+                case .video:
+                    return Color(hex: "8B5CF6") // Purple
+                case .conversation:
+                    return Color(hex: "10B981") // Green
+                case .explainer:
+                    return Color(hex: "EF4444") // Red
+                }
+            }
+            return Color(hex: "8B5CF6") // Default purple
+        }
+        return .white.opacity(0.5)
+    }
+
+    private var accessibilityLabel: String {
+        let tabName: String
+        switch tab {
+        case .focus:
+            tabName = "Focus"
+        case .clips:
+            tabName = "Discover"
+        case .create:
+            tabName = "Create"
+        case .community:
+            tabName = "Community"
+        case .profile:
+            tabName = "Profile"
+        }
+
+        var label = "\(tabName) tab"
+        if isSelected {
+            label += ", currently selected"
+        }
+
+        if let context = context {
+            label += ", learning context: \(context.topic)"
+        }
+
+        return label
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: min(size * 0.5, 24), weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(buttonColor)
+                    .shadow(color: isSelected ? buttonColor.opacity(0.5) : .clear, radius: 8)
+                    .scaleEffect(isSelected ? 1.1 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+
+                // Context indicator
+                if isSelected {
+                    Circle()
+                        .fill(buttonColor)
+                        .frame(width: 4, height: 4)
+                        .shadow(color: buttonColor, radius: 4)
+                        .transition(.scale)
+                }
+            }
+            .frame(width: size, height: size)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityRole(.tab)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Adaptive Navigation Background
+
+struct AdaptiveNavigationBackground: View {
+    let height: CGFloat
+    let isReachabilityMode: Bool
+    let activeContext: LearningContext?
+
+    private var backgroundMaterial: Material {
+        if let context = activeContext {
+            switch context.complexity {
+            case .simple:
+                return .regularMaterial
+            case .moderate:
+                return .thinMaterial
+            case .complex:
+                return .ultraThinMaterial
+            }
+        }
+        return .ultraThinMaterial
+    }
+
+    var body: some View {
+        ZStack {
+            // Liquid Glass Background
+            LiquidTabBarShape(
+                curveDepth: isReachabilityMode ? 45 : 35,
+                curveWidth: 100
+            )
+            .fill(backgroundMaterial)
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+            .frame(height: height)
+            .overlay(
+                LiquidTabBarShape(
+                    curveDepth: isReachabilityMode ? 45 : 35,
+                    curveWidth: 100
+                )
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+            )
+
+            // Context indicator stripe
+            if let context = activeContext {
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(contextColor(for: context))
+                        .frame(height: 2)
+                        .opacity(0.6)
+                }
+            }
+        }
+    }
+
+    private func contextColor(for context: LearningContext) -> Color {
+        switch context.contentType {
+        case .course:
+            return Color(hex: "3B82F6")
+        case .quiz:
+            return Color(hex: "F59E0B")
+        case .video:
+            return Color(hex: "8B5CF6")
+        case .conversation:
+            return Color(hex: "10B981")
+        case .explainer:
+            return Color(hex: "EF4444")
+        }
+    }
+}
+
+// MARK: - Reachability Mode Indicator
+
+struct ReachabilityModeIndicator: View {
+    let onDisable: () -> Void
+
+    var body: some View {
+        VStack {
+            HStack {
+                Spacer()
+
+                Button(action: onDisable) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "hand.raised.fill")
+                            .font(.caption)
+                        Text("One-handed mode")
+                            .font(.caption2)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                }
+                .padding(.trailing, 20)
+                .padding(.top, 50)
+            }
+
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Enhanced Tab Bar Components for MainTabView Integration
+
+/// Enhanced version of LivingHubTabBar with orchestrator integration
+struct EnhancedLivingHubTabBar: View {
+    @Binding var selectedTab: MainTabView.Tab
+    let onLyoTap: () -> Void
+    @Binding var lyoButtonFrame: CGRect
+    @Binding var isCreationSheetPresented: Bool
+    @ObservedObject var orchestrator: LyoOrchestrator
+
+    // Progress for the mascot glow (driven by orchestrator)
+    private var progress: Double {
+        orchestrator.getDailyProgress()
+    }
+
+    private var streakActive: Bool {
+        orchestrator.hasActiveStreak
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // 1. Context-Aware Background
+            contextAwareBackground
+
+            // 2. Icons Row with Enhanced Feedback
+            HStack(spacing: 0) {
+                // Left Group
+                HStack(spacing: 30) {
+                    EnhancedGhostTabButton(
+                        icon: "target",
+                        label: "Focus",
+                        isSelected: selectedTab == .focus,
+                        hasContextualHint: orchestrator.hasUnfinishedFocus
+                    ) { selectedTab = .focus }
+
+                    EnhancedGhostTabButton(
+                        icon: "safari",
+                        label: "Discover",
+                        isSelected: selectedTab == .clips,
+                        hasContextualHint: orchestrator.hasRecommendedContent
+                    ) { selectedTab = .clips }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.trailing, 40)
+
+                // Right Group
+                HStack(spacing: 30) {
+                    EnhancedGhostTabButton(
+                        icon: "person.3.fill",
+                        label: "Community",
+                        isSelected: selectedTab == .community,
+                        hasContextualHint: orchestrator.hasNewCommunityActivity
+                    ) { selectedTab = .community }
+
+                    EnhancedGhostTabButton(
+                        icon: "plus.app",
+                        label: "Create",
+                        isSelected: selectedTab == .create,
+                        hasContextualHint: false
+                    ) {
+                        isCreationSheetPresented = true
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.leading, 40)
+            }
+            .frame(height: 80)
+            .padding(.bottom, 10)
+
+            // 3. Enhanced Mascot FAB with Orchestrator Integration
+            GeometryReader { geo in
+                EnhancedLivingMascotFAB(
+                    onTap: onLyoTap,
+                    progress: progress,
+                    streakActive: streakActive,
+                    orchestrator: orchestrator
+                )
+                .position(x: geo.size.width / 2, y: 15)
+                .onAppear {
+                    DispatchQueue.main.async {
+                        lyoButtonFrame = geo.frame(in: .global)
+                    }
+                }
+            }
+            .frame(height: 80)
+        }
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    @ViewBuilder
+    private var contextAwareBackground: some View {
+        LiquidTabBarShape(curveDepth: 35, curveWidth: 100)
+            .fill(.ultraThinMaterial)
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+            .frame(height: 80)
+            .overlay(
+                LiquidTabBarShape(curveDepth: 35, curveWidth: 100)
+                    .stroke(
+                        contextualGradient,
+                        lineWidth: 1
+                    )
+            )
+    }
+
+    private var contextualGradient: LinearGradient {
+        if let context = orchestrator.activeContext {
+            switch context.type {
+            case .study:
+                return LinearGradient(
+                    colors: [Color(hex: "8B5CF6").opacity(0.3), Color(hex: "8B5CF6").opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            case .practice:
+                return LinearGradient(
+                    colors: [Color(hex: "10B981").opacity(0.3), Color(hex: "10B981").opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            case .explore:
+                return LinearGradient(
+                    colors: [Color(hex: "3B82F6").opacity(0.3), Color(hex: "3B82F6").opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        } else {
+            return LinearGradient(
+                colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+}
+
+// MARK: - Enhanced Ghost Tab Button
+
+struct EnhancedGhostTabButton: View {
+    let icon: String
+    let label: String
+    let isSelected: Bool
+    let hasContextualHint: Bool
+    let action: () -> Void
+
+    @State private var isAnimatingHint = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 24, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(.white)
+                        .opacity(isSelected ? 1.0 : 0.5)
+                        .shadow(color: isSelected ? .white.opacity(0.5) : .clear, radius: 8)
+                        .scaleEffect(isSelected ? 1.1 : 1.0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+
+                    // Contextual hint indicator
+                    if hasContextualHint && !isSelected {
+                        Circle()
+                            .fill(Color(hex: "FF8C00"))
+                            .frame(width: 8, height: 8)
+                            .offset(x: 15, y: -10)
+                            .scaleEffect(isAnimatingHint ? 1.2 : 1.0)
+                            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isAnimatingHint)
+                    }
+                }
+
+                // Selection indicator
+                if isSelected {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 4, height: 4)
+                        .shadow(color: .white, radius: 4)
+                        .transition(.scale)
+                }
+            }
+            .frame(width: 50, height: 50)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onAppear {
+            if hasContextualHint {
+                isAnimatingHint = true
+            }
+        }
+    }
+}
+
+// MARK: - Enhanced Living Mascot FAB
+
+struct EnhancedLivingMascotFAB: View {
+    let onTap: () -> Void
+    var progress: Double
+    var streakActive: Bool
+    @ObservedObject var orchestrator: LyoOrchestrator
+
+    @State private var isBreathing = false
+    @State private var isHovering = false
+    @State private var isPressed = false
+    @State private var shockwaveScale: CGFloat = 0.0
+    @State private var shockwaveOpacity: Double = 0.0
+    @State private var contextPulseScale: CGFloat = 1.0
+
+    // Enhanced glow color with context awareness
+    var glowColor: Color {
+        if let context = orchestrator.activeContext {
+            switch context.type {
+            case .study:
+                return Color(hex: "8B5CF6") // Purple for study
+            case .practice:
+                return Color(hex: "10B981") // Green for practice
+            case .explore:
+                return Color(hex: "3B82F6") // Blue for exploration
+            }
+        } else if streakActive && progress >= 1.0 {
+            return Color(hex: "FF8C00") // Gold/Orange for mastery
+        } else if progress >= 0.5 {
+            return Color(hex: "A78BFA") // Purple for progress
+        } else {
+            return Color(hex: "60A5FA") // Blue for beginning
+        }
+    }
+
+    var body: some View {
+        Button(action: {
+            triggerShockwave()
+            onTap()
+        }) {
+            ZStack {
+                // 0. Context-aware particles
+                if orchestrator.activeContext != nil {
+                    EnhancedMascotParticles(color: glowColor, intensity: 0.8)
+                        .frame(width: 130, height: 130)
+                } else {
+                    MascotParticles(color: glowColor)
+                        .frame(width: 120, height: 120)
+                }
+
+                // 1. Context awareness pulse ring
+                if orchestrator.activeContext != nil {
+                    Circle()
+                        .stroke(glowColor.opacity(0.6), lineWidth: 3)
+                        .frame(width: 85, height: 85)
+                        .scaleEffect(contextPulseScale)
+                        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: contextPulseScale)
+                }
+
+                // 2. Shockwave Ring
+                Circle()
+                    .stroke(glowColor, lineWidth: 2)
+                    .frame(width: 70, height: 70)
+                    .scaleEffect(shockwaveScale)
+                    .opacity(shockwaveOpacity)
+
+                // 3. Progressive Glow Field
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [glowColor.opacity(0.6), glowColor.opacity(0.0)],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 60
+                        )
+                    )
+                    .frame(width: 110, height: 110)
+                    .scaleEffect(isBreathing ? 1.15 : 1.0)
+                    .opacity(isBreathing ? 0.7 : 0.4)
+
+                // 4. Core Glow
+                Circle()
+                    .fill(glowColor.opacity(0.4))
+                    .frame(width: 75, height: 75)
+                    .blur(radius: 12)
+                    .scaleEffect(isBreathing ? 1.05 : 0.95)
+
+                // 5. The Enhanced Mascot Avatar
+                AccessibleLyoAvatar(
+                    emotionalState: orchestrator.currentEmotionalState,
+                    isListening: orchestrator.isProcessingVoice,
+                    contextIndicator: orchestrator.activeContext?.type,
+                    onTap: onTap,
+                    onVoiceInput: { input in
+                        Task {
+                            await orchestrator.processVoiceInput(input)
+                        }
+                    }
+                )
+                .frame(width: 70, height: 70)
+                .scaleEffect(isPressed ? 0.9 : 1.0)
+                .shadow(color: glowColor.opacity(0.6), radius: 10, x: 0, y: 5)
+                .offset(y: isHovering ? -6 : 4)
+                .rotation3DEffect(
+                    .degrees(isHovering ? 5 : -5),
+                    axis: (x: 10, y: 0, z: 0)
+                )
+                .rotation3DEffect(
+                    .degrees(isHovering ? 3 : -3),
+                    axis: (x: 0, y: 10, z: 0)
+                )
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                        isPressed = true
+                    }
+                }
+                .onEnded { _ in
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                        isPressed = false
+                    }
+                }
+        )
+        .onAppear {
+            startAnimations()
+        }
+        .onChange(of: orchestrator.activeContext) { _, _ in
+            // Trigger context change animation
+            contextPulseScale = 1.2
+        }
+    }
+
+    private func startAnimations() {
+        // Breathing (Glow)
+        withAnimation(
+            Animation
+                .easeInOut(duration: 3.0)
+                .repeatForever(autoreverses: true)
+        ) {
+            isBreathing = true
+        }
+
+        // Hovering (Movement)
+        withAnimation(
+            Animation
+                .easeInOut(duration: 2.0)
+                .repeatForever(autoreverses: true)
+        ) {
+            isHovering = true
+        }
+
+        // Context pulse
+        withAnimation(
+            Animation
+                .easeInOut(duration: 1.5)
+                .repeatForever(autoreverses: true)
+        ) {
+            contextPulseScale = 1.1
+        }
+    }
+
+    private func triggerShockwave() {
+        shockwaveScale = 1.0
+        shockwaveOpacity = 0.8
+
+        withAnimation(.easeOut(duration: 0.5)) {
+            shockwaveScale = 2.5
+            shockwaveOpacity = 0.0
+        }
+
+        // Reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            shockwaveScale = 1.0
+        }
+    }
+}
+
+// MARK: - Enhanced Mascot Particles
+
+struct EnhancedMascotParticles: View {
+    let color: Color
+    let intensity: Double
+    @State private var particles: [EnhancedParticle] = []
+
+    struct EnhancedParticle: Identifiable {
+        let id = UUID()
+        var x: CGFloat
+        var y: CGFloat
+        var scale: CGFloat
+        var opacity: Double
+        var speed: CGFloat
+        var swayAmplitude: CGFloat
+        var swayFrequency: CGFloat
+    }
+
+    let timer = Timer.publish(every: 0.08, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                for particle in particles {
+                    let sway = sin(timeline.date.timeIntervalSinceReferenceDate * particle.swayFrequency) * particle.swayAmplitude
+                    let rect = CGRect(
+                        x: (particle.x * size.width) + sway,
+                        y: particle.y * size.height,
+                        width: 4 * particle.scale,
+                        height: 4 * particle.scale
+                    )
+                    context.opacity = particle.opacity
+                    context.fill(Circle().path(in: rect), with: .color(color))
+                }
+            }
+        }
+        .onReceive(timer) { _ in
+            updateParticles()
+        }
+    }
+
+    private func updateParticles() {
+        // Add new particle with higher intensity
+        if Double.random(in: 0...1) > (0.6 - intensity * 0.3) {
+            particles.append(EnhancedParticle(
+                x: CGFloat.random(in: 0.15...0.85),
+                y: 0.85,
+                scale: CGFloat.random(in: 0.8...2.0),
+                opacity: 1.0,
+                speed: CGFloat.random(in: 0.015...0.04) * intensity,
+                swayAmplitude: CGFloat.random(in: 5...15),
+                swayFrequency: CGFloat.random(in: 2...6)
+            ))
+        }
+
+        // Update existing
+        for i in particles.indices {
+            particles[i].y -= particles[i].speed
+            particles[i].opacity -= 0.015
+        }
+
+        // Remove dead particles
+        particles.removeAll { $0.opacity <= 0 || $0.y < 0 }
+    }
+}
+
+// MARK: - Enhanced Overlay Components
+
+/// Enhanced Lyo Overlay with accessibility and orchestrator integration
+struct AccessibleLyoOverlayView: View {
+    @Binding var isPresented: Bool
+    let startFrame: CGRect
+    @ObservedObject var orchestrator: LyoOrchestrator
+
+    var body: some View {
+        // For now, use the existing LyoOverlayView but inject orchestrator context
+        LyoOverlayView(
+            isPresented: $isPresented,
+            startFrame: startFrame
+        )
+        .onAppear {
+            // Track overlay interaction
+            orchestrator.trackUserInteraction(.overlayOpened)
+        }
+        .onDisappear {
+            // Track overlay closure
+            orchestrator.trackUserInteraction(.overlayClosed)
+        }
+    }
+}
+
+/// Enhanced Lio Chat Sheet with orchestrator integration
+struct EnhancedLioChatSheet: View {
+    @Binding var isPresented: Bool
+    @EnvironmentObject var uiState: AppUIState
+    @EnvironmentObject var aiViewModel: LyoAIViewModel
+    @EnvironmentObject var orchestrator: LyoOrchestrator
+
+    var body: some View {
+        // Use existing LioChatSheet but enhance with orchestrator context
+        LioChatSheet(isPresented: $isPresented)
+            .environmentObject(uiState)
+            .environmentObject(aiViewModel)
+            .onAppear {
+                // Inject current learning context
+                if let context = orchestrator.activeContext {
+                    // Pass context to AI system for enhanced responses
+                    aiViewModel.setLearningContext(context)
+                }
+                orchestrator.trackUserInteraction(.chatOpened)
+            }
+    }
+}
+
+// MARK: - Extensions
+
+extension UIDevice {
+    static let deviceDidShakeNotification = Notification.Name(rawValue: "deviceDidShakeNotification")
+}
+
+extension UIWindow {
+    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake {
+            NotificationCenter.default.post(name: UIDevice.deviceDidShakeNotification, object: nil)
+        }
+    }
+}

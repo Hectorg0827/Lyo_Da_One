@@ -1,0 +1,45 @@
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# === Xcode ===
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# === Build artifacts ===
+build/
+/.build
+/SourcePackages
+/Packages
+SourcePackages/
+
+# === Swift Package Manager ===
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# === Secrets & credentials ===
+.netrc
+.fake
+
+# === Prevent one-off helper scripts from being committed ===
+# Use Sources/ for real app code; keep root clean.
+/*.rb
+/*.py
+/*.sh
+/*.log
+/*.txt
+
+# === Prevent stale docs/reports from accumulating in root ===
+# Put real docs in a docs/ folder instead.
+# (README.md and CHANGELOG.md are allowed)
+
+# === Misc ===
+*.ipa
+*.dSYM.zip
+*.dSYM
+Pods/
+build_temp*/
