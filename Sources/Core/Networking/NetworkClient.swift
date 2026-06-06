@@ -2,11 +2,10 @@ import Foundation
 
 // MARK: - Network Client
 /// Actor-based thread-safe networking client with interceptors, retry logic, and automatic token refresh
-actor NetworkClient: NetworkRequestable {
+actor NetworkClient {
 
     // MARK: - Properties
     static let shared = NetworkClient()
-    static var baseURL: String { AppConfig.baseURL }
 
     private let session: URLSession
     private var tokenRefreshTask: Task<String, Error>?
@@ -32,14 +31,12 @@ actor NetworkClient: NetworkRequestable {
     // MARK: - Public API
 
     /// Execute a network request with automatic retry and caching
-    func request<T: Decodable>(
+    func request<T: Codable>(
         _ endpoint: Endpoint,
         cachePolicy: CachePolicy = .default
     ) async throws -> T {
 
         // 1. Check cache first if policy allows
-        // Note: We can only retrieve from cache if T is Decodable (which it is)
-        // But the cache stores encoded data.
         if cachePolicy != .reloadIgnoringCache,
            let cached: T = await cache.get(key: endpoint.cacheKey) {
             logger.log("📦 Cache HIT: \(endpoint.path)")
@@ -72,51 +69,33 @@ actor NetworkClient: NetworkRequestable {
         let processedResponse = try await applyResponseInterceptors(response)
 
         // 6. Decode response
-        #if DEBUG
-        if let urlPath = request.url?.path, urlPath.contains("/course/") {
-            print("🌐 RAW RESPONSE [\\(urlPath)]: \\((String(data: processedResponse.data, encoding: .utf8) ?? \"<non-UTF8>\").prefix(2000))")
-        }
-        #endif
-        
-        let decoded: T
-        do {
-            let decoder = JSONDecoder.lyoDecoder
-            decoded = try decoder.decode(T.self, from: processedResponse.data)
-        } catch let DecodingError.keyNotFound(key, context) {
-            print("🚨 DECODE FAIL: Missing key '\\(key.stringValue)' — \\(context.debugDescription)")
-            print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
-            throw DecodingError.keyNotFound(key, context)
-        } catch let DecodingError.typeMismatch(type, context) {
-            print("🚨 DECODE FAIL: Type mismatch for \\(type) — \\(context.debugDescription)")
-            print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
-            throw DecodingError.typeMismatch(type, context)
-        } catch let DecodingError.valueNotFound(type, context) {
-            print("🚨 DECODE FAIL: Null value for \\(type) — \\(context.debugDescription)")
-            throw DecodingError.valueNotFound(type, context)
-        } catch let DecodingError.dataCorrupted(context) {
-            print("🚨 DECODE FAIL: Corrupted data — \\(context.debugDescription)")
-            throw DecodingError.dataCorrupted(context)
-        } catch {
-            print("🚨 NETWORK ERROR: \\(error.localizedDescription)")
-            throw error
-        }
+        let decoder = JSONDecoder.lyoDecoder
+        let decoded: T = try decoder.decode(T.self, from: processedResponse.data)
 
-        // 7. Cache if policy allows and TTL > 0 (skip caching for dynamic endpoints with TTL=0)
-        // Only cache if the type is Encodable
-        /* 
-        // FIXME: Generics issue with existential Encodable. Re-enable when cache.set supports existential or overload request.
-        if cachePolicy != .reloadIgnoringCache && endpoint.cacheTTL > 0,
-           let encodableValue = decoded as? Encodable {
+        // 7. Cache if policy allows
+        if cachePolicy != .reloadIgnoringCache {
             await cache.set(
                 key: endpoint.cacheKey,
-                value: encodableValue,
+                value: decoded,
                 ttl: endpoint.cacheTTL
             )
             logger.log("💾 Cached: \(endpoint.path)")
         }
-        */
 
         return decoded
+    }
+
+    /// Execute a network request and return the raw response body.
+    func requestRawData(_ endpoint: Endpoint) async throws -> Data {
+        let isConnected = await MainActor.run { NetworkMonitor.shared.isConnected }
+        guard isConnected else {
+            throw LyoError.network(.noInternetConnection)
+        }
+
+        var request = try endpoint.buildURLRequest()
+        request = try await applyHeaders(request, endpoint: endpoint)
+        let response = try await executeWithRetry(request: request, endpoint: endpoint)
+        return try await applyResponseInterceptors(response).data
     }
 
     /// Upload multipart form data
@@ -210,20 +189,6 @@ actor NetworkClient: NetworkRequestable {
         logger.logRequest(request, attempt: 0)
         
         return try await session.bytes(for: request)
-    }
-
-    /// Execute a request and return raw Data (for binary responses like TTS audio)
-    func requestRawData(_ endpoint: Endpoint) async throws -> Data {
-        var request = try endpoint.buildURLRequest()
-        request = try await applyHeaders(request, endpoint: endpoint)
-        
-        let response = try await executeWithRetry(request: request, endpoint: endpoint)
-        
-        guard (200...299).contains(response.statusCode) else {
-            throw LyoError.network(.serverError(response.statusCode))
-        }
-        
-        return response.data
     }
 
     // MARK: - Request Execution
@@ -366,7 +331,6 @@ actor NetworkClient: NetworkRequestable {
         // 4. Add API Key (SaaS Auth)
         modifiedRequest.setValue(AppConfig.apiKey, forHTTPHeaderField: "X-API-Key")
 
-
         return modifiedRequest
     }
 
@@ -453,8 +417,8 @@ struct TokenRefreshResponse: Codable {
     let refreshToken: String?
 
     enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case refreshToken = "refresh_token"
+        case accessToken
+        case refreshToken
     }
 }
 
@@ -509,19 +473,3 @@ extension JSONEncoder {
         return encoder
     }
 }
-
-extension URLRequest {
-    static func authenticatedRequest(url: URL, method: String, body: Data?, token: String? = nil) -> URLRequest {
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.httpBody = body
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        return request
-    }
-}
-

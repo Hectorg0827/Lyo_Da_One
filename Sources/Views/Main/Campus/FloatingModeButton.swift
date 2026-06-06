@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Floating Mode Button (FAB)
 
-struct FloatingModeButton: View {
+struct CampusFloatingModeButton: View {
     @Binding var showModeSheet: Bool
     let currentMode: CampusViewMode
     
@@ -172,7 +172,7 @@ extension CampusViewMode {
             Spacer()
             HStack {
                 Spacer()
-                FloatingModeButton(
+                CampusFloatingModeButton(
                     showModeSheet: .constant(false),
                     currentMode: .map
                 )

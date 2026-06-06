@@ -16,28 +16,28 @@ import Foundation
 
 /// The level we tag a topic with for course generation.
 public enum SkillBand: String, Codable, CaseIterable, Equatable {
-    case beginner       // No prior exposure
-    case refresher      // Had it once, needs a brush-up
-    case intermediate   // Comfortable with fundamentals
-    case advanced       // Wants depth / edge cases
+    case beginner  // No prior exposure
+    case refresher  // Had it once, needs a brush-up
+    case intermediate  // Comfortable with fundamentals
+    case advanced  // Wants depth / edge cases
 
     /// String the backend course generator accepts for `level`.
     /// "refresher" doesn't exist server-side — map to intermediate with faster pacing.
     public var backendLevel: String {
         switch self {
-        case .beginner:    return "beginner"
-        case .refresher:   return "intermediate"
+        case .beginner: return "beginner"
+        case .refresher: return "intermediate"
         case .intermediate: return "intermediate"
-        case .advanced:    return "advanced"
+        case .advanced: return "advanced"
         }
     }
 
     public var displayName: String {
         switch self {
-        case .beginner:    return "Beginner"
-        case .refresher:   return "Refresher"
+        case .beginner: return "Beginner"
+        case .refresher: return "Refresher"
         case .intermediate: return "Intermediate"
-        case .advanced:    return "Advanced"
+        case .advanced: return "Advanced"
         }
     }
 }
@@ -45,18 +45,18 @@ public enum SkillBand: String, Codable, CaseIterable, Equatable {
 // MARK: - Goal & Format
 
 public enum LearningGoal: String, Codable, Equatable {
-    case curiosity      // "I just want to understand"
-    case examPrep       // "I have a test"
-    case career         // "I need this for work"
-    case school         // "It's homework / class"
-    case refresher      // "I knew this once"
+    case curiosity  // "I just want to understand"
+    case examPrep  // "I have a test"
+    case career  // "I need this for work"
+    case school  // "It's homework / class"
+    case refresher  // "I knew this once"
 }
 
 public enum ContentFormat: String, Codable, Equatable {
-    case visual          // Diagrams, charts, animations
+    case visual  // Diagrams, charts, animations
     case conversational  // Lyo explains step by step
-    case practiceHeavy   // More quizzes / exercises
-    case balanced        // Default mix
+    case practiceHeavy  // More quizzes / exercises
+    case balanced  // Default mix
 }
 
 public enum AcademicLevel: String, Codable, Equatable {
@@ -72,7 +72,7 @@ public enum AcademicLevel: String, Codable, Equatable {
 
 public struct ProficiencyEstimate: Codable, Equatable {
     public var level: SkillBand
-    public var confidence: Double           // 0.0 – 1.0
+    public var confidence: Double  // 0.0 – 1.0
     public var lastAssessedAt: Date
 
     public init(level: SkillBand, confidence: Double, lastAssessedAt: Date = Date()) {
@@ -122,7 +122,9 @@ public struct LearnerProfile: Codable, Equatable {
     /// Has the learner already completed a course on this topic? (case-insensitive substring match)
     public func hasCompleted(topic: String) -> Bool {
         let lower = topic.lowercased()
-        return completedTopicIds.contains { $0.lowercased().contains(lower) || lower.contains($0.lowercased()) }
+        return completedTopicIds.contains {
+            $0.lowercased().contains(lower) || lower.contains($0.lowercased())
+        }
     }
 
     public mutating func recordProficiency(domain: String, level: SkillBand, confidence: Double) {
@@ -157,7 +159,8 @@ public final class LearnerProfileStore: ObservableObject {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         if let data = defaults.data(forKey: storageKey),
-           let decoded = try? JSONDecoder().decode(LearnerProfile.self, from: data) {
+            let decoded = try? JSONDecoder().decode(LearnerProfile.self, from: data)
+        {
             self.profile = decoded
         } else {
             self.profile = LearnerProfile()

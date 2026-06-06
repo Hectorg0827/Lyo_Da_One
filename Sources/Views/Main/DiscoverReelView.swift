@@ -59,7 +59,8 @@ struct DiscoverReelView: View {
                         VideoPlayer(player: player)
                             .disabled(true)
                             .onAppear {
-                                setupPlayer(url: videoURL)
+                                // Prioritize lightweight preview for feed scrolling
+                                setupPlayer(url: item.previewURL ?? videoURL)
                             }
                             .onDisappear {
                                 teardownPlayer()

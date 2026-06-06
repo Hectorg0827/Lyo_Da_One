@@ -25,7 +25,6 @@ class StackService: ObservableObject {
         let request = CreateStackItemRequest(
             type: type,
             refId: refId,
-            title: contextData?["title"] ?? refId,
             tags: tags,
             contextData: contextData
         )

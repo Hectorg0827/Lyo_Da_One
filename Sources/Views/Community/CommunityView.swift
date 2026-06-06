@@ -447,11 +447,9 @@ struct CommunityListView: View {
         case .course:
             if let courseData = item.courseData {
                 // Navigate to classroom directly or a detail view if we have one
-                LiveClassroomView(
+                LivingClassroomView(
                     courseId: courseData.id,
-                    lessonId: "lesson-1", // Start at beginning
-                    courseTitle: courseData.title,
-                    lessonTitle: "Lesson 1"
+                    courseTitle: courseData.title
                 )
             } else {
                 CommunityItemDetailPlaceholder(item: item)

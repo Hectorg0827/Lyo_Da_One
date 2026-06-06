@@ -60,15 +60,12 @@ struct DiscoverView: View {
         }
         .fullScreenCover(isPresented: $showClassroom) {
             if let course = selectedCourse {
-                LiveClassroomView(
+                LivingClassroomView(
                     courseId: course.id,
-                    lessonId: course.lessonId ?? "lesson-1",
-                    courseTitle: course.title,
-                    lessonTitle: "Lesson"
+                    courseTitle: course.title
                 )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)
-                .environmentObject(lyoAIViewModel)
             }
         }
         .sheet(isPresented: $showLioChat) {

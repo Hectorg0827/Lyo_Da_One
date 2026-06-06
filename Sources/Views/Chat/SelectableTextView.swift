@@ -82,11 +82,12 @@ struct SelectableTextView: UIViewRepresentable {
         content: String,
         highlights: [ChatHighlight]
     ) -> NSAttributedString {
-        let baseFont = UIFont.systemFont(ofSize: 16, weight: .regular)
-        let baseColor = UIColor.white.withAlphaComponent(0.9)
+        let baseFont = UIFont.systemFont(ofSize: 18, weight: .regular)
+        let baseColor = UIColor.white.withAlphaComponent(0.95)
 
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 4
+        paragraphStyle.lineSpacing = 8
+        paragraphStyle.paragraphSpacing = 12
 
         let baseAttributes: [NSAttributedString.Key: Any] = [
             .font: baseFont,
@@ -97,19 +98,19 @@ struct SelectableTextView: UIViewRepresentable {
         // Parse simple inline markdown into NSAttributedString
         let result = NSMutableAttributedString(string: content, attributes: baseAttributes)
 
-        // Apply bold (**text** or __text__)
+        // Apply bold (**text** or __text__) with a nice accent color
         applyMarkdownPattern(result, pattern: #"\*\*(.+?)\*\*"#, attributes: [
-            .font: UIFont.systemFont(ofSize: 17, weight: .bold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 18, weight: .bold),
+            .foregroundColor: UIColor(red: 1.0, green: 0.65, blue: 0.0, alpha: 1.0) // Premium orange/gold accent
         ])
         applyMarkdownPattern(result, pattern: #"__(.+?)__"#, attributes: [
-            .font: UIFont.systemFont(ofSize: 17, weight: .bold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 18, weight: .bold),
+            .foregroundColor: UIColor(red: 1.0, green: 0.65, blue: 0.0, alpha: 1.0)
         ])
 
         // Apply italic (*text* or _text_) – avoid matching ** or __
         applyMarkdownPattern(result, pattern: #"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"#, attributes: [
-            .font: UIFont.italicSystemFont(ofSize: 16),
+            .font: UIFont.italicSystemFont(ofSize: 17),
             .foregroundColor: UIColor.white.withAlphaComponent(0.85)
         ])
 

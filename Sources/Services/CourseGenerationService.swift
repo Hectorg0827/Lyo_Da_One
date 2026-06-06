@@ -1,656 +1,756 @@
+//
+//  CourseGenerationService.swift
+//  Lyo
+//
+//  Service for generating courses from AI conversations
+//
+
 import Foundation
 
+// MARK: - Course Generation Request
+
+struct ServiceCourseGenerationRequest: Codable {
+    let topic: String
+    let level: String
+    let outcomes: [String]
+    let teachingStyle: String
+    let systemPrompt: String?
+    let diagnosticData: [String: String]?
+    
+    enum CodingKeys: String, CodingKey {
+        case topic
+        case level
+        case outcomes
+        case teachingStyle = "teaching_style"
+        case systemPrompt = "system_prompt"
+        case diagnosticData = "diagnostic_data"
+    }
+}
+
+// Course response/module/lesson types live in LegacyCourseModels.swift
+// (GeneratedCourseResponse / GenerationCourseModule / GenerationGenerationCourseLesson).
+// Older versions of this file shipped local duplicates — those have been
+// removed so a fresh XcodeGen run doesn't trip on the ambiguity.
+
+// MARK: - Course Generation Service
+
 @MainActor
-class CourseGenerationService: ObservableObject {
+final class CourseGenerationService: ObservableObject {
     static let shared = CourseGenerationService()
-
-    @Published var generatedCourse: GeneratedCourse?
-    @Published var generationState: GenerationState = .idle {
-        didSet {
-            switch generationState {
-            case .idle: currentStep = "Preparing..."
-            case .startingGeneration: currentStep = "Starting course generation..."
-            case .engagementBridge: currentStep = "Building your course outline..."
-            case .pollingForModules: currentStep = "Generating course content..."
-            case .complete: currentStep = "Course ready!"
-            case .failed(let msg): currentStep = "Error: \(msg)"
-            }
-        }
-    }
-    @Published var progress: Double = 0.0
-
-    private var pollingTask: Task<Void, Never>?
-    private var prewarmTask: Task<Void, Never>?
-    private var prewarmedKey: String?
-    private var prewarmStartedAt: Date?
-
-    enum GenerationState: Equatable {
-        case idle
-        case startingGeneration  // POST /generate in flight
-        case engagementBridge  // Phase B: quiz / voice playing
-        case pollingForModules  // Phase C: polling loop active
-        case complete
-        case failed(String)
-    }
-
-    // MARK: - Pre-warm (Sprint 2: seamless paced handoff)
-
-    /// Kick off Phase A generation in the background as soon as a proposal card
-    /// appears in chat. Idempotent — safe to call repeatedly with the same
-    /// (topic, level). When the user finally taps "Start Course", Phase A is
-    /// already in flight (or done), so the CourseStartGateView countdown
-    /// overlaps with real backend work instead of a fake animation.
-    func prewarm(topic: String, level: String = "beginner") {
-        let key = Self.prewarmKey(topic: topic, level: level)
-
-        // Already prewarmed (or in progress) for this exact request → no-op.
-        if prewarmedKey == key {
-            LyoAnalyticsManager.shared.trackEvent(
-                "course_prewarm_skip",
-                parameters: [
-                    "reason": "duplicate", "topic": topic, "level": level,
-                ])
-            return
-        }
-
-        // If we're already generating something else, don't clobber it.
-        switch generationState {
-        case .startingGeneration, .engagementBridge, .pollingForModules:
-            LyoAnalyticsManager.shared.trackEvent(
-                "course_prewarm_skip",
-                parameters: [
-                    "reason": "in_progress", "topic": topic, "level": level,
-                ])
-            return
-        default:
-            break
-        }
-
-        prewarmedKey = key
-        prewarmStartedAt = Date()
-        print("🔥 Prewarm: kicking off generation for \(key)")
-        LyoAnalyticsManager.shared.trackEvent(
-            "course_prewarm_start",
-            parameters: [
-                "topic": topic, "level": level,
-            ])
-        prewarmTask?.cancel()
-        prewarmTask = Task { [weak self] in
-            await self?.startCourseGeneration(topic: topic, level: level)
-            guard let self else { return }
-            if case .failed(let msg) = self.generationState {
-                // Sprint 12 — clear the prewarm key on failure so the next
-                // user-initiated tap (or a re-render of the proposal card) can
-                // retry from a clean slate instead of being silently no-op'd.
-                self.prewarmedKey = nil
-                LyoAnalyticsManager.shared.trackEvent(
-                    "course_prewarm_failed",
-                    parameters: [
-                        "topic": topic, "level": level, "error": msg,
-                    ])
-                return
-            }
-            if let started = self.prewarmStartedAt {
-                let elapsed = Date().timeIntervalSince(started)
-                LyoAnalyticsManager.shared.trackEvent(
-                    "course_prewarm_complete",
-                    parameters: [
-                        "topic": topic, "level": level, "elapsed_seconds": elapsed,
-                    ])
-            }
-        }
-    }
-
-    /// Reset prewarm tracking. Call when a chat is cleared or a new
-    /// conversation starts so stale generations don't block fresh ones.
-    func resetPrewarm() {
-        prewarmTask?.cancel()
-        prewarmTask = nil
-        prewarmedKey = nil
-        // Sprint 15 — if we cancel a prewarm mid-flight, drop any state it
-        // already published so the next gate doesn't pick up a stale
-        // .startingGeneration / .failed leaked by the cancelled URLSession.
-        // Only roll back states owned by the prewarm path; preserve
-        // user-initiated states like .complete / .pollingForModules with
-        // a real generatedCourse so concurrent live flows aren't disturbed.
-        switch generationState {
-        case .startingGeneration, .engagementBridge, .failed:
-            if generatedCourse == nil {
-                generationState = .idle
-            }
-        default:
-            break
-        }
-        LyoAnalyticsManager.shared.trackEvent("course_prewarm_reset", parameters: [:])
-    }
-
-    private static func prewarmKey(topic: String, level: String) -> String {
-        let t = topic.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let l = level.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return "\(t)|\(l)"
-    }
-
-    /// Sprint 16 — per-card readiness check. The proposal card's badge must
-    /// only light up when *this* (topic, level) is the one that's been
-    /// prewarmed; otherwise older proposal cards in chat scrollback will
-    /// falsely flash "Ready" when a newer card's prewarm completes.
-    func isPrewarmReady(topic: String, level: String) -> Bool {
-        guard prewarmedKey == Self.prewarmKey(topic: topic, level: level) else {
-            return false
-        }
-        switch generationState {
-        case .engagementBridge, .pollingForModules, .complete:
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// Sprint 16 — per-card failure check, mirrors `isPrewarmReady`.
-    func isPrewarmFailed(topic: String, level: String) -> Bool {
-        guard prewarmedKey == Self.prewarmKey(topic: topic, level: level) else {
-            return false
-        }
-        if case .failed = generationState { return true }
-        return false
-    }
-
-    // MARK: - Phase A: Instant Payload
-
-    /// Kicks off generation. Returns in < 5 seconds with syllabus + preview.
-    func startCourseGeneration(topic: String, level: String = "beginner") async {
-        generationState = .startingGeneration
-        failedModuleFetches.removeAll()
-
-        do {
-            let response: InstantCourseResponse = try await NetworkClient.shared.request(
-                Endpoints.CourseGen.start(topic: topic, level: level)
-            )
-
-            print("✅ Phase A: Instant payload received — job: \(response.jobId)")
-
-            // Build initial course from instant payload
-            let course = buildCourseFromInstant(response)
-            self.generatedCourse = course
-            self.generationState = .engagementBridge
-
-            // Phase C: Begin polling immediately
-            startPolling(jobId: response.jobId, courseId: response.instant.courseId)
-
-        } catch {
-            // Sprint 15 — a cancelled Task (e.g. user tapped Adjust on the
-            // proposal card during prewarm) raises CancellationError or a
-            // URLError(.cancelled). Treat both as a clean abort, not a real
-            // backend failure that should surface in the gate's failure
-            // overlay or trigger course_prewarm_failed analytics.
-            if Task.isCancelled
-                || (error as? CancellationError) != nil
-                || (error as? URLError)?.code == .cancelled
-            {
-                print("⏹️ Phase A cancelled — swallowing without state change")
-                return
-            }
-            print("🚨 Phase A FAILED: \(error)")
-            self.generationState = .failed(
-                "Could not start course generation: \(error.localizedDescription)")
-        }
-    }
-
-    // MARK: - Phase C: Polling Loop
-
-    private func startPolling(jobId: String, courseId: String) {
-        pollingTask?.cancel()
-        generationState = .pollingForModules
-
-        pollingTask = Task { [weak self] in
-            guard let self else { return }
-
-            var fastPollCount = 0
-            let maxPolls = 25  // 10×2s + 15×5s = ~95 seconds absolute max
-            var pollCount = 0
-
-            while !Task.isCancelled && pollCount < maxPolls {
-                // Adaptive interval: 2 sec for first 10 polls, then 5 sec
-                let interval: UInt64 = fastPollCount < 10 ? 2_000_000_000 : 5_000_000_000
-                try? await Task.sleep(nanoseconds: interval)
-                fastPollCount += 1
-                pollCount += 1
-
-                do {
-                    let status: CourseStatus = try await NetworkClient.shared.request(
-                        Endpoints.CourseGen.status(jobId: jobId)
-                    )
-
-                    print(
-                        "📡 Poll #\(pollCount): state=\(status.state) progress=\(status.progress ?? 0)"
-                    )
-                    self.progress = status.progress ?? 0
-
-                    // Fetch any newly-ready modules
-                    for moduleStatus in status.modules where moduleStatus.state == .ready {
-                        let _ = await fetchModuleIfNeeded(
-                            courseId: courseId, index: moduleStatus.index)
-                    }
-
-                    // Retry any previously failed fetches
-                    if !self.failedModuleFetches.isEmpty {
-                        let retryIndices = self.failedModuleFetches.sorted()
-                        for idx in retryIndices {
-                            if status.modules.first(where: { $0.index == idx })?.state == .ready {
-                                print("🔄 Retrying failed module \(idx)")
-                                let _ = await fetchModuleIfNeeded(courseId: courseId, index: idx)
-                            }
-                        }
-                    }
-
-                    // Update states for building/failed modules in local model
-                    updateModuleStates(from: status)
-
-                    // Terminal states
-                    if status.state == "complete" {
-                        print("🎉 All modules ready!")
-                        // Hydration pass: re-fetch any modules that failed during polling
-                        await hydrateFailedModules(courseId: courseId)
-                        // If hydration couldn't recover all modules, fetch full course as safety net
-                        if !self.failedModuleFetches.isEmpty {
-                            print("🔄 Hydration incomplete — fetching full course truth")
-                            await fetchFinalTruth(courseId: courseId)
-                        } else {
-                            self.generationState = .complete
-                        }
-                        break
-                    } else if status.state == "failed" {
-                        print("🚨 Backend generation failed")
-                        self.generationState = .failed("Course generation failed on server")
-                        break
-                    }
-
-                } catch {
-                    print("⚠️ Poll error (will retry): \(error.localizedDescription)")
-                    // Don't break — polling is resilient. Next poll will try again.
-                }
-            }
-
-            if pollCount >= maxPolls && self.generationState != .complete {
-                print("🚨 Polling timed out after \(maxPolls) attempts")
-                // Safety net: fetch whatever the server has
-                await fetchFinalTruth(courseId: courseId)
-
-                // If it's still not complete after final truth, explicitly fail to avoid hanging UI
-                if self.generationState != .complete {
-                    self.generationState = .failed("Course generation timed out. Please try again.")
-                }
-            }
-        }
-    }
-
-    // MARK: - Fetch Individual Module
-
-    /// Track module indices that failed to fetch so we can retry during hydration
-    private var failedModuleFetches: Set<Int> = []
-
-    private func fetchModuleIfNeeded(courseId: String, index: Int) async -> Bool {
-        // Don't re-fetch if already ready locally WITH lessons
-        if let existingModule = generatedCourse?.modules.first(where: { $0.index == index }),
-            existingModule.state == .ready, existingModule.lessons?.isEmpty == false
-        {
-            return true
-        }
-
-        do {
-            let fullModule: ProgressiveModule = try await NetworkClient.shared.request(
-                Endpoints.CourseGen.module(courseId: courseId, index: index)
-            )
-
-            let lessonCount = fullModule.lessons?.count ?? 0
-            print("✅ Module \(index) fetched: \(fullModule.title) — \(lessonCount) lessons")
-
-            // Only accept if it actually has lesson content
-            guard lessonCount > 0 else {
-                print("⚠️ Module \(index) returned 0 lessons — treating as not ready")
-                failedModuleFetches.insert(index)
-                return false
-            }
-
-            failedModuleFetches.remove(index)
-
-            // Swap into local course model
-            if let idx = generatedCourse?.modules.firstIndex(where: { $0.index == index }) {
-                generatedCourse?.modules[idx] = fullModule
-            } else {
-                generatedCourse?.modules.append(fullModule)
-            }
-
-            return true
-
-        } catch {
-            print("🚨 Failed to fetch module \(index): \(error)")
-            failedModuleFetches.insert(index)
-            return false
-        }
-    }
-
-    // MARK: - Update Module States from Status
-
-    private func updateModuleStates(from status: CourseStatus) {
-        for moduleStatus in status.modules {
-            guard
-                let idx = generatedCourse?.modules.firstIndex(where: {
-                    $0.index == moduleStatus.index
-                })
-            else { continue }
-
-            let currentModule = generatedCourse!.modules[idx]
-
-            // NEVER mark a module as .ready locally unless we have actual lesson content.
-            // If the backend says "ready" but our fetch failed, keep the local state as .building
-            // so the UI shows a loading indicator instead of empty content.
-            let effectiveState: ModuleState
-            if moduleStatus.state == .ready {
-                let hasLessons = currentModule.lessons?.isEmpty == false
-                if hasLessons {
-                    // Already fetched with content — keep as ready
-                    effectiveState = .ready
-                } else if failedModuleFetches.contains(moduleStatus.index) {
-                    // Fetch failed — keep as building so UI shows progress, not empty "complete"
-                    effectiveState = .building
-                    print(
-                        "⚠️ Module \(moduleStatus.index) reported ready by server but fetch failed — keeping as .building"
-                    )
-                } else {
-                    // Fetch succeeded and set state already — trust it
-                    effectiveState = .ready
-                }
-            } else {
-                effectiveState = moduleStatus.state
-            }
-
-            // Only update if local state needs changing
-            if currentModule.state != effectiveState || currentModule.state != .ready {
-                let updatedTitle: String
-                if let statusTitle = moduleStatus.title, !statusTitle.isEmpty,
-                    currentModule.title.hasPrefix("Module ")
-                {
-                    updatedTitle = statusTitle
-                } else {
-                    updatedTitle = currentModule.title
-                }
-                generatedCourse?.modules[idx] = ProgressiveModule(
-                    id: currentModule.id,
-                    index: currentModule.index,
-                    state: effectiveState,
-                    title: updatedTitle,
-                    lessons: currentModule.lessons,
-                    summary: currentModule.summary,
-                    hook: currentModule.hook
-                )
-            }
-        }
-    }
-
-    // MARK: - Hydration Pass
-
-    /// Re-fetch any modules that failed during polling. Called when generation completes.
-    private func hydrateFailedModules(courseId: String) async {
-        guard !failedModuleFetches.isEmpty else { return }
-
-        let toRetry = failedModuleFetches.sorted()
-        print("💧 Hydration pass: retrying \(toRetry.count) failed module fetches")
-
-        for index in toRetry {
-            // Give each retry 2 attempts with a small delay
-            for attempt in 1...2 {
-                let success = await fetchModuleIfNeeded(courseId: courseId, index: index)
-                if success {
-                    print("💧 Hydration: Module \(index) recovered on attempt \(attempt)")
-                    break
-                }
-                if attempt < 2 {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                }
-            }
-        }
-
-        // If we recovered any modules, trigger a final rebuild
-        if failedModuleFetches.isEmpty {
-            print("💧 Hydration complete — all modules recovered")
-        } else {
-            print("⚠️ Hydration finished with \(failedModuleFetches.count) still missing")
-        }
-    }
-
-    // MARK: - Safety Net: Final Truth
-
-    /// Called on timeout, app relaunch, or background return
-    func fetchFinalTruth(courseId: String) async {
-        do {
-            let fullCourse: GeneratedCourse = try await NetworkClient.shared.request(
-                Endpoints.CourseGen.fullCourse(courseId: courseId)
-            )
-            print("🔄 Final truth fetched: \(fullCourse.modules.count) modules")
-            self.generatedCourse = fullCourse
-            self.failedModuleFetches.removeAll()
-            self.generationState = .complete
-        } catch {
-            print("🚨 Final truth fetch failed: \(error)")
-            self.generationState = .failed("Could not retrieve course")
-        }
-    }
-
-    // MARK: - Build Course from Instant Payload
-
-    private func buildCourseFromInstant(_ response: InstantCourseResponse) -> GeneratedCourse {
-        let instant = response.instant
-
-        // Build module placeholders from syllabus
-        var modules: [ProgressiveModule] = instant.syllabus.enumerated().map { idx, title in
-            ProgressiveModule(
-                id: UUID().uuidString,
-                index: idx + 1,
-                state: .locked,
-                title: title
-            )
-        }
-
-        // Enrich Module 1 with preview data
-        if let preview = instant.modulePreview,
-            let firstIdx = modules.firstIndex(where: { $0.index == preview.moduleIndex })
-        {
-            var previewLesson: [ProgressiveLesson] = []
-            if let lp = preview.lessonPreview {
-                previewLesson.append(
-                    ProgressiveLesson(
-                        id: UUID().uuidString,
-                        title: lp.title,
-                        content: nil,
-                        summary: lp.summary,
-                        miniPractice: lp.miniPractice
-                    ))
-            }
-            modules[firstIdx] = ProgressiveModule(
-                id: modules[firstIdx].id,
-                index: preview.moduleIndex,
-                state: .building,
-                title: preview.moduleTitle,
-                lessons: previewLesson,
-                summary: preview.lessonPreview?.summary
-            )
-        }
-
-        return GeneratedCourse(
-            id: instant.courseId,
-            jobId: response.jobId,
-            title: instant.title,
-            objective: instant.objective,
-            syllabus: instant.syllabus,
-            modules: modules,
-            schemaVersion: response.schemaVersion
-        )
-    }
-
-    // MARK: - Cleanup
-
-    func stopPolling() {
-        pollingTask?.cancel()
-        pollingTask = nil
-    }
-
-    func reset() {
-        stopPolling()
-        generatedCourse = nil
-        generationState = .idle
-        progress = 0.0
-    }
-
-    // MARK: - Compatibility Helpers
-
-    /// Legacy convenience — human-readable step description
-    @Published var currentStep: String = "Preparing..."
-
-    /// Legacy convenience — true while any generation is in progress
-    var isGenerating: Bool {
-        switch generationState {
-        case .startingGeneration, .engagementBridge, .pollingForModules:
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// Smart Review: generates a quick review course from struggle items
+    
+    @Published var isGenerating: Bool = false
+    @Published var progress: Double = 0
+    @Published var currentStep: String = ""
+    @Published var generatedCourse: GeneratedCourseResponse?
+    @Published var error: String?
+    
+    // NEW: Streaming state for live UI updates
+    @Published var streamingText: String = ""
+    @Published var streamingBlocks: [LessonBlock] = []
+    @Published var isStreaming: Bool = false
+    
+    private var baseURL: String { AppConfig.baseURL }
+    
+    private init() {}
+    
+    // MARK: - Generate Smart Review
+
+    /// Build a focused review course from the user's recent struggle topics.
+    /// Thin wrapper that funnels the struggle topics into the standard
+    /// course-generation pipeline. Caller supplies a list of `StruggleItem`
+    /// (from `SmartMemoryService`); we synthesize a topic + outcomes string.
     func generateSmartReview(struggles: [StruggleItem]) async throws -> GeneratedCourseResponse {
-        let topic = struggles.map(\.topic).joined(separator: ", ")
-        await startCourseGeneration(topic: "Review: \(topic)", level: "adaptive")
-
-        // Return a lightweight GeneratedCourseResponse for callers that expect the old API
-        let modules = struggles.enumerated().map { idx, item in
-            GenerationCourseModule(
-                id: UUID().uuidString,
-                title: item.topic,
-                description: "Review of \(item.topic)",
-                lessons: [
-                    GenerationCourseLesson(
-                        id: UUID().uuidString,
-                        title: "Review: \(item.topic)",
-                        content: "",
-                        durationMinutes: 5,
-                        order: 1
-                    )
-                ],
-                order: idx + 1
-            )
-        }
-
-        return GeneratedCourseResponse(
-            courseId: generatedCourse?.id ?? UUID().uuidString,
-            title: "Smart Review",
-            description: "Targeted review of areas that need practice",
-            modules: modules,
-            estimatedDuration: struggles.count * 5,
-            difficulty: "adaptive"
+        let topics = struggles.map(\.topic)
+        let topic = topics.isEmpty
+            ? "Review session"
+            : "Review of \(topics.joined(separator: ", "))"
+        let outcomes = topics.map { "Reinforce \($0)" }
+        return try await generateCourse(
+            topic: topic,
+            level: "beginner",
+            outcomes: outcomes.isEmpty ? nil : outcomes,
+            teachingStyle: "review"
         )
     }
 
-    // MARK: - Legacy Compatibility: generateCourse
+    // MARK: - Generate Course
 
-    /// Wraps the new progressive generation into the old blocking API signature.
-    /// Used by InteractiveCinemaService and other legacy callers.
     func generateCourse(
         topic: String,
         level: String = "beginner",
-        outcomes: [String] = [],
+        outcomes: [String]? = nil,
         teachingStyle: String = "interactive"
     ) async throws -> GeneratedCourseResponse {
-        await startCourseGeneration(topic: topic, level: level)
-
-        // Wait for generation to progress past instant payload (max 60 seconds)
-        var attempts = 0
-        while generationState != .complete && attempts < 60 {
-            if case .failed(let msg) = generationState {
-                throw CourseGenerationError.generationFailed(msg)
+        isGenerating = true
+        progress = 0
+        currentStep = "Analyzing topic..."
+        error = nil
+        
+        defer {
+            isGenerating = false
+            progress = 1.0
+        }
+        
+        // Build outcomes if not provided
+        let learningOutcomes = outcomes ?? [
+            "Understand core concepts of \(topic)",
+            "Apply knowledge through practical examples",
+            "Build confidence in \(topic)"
+        ]
+        
+        let request = ServiceCourseGenerationRequest(
+            topic: topic,
+            level: level,
+            outcomes: learningOutcomes,
+            teachingStyle: teachingStyle,
+            systemPrompt: nil,
+            diagnosticData: nil
+        )
+        
+        // Use Backend Generation (Gemini via Dual AI Orchestrator)
+        currentStep = "Generating course with AI..."
+        progress = 0.3
+        
+        do {
+            print("🎯 Attempting Backend course generation for topic: \(topic)")
+            
+            // Enable streaming for better UX - shows content as it arrives
+            let course = try await generateFromBackendStreaming(request: request)
+            
+            print("✅ SUCCESS: Backend generated course: \(course.title)")
+            
+            currentStep = "Course ready!"
+            progress = 1.0
+            
+            generatedCourse = course
+            return course
+            
+        } catch let apiError {
+            print("⚠️ Backend generation error: \(apiError)")
+            
+            // Fallback to OpenAI (Direct) if backend fails
+            print("🔄 Falling back to OpenAI (Direct)")
+            do {
+                let course = try await generateFromOpenAI(topic: topic, level: level, outcomes: learningOutcomes)
+                print("✅ SUCCESS: OpenAI generated course: \(course.title)")
+                
+                currentStep = "Course ready!"
+                progress = 1.0
+                
+                generatedCourse = course
+                return course
+            } catch {
+                print("❌ OpenAI fallback failed: \(error)")
+                
+                // Fallback to mock (Last Resort)
+                print("🛠 LAST RESORT: Generating mock course")
+                let course = generateMockCourse(topic: topic)
+                
+                currentStep = "Course ready (Offline Mode)!"
+                progress = 1.0
+                
+                generatedCourse = course
+                return course
             }
-            try await Task.sleep(nanoseconds: 1_000_000_000)
-            attempts += 1
         }
-
-        guard let course = generatedCourse else {
-            throw CourseGenerationError.noContent
+    }
+    
+    // MARK: - Backend Generation (Primary - Uses Gemini AI with Streaming)
+    
+    private func generateFromBackendStreaming(request: ServiceCourseGenerationRequest) async throws -> GeneratedCourseResponse {
+        print("🎓 Starting STREAMING course generation for: \(request.topic)")
+        
+        let endpoint = Endpoints.AI.generateCourseStream(
+            topic: request.topic,
+            level: request.level,
+            outcomes: request.outcomes,
+            teachingStyle: request.teachingStyle
+        )
+        
+        print("📤 Calling streaming backend: \(endpoint.path)")
+        
+        // Accumulate streamed chunks
+        var accumulatedData = Data()
+        var lastProgressUpdate = Date()
+        let progressUpdateInterval: TimeInterval = 0.5 // Update progress every 0.5 seconds
+        
+        do {
+            let (asyncBytes, response) = try await NetworkClient.shared.stream(endpoint)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ Invalid response type")
+                throw ServiceCourseGenerationError.serverError
+            }
+            
+            print("📥 Streaming started - status: \(httpResponse.statusCode)")
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                print("❌ Backend error status: \(httpResponse.statusCode)")
+                throw ServiceCourseGenerationError.serverError
+            }
+            
+            // Stream and accumulate chunks
+            for try await byte in asyncBytes {
+                accumulatedData.append(byte)
+                
+                // Update progress periodically (avoid too frequent UI updates)
+                let now = Date()
+                if now.timeIntervalSince(lastProgressUpdate) >= progressUpdateInterval {
+                    let estimatedProgress = min(0.3 + (Double(accumulatedData.count) / 8000.0 * 0.6), 0.9)
+                    await MainActor.run {
+                        self.progress = estimatedProgress
+                        self.currentStep = "Receiving course data... (\(accumulatedData.count) bytes)"
+                    }
+                    lastProgressUpdate = now
+                }
+            }
+            
+            print("✅ Streaming completed - received \(accumulatedData.count) bytes")
+            
+            // Log response preview
+            if let jsonStr = String(data: accumulatedData, encoding: .utf8) {
+                print("📥 Streamed response preview: \(String(jsonStr.prefix(300)))...")
+            }
+            
+            // Parse the accumulated response
+            return try parseBackendResponse(data: accumulatedData, topic: request.topic)
+            
+        } catch let streamError as URLError {
+            print("❌ Streaming error: \(streamError.localizedDescription)")
+            throw ServiceCourseGenerationError.serverError
+        } catch {
+            print("❌ Unexpected streaming error: \(error)")
+            throw error
         }
-
-        return convertToLegacyResponse(course, level: level)
+    }
+    
+    // MARK: - Backend Generation (Fallback - Non-Streaming)
+    
+    private struct AIResponse: Codable {
+        let content: String?
+        let response: String?
+        let primaryAi: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case content
+            case response
+            case primaryAi = "primary_ai"
+        }
     }
 
-    /// Convert a GeneratedCourse to the legacy GeneratedCourseResponse type
-    private func convertToLegacyResponse(_ course: GeneratedCourse, level: String = "beginner")
-        -> GeneratedCourseResponse
-    {
-        GeneratedCourseResponse(
-            courseId: course.id,
-            title: course.title,
-            description: course.objective ?? "",
-            modules: course.modules.enumerated().map { idx, module in
-                GenerationCourseModule(
-                    id: module.id,
-                    title: module.title,
-                    description: module.summary ?? "",
-                    lessons: (module.lessons ?? []).enumerated().map { lIdx, lesson in
-                        GenerationCourseLesson(
-                            id: lesson.id,
-                            title: lesson.title ?? "Lesson \(lIdx + 1)",
-                            content: lesson.content ?? lesson.summary ?? "",
-                            durationMinutes: 5,
-                            order: lIdx + 1
+    private func generateFromBackend(request: ServiceCourseGenerationRequest) async throws -> GeneratedCourseResponse {
+        // Use the backend's Dual AI Orchestrator endpoint (Gemini + OpenAI Hybrid)
+        // This endpoint routes to Gemini for educational content generation
+        
+        print("🎓 Starting course generation for: \(request.topic)")
+        print("📤 Calling Dual AI Orchestrator: /api/v1/ai/generate")
+        
+        // Build course generation prompt for the AI
+        let outcomesText = request.outcomes.joined(separator: "\n- ")
+        let coursePrompt = """
+        Generate a complete learning course structure for: \(request.topic)
+        
+        Level: \(request.level)
+        Teaching Style: \(request.teachingStyle)
+        
+        Learning Outcomes:
+        - \(outcomesText)
+        
+        Create a JSON course structure with:
+        - course_id: unique identifier
+        - title: engaging course title
+        - description: brief course description
+        - estimated_duration: total minutes
+        - difficulty: \(request.level)
+        - modules: array of 2-3 modules, each with:
+          - id, title, description, order
+          - lessons: array of 2-3 lessons per module, each with:
+            - id, title, content (2-3 paragraphs), duration_minutes, order
+        
+        Return ONLY valid JSON, no markdown or extra text.
+        """
+        
+        // Construct request body for /api/v1/ai/generate
+        let requestBody: [String: Any] = [
+            "prompt": coursePrompt,
+            "task_type": "CONTENT_GENERATION",  // Routes to Gemini for educational content
+            "max_tokens": 4000,
+            "temperature": 0.7,
+            "context": [
+                "type": "course_generation",
+                "topic": request.topic,
+                "level": request.level
+            ]
+        ]
+        
+        // Use AnyEncodable wrapper for the body
+        let encodableBody = requestBody.mapValues { AnyEncodable(value: $0) }
+        
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/ai/generate",
+            method: .post,
+            body: encodableBody,
+            requiresAuth: true
+        )
+        
+        do {
+            let aiResponse: AIResponse = try await NetworkClient.shared.request(endpoint)
+            
+            let content = aiResponse.content ?? aiResponse.response
+            guard let validContent = content else {
+                print("❌ Failed to extract content/response from AI JSON")
+                throw ServiceCourseGenerationError.invalidResponse
+            }
+            
+            print("🤖 AI used: \(aiResponse.primaryAi ?? "unknown")")
+            print("📄 Content length: \(validContent.count) characters")
+            
+            return try parseAIContent(validContent, topic: request.topic)
+            
+        } catch {
+            print("❌ Backend generation failed: \(error)")
+            throw error
+        }
+    }
+    
+    // MARK: - Parse AI Content
+    
+    private func parseAIContent(_ content: String, topic: String) throws -> GeneratedCourseResponse {
+        // Clean and parse the JSON from the content
+        var cleanJson = content
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Extract JSON if there's extra text
+        if let jsonStart = cleanJson.firstIndex(of: "{"),
+           let jsonEnd = cleanJson.lastIndex(of: "}") {
+            cleanJson = String(cleanJson[jsonStart...jsonEnd])
+        }
+        
+        guard let courseData = cleanJson.data(using: .utf8) else {
+            print("❌ Failed to convert cleaned JSON to data")
+            throw ServiceCourseGenerationError.invalidResponse
+        }
+        
+        // Try to decode as GeneratedCourseResponse
+        do {
+            let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: courseData)
+            print("✅ Backend (Gemini) generated course: \(course.title)")
+            return course
+        } catch {
+            print("⚠️ Direct decode failed, trying to map response...")
+            
+            // Try to parse as generic JSON and map
+            if let courseJson = try? JSONSerialization.jsonObject(with: courseData) as? [String: Any] {
+                let course = try mapBackendResponse(courseJson, topic: topic)
+                print("✅ Mapped backend course: \(course.title)")
+                return course
+            }
+            
+            print("❌ Failed to parse course JSON: \(error)")
+            print("❌ Cleaned JSON was: \(cleanJson.prefix(500))...")
+            throw ServiceCourseGenerationError.invalidResponse
+        }
+    }
+    
+    // MARK: - Parse Backend Response (Used by streaming endpoint)
+    
+    private func parseBackendResponse(data: Data, topic: String) throws -> GeneratedCourseResponse {
+        // Try to decode the backend response
+        // Backend may return different structure, so we handle both cases
+        do {
+            // First try direct decode
+            let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
+            print("✅ Backend generated course: \(course.title)")
+            return course
+        } catch {
+            print("⚠️ Direct decode failed, trying to map backend response...")
+            
+            // Try to parse as generic JSON and map to our structure
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let course = try mapBackendResponse(json, topic: topic)
+                print("✅ Mapped backend course: \(course.title)")
+                return course
+            }
+            
+            print("❌ Failed to decode backend response: \(error)")
+            throw ServiceCourseGenerationError.invalidResponse
+        }
+    }
+    
+    // MARK: - Map Backend Response to GeneratedCourseResponse
+    
+    private func mapBackendResponse(_ json: [String: Any], topic: String) throws -> GeneratedCourseResponse {
+        // Handle various backend response formats
+        let courseId = json["course_id"] as? String ?? json["id"] as? String ?? "backend_\(UUID().uuidString.prefix(8))"
+        let title = json["title"] as? String ?? "Course on \(topic)"
+        let description = json["description"] as? String ?? "AI-generated course about \(topic)"
+        let estimatedDuration = json["estimated_duration"] as? Int ?? json["duration"] as? Int ?? 60
+        let difficulty = json["difficulty"] as? String ?? json["level"] as? String ?? "beginner"
+        
+        // Parse modules
+        var modules: [GenerationCourseModule] = []
+        
+        if let modulesArray = json["modules"] as? [[String: Any]] {
+            for (index, moduleJson) in modulesArray.enumerated() {
+                let moduleId = moduleJson["id"] as? String ?? "mod_\(index + 1)"
+                let moduleTitle = moduleJson["title"] as? String ?? "Module \(index + 1)"
+                let moduleDesc = moduleJson["description"] as? String ?? ""
+                let moduleOrder = moduleJson["order"] as? Int ?? index + 1
+                
+                // Parse lessons
+                var lessons: [GenerationCourseLesson] = []
+                if let lessonsArray = moduleJson["lessons"] as? [[String: Any]] {
+                    for (lessonIndex, lessonJson) in lessonsArray.enumerated() {
+                        let lesson = GenerationCourseLesson(
+                            id: lessonJson["id"] as? String ?? "les_\(index + 1)_\(lessonIndex + 1)",
+                            title: lessonJson["title"] as? String ?? "Lesson \(lessonIndex + 1)",
+                            content: lessonJson["content"] as? String ?? lessonJson["description"] as? String ?? "",
+                            durationMinutes: lessonJson["duration_minutes"] as? Int ?? lessonJson["duration"] as? Int ?? 10,
+                            order: lessonJson["order"] as? Int ?? lessonIndex + 1
                         )
-                    },
-                    order: idx + 1
+                        lessons.append(lesson)
+                    }
+                }
+                
+                let module = GenerationCourseModule(
+                    id: moduleId,
+                    title: moduleTitle,
+                    description: moduleDesc,
+                    lessons: lessons,
+                    order: moduleOrder
                 )
-            },
-            estimatedDuration: course.modules.count * 15,
-            difficulty: level
+                modules.append(module)
+            }
+        } else if let lessonsArray = json["lessons"] as? [[String: Any]] {
+            // Backend returned flat lessons, group into single module
+            var lessons: [GenerationCourseLesson] = []
+            for (index, lessonJson) in lessonsArray.enumerated() {
+                let lesson = GenerationCourseLesson(
+                    id: lessonJson["id"] as? String ?? "les_\(index + 1)",
+                    title: lessonJson["title"] as? String ?? "Lesson \(index + 1)",
+                    content: lessonJson["content"] as? String ?? lessonJson["description"] as? String ?? "",
+                    durationMinutes: lessonJson["duration_minutes"] as? Int ?? lessonJson["duration"] as? Int ?? 10,
+                    order: index + 1
+                )
+                lessons.append(lesson)
+            }
+            
+            modules.append(GenerationCourseModule(
+                id: "mod_1",
+                title: "Course Content",
+                description: "Main course material",
+                lessons: lessons,
+                order: 1
+            ))
+        }
+        
+        // If no modules found, create a placeholder
+        if modules.isEmpty {
+            throw ServiceCourseGenerationError.noContent
+        }
+        
+        return GeneratedCourseResponse(
+            courseId: courseId,
+            title: title,
+            description: description,
+            modules: modules,
+            estimatedDuration: estimatedDuration,
+            difficulty: difficulty
+        )
+    }
+    
+    // MARK: - OpenAI Fallback Generation (Secondary - Only if backend fails)
+    
+    private func generateFromOpenAI(topic: String, level: String, outcomes: [String]) async throws -> GeneratedCourseResponse {
+        let outcomesText = outcomes.joined(separator: "\n- ")
+        
+        // Generate a fixed course_id to avoid interpolation issues in JSON
+        let courseId = "generated_\(UUID().uuidString.prefix(8))"
+        
+        let prompt = """
+        Create a structured learning course for: \(topic)
+        Level: \(level)
+        
+        Learning Outcomes:
+        - \(outcomesText)
+        
+        Return a JSON object with this exact structure (use these exact field names):
+        {
+            "course_id": "\(courseId)",
+            "title": "Your course title here",
+            "description": "Brief course description",
+            "estimated_duration": 60,
+            "difficulty": "\(level)",
+            "modules": [
+                {
+                    "id": "mod_1",
+                    "title": "Module 1 Title",
+                    "description": "Module description",
+                    "order": 1,
+                    "lessons": [
+                        {
+                            "id": "les_1_1",
+                            "title": "Lesson Title",
+                            "content": "Lesson content (2-3 paragraphs)",
+                            "duration_minutes": 10,
+                            "order": 1
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        Create 2 modules with 2 lessons each. Keep content concise.
+        IMPORTANT: Return ONLY the JSON object, no markdown code blocks, no extra text.
+        """
+        
+        print("📤 Sending course generation request to OpenAI...")
+        
+        let response = try await OpenAIService.shared.sendMessage(
+            message: prompt,
+            conversationHistory: [],
+            systemPrompt: "You are a curriculum designer. You must return only valid JSON with no markdown formatting."
+        )
+        
+        print("📥 OpenAI raw response length: \(response.count) characters")
+        print("📥 OpenAI response preview: \(String(response.prefix(200)))...")
+        
+        // Clean and parse JSON
+        var cleanJson = response
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Try to extract JSON if there's extra text
+        if let jsonStart = cleanJson.firstIndex(of: "{"),
+           let jsonEnd = cleanJson.lastIndex(of: "}") {
+            cleanJson = String(cleanJson[jsonStart...jsonEnd])
+        }
+        
+        print("🧹 Cleaned JSON length: \(cleanJson.count) characters")
+        
+        guard let data = cleanJson.data(using: .utf8) else {
+            print("❌ Failed to convert cleaned JSON to data")
+            throw ServiceCourseGenerationError.invalidResponse
+        }
+        
+        do {
+            let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
+            print("✅ Successfully decoded course: \(course.title)")
+            return course
+        } catch let decodingError {
+            print("❌ JSON decoding error: \(decodingError)")
+            print("❌ Cleaned JSON was: \(cleanJson)")
+            throw decodingError
+        }
+    }
+    
+    // MARK: - Mock Fallback Generation
+    
+    private func generateMockCourse(topic: String) -> GeneratedCourseResponse {
+        return GeneratedCourseResponse(
+            courseId: "mock_\(UUID().uuidString.prefix(8))",
+            title: "Introduction to \(topic)",
+            description: "A comprehensive guide to mastering \(topic) fundamentals.",
+            modules: [
+                GenerationCourseModule(
+                    id: "mod_1",
+                    title: "Getting Started",
+                    description: "Core concepts and setup",
+                    lessons: [
+                        GenerationCourseLesson(
+                            id: "les_1_1",
+                            title: "What is \(topic)?",
+                            content: "\(topic) is a fascinating subject. In this lesson, we'll explore the basics.\n\nIt is essential for understanding modern systems.",
+                            durationMinutes: 5,
+                            order: 1
+                        ),
+                        GenerationCourseLesson(
+                            id: "les_1_2",
+                            title: "Key Principles",
+                            content: "There are three main principles you need to know.\n\n1. Consistency\n2. Practice\n3. Application",
+                            durationMinutes: 8,
+                            order: 2
+                        )
+                    ],
+                    order: 1
+                ),
+                GenerationCourseModule(
+                    id: "mod_2",
+                    title: "Advanced Concepts",
+                    description: "Taking it to the next level",
+                    lessons: [
+                        GenerationCourseLesson(
+                            id: "les_2_1",
+                            title: "Deep Dive",
+                            content: "Now that you know the basics, let's look at advanced topics.",
+                            durationMinutes: 12,
+                            order: 1
+                        )
+                    ],
+                    order: 2
+                )
+            ],
+            estimatedDuration: 45,
+            difficulty: "Beginner"
         )
     }
 
-    // MARK: - Legacy Compatibility: createLiveLessonFromGenerated
-
-    /// Converts a ProgressiveLesson into a LiveLesson for the classroom ViewModel.
-    func createLiveLessonFromGenerated(lesson: ProgressiveLesson, moduleTitle: String) -> LiveLesson
-    {
+    // MARK: - Create Lesson Blocks from Generated Course
+    
+    func createLiveLessonFromGenerated(lesson: GenerationCourseLesson, moduleTitle: String) -> LiveLesson {
+        // This path was originally written against an older `LessonBlock` type
+        // with `.explain` / `.example` cases and a `body:` field. The canonical
+        // model is now `LiveLessonBlock` with a `LessonBlockType` enum (using
+        // `.text` / `.callout`) and a `content:` field. The block construction
+        // below has been migrated; behavior is unchanged.
         var blocks: [LiveLessonBlock] = []
 
-        blocks.append(
-            LiveLessonBlock(
-                id: "intro_\(lesson.id)",
-                type: .paragraph,
-                title: lesson.title ?? "Lesson",
-                content: lesson.content ?? lesson.summary ?? ""
+        let memoryContext = SmartMemoryService.shared.memory
+        let userContext = UserContextService.shared.currentContext
+
+        // Personalized intro based on persona
+        let introText: String
+        if userContext?.persona == "professional" {
+            introText = "Let's efficiently cover \(lesson.title). Here's what matters most. ⚡"
+        } else if userContext?.persona == "student" {
+            introText = "Welcome to \(lesson.title)! Take notes – this might be on the test! 📝"
+        } else {
+            introText = "Welcome to this lesson on \(lesson.title). Let's dive in! 🚀"
+        }
+
+        blocks.append(LiveLessonBlock(
+            id: "intro_\(lesson.id)",
+            type: .text,
+            title: lesson.title,
+            content: introText
+        ))
+
+        // Encouragement for past-struggle topics
+        if let struggles = memoryContext?.struggles,
+           struggles.contains(where: { lesson.title.localizedCaseInsensitiveContains($0.topic) }) {
+            blocks.append(LiveLessonBlock(
+                id: "encouragement_\(lesson.id)",
+                type: .text,
+                title: "💪 You've Got This!",
+                content: "We noticed you found this topic challenging before. We've added extra examples to help!"
+            ))
+        }
+
+        // Cinematic intro image
+        blocks.append(LiveLessonBlock(
+            id: "img_intro_\(lesson.id)",
+            type: .image,
+            title: "Let's explore \(lesson.title)",
+            imageURL: URL(string: "LyoThinking")
+        ))
+
+        // Body content split into paragraphs
+        let paragraphs = lesson.content.components(separatedBy: "\n\n")
+        for (index, paragraph) in paragraphs.enumerated() {
+            let trimmed = paragraph.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            blocks.append(LiveLessonBlock(
+                id: "exp_\(lesson.id)_\(index)",
+                type: .text,
+                title: nil,
+                content: trimmed
             ))
 
-        if let practice = lesson.miniPractice, !practice.isEmpty {
-            for (i, question) in practice.enumerated() {
-                blocks.append(
-                    LiveLessonBlock(
-                        id: "practice_\(lesson.id)_\(i)",
-                        type: .paragraph,
-                        title: "Practice \(i + 1)",
-                        content: question
-                    ))
+            if index == paragraphs.count / 2 && paragraphs.count > 1 {
+                blocks.append(LiveLessonBlock(
+                    id: "img_mid_\(lesson.id)",
+                    type: .image,
+                    title: "Key Insight",
+                    imageURL: URL(string: "avatar_reading")
+                ))
             }
         }
 
-        blocks.append(
-            LiveLessonBlock(
-                id: "summary_\(lesson.id)",
-                type: .summary,
-                title: "✅ Lesson Complete",
-                content: lesson.summary ?? "You've finished this lesson in \(moduleTitle)."
+        // Persona-driven interactive recall
+        if userContext?.suggestedStyle == "exam_prep" {
+            blocks.append(LiveLessonBlock(
+                id: "flashcard_\(lesson.id)",
+                type: .quizMcq,
+                title: "⚡ Quick Recall",
+                content: "Test your memory!",
+                question: "Test your memory!",
+                options: ["I remember this", "Need a hint", "Show me again"],
+                correctIndex: 0,
+                explanation: "Great memory!"
             ))
+        }
 
+        // Example callout (formerly its own .example case, now .callout)
+        blocks.append(LiveLessonBlock(
+            id: "example_\(lesson.id)",
+            type: .callout,
+            title: "Let's See an Example",
+            content: "Here's a practical example to help solidify your understanding of \(lesson.title)."
+        ))
+
+        // Knowledge check
+        blocks.append(LiveLessonBlock(
+            id: "quiz_\(lesson.id)",
+            type: .quizMcq,
+            title: "Quick Check",
+            content: "Let's make sure you understood the key concepts!",
+            question: "Let's make sure you understood the key concepts!",
+            options: [
+                "I understand the key concepts",
+                "I need more examples",
+                "I have questions",
+                "Ready for next lesson"
+            ],
+            correctIndex: 0,
+            explanation: "Great job! You've completed this lesson."
+        ))
+
+        blocks.append(LiveLessonBlock(
+            id: "summary_\(lesson.id)",
+            type: .summary,
+            title: "Summary",
+            content: "In this lesson, you learned about \(lesson.title). Keep practicing and you'll master this topic!"
+        ))
+        
         return LiveLesson(
-            courseId: generatedCourse?.id ?? "unknown",
+            courseId: "generated",
             lessonId: lesson.id,
-            title: lesson.title ?? "Lesson",
+            title: lesson.title,
             subtitle: moduleTitle,
-            blocks: blocks
+            blocks: blocks,
+            estimatedDuration: lesson.durationMinutes
         )
+    }
+}
+
+// MARK: - Errors
+
+enum ServiceCourseGenerationError: LocalizedError {
+    case invalidURL
+    case serverError
+    case invalidResponse
+    case noContent
+    case authenticationRequired
+    case energyRequired
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid server URL"
+        case .serverError:
+            return "Server error during course generation"
+        case .invalidResponse:
+            return "Could not parse generated course"
+        case .noContent:
+            return "No course content generated"
+        case .authenticationRequired:
+            return "Please sign in to generate courses"
+        case .energyRequired:
+            return "Watch an ad or upgrade to Premium for more courses"
+        }
     }
 }

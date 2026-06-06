@@ -25,7 +25,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.689766559983-qofs54ugjj3vg5p6a37ealq2no2psmoj</string>
+				<string>com.googleusercontent.apps.127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b</string>
 			</array>
 		</dict>
 		<dict>
@@ -42,11 +42,16 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>GIDClientID</key>
-	<string>689766559983-qofs54ugjj3vg5p6a37ealq2no2psmoj.apps.googleusercontent.com</string>
+	<string>127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b.apps.googleusercontent.com</string>
+	<!-- Non-empty values override AppConfig defaults. Prefer Xcode env vars for temporary backend hosts. -->
+	<key>LyoAPIBaseURL</key>
+	<string>https://lyobackendjune-lyo.up.railway.app</string>
+	<key>LyoAPIWebSocketURL</key>
+	<string>wss://lyobackendjune-lyo.up.railway.app/ws</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>google</string>
-		<string>com.googleusercontent.apps.689766559983-qofs54ugjj3vg5p6a37ealq2no2psmoj</string>
+		<string>com.googleusercontent.apps.127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
@@ -63,12 +68,12 @@
 				<key>NSIncludesSubdomains</key>
 				<true/>
 			</dict>
-			<key>192.168.1.167</key>
+			<key>up.railway.app</key>
 			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
 				<key>NSIncludesSubdomains</key>
 				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
 			</dict>
 			<key>lyobackendjune.onrender.com</key>
 			<dict>
@@ -85,10 +90,6 @@
 	<string>Lyo needs microphone access for voice interactions with Leo AI.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lyo needs photo library access to let you choose profile pictures.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Lyo needs speech recognition access to transcribe your voice interactions with Leo AI.</string>
-    <key>NSCalendarUsageDescription</key>
-    <string>Lyo needs calendar access to schedule your study sessions and reminders.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

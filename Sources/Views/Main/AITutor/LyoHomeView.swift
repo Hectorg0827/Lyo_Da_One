@@ -15,90 +15,8 @@ struct LyoHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Chat Area
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        if viewModel.messages.isEmpty {
-                            emptyStateView
-                                .frame(minHeight: UIScreen.main.bounds.height * 0.6)
-                        } else {
-                            LazyVStack(spacing: 16) {
-                                ForEach(viewModel.messages) { message in
-                                    LyoMessageBubbleView(
-                                        message: message,
-                                        onActionTap: { action in
-                                            viewModel.executeAction(action)
-                                        },
-                                        onQuickChipTap: { chip in
-                                            viewModel.inputText = chip
-                                            Task { await viewModel.sendMessage() }
-                                        },
-                                        onCourseStart: { data in
-                                            let payload = CoursePayload(
-                                                id: nil, title: data.title, topic: data.subtext,
-                                                level: data.summary, language: nil, duration: nil,
-                                                objectives: data.modules
-                                            )
-                                            AICommandHandler.shared.executeOpenClassroom(for: payload)
-                                        },
-                                        onCourseStart_A2A: { course in
-                                            viewModel.onCourseStart(course: course)
-                                        },
-                                        onQuizAnswer_A2A: { question, answerIndex in
-                                            viewModel.onQuizAnswer(question: question, answerIndex: answerIndex)
-                                        }
-                                    )
-                                        .id(message.id)
-                                }
-                                
-                                if viewModel.isLoading {
-                                    HStack {
-                                        LyoTypingIndicator()
-                                        Spacer()
-                                    }
-                                    .padding(.leading)
-                                    .id("typingIndicator")
-                                }
-                            }
-                            .padding()
-                        }
-                    }
-                    .onChange(of: viewModel.messages.count) {
-                        if let lastId = viewModel.messages.last?.id {
-                            withAnimation {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
-                    }
-                    .onChange(of: viewModel.isLoading) { _, isLoading in
-                        if isLoading {
-                            withAnimation {
-                                proxy.scrollTo("typingIndicator", anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-                
-                // Input Area
-                ComposerBar(
-                    text: $viewModel.inputText,
-                    attachments: $viewModel.attachments,
-                    isLoading: viewModel.isLoading,
-                    onSend: {
-                        Task {
-                            await viewModel.sendMessage()
-                        }
-                    },
-                    onAddAttachment: {
-                        // Handle attachment
-                    },
-                    onRemoveAttachment: { attachment in
-                        if let index = viewModel.attachments.firstIndex(where: { $0.id == attachment.id }) {
-                            viewModel.attachments.remove(at: index)
-                        }
-                    }
-                )
-                .padding(.bottom, 8)
+                chatArea
+                composerArea
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -118,6 +36,55 @@ struct LyoHomeView: View {
                 }
             }
         }
+    }
+
+    private var chatArea: some View {
+        ScrollView {
+            if viewModel.messages.isEmpty {
+                emptyStateView
+                    .frame(minHeight: UIScreen.main.bounds.height * 0.6)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.messages) { message in
+                        Text(message.content)
+                            .frame(maxWidth: .infinity, alignment: message.isFromUser ? .trailing : .leading)
+                            .padding(12)
+                            .background(message.isFromUser ? Color.blue.opacity(0.12) : Color.gray.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .id(message.id)
+                    }
+
+                    if viewModel.isLoading {
+                        HStack {
+                            LyoTypingIndicator()
+                            Spacer()
+                        }
+                        .padding(.leading)
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+
+    private var composerArea: some View {
+        ComposerBar(
+            text: $viewModel.inputText,
+            attachments: $viewModel.attachments,
+            isLoading: viewModel.isLoading,
+            onSend: {
+                Task {
+                    await viewModel.sendMessage()
+                }
+            },
+            onAddAttachment: {},
+            onRemoveAttachment: { attachment in
+                if let index = viewModel.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                    viewModel.attachments.remove(at: index)
+                }
+            }
+        )
+        .padding(.bottom, 8)
     }
     
     private var emptyStateView: some View {

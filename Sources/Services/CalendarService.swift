@@ -81,24 +81,23 @@ class CalendarService: ObservableObject {
     
     func addStudyPlan(_ plan: CalendarStudyPlan) async -> Int {
         var addedCount = 0
-        
-        // Start from tomorrow if no date specified, or use plan date
-        _ = plan.testDate ?? Date().addingTimeInterval(86400)
-        
-        // If test date is set, schedule backwards. If not, schedule forwards.
-        // For simplicity, let's just schedule them sequentially from tomorrow for now 
-        // unless they have specific dates in the payload (which our backend schema supports but simpler to plan here)
-        
-        let scheduledDate = Date().addingTimeInterval(86400) // Start tomorrow
-        if plan.testDate != nil {
-             // Basic logic: spread sessions before test date
-             // This is complex, so for V1 we'll stick to sequential days
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let sessionCount = plan.sessions.count
+
+        let scheduledStartDate: Date
+        if let testDate = plan.testDate {
+            let daysBefore = max(sessionCount, 1)
+            scheduledStartDate = calendar.date(byAdding: .day, value: -daysBefore, to: calendar.startOfDay(for: testDate)) ?? today.addingTimeInterval(86400)
+        } else {
+            scheduledStartDate = today.addingTimeInterval(86400)
         }
-        
+
         for (index, session) in plan.sessions.enumerated() {
-            // Schedule 1 session per day
-            let sessionDate = scheduledDate.addingTimeInterval(TimeInterval(index * 86400))
-            
+            let dayOffset = index
+            let baseDate = calendar.date(byAdding: .day, value: dayOffset, to: scheduledStartDate) ?? scheduledStartDate.addingTimeInterval(TimeInterval(dayOffset * 86400))
+            let sessionDate = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: baseDate) ?? baseDate
+
             do {
                 let success = try await addStudySession(
                     title: session.title,
@@ -111,7 +110,7 @@ class CalendarService: ObservableObject {
                 print("Error adding session: \(error)")
             }
         }
-        
+
         return addedCount
     }
 }

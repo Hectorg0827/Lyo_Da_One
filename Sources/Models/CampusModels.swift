@@ -201,6 +201,40 @@ struct CampusItem: Identifiable, Codable {
     let maxAttendees: Int?
     let tags: [String]
     let userAttendanceStatus: String?
+
+    init(
+        id: String,
+        type: CampusItemType,
+        title: String,
+        subtitle: String,
+        locationName: String,
+        coordinate: CampusCoordinate,
+        startTime: Date,
+        endTime: Date,
+        roomId: String?,
+        hostName: String,
+        hostAvatarURL: String?,
+        attendeeCount: Int,
+        maxAttendees: Int?,
+        tags: [String],
+        userAttendanceStatus: String? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.title = title
+        self.subtitle = subtitle
+        self.locationName = locationName
+        self.coordinate = coordinate
+        self.startTime = startTime
+        self.endTime = endTime
+        self.roomId = roomId
+        self.hostName = hostName
+        self.hostAvatarURL = hostAvatarURL
+        self.attendeeCount = attendeeCount
+        self.maxAttendees = maxAttendees
+        self.tags = tags
+        self.userAttendanceStatus = userAttendanceStatus
+    }
     
     var isLive: Bool {
         let now = Date()
@@ -448,4 +482,3 @@ enum CampusViewMode: String, Codable, CaseIterable {
         }
     }
 }
-

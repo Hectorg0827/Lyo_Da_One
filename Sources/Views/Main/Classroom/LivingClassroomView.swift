@@ -63,6 +63,62 @@ enum ClassroomBottomTab: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Local Classroom Interaction Models
+
+private struct ClassroomQuickHelp: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let icon: String
+    let accent: Color
+}
+
+private struct ClassroomLocalQuestion: Identifiable {
+    let id = UUID()
+    let question: String
+    let response: String
+    let context: String
+    let timestamp: Date
+}
+
+private struct ClassroomLocalNote: Identifiable {
+    enum Kind {
+        case note
+        case highlight
+        case saved
+
+        var icon: String {
+            switch self {
+            case .note: return "note.text"
+            case .highlight: return "highlighter"
+            case .saved: return "bookmark.fill"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .note: return "Note"
+            case .highlight: return "Highlight"
+            case .saved: return "Saved"
+            }
+        }
+
+        var accent: Color {
+            switch self {
+            case .note: return Color(hexString: "7AB3E0")
+            case .highlight: return Color(hexString: "F59E0B")
+            case .saved: return Color(hexString: "7EC8A0")
+            }
+        }
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let title: String
+    let body: String
+    let timestamp: Date
+}
+
 // MARK: - Session Timer
 
 /// Tracks elapsed time for the live classroom session
@@ -132,19 +188,32 @@ struct LivingClassroomView: View {
     @State private var isBottomExpanded: Bool = false
     @State private var lyoSpeaking: Bool = false
     @State private var showAskSheet: Bool = false
+    @State private var askContextStep: ActiveLessonView.LessonStep? = nil
+    @State private var quickHelp: ClassroomQuickHelp? = nil
+    @State private var localQuestions: [ClassroomLocalQuestion] = []
+    @State private var localNotes: [ClassroomLocalNote] = []
+    @State private var highlightedMomentIds: Set<String> = []
+    @State private var savedMomentIds: Set<String> = []
     @FocusState private var inputFieldFocused: Bool
 
     @State private var narrationWork: DispatchWorkItem? = nil
+    @State private var continueFallbackTask: Task<Void, Never>? = nil
 
     // Sprint 3 — minimalist 4-zone shell (Stage / Pulse / ActionBar / Drawer).
     // Default ON; persisted so power users who flip to expert mode keep it.
     @AppStorage("classroom.minimalMode") private var minimalMode: Bool = true
     @State private var showDrawer: Bool = false
 
+    // Sprint 21 — Cinematic active-lesson layout (TeacherCard + supporting block
+    // + key-term strip + bottom dock). Highest-priority layout; falls back to
+    // `minimalLayout` if disabled.
+    @AppStorage("classroom.activeLessonMode") private var activeLessonMode: Bool = true
+
     // Sprint 10 — debounce Continue. WebSocket sendUserAction is fire-and-
     // forget; without a cooldown a fast double-tap would skip two cards.
     @State private var lastAdvanceAt: Date? = nil
     private let advanceCooldown: TimeInterval = 0.6
+    private let liveContinuationTimeoutNanoseconds: UInt64 = 15_000_000_000
 
     // Design tokens
     private let bgDeep = Color(hexString: "080C14")
@@ -159,7 +228,9 @@ struct LivingClassroomView: View {
             // Full-bleed dark background
             bgDeep.ignoresSafeArea()
 
-            if minimalMode {
+            if activeLessonMode {
+                activeLessonLayout
+            } else if minimalMode {
                 minimalLayout
             } else {
                 expertLayout
@@ -179,6 +250,12 @@ struct LivingClassroomView: View {
                     .zIndex(101)
             }
 
+            if let quickHelp {
+                quickHelpOverlay(quickHelp)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(103)
+            }
+
             // Sprint 18 — Reconnect banner. Surfaces when the WebSocket drops
             // so the user is never left staring at a frozen, blank classroom.
             if !service.isConnected, service.error != nil {
@@ -196,11 +273,12 @@ struct LivingClassroomView: View {
         .navigationBarHidden(true)
         .statusBar(hidden: true)
         .task {
-            service.connect(sessionId: courseId)
+            service.connect(sessionId: courseId, topic: courseTitle)
             sessionTimer.start()
         }
         .onDisappear {
             narrationWork?.cancel()
+            continueFallbackTask?.cancel()
             service.disconnect()
             sessionTimer.stop()
         }
@@ -214,10 +292,15 @@ struct LivingClassroomView: View {
         .onChange(of: service.renderedComponents.count) { _, _ in
             handleNewComponent()
         }
+        .onChange(of: service.sceneRevision) { _, _ in
+            continueFallbackTask?.cancel()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .classroomAdvance)) { _ in
             // Sprint 5 — minimalist Continue button posts .classroomAdvance.
             // Forward to the WebSocket so the backend advances the lesson.
-            service.sendUserAction(actionIntent: "advance", componentId: "classroom_continue")
+            let revision = service.sceneRevision
+            service.sendUserAction(actionIntent: "continue", componentId: "classroom_continue")
+            scheduleContinueFallback(from: revision)
             LyoAnalyticsManager.shared.trackEvent(
                 "classroom_advance_tapped",
                 parameters: [
@@ -259,6 +342,129 @@ struct LivingClassroomView: View {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - SPRINT 3 — MINIMAL 4-ZONE SHELL (Stage / Pulse / ActionBar / Drawer)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// Sprint 21 — Cinematic active-lesson layout.
+    ///
+    /// Premium calm shell, lesson-as-hero. Maps the WebSocket component
+    /// stream into discrete `LessonStep`s and renders one at a time with
+    /// progressive disclosure. Continue advances to the next step locally,
+    /// or — once at the last step — fires the `continue` user action so the
+    /// backend generates the next scene.
+    private var activeLessonLayout: some View {
+        let steps = ActiveLessonAdapter.steps(from: service.renderedComponents)
+        return ActiveLessonView(
+            header: .init(
+                title: courseTitle,
+                subtitle: lessonSubtitle(stepCount: steps.count)
+            ),
+            steps: steps,
+            onAdvance: { step in handleAdvance(step, isLast: step.id == steps.last?.id) },
+            onAskLyo: { step in openAskOverlay(for: step) },
+            onExplainEasier: { step in explainStepEasier(step) },
+            onQuizAnswer: { component, option in
+                service.sendUserAction(
+                    actionIntent: component.actionIntent ?? "submit_answer",
+                    componentId: component.id,
+                    actionData: [
+                        "selected_option_id": option.id,
+                        "selected_option_label": option.label,
+                    ]
+                )
+            },
+            onBack: { dismiss() },
+            onMenu: { withAnimation { showDrawer.toggle() } },
+            onMic: { openAskOverlay(for: nil) },
+            onTools: { withAnimation { showDrawer.toggle() } }
+        )
+        .id(service.sceneRevision)
+    }
+
+    private func lessonSubtitle(stepCount: Int) -> String {
+        // Best-effort subtitle. Once the backend exposes lesson_index /
+        // total_lessons in the scene metadata, this can read those directly.
+        if stepCount > 0 {
+            return "\(stepCount) step\(stepCount == 1 ? "" : "s") in this scene"
+        }
+        return "Live lesson"
+    }
+
+    private func handleAdvance(_ step: ActiveLessonView.LessonStep, isLast: Bool) {
+        // Cooldown so a fast double-tap does not double-advance.
+        let now = Date()
+        if let last = lastAdvanceAt, now.timeIntervalSince(last) < advanceCooldown {
+            return
+        }
+        lastAdvanceAt = now
+
+        if isLast {
+            if service.hasQueuedComponents {
+                if let queuedCTA = service.nextQueuedComponent, queuedCTA.type == .ctaButton {
+                    service.revealNextComponent()
+                    let queuedActionData = queuedCTA.actionPayload?.reduce(into: [String: Any]()) { result, item in
+                        result[item.key] = item.value
+                    }
+
+                    service.sendUserAction(
+                        actionIntent: queuedCTA.actionIntent ?? step.primaryActionIntent ?? "continue",
+                        componentId: queuedCTA.id,
+                        actionData: queuedActionData
+                    )
+                    scheduleContinueFallback(from: service.sceneRevision)
+                    return
+                }
+
+                service.revealNextComponent()
+                return
+            }
+
+            let actionData = step.primaryActionPayload?.reduce(into: [String: Any]()) { result, item in
+                result[item.key] = item.value
+            }
+
+            // Ask the backend for the next scene using the scene-provided CTA
+            // metadata when available.
+            service.sendUserAction(
+                actionIntent: step.primaryActionIntent ?? "continue",
+                componentId: step.primaryActionComponentId ?? "classroom_continue",
+                actionData: actionData
+            )
+            scheduleContinueFallback(from: service.sceneRevision)
+        }
+        // Non-last advances are handled inside ActiveLessonView local state.
+    }
+
+    private func scheduleContinueFallback(from revision: Int) {
+        continueFallbackTask?.cancel()
+        continueFallbackTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: liveContinuationTimeoutNanoseconds)
+            guard !Task.isCancelled else { return }
+            guard service.sceneRevision == revision else { return }
+            guard !service.hasQueuedComponents else { return }
+
+            guard !service.isConnected || service.error != nil else {
+                Log.classroom.warning(
+                    "Classroom live continuation still pending; suppressing local fallback while WebSocket is connected"
+                )
+                LyoAnalyticsManager.shared.trackEvent(
+                    "classroom_live_continuation_pending",
+                    parameters: [
+                        "courseId": courseId,
+                        "courseTitle": courseTitle,
+                        "revision": revision,
+                    ])
+                return
+            }
+
+            service.showLocalFallbackScene(topic: courseTitle)
+            LyoAnalyticsManager.shared.trackEvent(
+                "classroom_local_fallback_scene_shown",
+                parameters: [
+                    "courseId": courseId,
+                    "courseTitle": courseTitle,
+                    "revision": revision,
+                ])
+        }
+    }
 
     /// New minimalist layout: one focused stage + slim pulse strip + 3-button
     /// action bar. All non-essential chrome (agent rail, tools, tabs, transcript)
@@ -385,10 +591,7 @@ struct LivingClassroomView: View {
             .accessibilityHint(isAdvanceCoolingDown ? "Advancing\u{2026}" : "Advance to the next card")
 
             Button {
-                HapticManager.shared.playMediumImpact()
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    showAskSheet = true
-                }
+                openAskOverlay(for: nil)
             } label: {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 14, weight: .semibold))
@@ -401,7 +604,7 @@ struct LivingClassroomView: View {
                             .stroke(borderColor, lineWidth: 1)
                     )
             }
-            .accessibilityLabel("Ask Lio")
+            .accessibilityLabel("Ask Lyo")
 
             Button {
                 HapticManager.shared.playLightImpact()
@@ -456,9 +659,23 @@ struct LivingClassroomView: View {
                         .padding(.horizontal, 14)
 
                     HStack(spacing: 10) {
-                        drawerToolButton(icon: "pencil.tip", label: "Annotate")
-                        drawerToolButton(icon: "highlighter", label: "Highlight")
-                        drawerToolButton(icon: "bookmark.fill", label: "Save")
+                        drawerToolButton(icon: "pencil.tip", label: "Annotate") {
+                            createAnnotationFromCurrentMoment()
+                        }
+                        drawerToolButton(
+                            icon: "highlighter",
+                            label: "Highlight",
+                            isActive: isCurrentMomentHighlighted
+                        ) {
+                            highlightCurrentMoment()
+                        }
+                        drawerToolButton(
+                            icon: "bookmark.fill",
+                            label: "Save",
+                            isActive: isCurrentMomentSaved
+                        ) {
+                            saveCurrentMoment()
+                        }
                         drawerTranscriptButton {
                             showDrawer = false
                             showTranscript = true
@@ -487,9 +704,15 @@ struct LivingClassroomView: View {
         }
     }
 
-    private func drawerToolButton(icon: String, label: String) -> some View {
+    private func drawerToolButton(
+        icon: String,
+        label: String,
+        isActive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button {
             HapticManager.shared.playLightImpact()
+            action()
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: icon)
@@ -497,16 +720,17 @@ struct LivingClassroomView: View {
                 Text(label)
                     .font(.system(size: 10, weight: .medium))
             }
-            .foregroundStyle(.white.opacity(0.75))
+            .foregroundStyle(isActive ? .white : .white.opacity(0.75))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(bgSurface)
+            .background(isActive ? accentBlue.opacity(0.8) : bgSurface)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(borderColor, lineWidth: 1)
+                    .stroke(isActive ? accentBlue.opacity(0.7) : borderColor, lineWidth: 1)
             )
         }
+        .accessibilityLabel(label)
     }
 
     private func drawerTranscriptButton(action: @escaping () -> Void) -> some View {
@@ -1042,6 +1266,7 @@ struct LivingClassroomView: View {
     private func toolbarIcon(_ systemName: String, tooltip: String) -> some View {
         Button {
             HapticManager.shared.playLightImpact()
+            handleToolbarAction(tooltip)
         } label: {
             Image(systemName: systemName)
                 .font(.system(size: 14, weight: .medium))
@@ -1129,6 +1354,8 @@ struct LivingClassroomView: View {
             // Overflow
             Button {
                 HapticManager.shared.playLightImpact()
+                showDrawer = false
+                showTranscript = true
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 12, weight: .bold))
@@ -1146,7 +1373,7 @@ struct LivingClassroomView: View {
         case .outline:
             outlineContent
         case .materials:
-            placeholderContent("Materials will appear here", icon: "book.closed")
+            materialsContent
         case .notes:
             notesContent
         case .quiz:
@@ -1159,7 +1386,7 @@ struct LivingClassroomView: View {
     private var outlineContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
-                if let scene = service.currentScene {
+                if service.currentScene != nil {
                     ForEach(Array(service.renderedComponents.enumerated()), id: \.element.id) {
                         index, component in
                         HStack(spacing: 8) {
@@ -1194,15 +1421,47 @@ struct LivingClassroomView: View {
         }
     }
 
+    private var materialsContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                drawerInfoRow(
+                    icon: "book.closed",
+                    title: "Current lesson",
+                    body: courseTitle
+                )
+
+                drawerInfoRow(
+                    icon: "text.quote",
+                    title: "Current focus",
+                    body: currentMomentText
+                )
+
+                HStack(spacing: 8) {
+                    compactDrawerAction(title: "Study Notes", icon: "note.text") {
+                        createAnnotationFromCurrentMoment()
+                    }
+                    compactDrawerAction(title: "Quick Check", icon: "checkmark.square") {
+                        startQuickCheck()
+                    }
+                }
+            }
+            .padding(12)
+        }
+    }
+
     private var notesContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
                 let noteComponents = service.renderedComponents.filter {
                     $0.type == .textBlock || $0.type == .codeBlock
                 }
-                if noteComponents.isEmpty {
+                if localNotes.isEmpty && noteComponents.isEmpty {
                     placeholderContent("Notes & code blocks will appear here", icon: "note.text")
                 } else {
+                    ForEach(localNotes) { note in
+                        localNoteRow(note)
+                    }
+
                     ForEach(noteComponents) { comp in
                         Text(comp.content)
                             .font(.system(size: 12))
@@ -1222,8 +1481,14 @@ struct LivingClassroomView: View {
             LazyVStack(spacing: 8) {
                 let quizComponents = service.renderedComponents.filter { $0.type == .quizCard }
                 if quizComponents.isEmpty {
-                    placeholderContent(
-                        "Quizzes will appear as the lesson progresses", icon: "checkmark.square")
+                    VStack(spacing: 10) {
+                        placeholderContent(
+                            "No quiz in this scene yet", icon: "checkmark.square")
+
+                        compactDrawerAction(title: "Create Quick Check", icon: "sparkles") {
+                            startQuickCheck()
+                        }
+                    }
                 } else {
                     ForEach(quizComponents) { comp in
                         Text(comp.question ?? comp.content)
@@ -1245,10 +1510,14 @@ struct LivingClassroomView: View {
                 let messages = service.renderedComponents.filter {
                     $0.type == .teacherMessage || $0.type == .studentPrompt
                 }
-                if messages.isEmpty {
+                if messages.isEmpty && localQuestions.isEmpty {
                     placeholderContent(
                         "Discussion threads will appear here", icon: "bubble.left.and.bubble.right")
                 } else {
+                    ForEach(localQuestions) { item in
+                        localQuestionRow(item)
+                    }
+
                     ForEach(messages) { msg in
                         HStack(alignment: .top, spacing: 8) {
                             Circle()
@@ -1288,15 +1557,142 @@ struct LivingClassroomView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func drawerInfoRow(icon: String, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(accentBlue)
+                .frame(width: 24, height: 24)
+                .background(accentBlue.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.85))
+                Text(body)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .lineLimit(4)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(borderColor, lineWidth: 1))
+    }
+
+    private func compactDrawerAction(
+        title: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            HapticManager.shared.playLightImpact()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(accentBlue.opacity(0.75))
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+
+    private func localNoteRow(_ note: ClassroomLocalNote) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: note.kind.icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(note.kind.accent)
+                .frame(width: 24, height: 24)
+                .background(note.kind.accent.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(note.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.86))
+                    Text(note.kind.label)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(note.kind.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(note.kind.accent.opacity(0.14))
+                        .clipShape(Capsule())
+                }
+
+                Text(note.body)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.66))
+                    .lineLimit(4)
+
+                Text(shortTime(note.timestamp))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func localQuestionRow(_ item: ClassroomLocalQuestion) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Circle()
+                    .fill(Color(hexString: "7EC8A0").opacity(0.7))
+                    .frame(width: 20, height: 20)
+                    .overlay(
+                        Text("U")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                Text(item.question)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Circle()
+                    .fill(Color(hexString: "E09545").opacity(0.72))
+                    .frame(width: 20, height: 20)
+                    .overlay(
+                        Text("L")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                Text(item.response)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(5)
+            }
+        }
+        .padding(10)
+        .background(bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
     /// Bottom action bar: Ask, Annotate, Compare, Save
     private var bottomActionBar: some View {
         HStack(spacing: 12) {
             // Ask button (primary)
             Button {
-                HapticManager.shared.playMediumImpact()
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    showAskSheet = true
-                }
+                openAskOverlay(for: nil)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "mic.fill")
@@ -1317,9 +1713,15 @@ struct LivingClassroomView: View {
                 .shadow(color: accentBlue.opacity(0.3), radius: 6, y: 2)
             }
 
-            actionButton(icon: "pencil.tip", label: "Annotate")
-            actionButton(icon: "rectangle.on.rectangle", label: "Compare")
-            actionButton(icon: "bookmark.fill", label: "Save")
+            actionButton(icon: "pencil.tip", label: "Annotate") {
+                createAnnotationFromCurrentMoment()
+            }
+            actionButton(icon: "rectangle.on.rectangle", label: "Compare") {
+                askForComparison()
+            }
+            actionButton(icon: "bookmark.fill", label: "Save") {
+                saveCurrentMoment()
+            }
 
             Spacer()
         }
@@ -1327,9 +1729,14 @@ struct LivingClassroomView: View {
         .padding(.vertical, 8)
     }
 
-    private func actionButton(icon: String, label: String) -> some View {
+    private func actionButton(
+        icon: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button {
             HapticManager.shared.playLightImpact()
+            action()
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
@@ -1344,6 +1751,7 @@ struct LivingClassroomView: View {
             .clipShape(Capsule())
             .overlay(Capsule().stroke(borderColor, lineWidth: 1))
         }
+        .accessibilityLabel(label)
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1398,6 +1806,101 @@ struct LivingClassroomView: View {
     // MARK: - ASK OVERLAY
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+    private func quickHelpOverlay(_ help: ClassroomQuickHelp) -> some View {
+        VStack {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: help.icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(help.accent)
+                        .clipShape(Circle())
+
+                    Text(help.title)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            quickHelp = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .frame(width: 24, height: 24)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                }
+
+                Text(help.message)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.84))
+                    .lineLimit(8)
+
+                HStack(spacing: 8) {
+                    Button {
+                        openAskOverlay(for: nil)
+                    } label: {
+                        Label("Ask follow-up", systemImage: "bubble.left")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(accentBlue.opacity(0.8))
+                            .clipShape(Capsule())
+                    }
+
+                    Button {
+                        startQuickCheck()
+                    } label: {
+                        Label("Quiz me", systemImage: "checkmark.square")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.78))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(bgPanel.opacity(0.96))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(help.accent.opacity(0.35), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+            .padding(.horizontal, 18)
+            .padding(.bottom, activeLessonMode ? 98 : 80)
+        }
+    }
+
+    private func askSuggestionButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button {
+            HapticManager.shared.playSelection()
+            action()
+        } label: {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.78))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var askOverlay: some View {
         ZStack {
             Color.black.opacity(0.5)
@@ -1411,11 +1914,21 @@ struct LivingClassroomView: View {
             VStack(spacing: 16) {
                 // Ask header
                 HStack {
-                    Text("Ask the Classroom")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(askContextStep == nil ? "Ask the Classroom" : "Ask about this step")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+
+                        if let context = askContextStep?.teachingText {
+                            Text(context)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.5))
+                                .lineLimit(2)
+                        }
+                    }
                     Spacer()
                     Button {
+                        userInput = ""
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             showAskSheet = false
                         }
@@ -1429,14 +1942,37 @@ struct LivingClassroomView: View {
                     }
                 }
 
+                HStack(spacing: 8) {
+                    askSuggestionButton("Explain this") {
+                        if let step = askContextStep {
+                            explainStepEasier(step)
+                            showAskSheet = false
+                        } else {
+                            explainCurrentMoment()
+                        }
+                    }
+                    askSuggestionButton("Quiz me") {
+                        startQuickCheck()
+                        showAskSheet = false
+                    }
+                    askSuggestionButton("Example") {
+                        userInput = "Give me a concrete example for this."
+                    }
+                }
+
                 // Text input
                 HStack(spacing: 10) {
                     Image(systemName: "pencil.line")
                         .font(.system(size: 14))
                         .foregroundStyle(.white.opacity(0.4))
 
-                    TextField("Type your question…", text: $userInput)
-                        .font(.system(size: 14))
+                    TextField(
+                        askContextStep == nil
+                            ? "Type your question…"
+                            : "Ask Lyo about this moment…",
+                        text: $userInput
+                    )
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
                         .foregroundStyle(.white)
                         .focused($inputFieldFocused)
                         .onSubmit { sendMessage() }
@@ -1574,17 +2110,354 @@ struct LivingClassroomView: View {
     // MARK: - HELPERS
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+    private var latestLessonStep: ActiveLessonView.LessonStep? {
+        ActiveLessonAdapter.steps(from: service.renderedComponents).last
+    }
+
+    private var currentMomentId: String {
+        latestLessonStep?.id
+            ?? service.renderedComponents.last(where: { $0.type == .teacherMessage })?.id
+            ?? service.currentScene?.id
+            ?? courseId
+    }
+
+    private var currentMomentText: String {
+        if let text = latestLessonStep?.teachingText, !text.isEmpty {
+            return compactText(text, limit: 220)
+        }
+
+        if let text = service.renderedComponents.last(where: { $0.type == .teacherMessage })?.content,
+           !text.isEmpty {
+            return compactText(text, limit: 220)
+        }
+
+        return "We are working on \(courseTitle)."
+    }
+
+    private var isCurrentMomentHighlighted: Bool {
+        highlightedMomentIds.contains(currentMomentId)
+    }
+
+    private var isCurrentMomentSaved: Bool {
+        savedMomentIds.contains(currentMomentId)
+    }
+
+    private func openAskOverlay(for step: ActiveLessonView.LessonStep?) {
+        HapticManager.shared.playMediumImpact()
+        askContextStep = step
+        userInput = ""
+        quickHelp = nil
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            showAskSheet = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            inputFieldFocused = true
+        }
+    }
+
+    private func explainStepEasier(_ step: ActiveLessonView.LessonStep) {
+        HapticManager.shared.playSelection()
+        let message = makeSimpleExplanation(from: step.teachingText, keyTerm: step.keyTerm)
+        quickHelp = ClassroomQuickHelp(
+            title: "Simpler explanation",
+            message: message,
+            icon: "wand.and.stars",
+            accent: Color(hexString: "8B5CF6")
+        )
+        localQuestions.insert(
+            ClassroomLocalQuestion(
+                question: "Explain this easier",
+                response: message,
+                context: step.teachingText,
+                timestamp: Date()
+            ),
+            at: 0
+        )
+        service.sendUserAction(
+            actionIntent: "explain_easier",
+            componentId: step.id,
+            actionData: [
+                "message": "Explain this more simply.",
+                "context": step.teachingText,
+                "course_title": courseTitle,
+            ]
+        )
+        LyoAnalyticsManager.shared.trackEvent(
+            "classroom_explain_easier_tapped",
+            parameters: ["courseId": courseId, "stepId": step.id]
+        )
+    }
+
+    private func explainCurrentMoment() {
+        if let step = latestLessonStep {
+            explainStepEasier(step)
+            return
+        }
+
+        let message = makeSimpleExplanation(from: currentMomentText, keyTerm: nil)
+        quickHelp = ClassroomQuickHelp(
+            title: "Simpler explanation",
+            message: message,
+            icon: "wand.and.stars",
+            accent: Color(hexString: "8B5CF6")
+        )
+        service.sendUserAction(
+            actionIntent: "explain_easier",
+            componentId: currentMomentId,
+            actionData: ["message": "Explain this more simply.", "context": currentMomentText]
+        )
+    }
+
+    private func askForComparison() {
+        let response = "Compare it this way: one side is the new idea, the other side is the mistake it prevents. For this moment, the useful contrast is: \(currentMomentText) The mistake to avoid is treating recognition as understanding. Test yourself, then correct the weak part."
+        quickHelp = ClassroomQuickHelp(
+            title: "Comparison",
+            message: response,
+            icon: "rectangle.on.rectangle",
+            accent: Color(hexString: "7AB3E0")
+        )
+        localQuestions.insert(
+            ClassroomLocalQuestion(
+                question: "Compare this with the common mistake",
+                response: response,
+                context: currentMomentText,
+                timestamp: Date()
+            ),
+            at: 0
+        )
+        service.sendUserAction(
+            actionIntent: "compare_concepts",
+            componentId: currentMomentId,
+            actionData: ["message": "Compare the current idea with the common mistake.", "context": currentMomentText]
+        )
+    }
+
+    private func createAnnotationFromCurrentMoment() {
+        let note = ClassroomLocalNote(
+            kind: .note,
+            title: "Classroom note",
+            body: currentMomentText,
+            timestamp: Date()
+        )
+        localNotes.insert(note, at: 0)
+        selectedBottomTab = .notes
+        isBottomExpanded = true
+        quickHelp = ClassroomQuickHelp(
+            title: "Note added",
+            message: "Saved this classroom moment to Notes so you can review it from the drawer.",
+            icon: "note.text",
+            accent: Color(hexString: "7AB3E0")
+        )
+        LyoAnalyticsManager.shared.trackEvent(
+            "classroom_note_created",
+            parameters: ["courseId": courseId, "momentId": currentMomentId]
+        )
+    }
+
+    private func highlightCurrentMoment() {
+        let id = currentMomentId
+        guard !highlightedMomentIds.contains(id) else {
+            quickHelp = ClassroomQuickHelp(
+                title: "Already highlighted",
+                message: "This moment is already marked as important in your Notes tab.",
+                icon: "highlighter",
+                accent: Color(hexString: "F59E0B")
+            )
+            return
+        }
+
+        highlightedMomentIds.insert(id)
+        localNotes.insert(
+            ClassroomLocalNote(
+                kind: .highlight,
+                title: "Key highlight",
+                body: currentMomentText,
+                timestamp: Date()
+            ),
+            at: 0
+        )
+        selectedBottomTab = .notes
+        isBottomExpanded = true
+        quickHelp = ClassroomQuickHelp(
+            title: "Highlighted",
+            message: "Marked this as a key idea. It now appears in Notes with a highlight label.",
+            icon: "highlighter",
+            accent: Color(hexString: "F59E0B")
+        )
+    }
+
+    private func saveCurrentMoment() {
+        let id = currentMomentId
+        savedMomentIds.insert(id)
+        uiStackStore.upsertCourse(
+            courseId: courseId,
+            title: courseTitle,
+            subtitle: "Saved from AI Classroom",
+            progress: min(0.95, max(0.1, Double(max(service.sceneRevision, 1)) / 10.0))
+        )
+
+        if !localNotes.contains(where: { $0.kind.label == ClassroomLocalNote.Kind.saved.label && $0.body == currentMomentText }) {
+            localNotes.insert(
+                ClassroomLocalNote(
+                    kind: .saved,
+                    title: "Saved moment",
+                    body: currentMomentText,
+                    timestamp: Date()
+                ),
+                at: 0
+            )
+        }
+
+        quickHelp = ClassroomQuickHelp(
+            title: "Saved to your stack",
+            message: "This classroom and the current moment were saved so you can resume and review later.",
+            icon: "bookmark.fill",
+            accent: Color(hexString: "7EC8A0")
+        )
+        LyoAnalyticsManager.shared.trackEvent(
+            "classroom_moment_saved",
+            parameters: ["courseId": courseId, "momentId": id]
+        )
+    }
+
+    private func startQuickCheck() {
+        quickHelp = nil
+        showDrawer = false
+        showAskSheet = false
+        service.sendUserAction(
+            actionIntent: "create_quiz",
+            componentId: currentMomentId,
+            actionData: [
+                "mode": "quick_check",
+                "topic": courseTitle,
+                "context": currentMomentText,
+            ]
+        )
+        service.showLocalQuickCheck(topic: courseTitle, focusText: currentMomentText)
+        LyoAnalyticsManager.shared.trackEvent(
+            "classroom_quick_check_started",
+            parameters: ["courseId": courseId, "momentId": currentMomentId]
+        )
+    }
+
+    private func handleToolbarAction(_ tooltip: String) {
+        switch tooltip {
+        case "Annotate", "Edit":
+            createAnnotationFromCurrentMoment()
+        case "Eraser":
+            highlightedMomentIds.removeAll()
+            quickHelp = ClassroomQuickHelp(
+                title: "Highlights cleared",
+                message: "Current highlight marks were cleared. Your saved notes stay in the Notes tab.",
+                icon: "eraser",
+                accent: Color(hexString: "7AB3E0")
+            )
+        case "Highlight":
+            highlightCurrentMoment()
+        case "Check":
+            startQuickCheck()
+        case "Copy":
+            showTranscript = true
+        case "Audio":
+            openAskOverlay(for: nil)
+        default:
+            break
+        }
+    }
+
     private func sendMessage() {
         let trimmed = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         HapticManager.shared.playMessageSent()
-        service.sendUserAction(
-            actionIntent: "user_message",
-            componentId: "input",
-            actionData: ["message": trimmed]
+
+        let context = askContextStep?.teachingText ?? currentMomentText
+        let contextId = askContextStep?.id ?? currentMomentId
+        let response = makeLocalQuestionResponse(question: trimmed, context: context)
+
+        localQuestions.insert(
+            ClassroomLocalQuestion(
+                question: trimmed,
+                response: response,
+                context: context,
+                timestamp: Date()
+            ),
+            at: 0
         )
+        selectedBottomTab = .discussion
+
+        service.sendUserAction(
+            actionIntent: "ask_question",
+            componentId: contextId,
+            actionData: [
+                "message": trimmed,
+                "context": context,
+                "course_title": courseTitle,
+            ]
+        )
+        uiStackStore.upsertTutor(
+            courseId: courseId,
+            lessonId: contextId,
+            courseTitle: courseTitle,
+            lessonTitle: "AI Classroom",
+            lastQuestion: trimmed
+        )
+        quickHelp = ClassroomQuickHelp(
+            title: "Lyo answered",
+            message: response,
+            icon: "bubble.left.and.bubble.right",
+            accent: accentBlue
+        )
+        LyoAnalyticsManager.shared.trackEvent(
+            "classroom_ask_lyo_sent",
+            parameters: ["courseId": courseId, "contextId": contextId]
+        )
+
         userInput = ""
+        askContextStep = nil
         inputFieldFocused = false
+    }
+
+    private func makeLocalQuestionResponse(question: String, context: String) -> String {
+        let lower = question.lowercased()
+        if lower.contains("example") {
+            return "Concrete example: take the idea from this moment and use it in one small task right now. For this lesson: \(context) Then say it back in your own words and check what you missed."
+        }
+        if lower.contains("quiz") || lower.contains("test") || lower.contains("practice") {
+            return "Yes. I can turn this moment into a quick check. The best first question should test whether you can explain the idea without looking, not just recognize the wording."
+        }
+        if lower.contains("why") {
+            return "Why it matters: \(context) This matters because the goal is transfer. You want to use the idea later, under pressure, without needing the original notes in front of you."
+        }
+        return "Short answer: \(context) The useful move is to restate it in your own words, test yourself once, and correct the part that feels fuzzy."
+    }
+
+    private func makeSimpleExplanation(
+        from text: String,
+        keyTerm: ActiveLessonView.LessonStep.KeyTerm?
+    ) -> String {
+        var response = "Simple version: \(compactText(text, limit: 180))"
+        if let keyTerm {
+            response += " Key idea: \(keyTerm.term) means \(keyTerm.definition)"
+        }
+        response += " Try this now: say it back in one plain sentence. If you get stuck, that stuck point is exactly what to practice next."
+        return response
+    }
+
+    private func compactText(_ text: String, limit: Int) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > limit else { return collapsed }
+        let index = collapsed.index(collapsed.startIndex, offsetBy: limit)
+        return String(collapsed[..<index]).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+
+    private func shortTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     private func handleNewComponent() {
@@ -1626,7 +2499,12 @@ struct LivingClassroomView: View {
         }
         lastAdvanceAt = Date()
         HapticManager.shared.playMediumImpact()
-        NotificationCenter.default.post(name: .classroomAdvance, object: nil)
+
+        if service.hasQueuedComponents {
+            service.revealNextComponent()
+        } else {
+            NotificationCenter.default.post(name: .classroomAdvance, object: nil)
+        }
     }
 
     private func agentForComponent(_ component: SDUIComponent) -> ClassroomAgent {
@@ -1692,49 +2570,88 @@ struct WhiteboardComponentRenderer: View {
         case .textBlock: textBlockView
         case .codeBlock: codeBlockView
         case .progressBar: progressBarView
+        case .lessonBlock: lessonBlockView
         default: fallbackView
         }
     }
 
-    // Teacher message — handwritten note feel on whiteboard
+    /// Pass-through to the rich BlockRendererView for diagrams, math, charts,
+    /// flashcards, callouts, hooks, and the rest of the LiveLessonBlock palette.
+    @ViewBuilder
+    private var lessonBlockView: some View {
+        if let block = component.lessonBlock {
+            BlockRendererView(
+                block: block,
+                onQuizAnswer: { idx in
+                    onAction?(
+                        "submit_answer",
+                        component.id,
+                        ["selected_index": idx]
+                    )
+                },
+                onAction: { actionString in
+                    onAction?("ask_question", component.id, ["text": actionString])
+                }
+            )
+        } else {
+            fallbackView
+        }
+    }
+
+    // Teacher message — Premium glassmorphic note
     private var teacherMessageView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                // Lyo indicator dot
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hexString: "8B5CF6"), Color(hexString: "6366F1")],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
+                // Lyo indicator dot with glow
+                ZStack {
+                    Circle()
+                        .fill(Color(hexString: "8B5CF6").opacity(0.3))
+                        .frame(width: 32, height: 32)
+                        .blur(radius: 4)
+
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hexString: "8B5CF6"), Color(hexString: "6366F1")],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 24, height: 24)
-                    .overlay(
-                        Text("L")
-                            .font(.system(size: 11, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-                    )
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Text("L")
+                                .font(.system(size: 11, weight: .black, design: .rounded))
+                                .foregroundStyle(.white)
+                        )
+                }
 
                 Text("Lyo")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hexString: "7C3AED"))
             }
 
             Text(component.content)
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(textDark)
-                .lineSpacing(4)
+                .lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(14)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(hexString: "F5F3FF"))
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .background(Color(hexString: "F5F3FF").opacity(0.85))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(hexString: "DDD6FE"), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.8), Color.white.opacity(0.2)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 )
         )
+        .shadow(color: Color(hexString: "8B5CF6").opacity(0.15), radius: 10, y: 5)
     }
 
     // Student prompt
@@ -1742,39 +2659,52 @@ struct WhiteboardComponentRenderer: View {
         HStack(alignment: .top, spacing: 10) {
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 Text(component.studentName ?? "You")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hexString: "059669"))
 
                 Text(component.content)
-                    .font(.system(size: 14))
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(textDark)
                     .multilineTextAlignment(.trailing)
             }
-            .padding(12)
+            .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(hexString: "ECFDF5"))
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+                    .background(Color(hexString: "ECFDF5").opacity(0.85))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(hexString: "A7F3D0"), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.8), Color.white.opacity(0.2)],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
                     )
             )
+            .shadow(color: Color(hexString: "059669").opacity(0.1), radius: 8, y: 4)
         }
     }
 
     // Quiz card
     private var quizCardView: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             // Question
-            HStack(spacing: 8) {
-                Image(systemName: "questionmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color(hexString: "F59E0B"))
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color(hexString: "F59E0B").opacity(0.2))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "questionmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color(hexString: "D97706"))
+                }
 
                 Text(component.question ?? component.content)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(textDark)
             }
 
@@ -1784,19 +2714,21 @@ struct WhiteboardComponentRenderer: View {
                     let isSelected = quizSelections[component.id] == option.id
 
                     Button {
-                        quizSelections[component.id] = option.id
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                            quizSelections[component.id] = option.id
+                        }
                         HapticManager.shared.playQuizSelection()
                         onAction?(
-                            "quiz_answer", component.id,
+                            "submit_answer", component.id,
                             [
                                 "selected_option_id": option.id,
                                 "selected_option_label": option.label,
                             ])
                     } label: {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 12) {
                             Circle()
                                 .fill(isSelected ? accentBlue : Color.clear)
-                                .frame(width: 18, height: 18)
+                                .frame(width: 22, height: 22)
                                 .overlay(
                                     Circle().stroke(
                                         isSelected ? accentBlue : Color(hexString: "D1D5DB"),
@@ -1807,40 +2739,50 @@ struct WhiteboardComponentRenderer: View {
                                         ? Image(systemName: "checkmark")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(.white)
+                                            .scaleEffect(isSelected ? 1 : 0)
                                         : nil
                                 )
 
                             Text(option.label)
-                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                .font(.system(size: 15, weight: isSelected ? .bold : .medium, design: .rounded))
                                 .foregroundStyle(isSelected ? accentBlue : textMedium)
 
                             Spacer()
                         }
-                        .padding(10)
+                        .padding(14)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(isSelected ? accentBlue.opacity(0.06) : cardBg)
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(isSelected ? accentBlue.opacity(0.08) : cardBg)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 12)
                                         .stroke(
-                                            isSelected ? accentBlue.opacity(0.3) : cardBorder,
-                                            lineWidth: 1)
+                                            isSelected ? accentBlue.opacity(0.4) : cardBorder,
+                                            lineWidth: isSelected ? 2 : 1)
                                 )
                         )
+                        .scaleEffect(isSelected ? 1.02 : 1.0)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(14)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(hexString: "FFFBEB"))
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .background(Color(hexString: "FFFBEB").opacity(0.85))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(hexString: "FDE68A"), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.9), Color.white.opacity(0.3)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 )
         )
+        .shadow(color: Color(hexString: "F59E0B").opacity(0.1), radius: 10, y: 5)
     }
 
     // CTA button
@@ -1852,24 +2794,29 @@ struct WhiteboardComponentRenderer: View {
             HStack(spacing: 8) {
                 if let intent = component.actionIntent, intent.contains("next") {
                     Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 16, weight: .bold))
                 }
 
                 Text(component.content)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
             .background(
                 LinearGradient(
-                    colors: [accentBlue, Color(hexString: "6366F1")],
-                    startPoint: .leading, endPoint: .trailing
+                    colors: [Color(hexString: "4F46E5"), Color(hexString: "7C3AED")],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .shadow(color: accentBlue.opacity(0.25), radius: 6, y: 3)
+            .clipShape(Capsule())
+            .shadow(color: Color(hexString: "4F46E5").opacity(0.4), radius: 12, y: 6)
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
         }
+        .buttonStyle(PlainButtonStyle())
     }
 
     // Text block

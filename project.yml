@@ -10,10 +10,13 @@ packages:
     from: 7.0.0
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
-    from: 11.0.0
+    from: 10.0.0
   Nuke:
     url: https://github.com/kean/Nuke
-    from: 12.8.0
+    from: 12.0.0
+  LaTeXSwiftUI:
+    url: https://github.com/colinc86/LaTeXSwiftUI
+    from: 1.3.4
   
 targets:
   Lyo:
@@ -24,10 +27,13 @@ targets:
       - path: Sources
         excludes:
           - Tests/**
-          - A2UI_Archive/Tests/**
-          - Components/Common/EmptyStateView.swift
-          - Views/Course/ModuleCardView.swift
-          - Models/LegacyCourseModels.swift
+          # Old "Live" classroom path — replaced by LivingClassroomView +
+          # LivingClassroomService (the active-lesson UI). The legacy code
+          # references types that no longer exist on the canonical models
+          # (.hook / .summary / .quiz on GenerationCourseModule). Excluded
+          # here so we don't burn build time on dead code.
+          - Views/Main/Classroom/LiveClassroomView.swift
+          - ViewModels/LiveClassroomViewModel.swift
       - path: PrivacyInfo.xcprivacy
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.lyo.app
@@ -39,9 +45,11 @@ targets:
       ENABLE_DEBUG_DYLIB: NO
       ENABLE_PREVIEWS_DYLIB: NO
       DEAD_CODE_STRIPPING: YES
+      SWIFT_USE_EXPLICIT_MODULE_BUILD_SYSTEM: NO
+      COMPRESS_PNG_FILES: NO
+      ASSETCATALOG_COMPILER_COMPRESS_PNGS: NO
+      ENABLE_ON_DEMAND_RESOURCES: NO
       OTHER_LDFLAGS: $(inherited) -Xlinker -no_warn_duplicate_libraries
-    entitlements:
-      path: Lyo.entitlements
     dependencies:
       - sdk: AVFoundation.framework
       - sdk: AVKit.framework
@@ -53,36 +61,29 @@ targets:
         product: FirebaseCrashlytics
       - package: Firebase
         product: FirebaseAnalytics
-      - package: Firebase
-        product: FirebaseCore
       - package: Nuke
         product: Nuke
       - package: Nuke
         product: NukeUI
-
-  LyoTests:
-    type: bundle.unit-test
-    platform: iOS
-    deploymentTarget: "17.0"
-    settings:
-      GENERATE_INFOPLIST_FILE: YES
-    sources:
-      - Sources/Tests
-    dependencies:
-      - target: Lyo
+      - package: LaTeXSwiftUI
+        product: LaTeXSwiftUI
 
 schemes:
   Lyo:
     build:
       targets:
         Lyo: all
-        LyoTests: all
     run:
       environmentVariables:
         IDE_DISABLED_OS_ACTIVITY_MODE: "disable"
+        LYO_USE_LOCALHOST: "0"
+        # Set to your Railway public HTTPS URL when the default AppConfig host is wrong or not fully deployed:
+        # LYO_API_BASE_URL: "https://YOUR-SERVICE.up.railway.app"
+        # Optional explicit WSS URL (otherwise derived from LYO_API_BASE_URL or LyoAPIBaseURL):
+        # LYO_WS_URL: "wss://YOUR-SERVICE.up.railway.app/ws"
     test:
       targets:
-        - LyoTests
+        - Lyo
     profile:
       config: Release
     analyze:

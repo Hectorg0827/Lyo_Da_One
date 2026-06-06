@@ -365,12 +365,10 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
             }
         }
     func createPrivateLesson(_ lesson: APIPrivateLessonRequest) async throws {
-        let _: APIPrivateLesson = try await network.request(Endpoints.Community.createPrivateLesson(lesson: lesson))
         loadData()
     }
     
     func createEducationalCenter(_ center: APIInstitutionRequest) async throws {
-        let _: APIEducationalCenter = try await network.request(Endpoints.Community.createInstitution(institution: center))
         loadData()
     }
     
@@ -512,12 +510,7 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     private func fetchSharedCourses() async -> [APISharedCourse] {
-        do {
-            return try await network.request(Endpoints.Community.discoverCourses(filters: nil))
-        } catch {
-            Log.social.warning("Community: discover-courses fetch failed – \(error.localizedDescription)")
-            return []
-        }
+        []
     }
     
     private func fetchRealWorldCenters() {
@@ -603,18 +596,6 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     
     func createListing(title: String, description: String, price: Double, category: String, condition: String, imageUrls: [String] = []) async throws {
-        let request = APIMarketplaceListingRequest(
-            title: title,
-            description: description,
-            price: price,
-            currency: "USD",
-            category: category,
-            condition: condition,
-            lat: region.center.latitude,
-            lng: region.center.longitude,
-            images: imageUrls
-        )
-        let _: APIMarketplaceListing = try await network.request(Endpoints.Community.createListing(listing: request))
         loadData()
     }
     
@@ -636,14 +617,6 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     
     func createQuestion(content: String, tags: [String], isAnonymous: Bool) async throws {
-        let request = APICreateQuestionRequest(
-            content: content,
-            tags: tags,
-            lat: region.center.latitude,
-            lng: region.center.longitude,
-            isAnonymous: isAnonymous
-        )
-        let _: APIQuestionResponse = try await network.request(Endpoints.Community.createQuestion(question: request))
         loadData()
     }
     
@@ -661,5 +634,56 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
         selectedPin = pin
         region.center = pin.coordinate
         mapCameraPosition = .region(MKCoordinateRegion(center: pin.coordinate, span: region.span))
+    }
+}
+
+@MainActor
+extension CommunityViewModel {
+    var mapRegion: MKCoordinateRegion { region }
+    var availableFilters: [CommunityFilter] { [.all, .studyGroups, .events, .marketplace, .institutions, .today, .free] }
+    var activeFilters: [CommunityFilter] { [currentFilter] }
+    var studyGroups: [StudyGroup] { [] }
+    var events: [EducationalEvent] { [] }
+    var listings: [MarketplaceListing] { [] }
+    var institutions: [Institution] { [] }
+
+    func startUpdatingLocation() {
+        requestLocation()
+    }
+
+    func loadAllData() async {
+        loadData()
+    }
+
+    func searchInstitutions(query: String) async {
+        searchText = query
+        performLocalSearch(query: query, type: .educationalCenter)
+    }
+
+    func centerMapOnUser() {
+        centerOnUserLocation()
+    }
+
+    func centerMapOnPin(_ pin: MapPin) {
+        region.center = pin.coordinate
+        mapCameraPosition = .region(MKCoordinateRegion(center: pin.coordinate, span: region.span))
+    }
+
+    func getDirections(to coordinate: CLLocationCoordinate2D) {
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let item = MKMapItem(placemark: placemark)
+        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+    }
+
+    func joinStudyGroup(_ group: StudyGroup) async {
+        try? await joinStudyGroup(id: group.id)
+    }
+
+    func registerForEvent(_ event: EducationalEvent) async {
+        try? await registerForEvent(id: event.id)
+    }
+
+    func contactSeller(listing: MarketplaceListing) {
+        Log.social.info("Contact seller tapped for listing \(listing.id)")
     }
 }

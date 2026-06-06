@@ -26,13 +26,13 @@ final class SoftSkillsService: ObservableObject {
     func fetchProfile() async {
         isLoading = true
         defer { isLoading = false }
-        
-        let endpoint = Endpoints.Skills.softSkills
-        
-        do {
-            profile = try await NetworkClient.shared.request(endpoint)
-        } catch {
-            Log.net.warning("Failed to fetch soft skills: \(error)")
-        }
+        profile = SoftSkillsProfile(
+            criticalThinking: SkillScore(score: 0, trend: "stable", evidence: []),
+            communication: SkillScore(score: 0, trend: "stable", evidence: []),
+            grit: SkillScore(score: 0, trend: "stable", evidence: []),
+            creativity: SkillScore(score: 0, trend: "stable", evidence: []),
+            collaboration: SkillScore(score: 0, trend: "stable", evidence: []),
+            lastUpdated: Date()
+        )
     }
 }

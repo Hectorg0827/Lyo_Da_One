@@ -177,7 +177,7 @@ struct ProfileHeaderView: View {
             // Avatar
             ZStack(alignment: .bottomTrailing) {
                 if let avatarURL = user?.avatarURL {
-                    LyoImage(url: URL(string: avatarURL)) { image in
+                    AsyncImage(url: URL(string: avatarURL)) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
