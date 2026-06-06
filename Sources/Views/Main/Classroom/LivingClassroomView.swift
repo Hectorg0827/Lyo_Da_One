@@ -189,7 +189,7 @@ struct LivingClassroomView: View {
         .navigationBarHidden(true)
         .statusBar(hidden: true)
         .task {
-            service.connect(sessionId: courseId)
+            service.connect(sessionId: courseId, topic: courseTitle)
             sessionTimer.start()
         }
         .onDisappear {
@@ -972,7 +972,7 @@ struct LivingClassroomView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Bottom action bar: Ask, Annotate, Compare, Save
+    /// Bottom action bar: Ask, Continue/progress, and quick tools.
     private var bottomActionBar: some View {
         HStack(spacing: 12) {
             // Ask button (primary)
@@ -1001,19 +1001,91 @@ struct LivingClassroomView: View {
                 .shadow(color: accentBlue.opacity(0.3), radius: 6, y: 2)
             }
 
-            actionButton(icon: "pencil.tip", label: "Annotate")
-            actionButton(icon: "rectangle.on.rectangle", label: "Compare")
-            actionButton(icon: "bookmark.fill", label: "Save")
+            actionButton(icon: "questionmark.bubble", label: "Confused") {
+                service.sendUserAction(actionIntent: "confused", componentId: "sentiment")
+            }
 
             Spacer()
+
+            // Progress / Continue — the heart of the continuous experience.
+            lessonProgressControl
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
     }
 
-    private func actionButton(icon: String, label: String) -> some View {
+    /// Shows generating status, a Continue button, or lesson-complete state.
+    @ViewBuilder
+    private var lessonProgressControl: some View {
+        if service.lessonComplete {
+            Button {
+                HapticManager.shared.playMediumImpact()
+                dismiss()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Lesson Complete")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 9)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hexString: "22C55E"), Color(hexString: "16A34A")],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+            }
+        } else if service.isGenerating {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
+                    .scaleEffect(0.7)
+                Text(service.statusText ?? "Thinking…")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(bgSurface)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(borderColor, lineWidth: 1))
+        } else if service.canContinue {
+            Button {
+                HapticManager.shared.playMediumImpact()
+                service.requestNextScene()
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Continue")
+                        .font(.system(size: 14, weight: .bold))
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 9)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hexString: "8B5CF6"), Color(hexString: "6366F1")],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+                .shadow(color: Color(hexString: "8B5CF6").opacity(0.4), radius: 8, y: 2)
+            }
+            .transition(.scale.combined(with: .opacity))
+        }
+    }
+
+    private func actionButton(icon: String, label: String, action: (() -> Void)? = nil) -> some View {
         Button {
             HapticManager.shared.playLightImpact()
+            action?()
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
