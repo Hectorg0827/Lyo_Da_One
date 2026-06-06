@@ -43,7 +43,8 @@ class ChatViewModel: ObservableObject {
         messagingService.$conversations
             .receive(on: DispatchQueue.main)
             .sink { [weak self] (apiConversations: [Conversation]) in
-                self?.conversations = apiConversations.compactMap { self?.mapConversation($0) ?? self?.mockConversation($0.id) }
+                // Drop unmappable entries rather than substituting fake mock data.
+                self?.conversations = apiConversations.compactMap { self?.mapConversation($0) }
                 self?.sortConversations()
             }
             .store(in: &cancellables)
@@ -51,7 +52,8 @@ class ChatViewModel: ObservableObject {
         messagingService.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak self] (apiMessages: [Message]) in
-                self?.messages = apiMessages.compactMap { self?.mapMessage($0) ?? self?.mockMessage($0.id) }
+                // Drop unmappable entries rather than substituting fake mock data.
+                self?.messages = apiMessages.compactMap { self?.mapMessage($0) }
                 self?.groupMessages()
             }
             .store(in: &cancellables)

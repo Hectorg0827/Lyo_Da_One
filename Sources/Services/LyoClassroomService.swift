@@ -14,10 +14,23 @@ public class LyoClassroomService: ObservableObject {
     @Published public var error: String?
     
     private var webSocketTask: URLSessionWebSocketTask?
-    
-    // Default to localhost for testing, but in production use environment variable or config
-    private let baseURL = "ws://localhost:8000/api/v1/classroom/ws/lesson/"
-    
+
+    /// WebSocket endpoint derived from the active environment's HTTP base URL
+    /// (http→ws, https→wss) so the live classroom works in dev, staging, and prod.
+    /// Set LYO_USE_LOCALHOST=1 in the scheme to point at a local backend.
+    private var baseURL: String {
+        let http = AppConfig.baseURL
+        let ws: String
+        if http.hasPrefix("https") {
+            ws = "wss" + http.dropFirst("https".count)
+        } else if http.hasPrefix("http") {
+            ws = "ws" + http.dropFirst("http".count)
+        } else {
+            ws = http
+        }
+        return ws + "/api/v1/classroom/ws/lesson/"
+    }
+
     private init() {}
     
     /// Starts a streaming session for a new lesson topic.

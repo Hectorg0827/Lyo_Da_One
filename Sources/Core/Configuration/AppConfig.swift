@@ -43,31 +43,40 @@ struct AppConfig {
     /// Stored securely in Keychain - initialized on first launch.
     private static let apiKeyKeychainKey = "com.lyo.app.apiKey"
 
+    /// SaaS API key resolution — NO secret is embedded in source.
+    /// Resolution order:
+    ///   1. Keychain (cached after first resolution)
+    ///   2. `LYO_API_KEY` process environment variable (local dev via Xcode scheme)
+    ///   3. `LYO_API_KEY` from Info.plist, injected at build time from a gitignored
+    ///      xcconfig / CI secret (the `$(...)` guard ignores an unsubstituted placeholder)
+    /// If none are present the key is empty and the backend will reject requests —
+    /// surfacing a misconfiguration instead of shipping a live credential.
     static var apiKey: String {
-        // First, try to read from Keychain (secure storage)
-        if let storedKey = KeychainHelper.shared.readString(forKey: apiKeyKeychainKey) {
+        if let storedKey = KeychainHelper.shared.readString(forKey: apiKeyKeychainKey),
+           !storedKey.isEmpty {
             return storedKey
         }
 
-        // If not in Keychain, use bundle-embedded key and store it securely
-        // In production builds, this is obfuscated at compile time
-        let bundleKey = Self.deobfuscateAPIKey()
-        KeychainHelper.shared.saveString(bundleKey, forKey: apiKeyKeychainKey)
-        return bundleKey
+        if let envKey = ProcessInfo.processInfo.environment["LYO_API_KEY"], !envKey.isEmpty {
+            KeychainHelper.shared.saveString(envKey, forKey: apiKeyKeychainKey)
+            return envKey
+        }
+
+        if let plistKey = Bundle.main.object(forInfoDictionaryKey: "LYO_API_KEY") as? String,
+           !plistKey.isEmpty, !plistKey.hasPrefix("$(") {
+            KeychainHelper.shared.saveString(plistKey, forKey: apiKeyKeychainKey)
+            return plistKey
+        }
+
+        #if DEBUG
+        print("⚠️ AppConfig.apiKey is empty — set LYO_API_KEY via the Xcode scheme or an xcconfig/CI secret")
+        #endif
+        return ""
     }
 
-    /// Deobfuscates the API key at runtime. In production, use a more sophisticated approach.
-    private static func deobfuscateAPIKey() -> String {
-        // XOR-based obfuscation - not perfect but better than plaintext
-        // The actual key is transformed at build time
-        let obfuscated: [UInt8] = [
-            0x6c, 0x79, 0x6f, 0x5f, 0x73, 0x6b, 0x5f, 0x6c, 0x69, 0x76, 0x65, 0x5f,
-            0x53, 0x35, 0x41, 0x4c, 0x74, 0x57, 0x33, 0x57, 0x44, 0x6a, 0x68, 0x46,
-            0x2d, 0x54, 0x41, 0x67, 0x6e, 0x37, 0x36, 0x37, 0x4f, 0x52, 0x43, 0x43,
-            0x67, 0x61, 0x34, 0x4e, 0x78, 0x35, 0x32, 0x78, 0x42, 0x6c, 0x41, 0x6b,
-            0x4d, 0x48, 0x67, 0x32, 0x2d, 0x54, 0x51,
-        ]
-        return String(bytes: obfuscated, encoding: .utf8) ?? ""
+    /// Inject an API key at runtime (e.g. one issued by the backend per session).
+    static func setAPIKey(_ key: String) {
+        KeychainHelper.shared.saveString(key, forKey: apiKeyKeychainKey)
     }
 
     /// Clear stored API key (for logout/reset)

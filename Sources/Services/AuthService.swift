@@ -66,8 +66,11 @@ class AuthService: NSObject, ObservableObject {
     
     // MARK: - Demo Mode
     
-    /// Enter demo mode - allows using app with mock data
+    /// Enter demo mode - allows using app with mock data.
+    /// DEBUG-only: in release builds this is a no-op so the app can never be
+    /// "authenticated" without a real backend token.
     func enterDemoMode() {
+        #if DEBUG
         self.currentUserName = "Demo User"
         self.currentUserEmail = "demo@lyo.app"
         self.isDemoMode = true
@@ -76,7 +79,10 @@ class AuthService: NSObject, ObservableObject {
         UserDefaults.standard.set(true, forKey: demoModeKey)
         self.isAuthenticated = true
         self.isLoading = false
-        Log.auth.info("Entered Demo Mode - using mock data")
+        Log.auth.info("Entered Demo Mode - using mock data (DEBUG only)")
+        #else
+        Log.auth.warning("enterDemoMode() called in a release build — ignored")
+        #endif
     }
     
     // MARK: - Email / Password
@@ -177,7 +183,12 @@ class AuthService: NSObject, ObservableObject {
         var randomBytes = [UInt8](repeating: 0, count: length)
         let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
         if errorCode != errSecSuccess {
-            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+            // Fall back to UUID-derived randomness instead of crashing the app.
+            Log.auth.error("SecRandomCopyBytes failed (OSStatus \(errorCode)) — using UUID nonce fallback")
+            return (UUID().uuidString + UUID().uuidString)
+                .replacingOccurrences(of: "-", with: "")
+                .prefix(length)
+                .description
         }
         let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
         return String(randomBytes.map { charset[Int($0) % charset.count] })

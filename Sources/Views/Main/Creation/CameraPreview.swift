@@ -8,7 +8,12 @@ struct CameraPreview: UIViewRepresentable {
         }
         
         var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-            return layer as! AVCaptureVideoPreviewLayer
+            // layerClass guarantees this type; the guard avoids a force-cast crash
+            // in the theoretically-impossible mismatch case.
+            guard let previewLayer = layer as? AVCaptureVideoPreviewLayer else {
+                return AVCaptureVideoPreviewLayer()
+            }
+            return previewLayer
         }
     }
     

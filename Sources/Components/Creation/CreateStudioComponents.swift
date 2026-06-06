@@ -32,7 +32,11 @@ class CameraPreviewUIView: UIView {
     }
 
     private var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-        layer as! AVCaptureVideoPreviewLayer
+        // layerClass guarantees this type; the guard avoids a force-cast crash.
+        guard let previewLayer = layer as? AVCaptureVideoPreviewLayer else {
+            return AVCaptureVideoPreviewLayer()
+        }
+        return previewLayer
     }
 
     override func layoutSubviews() {

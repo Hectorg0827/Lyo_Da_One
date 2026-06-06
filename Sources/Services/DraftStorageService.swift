@@ -40,7 +40,8 @@ class DraftStorageService: ObservableObject {
     
     private init() {
         // Create drafts media directory
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         draftsDirectory = docs.appendingPathComponent("drafts_media", isDirectory: true)
         try? FileManager.default.createDirectory(at: draftsDirectory, withIntermediateDirectories: true)
         
