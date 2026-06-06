@@ -331,24 +331,21 @@ struct LyoMessageBubbleView: View {
                 onSave: { onQuickChipTap?("save_course") }
             )
 
-        case .quiz(let question, _, let correctIndex, _):
-            ChatInteractiveCardView(
-                type: .quiz(title: "Quick Quiz", questionCount: 1, imageURL: nil),
-                onStart: {
-                    // Start quiz UI action
-                    onQuizAnswer_A2A?(question, correctIndex)
-                },
-                onRefine: { onQuickChipTap?("refine_quiz") },
-                onSave: { onQuickChipTap?("save_quiz") }
+        case .quiz(let question, let options, let correctIndex, let explanation):
+            // Render the fully interactive quiz bubble (was previously a non-answerable card).
+            InteractiveQuizBubbleView(
+                question: question,
+                options: options,
+                correctIndex: correctIndex,
+                explanation: explanation,
+                onAnswerSelected: { selected in
+                    onSmartBlockQuizAnswer?(question, selected, selected == correctIndex)
+                }
             )
 
         case .flashcards(let title, let cards):
-            ChatInteractiveCardView(
-                type: .flashcards(title: title, cardCount: cards.count, imageURL: nil),
-                onStart: { onQuickChipTap?("start_flashcards") },
-                onRefine: { onQuickChipTap?("refine_flashcards") },
-                onSave: { onQuickChipTap?("save_flashcards") }
-            )
+            // Render the real swipeable flashcard carousel (was previously a static card).
+            FlashcardCarouselBubbleView(title: title, cards: cards)
 
         case .notes(let title, let sections):
             NotesView(notes: NotesPayload(title: title, sections: sections))
@@ -430,9 +427,236 @@ struct LyoMessageBubbleView: View {
                 onConfirmSchedule: nil
             )
 
+        case .image(let url, let caption):
+            imageContentBubble(url: url, caption: caption)
+
+        case .video(let url, let thumbnail, let duration):
+            videoContentBubble(url: url, thumbnail: thumbnail, duration: duration)
+
+        case .audio(let url, let duration, _):
+            audioContentBubble(url: url, duration: duration)
+
+        case .file(let url, let name, let mimeType, let size):
+            fileContentBubble(url: url, name: name, mimeType: mimeType, size: size)
+
+        case .poll(let question, let options, let votes):
+            pollContentBubble(question: question, options: options, votes: votes)
+
+        case .suggestions(let title, let options):
+            suggestionsContentBubble(title: title, options: options)
+
         default:
             EmptyView()
         }
+    }
+
+    // MARK: - Media / Rich Content Builders
+
+    @ViewBuilder
+    private func imageContentBubble(url: String, caption: String?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            AsyncImage(url: URL(string: url)) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFit()
+                case .failure:
+                    mediaPlaceholder(icon: "photo", label: "Image unavailable")
+                case .empty:
+                    ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+
+            if let caption, !caption.isEmpty {
+                Text(caption)
+                    .font(DesignTokens.Typography.caption)
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func videoContentBubble(url: String, thumbnail: String?, duration: TimeInterval) -> some View {
+        Link(destination: URL(string: url) ?? URL(string: "https://lyo.app")!) {
+            ZStack {
+                if let thumbnail, let thumbURL = URL(string: thumbnail) {
+                    AsyncImage(url: thumbURL) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Color(white: 0.12)
+                    }
+                } else {
+                    Color(white: 0.12)
+                }
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.white)
+                    .shadow(radius: 6)
+                if duration > 0 {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Text(formatDuration(duration))
+                                .font(.caption2.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.black.opacity(0.6))
+                                .clipShape(Capsule())
+                                .padding(8)
+                        }
+                    }
+                }
+            }
+            .frame(height: 180)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.lg))
+        }
+    }
+
+    @ViewBuilder
+    private func audioContentBubble(url: String, duration: TimeInterval) -> some View {
+        Link(destination: URL(string: url) ?? URL(string: "https://lyo.app")!) {
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Image(systemName: "waveform.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(DesignTokens.Colors.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Audio clip")
+                        .font(DesignTokens.Typography.bodyMedium)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    if duration > 0 {
+                        Text(formatDuration(duration))
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    }
+                }
+                Spacer()
+                Image(systemName: "play.fill")
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
+            .padding(DesignTokens.Spacing.sm)
+            .background(Color(white: 0.10))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        }
+    }
+
+    @ViewBuilder
+    private func fileContentBubble(url: String, name: String, mimeType: String, size: Int64) -> some View {
+        Link(destination: URL(string: url) ?? URL(string: "https://lyo.app")!) {
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                Image(systemName: "doc.fill")
+                    .font(.title2)
+                    .foregroundStyle(DesignTokens.Colors.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(DesignTokens.Typography.bodyMedium)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        .lineLimit(1)
+                    Text(formatFileSize(size))
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "arrow.down.circle")
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
+            .padding(DesignTokens.Spacing.sm)
+            .background(Color(white: 0.10))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+        }
+    }
+
+    @ViewBuilder
+    private func pollContentBubble(question: String, options: [String], votes: [Int]?) -> some View {
+        let totalVotes = max(1, (votes ?? []).reduce(0, +))
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            Text(question)
+                .font(DesignTokens.Typography.titleSmall)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                let count = (votes?.indices.contains(index) ?? false) ? votes![index] : 0
+                let fraction = Double(count) / Double(totalVotes)
+                Button {
+                    onQuickChipTap?(option)
+                } label: {
+                    ZStack(alignment: .leading) {
+                        GeometryReader { geo in
+                            RoundedRectangle(cornerRadius: DesignTokens.Radius.sm)
+                                .fill(DesignTokens.Colors.accent.opacity(0.25))
+                                .frame(width: max(0, geo.size.width * fraction))
+                        }
+                        HStack {
+                            Text(option)
+                                .font(DesignTokens.Typography.bodyMedium)
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                            Spacer()
+                            if votes != nil {
+                                Text("\(Int(fraction * 100))%")
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            }
+                        }
+                        .padding(.horizontal, DesignTokens.Spacing.sm)
+                    }
+                    .frame(height: 40)
+                    .background(Color(white: 0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.sm))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func suggestionsContentBubble(title: String, options: [String]) -> some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+            if !title.isEmpty {
+                Text(title)
+                    .font(DesignTokens.Typography.caption)
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
+            FlowLayout(spacing: DesignTokens.Spacing.xs) {
+                ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+                    Button {
+                        onQuickChipTap?(option)
+                    } label: {
+                        Text(option)
+                            .font(DesignTokens.Typography.bodySmall)
+                            .foregroundStyle(DesignTokens.Colors.textPrimary)
+                            .padding(.horizontal, DesignTokens.Spacing.sm)
+                            .padding(.vertical, 8)
+                            .background(Color(white: 0.12))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func mediaPlaceholder(icon: String, label: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+            Text(label).font(DesignTokens.Typography.caption)
+        }
+        .foregroundStyle(DesignTokens.Colors.textSecondary)
+        .frame(maxWidth: .infinity, minHeight: 100)
+        .background(Color(white: 0.10))
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private func formatFileSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 
     @ViewBuilder

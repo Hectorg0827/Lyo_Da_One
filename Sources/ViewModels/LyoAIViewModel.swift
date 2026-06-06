@@ -1553,18 +1553,34 @@ class LyoAIViewModel: ObservableObject {
 
     private func generateSyllabus(with data: [String: String]?) {
         Log.ai.info("Generating syllabus with data: \(data ?? [:])")
+        let topic = data?["topic"]
+        inputText = topic.map { "Create a detailed course syllabus for \($0)" }
+            ?? "Create a detailed course syllabus for what we just discussed"
+        Task { await sendMessage() }
     }
 
     private func requestQuickExplainer(with data: [String: String]?) {
         Log.ai.info("Requesting quick explainer: \(data ?? [:])")
+        let topic = data?["topic"]
+        inputText = topic.map { "Give me a quick, simple explanation of \($0)" }
+            ?? "Give me a quick, simple explanation of that"
+        Task { await sendMessage() }
     }
 
     private func makeFlashcards(with data: [String: String]?) {
         Log.ai.info("Making flashcards: \(data ?? [:])")
+        let topic = data?["topic"]
+        inputText = topic.map { "Create study flashcards for \($0)" }
+            ?? "Create study flashcards from what we just covered"
+        Task { await sendMessage() }
     }
 
     private func extractKeyPoints(with data: [String: String]?) {
         Log.ai.info("Extracting key points: \(data ?? [:])")
+        let topic = data?["topic"]
+        inputText = topic.map { "Summarize the key points of \($0)" }
+            ?? "Summarize the key points from what we just covered"
+        Task { await sendMessage() }
     }
 
     // MARK: - History Loading
