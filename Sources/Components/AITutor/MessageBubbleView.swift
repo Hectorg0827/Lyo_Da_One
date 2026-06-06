@@ -385,6 +385,51 @@ struct LyoMessageBubbleView: View {
                 onQuickChipTap?(topic.id)
             }
 
+        case .testPrep(let data):
+            // Show progress card for messages that were delivered post-confirmation,
+            // and the proposal card for messages awaiting user approval.
+            if message.content == "__test_prep_progress__" {
+                TestPrepProgressBubbleView(
+                    content: data,
+                    onQuickAction: { action in
+                        switch action {
+                        case "quiz":
+                            onQuickChipTap?("Give me a practice quiz on \(data.subject)")
+                        case "flashcards":
+                            onQuickChipTap?("Show me flashcards for \(data.subject)")
+                        case "update":
+                            onQuickChipTap?("Let me update my \(data.subject) test prep plan")
+                        default:
+                            onQuickChipTap?(action)
+                        }
+                    }
+                )
+            } else {
+                TestPrepProposalCardView(
+                    content: data,
+                    onStartPrep: {
+                        HapticManager.shared.medium()
+                        Task {
+                            await TestPrepOrchestrator.shared.confirmAndExecute(
+                                content: data,
+                                in: UnifiedChatService.shared
+                            )
+                        }
+                    },
+                    onAdjust: {
+                        onQuickChipTap?("Let me adjust my test prep details for \(data.subject)")
+                    }
+                )
+            }
+
+        case .studyPlan(let plan):
+            StudyPlanBubbleView(
+                plan: plan,
+                testTitle: plan.title,
+                testDate: nil,
+                onConfirmSchedule: nil
+            )
+
         default:
             EmptyView()
         }

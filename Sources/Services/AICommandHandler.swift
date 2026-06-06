@@ -20,6 +20,7 @@ class AICommandHandler: ObservableObject {
     @Published var pendingClassroomCourse: CoursePayload?
     @Published var pendingStackItem: StackItemPayload?
     @Published var shouldOpenClassroom: Bool = false
+    @Published var pendingTestPrep: TestPrepContent?
     
     private init() {}
     
@@ -45,17 +46,52 @@ class AICommandHandler: ObservableObject {
         switch command.type {
         case .openClassroom:
             return handleOpenClassroom(command.payload)
-            
+
         case .showQuiz:
             return handleShowQuiz(command.payload)
-            
+
         case .addToStack:
             return handleAddToStack(command.payload)
-            
+
+        case .testPrep:
+            return handleTestPrep(command.payload)
+
         case .normalChat:
-            // Shouldn't happen, but handle gracefully
             return ("", false)
         }
+    }
+
+    func handleTestPrep(_ payload: AICommandPayload?) -> (displayText: String, wasCommand: Bool) {
+        guard let tp = payload?.testPrep else {
+            Log.ai.warning("TEST_PREP command missing test_prep payload")
+            return ("", false)
+        }
+
+        var testDate: Date? = nil
+        if let isoString = tp.testDateISO {
+            let formatter = ISO8601DateFormatter()
+            testDate = formatter.date(from: isoString)
+        }
+
+        let daysUntil: Int? = testDate.map { date in
+            Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
+        }
+
+        let content = TestPrepContent(
+            subject: tp.subject,
+            testType: tp.testType,
+            testDate: testDate,
+            daysUntilTest: daysUntil,
+            dailyStudyHours: tp.dailyStudyHours ?? 2.0,
+            confidenceLevel: tp.confidenceLevel ?? "medium",
+            studyPlan: tp.studyPlan,
+            quizBank: tp.quizItems ?? [],
+            flashcardSets: tp.flashcardSets ?? []
+        )
+
+        self.pendingTestPrep = content
+        Log.ai.info("📚 Test prep proposal prepared: \(tp.subject)")
+        return ("", true)
     }
     
     /// Returns the CoursePayload for rendering as a proposal card in chat.
@@ -223,5 +259,6 @@ class AICommandHandler: ObservableObject {
         pendingClassroomCourse = nil
         pendingStackItem = nil
         shouldOpenClassroom = false
+        pendingTestPrep = nil
     }
 }

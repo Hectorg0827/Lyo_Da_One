@@ -97,9 +97,12 @@ class LyoAIViewModel: ObservableObject {
     // Course wizard state
     @Published var currentOutline: CourseOutline?
     @Published var isGeneratingCourse: Bool = false
-    
+
     /// User's explicit intent choice from the UI (e.g., "COURSE", "QUIZ", "STUDY_PLAN")
     @Published var selectedIntent: String? = nil
+
+    /// Whether the test prep funnel or active prep session is running
+    @Published var isTestPrepActive: Bool = false
 
     // Persistence
     private let messagesPersistKey = "lyo_ai_messages_v1"
@@ -224,6 +227,18 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] msgs in
                 self?.handleTTSStreaming(messages: msgs)
+            }
+            .store(in: &cancellables)
+
+        // Test prep state bridge
+        TestPrepOrchestrator.shared.$state
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                if case .active = state {
+                    self?.isTestPrepActive = true
+                } else if case .idle = state {
+                    self?.isTestPrepActive = false
+                }
             }
             .store(in: &cancellables)
     }
@@ -635,6 +650,25 @@ class LyoAIViewModel: ObservableObject {
             Task.detached(priority: .background) { [weak self] in
                 await self?.updateAffectSignals(valence: 0.1, arousal: 0.6)
             }
+        }
+
+        // Route to test prep orchestrator if a funnel session is active
+        if case .gatheringInfo = TestPrepOrchestrator.shared.state {
+            unifiedChat.appendUserMessage(messageText, attachments: messageAttachments)
+            let attachmentIds = messageAttachments.compactMap { $0.id }
+            TestPrepOrchestrator.shared.handleFunnelResponse(
+                messageText,
+                attachmentIds: attachmentIds,
+                in: unifiedChat
+            )
+            return
+        }
+
+        // Detect fresh test prep intent before sending to the backend
+        if isTestPrepIntent(messageText) {
+            unifiedChat.appendUserMessage(messageText, attachments: messageAttachments)
+            TestPrepOrchestrator.shared.handleIntent(rawPhrase: messageText, in: unifiedChat)
+            return
         }
 
         // Use Streaming Flow
@@ -1701,4 +1735,18 @@ class LyoAIViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Test Prep Intent Detection
+
+    private func isTestPrepIntent(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let triggers = [
+            "i have a test", "i have an exam", "exam on", "test on",
+            "studying for", "study for", "prepare for my", "prep for",
+            "quiz tomorrow", "midterm", "final exam", "finals week",
+            "standardized test", "sat prep", "mcat prep", "bar exam",
+            "test in ", "exam in ", "help me study for", "study plan for",
+            "i need to study for", "i'm studying for", "help prepare"
+        ]
+        return triggers.contains { lower.contains($0) }
+    }
 }

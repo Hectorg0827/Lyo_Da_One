@@ -317,13 +317,34 @@ final class UnifiedChatService: ObservableObject {
     /// NOTE: Only triggers on explicit OPEN_CLASSROOM markers in the text.
     /// Normal markdown (** bold **, # headings) must NOT trigger this.
     private func scanForCommands(in text: String, messageId: String) {
-        let hasPotentialCommand = text.contains("OPEN_CLASSROOM")
+        let hasPotentialCommand = text.contains("OPEN_CLASSROOM") || text.contains("TEST_PREP")
 
         guard hasPotentialCommand else { return }
 
         let parsed = AICommandParser.parse(text)
         if case .command(let command) = parsed {
             Log.ai.info("🔗 Detected AI command in fast response: \(command.type.rawValue)")
+
+            // For TEST_PREP: render a proposal card (user must approve)
+            if command.type == .testPrep, let tp = command.payload?.testPrep {
+                Log.ai.info("📚 Rendering test prep proposal card (user must approve)")
+                let result = AICommandHandler.shared.handleTestPrep(command.payload)
+                if result.wasCommand, let content = AICommandHandler.shared.pendingTestPrep {
+                    if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                        let proposalMsg = LyoMessage(
+                            id: messageId,
+                            sessionId: currentConversationId,
+                            content: "Here's your personalized test prep plan! 📚",
+                            isFromUser: false,
+                            timestamp: messages[idx].timestamp,
+                            contentTypes: [.testPrep(data: content)]
+                        )
+                        messages[idx] = proposalMsg
+                    }
+                }
+                _ = tp
+                return
+            }
 
             // For OPEN_CLASSROOM: render a proposal card instead of auto-navigating
             if command.type == .openClassroom, let course = command.payload?.course {
@@ -1548,6 +1569,100 @@ final class UnifiedChatService: ObservableObject {
     private func extractTitle(from text: String) -> String {
         let words = text.split(separator: " ").prefix(5)
         return words.joined(separator: " ") + (text.split(separator: " ").count > 5 ? "..." : "")
+    }
+
+    // MARK: - Test Prep Bubble Helpers (called by TestPrepOrchestrator)
+
+    func appendUserMessage(_ text: String, attachments: [MessageAttachment] = []) {
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: text,
+            isFromUser: true,
+            timestamp: Date(),
+            attachments: attachments.isEmpty ? nil : attachments
+        )
+        messages.append(msg)
+        conversationHistory.append(ConversationMessage(role: "user", content: text))
+    }
+
+    func appendAssistantMessage(_ text: String) {
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: text,
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.text]
+        )
+        messages.append(msg)
+    }
+
+    func appendTestPrepBubble(_ content: TestPrepContent) {
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: "Here's your personalized test prep plan! 📚",
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.testPrep(data: content)]
+        )
+        messages.append(msg)
+    }
+
+    func appendStudyPlanBubble(_ plan: StudyPlan, testTitle: String, testDate: Date?) {
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: "",
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.studyPlan(plan: plan)]
+        )
+        messages.append(msg)
+    }
+
+    func appendFlashcardBubble(title: String, cards: [Flashcard]) {
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: "",
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.flashcards(title: title, cards: cards)]
+        )
+        messages.append(msg)
+    }
+
+    func appendQuizBubble(item: TestPrepQuizItem) {
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: "",
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.quiz(
+                question: item.question,
+                options: item.options,
+                correctIndex: item.correctIndex,
+                explanation: item.explanation
+            )]
+        )
+        messages.append(msg)
+    }
+
+    func appendTestPrepProgressBubble(_ content: TestPrepContent) {
+        // Rendered by MessageBubbleView as TestPrepProgressBubbleView via .testPrep content type
+        // We use a dedicated progress message with metadata to distinguish from the proposal card
+        let msg = LyoMessage(
+            id: UUID().uuidString,
+            sessionId: currentConversationId,
+            content: "__test_prep_progress__",
+            isFromUser: false,
+            timestamp: Date(),
+            contentTypes: [.testPrep(data: content)]
+        )
+        messages.append(msg)
     }
 }
 

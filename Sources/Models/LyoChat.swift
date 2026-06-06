@@ -368,16 +368,106 @@ struct Milestone: Codable {
 // MARK: - Test Prep Content
 
 struct TestPrepContent: Codable, Equatable {
+    let id: String
     let subject: String
+    let testType: String              // "quiz", "midterm", "final", "SAT", "MCAT", etc.
     let topic: String?
-    let testDate: String?
+    let testDate: Date?
+    let daysUntilTest: Int?
+    let dailyStudyHours: Double
+    let confidenceLevel: String       // "low", "medium", "high"
     let studyPlan: StudyPlan?
-    
-    init(subject: String, topic: String? = nil, testDate: String? = nil, studyPlan: StudyPlan? = nil) {
+    let quizBank: [TestPrepQuizItem]
+    let flashcardSets: [TestPrepFlashcardSet]
+    let uploadedMaterialIds: [String]
+    let completedTaskIds: [String]
+    let masteryScore: Double          // 0.0–1.0
+
+    init(
+        id: String = UUID().uuidString,
+        subject: String,
+        testType: String = "exam",
+        topic: String? = nil,
+        testDate: Date? = nil,
+        daysUntilTest: Int? = nil,
+        dailyStudyHours: Double = 2.0,
+        confidenceLevel: String = "medium",
+        studyPlan: StudyPlan? = nil,
+        quizBank: [TestPrepQuizItem] = [],
+        flashcardSets: [TestPrepFlashcardSet] = [],
+        uploadedMaterialIds: [String] = [],
+        completedTaskIds: [String] = [],
+        masteryScore: Double = 0.0
+    ) {
+        self.id = id
         self.subject = subject
+        self.testType = testType
         self.topic = topic
         self.testDate = testDate
+        self.daysUntilTest = daysUntilTest
+        self.dailyStudyHours = dailyStudyHours
+        self.confidenceLevel = confidenceLevel
         self.studyPlan = studyPlan
+        self.quizBank = quizBank
+        self.flashcardSets = flashcardSets
+        self.uploadedMaterialIds = uploadedMaterialIds
+        self.completedTaskIds = completedTaskIds
+        self.masteryScore = masteryScore
     }
+
+    enum CodingKeys: String, CodingKey {
+        case id, subject, testType, topic, testDate, daysUntilTest
+        case dailyStudyHours, confidenceLevel, studyPlan, quizBank
+        case flashcardSets, uploadedMaterialIds, completedTaskIds, masteryScore
+    }
+}
+
+struct TestPrepQuizItem: Codable, Equatable, Identifiable {
+    let id: String
+    let question: String
+    let options: [String]
+    let correctIndex: Int
+    let explanation: String
+    let topic: String
+    let difficulty: String            // "easy", "medium", "hard"
+
+    init(
+        id: String = UUID().uuidString,
+        question: String,
+        options: [String],
+        correctIndex: Int,
+        explanation: String,
+        topic: String,
+        difficulty: String = "medium"
+    ) {
+        self.id = id
+        self.question = question
+        self.options = options
+        self.correctIndex = correctIndex
+        self.explanation = explanation
+        self.topic = topic
+        self.difficulty = difficulty
+    }
+}
+
+struct TestPrepFlashcardSet: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let cards: [Flashcard]            // reuse existing Flashcard from MultimodalMessage.swift
+
+    init(id: String = UUID().uuidString, title: String, cards: [Flashcard]) {
+        self.id = id
+        self.title = title
+        self.cards = cards
+    }
+}
+
+struct TestPrepIntentInfo {
+    var subject: String?
+    var testType: String?
+    var testDate: Date?
+    var confidenceLevel: String?      // "low", "medium", "high"
+    var dailyStudyHours: Double?
+    var uploadedMaterialIds: [String] = []
 }
 

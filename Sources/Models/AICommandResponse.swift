@@ -16,6 +16,7 @@ enum AICommandType: String, Codable {
     case showQuiz = "SHOW_QUIZ"
     case addToStack = "ADD_TO_STACK"
     case normalChat = "NORMAL_CHAT"
+    case testPrep = "TEST_PREP"
 }
 
 struct AICommandResponse: Codable {
@@ -26,10 +27,31 @@ struct AICommandResponse: Codable {
 struct AICommandPayload: Codable {
     let stackItem: StackItemPayload?
     let course: CoursePayload?
-    
+    let testPrep: TestPrepPayload?
+
     enum CodingKeys: String, CodingKey {
         case stackItem = "stack_item"
         case course
+        case testPrep = "test_prep"
+    }
+}
+
+struct TestPrepPayload: Codable {
+    let subject: String
+    let testType: String
+    let testDateISO: String?
+    let confidenceLevel: String?
+    let dailyStudyHours: Double?
+    let studyPlan: StudyPlan?
+    let quizItems: [TestPrepQuizItem]?
+    let flashcardSets: [TestPrepFlashcardSet]?
+
+    enum CodingKeys: String, CodingKey {
+        case subject, testType, confidenceLevel, studyPlan
+        case testDateISO = "test_date_iso"
+        case dailyStudyHours = "daily_study_hours"
+        case quizItems = "quiz_items"
+        case flashcardSets = "flashcard_sets"
     }
 }
 
