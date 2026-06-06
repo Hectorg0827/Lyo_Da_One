@@ -53,6 +53,10 @@ class LyoAIViewModel: ObservableObject {
     @Published var isAudioOutputEnabled: Bool = false
     private var lastSentToTTSText: String = ""
     private var shouldAutoSpeakCurrentResponse: Bool = false
+    /// True while a conversational voice loop is in progress. Used to re-arm the
+    /// mic only AFTER the AI's spoken response finishes (not the instant the send
+    /// call returns), so funnel questions and streamed answers aren't cut off.
+    private var voiceLoopActive: Bool = false
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -134,12 +138,15 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .assign(to: &$isVoiceActive)
 
-        // Continuous Conversation: Start listening when AI finishes speaking
+        // Continuous Conversation: Start listening when AI finishes speaking.
+        // Drives the restart off voiceLoopActive (not isVoiceActive, which is cleared
+        // while a response is being generated) so the mic re-arms only after the
+        // spoken reply completes — including funnel questions on early-return paths.
         ttsService.onSpeechFinished = { [weak self] in
             guard let self = self else { return }
             self.currentlyPlayingMessageId = nil  // Reset playing state
 
-            if self.isVoiceActive && !self.sttService.isRecording {
+            if self.voiceLoopActive && !self.sttService.isRecording {
                 self.startListening()
             }
         }
@@ -411,6 +418,8 @@ class LyoAIViewModel: ObservableObject {
         // For barge-in, we don't stop TTS here. We let it play.
         // If user speaks, onSpeechDetected will stop TTS.
 
+        voiceLoopActive = true
+
         guard !sttService.isRecording else {
             isVoiceActive = true
             return
@@ -424,6 +433,7 @@ class LyoAIViewModel: ObservableObject {
             } catch {
                 Log.ai.error("🎙️ Failed to start recording: \(error)")
                 isVoiceActive = false
+                voiceLoopActive = false
                 addErrorMessage(
                     "Microphone access is required for voice input. Please enable it in Settings > Privacy > Microphone."
                 )
@@ -434,6 +444,7 @@ class LyoAIViewModel: ObservableObject {
     func stopListening() {
         sttService.stopRecording()
         isVoiceActive = false
+        voiceLoopActive = false  // Manual stop ends the conversational loop
         stopSpeaking()  // Also stop TTS if we are fully stopping voice mode
 
         // If we have text, send it automatically in conversational mode
@@ -653,14 +664,15 @@ class LyoAIViewModel: ObservableObject {
         lastSentToTTSText = ""
         shouldAutoSpeakCurrentResponse = shouldSpeak
 
+        // Mark the conversational voice loop active BEFORE clearing isVoiceActive,
+        // so onSpeechFinished re-arms the mic only after the spoken reply completes.
+        voiceLoopActive = shouldResumeListening
+
         if isVoiceActive {
             sttService.stopRecording()
             isVoiceActive = false
             stopSpeaking()
         }
-
-        // Restart listening on all exit paths (normal completion, test prep early returns, errors).
-        defer { if shouldResumeListening { startListening() } }
 
         // Update affect signals (debounced)
         if Date().timeIntervalSince(lastAffectUpdate) > 30 {
@@ -699,6 +711,12 @@ class LyoAIViewModel: ObservableObject {
             speakResponse: shouldSpeak
         )
 
+        // Safety net: if we're in a voice loop but nothing is being spoken
+        // (e.g. an empty/errored response never triggered TTS, so
+        // onSpeechFinished won't fire), re-arm the mic directly.
+        if voiceLoopActive && !isAISpeaking && !sttService.isRecording {
+            startListening()
+        }
     }
 
     private var currentConversationId: String {

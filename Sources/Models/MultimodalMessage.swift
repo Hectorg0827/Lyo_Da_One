@@ -29,6 +29,7 @@ enum MessageContentType: Codable, Equatable {
     case suggestions(title: String, options: [String])
     case studyPlan(plan: StudyPlan)
     case testPrep(data: TestPrepContent)
+    case testPrepProgress(data: TestPrepContent)
     case courseProposal(payload: CoursePayload)
     
     enum CodingKeys: String, CodingKey {
@@ -130,6 +131,9 @@ enum MessageContentType: Codable, Equatable {
         case "test_prep":
             let data = try container.decode(TestPrepContent.self, forKey: .testPrepData)
             self = .testPrep(data: data)
+        case "test_prep_progress":
+            let data = try container.decode(TestPrepContent.self, forKey: .testPrepData)
+            self = .testPrepProgress(data: data)
         case "cinematic":
             // Cinematic removed — decode as plain text fallback
             self = .text
@@ -229,6 +233,9 @@ enum MessageContentType: Codable, Equatable {
         case .testPrep(let data):
             try container.encode("test_prep", forKey: .type)
             try container.encode(data, forKey: .testPrepData)
+        case .testPrepProgress(let data):
+            try container.encode("test_prep_progress", forKey: .type)
+            try container.encode(data, forKey: .testPrepData)
         case .courseProposal(let payload):
             try container.encode("course_proposal", forKey: .type)
             try container.encode(payload, forKey: .coursePayload)
@@ -255,6 +262,7 @@ enum MessageContentType: Codable, Equatable {
         case (.suggestions(let t1, let o1), .suggestions(let t2, let o2)): return t1 == t2 && o1 == o2
         case (.studyPlan(let p1), .studyPlan(let p2)): return p1 == p2
         case (.testPrep(let d1), .testPrep(let d2)): return d1 == d2
+        case (.testPrepProgress(let d1), .testPrepProgress(let d2)): return d1 == d2
         case (.courseProposal(let p1), .courseProposal(let p2)): return p1.title == p2.title && p1.topic == p2.topic
         default: return false
         }

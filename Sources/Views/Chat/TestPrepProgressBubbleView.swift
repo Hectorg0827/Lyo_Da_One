@@ -26,6 +26,11 @@ struct TestPrepProgressBubbleView: View {
         guard totalTasks > 0 else { return 0 }
         return Double(completedCount) / Double(totalTasks)
     }
+    /// Mastery defensively clamped to [0, 1] so out-of-range backend values
+    /// never render as e.g. "105%" or a negative percentage.
+    private var clampedMastery: Double {
+        min(1.0, max(0.0, content.masteryScore))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
@@ -76,7 +81,7 @@ struct TestPrepProgressBubbleView: View {
                 color: .blue
             )
             metricCard(
-                value: "\(Int(content.masteryScore * 100))%",
+                value: "\(Int(clampedMastery * 100))%",
                 label: "mastery",
                 color: masteryColor
             )
@@ -128,7 +133,7 @@ struct TestPrepProgressBubbleView: View {
     }
 
     private var masteryColor: Color {
-        content.masteryScore >= 0.7 ? .green : content.masteryScore >= 0.4 ? .orange : .red
+        clampedMastery >= 0.7 ? .green : clampedMastery >= 0.4 ? .orange : .red
     }
 }
 

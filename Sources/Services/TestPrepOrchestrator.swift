@@ -66,7 +66,10 @@ final class TestPrepOrchestrator: ObservableObject {
     // MARK: - Entry Points
 
     func handleIntent(rawPhrase: String, in chatService: UnifiedChatService) {
-        guard case .idle = state else { return }
+        // Allow a fresh intent to restart cleanly from any non-active state
+        // (e.g. after a failed generation left the machine mid-funnel).
+        if case .active = state { return }
+        if case .idle = state {} else { reset() }
         Log.ai.info("📚 Test prep intent detected: \(rawPhrase.prefix(50))")
         state = .detectingIntent(rawPhrase: rawPhrase)
         let emptyInfo = TestPrepIntentInfo()
@@ -234,8 +237,11 @@ final class TestPrepOrchestrator: ObservableObject {
                 }
             } catch {
                 Log.ai.error("❌ Test prep plan generation failed: \(error.localizedDescription)")
-                chatService.appendAssistantMessage("I ran into a problem building your plan. Let's try again — what subject is your test on?")
-                state = .gatheringInfo(phase: .subject, gathered: TestPrepIntentInfo())
+                chatService.appendAssistantMessage("I ran into a problem building your plan. Just tell me about your test again and we'll start over — for example, \"I have a Chemistry final next week.\"")
+                // Reset to idle so a fresh intent can restart the flow cleanly.
+                generationTask = nil
+                state = .idle
+                pendingContent = nil
             }
         }
     }
@@ -276,11 +282,15 @@ final class TestPrepOrchestrator: ObservableObject {
                 testPrep: tp
             ))
             if handlerResult.wasCommand, let content = AICommandHandler.shared.pendingTestPrep {
+                // Consume the pending content so a stale plan never leaks into a later turn.
+                AICommandHandler.shared.pendingTestPrep = nil
                 return content
             }
         }
 
-        // Fallback: build a minimal local plan if AI didn't return structured data
+        // Fallback: build a minimal local plan if the AI didn't return structured data.
+        // Logged (not silent) so we can diagnose backend schema drift.
+        Log.ai.warning("⚠️ Test prep: AI response had no usable TEST_PREP command (wasCommand=\(aiResult.wasCommand), len=\(aiResult.response.count)) — using local fallback plan")
         return buildFallbackContent(from: info, daysUntil: daysUntil)
     }
 

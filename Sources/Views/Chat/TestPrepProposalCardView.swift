@@ -225,14 +225,19 @@ struct TestPrepProposalCardView: View {
         }
     }
 
+    /// Cached once instead of reallocating a DateFormatter on every render pass.
+    private static let examDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
     private var examDateText: String {
         guard let date = content.testDate else {
             return content.daysUntilTest.map { "\($0) days" } ?? "Scheduled"
         }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        return Self.examDateFormatter.string(from: date)
     }
 
     private var confidenceBadgeText: String {

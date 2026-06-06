@@ -73,9 +73,11 @@ class AICommandHandler: ObservableObject {
             testDate = formatter.date(from: isoString)
         }
 
-        let daysUntil: Int? = testDate.map { date in
-            Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
-        }
+        // Default to a 7-day horizon when no parseable date is supplied, so the
+        // proposal/progress cards always show a sensible countdown.
+        let daysUntil: Int = testDate.map { date in
+            max(1, Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 7)
+        } ?? 7
 
         let content = TestPrepContent(
             subject: tp.subject,

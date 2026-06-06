@@ -44,6 +44,7 @@ struct LyoMessageBubbleView: View {
             case .flashcards: return true
             case .studyPlan: return true
             case .testPrep: return true
+            case .testPrepProgress: return true
             default: return false
             }
         }
@@ -383,41 +384,41 @@ struct LyoMessageBubbleView: View {
             }
 
         case .testPrep(let data):
-            // Show progress card for messages that were delivered post-confirmation,
-            // and the proposal card for messages awaiting user approval.
-            if message.content == "__test_prep_progress__" {
-                TestPrepProgressBubbleView(
-                    content: data,
-                    onQuickAction: { action in
-                        switch action {
-                        case "quiz":
-                            onQuickChipTap?("Give me a practice quiz on \(data.subject)")
-                        case "flashcards":
-                            onQuickChipTap?("Show me flashcards for \(data.subject)")
-                        case "update":
-                            onQuickChipTap?("Let me update my \(data.subject) test prep plan")
-                        default:
-                            onQuickChipTap?(action)
-                        }
+            // Proposal card awaiting user approval.
+            TestPrepProposalCardView(
+                content: data,
+                onStartPrep: {
+                    HapticManager.shared.medium()
+                    Task {
+                        await TestPrepOrchestrator.shared.confirmAndExecute(
+                            content: data,
+                            in: UnifiedChatService.shared
+                        )
                     }
-                )
-            } else {
-                TestPrepProposalCardView(
-                    content: data,
-                    onStartPrep: {
-                        HapticManager.shared.medium()
-                        Task {
-                            await TestPrepOrchestrator.shared.confirmAndExecute(
-                                content: data,
-                                in: UnifiedChatService.shared
-                            )
-                        }
-                    },
-                    onAdjust: {
-                        onQuickChipTap?("Let me adjust my test prep details for \(data.subject)")
+                },
+                onAdjust: {
+                    onQuickChipTap?("Let me adjust my test prep details for \(data.subject)")
+                }
+            )
+
+        case .testPrepProgress(let data):
+            // Progress card delivered post-confirmation (distinct content type so it
+            // can never be confused with the approval proposal card).
+            TestPrepProgressBubbleView(
+                content: data,
+                onQuickAction: { action in
+                    switch action {
+                    case "quiz":
+                        onQuickChipTap?("Give me a practice quiz on \(data.subject)")
+                    case "flashcards":
+                        onQuickChipTap?("Show me flashcards for \(data.subject)")
+                    case "update":
+                        onQuickChipTap?("Let me update my \(data.subject) test prep plan")
+                    default:
+                        onQuickChipTap?(action)
                     }
-                )
-            }
+                }
+            )
 
         case .studyPlan(let plan):
             StudyPlanBubbleView(

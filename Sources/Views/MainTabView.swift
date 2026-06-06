@@ -553,11 +553,10 @@ extension MainTabView {
                 let topic = notification.userInfo?["topic"] as? String
                 uiState.isLioChatPresented = true
                 if let topic {
-                    Task {
-                        try? await Task.sleep(nanoseconds: 400_000_000)
-                        LyoAIViewModel.shared.inputText = "Create a course about \(topic)"
-                        await LyoAIViewModel.shared.sendMessage()
-                    }
+                    // Drive the view-owned view model (the one bound to the visible chat),
+                    // not the .shared singleton, so loading/input state stays consistent.
+                    aiViewModel.inputText = "Create a course about \(topic)"
+                    Task { await aiViewModel.sendMessage() }
                 }
             }
     }

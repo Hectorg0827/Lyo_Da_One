@@ -1080,7 +1080,7 @@ final class UnifiedChatService: ObservableObject {
     private func normalizeContentTypes(_ types: [MessageContentType]) -> [MessageContentType] {
         let hasRichContent = types.contains { contentType in
             switch contentType {
-            case .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep:
+            case .courseProposal, .courseRoadmap, .quiz, .flashcards, .studyPlan, .testPrep, .testPrepProgress:
                 return true
             default:
                 return false
@@ -1652,15 +1652,15 @@ final class UnifiedChatService: ObservableObject {
     }
 
     func appendTestPrepProgressBubble(_ content: TestPrepContent) {
-        // Rendered by MessageBubbleView as TestPrepProgressBubbleView via .testPrep content type
-        // We use a dedicated progress message with metadata to distinguish from the proposal card
+        // Rendered by MessageBubbleView as TestPrepProgressBubbleView via the dedicated
+        // .testPrepProgress content type — structurally distinct from the proposal card.
         let msg = LyoMessage(
             id: UUID().uuidString,
             sessionId: currentConversationId,
-            content: "__test_prep_progress__",
+            content: "",
             isFromUser: false,
             timestamp: Date(),
-            contentTypes: [.testPrep(data: content)]
+            contentTypes: [.testPrepProgress(data: content)]
         )
         messages.append(msg)
     }
