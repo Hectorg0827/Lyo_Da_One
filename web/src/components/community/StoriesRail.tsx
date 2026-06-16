@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion'
 import { Plus } from 'lucide-react'
 import { cn, getInitials } from '@/lib/utils'
+import { useApi } from '@/hooks/use-api'
+import { api } from '@/lib/api'
 
 interface StoryUser {
   id: string
@@ -16,17 +18,6 @@ interface StoriesRailProps {
   onAddStory?: () => void
   className?: string
 }
-
-const MOCK_STORIES: StoryUser[] = [
-  { id: '1', name: 'Alex Chen', viewed: false },
-  { id: '2', name: 'Sarah Kim', viewed: false },
-  { id: '3', name: 'Marcus J.', viewed: true },
-  { id: '4', name: 'Priya S.', viewed: false },
-  { id: '5', name: 'Jordan T.', viewed: true },
-  { id: '6', name: 'Leila M.', viewed: false },
-  { id: '7', name: 'Ryu H.', viewed: false },
-  { id: '8', name: 'Emma W.', viewed: true },
-]
 
 const AVATAR_COLORS = [
   'from-blue-500 to-indigo-600',
@@ -76,6 +67,15 @@ function StoryCircle({ user, index, onClick }: { user: StoryUser; index: number;
 }
 
 export default function StoriesRail({ onStoryClick, onAddStory, className }: StoriesRailProps) {
+  const { data } = useApi(() => api.stories.list(), [])
+
+  const stories: StoryUser[] = (data?.stories ?? []).map((s) => ({
+    id: String(s.id),
+    name: (s.user_name as string) || (s.username as string) || (s.display_name as string) || 'User',
+    avatar: (s.avatar_url as string) || (s.user_avatar as string) || undefined,
+    viewed: (s.viewed as boolean) || (s.is_seen as boolean) || false,
+  }))
+
   return (
     <div className={cn('w-full', className)}>
       <div
@@ -96,7 +96,7 @@ export default function StoriesRail({ onStoryClick, onAddStory, className }: Sto
         </motion.button>
 
         {/* Story Circles */}
-        {MOCK_STORIES.map((user, i) => (
+        {stories.map((user, i) => (
           <StoryCircle
             key={user.id}
             user={user}

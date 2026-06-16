@@ -1,289 +1,101 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Users, TrendingUp, Calendar, BookOpen, Hash, Camera } from 'lucide-react'
+import { Plus, Users, TrendingUp, Calendar, BookOpen, Hash, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { cn, formatNumber } from '@/lib/utils'
 import StoriesRail from '@/components/community/StoriesRail'
 import PostCard from '@/components/community/PostCard'
 import GroupCard from '@/components/community/GroupCard'
 import CreatePostModal from '@/components/community/CreatePostModal'
-import type { CommunityPost, Group } from '@/types'
+import { useApi } from '@/hooks/use-api'
+import { api, adaptUser } from '@/lib/api'
+import type { CommunityPost, Group, User } from '@/types'
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Helpers: map backend → frontend types ──────────────────────────────────
 
-const MOCK_AUTHOR = {
-  id: 'u1',
-  email: 'alex@example.com',
-  displayName: 'Alex Chen',
-  username: 'alexchen',
-  avatar: '',
-  bio: 'Full-stack dev & lifelong learner',
-  role: 'student' as const,
-  interests: ['JavaScript', 'Python'],
-  learningGoals: [],
-  streak: 42,
-  xp: 8200,
-  level: 12,
-  coursesCompleted: 7,
-  followersCount: 234,
-  followingCount: 89,
-  createdAt: '2023-01-01',
-  isPremium: true,
+function mapBackendPost(raw: Record<string, unknown>): CommunityPost {
+  const rawUser = (raw.user as Record<string, unknown>) || {}
+  const author: User = rawUser.id
+    ? adaptUser(rawUser)
+    : {
+        id: String(raw.user_id ?? ''),
+        email: '',
+        displayName: 'Unknown User',
+        username: 'unknown',
+        avatar: '',
+        bio: '',
+        role: 'student',
+        interests: [],
+        learningGoals: [],
+        streak: 0,
+        xp: 0,
+        level: 1,
+        coursesCompleted: 0,
+        followersCount: 0,
+        followingCount: 0,
+        createdAt: (raw.created_at as string) || new Date().toISOString(),
+        isPremium: false,
+      }
+
+  return {
+    id: String(raw.id ?? ''),
+    author,
+    type: (raw.type as CommunityPost['type']) || 'post',
+    title: (raw.title as string) || (raw.content as string)?.slice(0, 80) || '',
+    content: (raw.content as string) || '',
+    images: (raw.media_urls as string[]) || (raw.images as string[]) || [],
+    tags: (raw.tags as string[]) || [],
+    category: (raw.category as string) || 'General',
+    likes: (raw.like_count as number) ?? (raw.likes as number) ?? 0,
+    comments: (raw.comment_count as number) ?? (raw.comments as number) ?? 0,
+    views: (raw.view_count as number) ?? (raw.views as number) ?? 0,
+    isLiked: (raw.is_liked as boolean) ?? false,
+    isBookmarked: (raw.is_bookmarked as boolean) ?? false,
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+  }
 }
 
-const MOCK_POSTS: CommunityPost[] = [
-  {
-    id: 'p1',
-    author: MOCK_AUTHOR,
-    type: 'post',
-    title: 'Just finished the Advanced React Patterns course — mind blown 🤯',
-    content: 'After 3 weeks of deep diving into compound components, render props, and custom hooks, I finally feel like I understand React at a fundamental level. The section on context optimization alone saved 40% render time in my side project. Highly recommend to anyone who wants to level up their frontend skills!',
-    tags: ['react', 'javascript', 'webdev'],
-    category: 'Showcase',
-    likes: 124,
-    comments: 18,
-    views: 892,
-    isLiked: false,
-    isBookmarked: true,
-    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-  {
-    id: 'p2',
-    author: { ...MOCK_AUTHOR, id: 'u2', displayName: 'Sarah Kim', username: 'sarahk' },
-    type: 'question',
-    title: 'Best resources for learning machine learning from scratch in 2025?',
-    content: 'I have a solid Python background and understand basic statistics, but I\'m not sure where to start with ML. Should I go with Andrew Ng\'s course, fast.ai, or dive straight into PyTorch? Looking for practical, project-focused resources rather than heavy theory.',
-    tags: ['machinelearning', 'python', 'beginners'],
-    category: 'Questions',
-    likes: 67,
-    comments: 34,
-    views: 1203,
-    isLiked: true,
-    createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
-  },
-  {
-    id: 'p3',
-    author: { ...MOCK_AUTHOR, id: 'u3', displayName: 'Marcus J.', username: 'marcusj' },
-    type: 'poll',
-    title: 'What\'s your preferred way to learn new programming concepts?',
-    content: 'Curious how the community approaches learning. I\'ve been debating between structured courses vs building projects from day one.',
-    tags: ['learning', 'productivity'],
-    category: 'General',
-    likes: 89,
-    comments: 22,
-    views: 654,
-    poll: {
-      id: 'poll1',
-      options: [
-        { id: 'o1', text: 'Structured courses (video/reading)', votes: 142, isSelected: false },
-        { id: 'o2', text: 'Build projects from day one', votes: 98, isSelected: true },
-        { id: 'o3', text: 'Mix of both', votes: 201, isSelected: false },
-        { id: 'o4', text: 'Pair programming / mentorship', votes: 57, isSelected: false },
-      ],
-      totalVotes: 498,
-      endsAt: new Date(Date.now() + 2 * 86400000).toISOString(),
-    },
-    createdAt: new Date(Date.now() - 8 * 3600000).toISOString(),
-  },
-  {
-    id: 'p4',
-    author: { ...MOCK_AUTHOR, id: 'u4', displayName: 'Priya S.', username: 'priyas' },
-    type: 'event',
-    title: 'Live Coding Session: Building a REST API with FastAPI',
-    content: 'Join me this Saturday for a 2-hour live coding session where we\'ll build a complete REST API with authentication, database integration, and deployment. Bring your questions! All skill levels welcome.',
-    tags: ['python', 'fastapi', 'livecoding', 'backend'],
-    category: 'Events',
-    likes: 45,
-    comments: 12,
-    views: 423,
-    createdAt: new Date(Date.now() - 12 * 3600000).toISOString(),
-  },
-  {
-    id: 'p5',
-    author: { ...MOCK_AUTHOR, id: 'u5', displayName: 'Jordan T.', username: 'jordant' },
-    type: 'course_share',
-    title: 'Course Review: "System Design Fundamentals" — 9/10 ⭐',
-    content: 'Finished this course in 2 weeks and it completely changed how I think about scalability. Covers everything from load balancing to database sharding with real-world examples from Netflix, Uber, and Twitter. The interview prep section alone is worth it.',
-    tags: ['systemdesign', 'architecture', 'interviews'],
-    category: 'Guides',
-    likes: 201,
-    comments: 41,
-    views: 2140,
-    isBookmarked: false,
-    courseId: 'course-sys-design',
-    createdAt: new Date(Date.now() - 18 * 3600000).toISOString(),
-  },
-  {
-    id: 'p6',
-    author: { ...MOCK_AUTHOR, id: 'u6', displayName: 'Leila M.', username: 'leilam' },
-    type: 'post',
-    title: '30-day Spanish challenge: Week 4 update 🇪🇸',
-    content: 'Can\'t believe I\'m already in week 4! My listening comprehension has improved dramatically. I can now watch Spanish Netflix shows without subtitles for about 70% comprehension. Using the spaced repetition deck shared here + daily 30min immersion. Who else is on a language learning streak?',
-    tags: ['spanish', 'languagelearning', 'streak'],
-    category: 'Showcase',
-    likes: 156,
-    comments: 28,
-    views: 934,
-    isLiked: true,
-    createdAt: new Date(Date.now() - 24 * 3600000).toISOString(),
-  },
-  {
-    id: 'p7',
-    author: { ...MOCK_AUTHOR, id: 'u7', displayName: 'Ryu H.', username: 'ryuh' },
-    type: 'achievement',
-    title: '🏆 Just hit 100-day streak!',
-    content: 'Started as a complete beginner in data science 100 days ago. Today I deployed my first ML model to production. The key was consistency — even 20 minutes a day compounds into something incredible. Thank you to this community for the motivation!',
-    tags: ['milestone', 'datascience', 'motivation'],
-    category: 'General',
-    likes: 342,
-    comments: 67,
-    views: 3210,
-    isLiked: false,
-    createdAt: new Date(Date.now() - 30 * 3600000).toISOString(),
-  },
-  {
-    id: 'p8',
-    author: { ...MOCK_AUTHOR, id: 'u8', displayName: 'Emma W.', username: 'emmaw' },
-    type: 'question',
-    title: 'How do you stay focused during long study sessions?',
-    content: 'I find myself losing focus after about 45 minutes no matter what I try. Have experimented with Pomodoro, ambient music, and different environments. What strategies have worked best for you? Looking for practical tips that go beyond "put your phone away."',
-    tags: ['productivity', 'focus', 'studytips'],
-    category: 'Questions',
-    likes: 93,
-    comments: 56,
-    views: 1876,
-    createdAt: new Date(Date.now() - 36 * 3600000).toISOString(),
-  },
-]
+const DEFAULT_ADMIN: User = {
+  id: '0',
+  email: '',
+  displayName: 'Admin',
+  username: 'admin',
+  avatar: '',
+  bio: '',
+  role: 'admin',
+  interests: [],
+  learningGoals: [],
+  streak: 0,
+  xp: 0,
+  level: 1,
+  coursesCompleted: 0,
+  followersCount: 0,
+  followingCount: 0,
+  createdAt: new Date().toISOString(),
+  isPremium: false,
+}
 
-const MOCK_GROUPS: Group[] = [
-  {
-    id: 'g1',
-    name: 'JavaScript Developers',
-    description: 'A community for JS developers of all levels. Share tips, resources, projects, and get help with your code.',
-    coverImage: '',
-    icon: '⚡',
-    memberCount: 8420,
-    category: 'Technology',
-    isJoined: true,
-    isPrivate: false,
-    admin: MOCK_AUTHOR,
-    recentActivity: 'Emma posted a new tutorial 2h ago',
-    createdAt: '2023-01-01',
-  },
-  {
-    id: 'g2',
-    name: 'ML & AI Study Group',
-    description: 'Weekly paper readings, project collaboration, and discussions on the latest in machine learning and artificial intelligence.',
-    coverImage: '',
-    icon: '🤖',
-    memberCount: 3201,
-    category: 'Technology',
-    isJoined: false,
-    isPrivate: false,
-    admin: { ...MOCK_AUTHOR, id: 'u2' },
-    recentActivity: 'New discussion: GPT-4 vs Llama 3 for code gen',
-    createdAt: '2023-03-15',
-  },
-  {
-    id: 'g3',
-    name: 'Language Learning Hub',
-    description: 'Practice partners, resource sharing, and cultural exchange for language learners worldwide.',
-    coverImage: '',
-    icon: '🌍',
-    memberCount: 5670,
-    category: 'Languages',
-    isJoined: true,
-    isPrivate: false,
-    admin: { ...MOCK_AUTHOR, id: 'u3' },
-    recentActivity: '12 new members this week',
-    createdAt: '2023-02-10',
-  },
-  {
-    id: 'g4',
-    name: 'Data Science & Analytics',
-    description: 'Explore data science fundamentals, visualization techniques, and real-world analytics projects together.',
-    coverImage: '',
-    icon: '📊',
-    memberCount: 4102,
-    category: 'Science',
-    isJoined: false,
-    isPrivate: false,
-    admin: { ...MOCK_AUTHOR, id: 'u4' },
-    recentActivity: 'Monthly challenge: Kaggle competition',
-    createdAt: '2023-04-01',
-  },
-  {
-    id: 'g5',
-    name: 'UI/UX Design Circle',
-    description: 'Share design work, get feedback, discuss tools and trends, and grow your design skills with peers.',
-    coverImage: '',
-    icon: '🎨',
-    memberCount: 2890,
-    category: 'Arts',
-    isJoined: false,
-    isPrivate: false,
-    admin: { ...MOCK_AUTHOR, id: 'u5' },
-    recentActivity: 'Portfolio critique session this Friday',
-    createdAt: '2023-05-20',
-  },
-  {
-    id: 'g6',
-    name: 'Startup & Entrepreneurship',
-    description: 'For builders and dreamers. Share ideas, get feedback on your startup, discuss growth strategies and funding.',
-    coverImage: '',
-    icon: '🚀',
-    memberCount: 1934,
-    category: 'Business',
-    isJoined: false,
-    isPrivate: false,
-    admin: { ...MOCK_AUTHOR, id: 'u6' },
-    recentActivity: 'AMA with a YC founder next week',
-    createdAt: '2023-06-01',
-  },
-]
+function mapBackendGroup(raw: Record<string, unknown>): Group {
+  const rawAdmin = (raw.admin as Record<string, unknown>) || {}
+  return {
+    id: String(raw.id ?? ''),
+    name: (raw.name as string) || '',
+    description: (raw.description as string) || '',
+    coverImage: (raw.cover_image as string) || '',
+    icon: (raw.icon as string) || '👥',
+    memberCount: (raw.member_count as number) ?? 0,
+    category: (raw.category as string) || 'General',
+    isJoined: (raw.is_joined as boolean) ?? false,
+    isPrivate: (raw.is_private as boolean) ?? false,
+    admin: rawAdmin.id ? adaptUser(rawAdmin) : DEFAULT_ADMIN,
+    recentActivity: (raw.recent_activity as string) || '',
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+  }
+}
 
-const MOCK_EVENTS = [
-  {
-    id: 'ev1',
-    title: 'React Summit 2025 — Community Watch Party',
-    date: 'Sat, Dec 14 · 2:00 PM UTC',
-    location: 'Online (LYO Community Room)',
-    attendees: 127,
-    emoji: '⚛️',
-    color: 'from-blue-600 to-indigo-700',
-  },
-  {
-    id: 'ev2',
-    title: 'Python for Data Science Bootcamp',
-    date: 'Mon, Dec 16 · 6:00 PM UTC',
-    location: 'Online (Zoom)',
-    attendees: 89,
-    emoji: '🐍',
-    color: 'from-emerald-600 to-teal-700',
-  },
-  {
-    id: 'ev3',
-    title: 'Open Source Contribution Sprint',
-    date: 'Fri, Dec 20 · 10:00 AM UTC',
-    location: 'GitHub + Discord',
-    attendees: 214,
-    emoji: '🔓',
-    color: 'from-violet-600 to-purple-700',
-  },
-  {
-    id: 'ev4',
-    title: 'Language Exchange: Spanish ↔ English',
-    date: 'Sun, Dec 22 · 4:00 PM UTC',
-    location: 'Online (Community Voice)',
-    attendees: 56,
-    emoji: '🗣️',
-    color: 'from-orange-600 to-amber-700',
-  },
-]
-
+// TODO: wire to trending endpoint
 const TRENDING_TOPICS = [
   { tag: 'react', count: 342 },
   { tag: 'machinelearning', count: 289 },
@@ -294,8 +106,6 @@ const TRENDING_TOPICS = [
   { tag: 'javascript', count: 122 },
   { tag: 'productivity', count: 98 },
 ]
-
-const SUGGESTED_GROUPS = MOCK_GROUPS.filter(g => !g.isJoined).slice(0, 3)
 
 const ACTIVE_MEMBERS = [
   { id: 'm1', name: 'Alex Chen', xp: 8200, color: 'from-blue-500 to-indigo-600' },
@@ -308,19 +118,99 @@ const ACTIVE_MEMBERS = [
 const TABS = ['Feed', 'Groups', 'Events', 'Trending'] as const
 type Tab = typeof TABS[number]
 
-const STATS = [
-  { label: 'Members', value: '12.4K', icon: Users, color: 'text-blue-400' },
-  { label: 'Active Today', value: '892', icon: TrendingUp, color: 'text-emerald-400' },
-  { label: 'Posts', value: '3.2K', icon: BookOpen, color: 'text-lyo-400' },
-  { label: 'Courses Shared', value: '567', icon: BookOpen, color: 'text-accent-purple' },
-]
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CommunityPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('Feed')
   const [showCreateModal, setShowCreateModal] = useState(false)
+
+  // ── Fetch posts ──
+  const {
+    data: feedData,
+    isLoading: feedLoading,
+    error: feedError,
+    refetch: refetchFeed,
+  } = useApi(
+    () => api.feed.publicFeed(1, 20),
+    []
+  )
+
+  const posts: CommunityPost[] = feedData?.posts?.map(mapBackendPost) ?? []
+  const totalPosts = feedData?.total ?? 0
+
+  // ── Fetch groups ──
+  const {
+    data: rawGroups,
+    isLoading: groupsLoading,
+    error: groupsError,
+  } = useApi(
+    () => api.community.groups(),
+    []
+  )
+
+  const groups: Group[] = rawGroups?.map(mapBackendGroup) ?? []
+  const suggestedGroups = groups.filter(g => !g.isJoined).slice(0, 3)
+
+  // ── Fetch events ──
+  const {
+    data: rawEvents,
+    isLoading: eventsLoading,
+    error: eventsError,
+  } = useApi(
+    () => api.community.events(),
+    []
+  )
+
+  const GRADIENT_COLORS = [
+    'from-blue-600 to-indigo-700',
+    'from-emerald-600 to-teal-700',
+    'from-violet-600 to-purple-700',
+    'from-orange-600 to-amber-700',
+  ]
+
+  const events = (rawEvents ?? []).map((raw: Record<string, unknown>, i: number) => ({
+    id: String(raw.id ?? `ev-${i}`),
+    title: (raw.title as string) || (raw.name as string) || '',
+    date: (raw.date as string) || (raw.start_time as string) || '',
+    location: (raw.location as string) || 'Online',
+    attendees: (raw.attendee_count as number) ?? (raw.attendees as number) ?? 0,
+    emoji: (raw.emoji as string) || '📅',
+    color: GRADIENT_COLORS[i % GRADIENT_COLORS.length],
+  }))
+
+  // ── Derive stats from API data ──
+  const STATS = [
+    { label: 'Members', value: groups.length > 0 ? formatNumber(groups.reduce((sum, g) => sum + g.memberCount, 0)) : '---', icon: Users, color: 'text-blue-400' },
+    { label: 'Active Today', value: '---', icon: TrendingUp, color: 'text-emerald-400' },
+    { label: 'Posts', value: totalPosts > 0 ? formatNumber(totalPosts) : '---', icon: BookOpen, color: 'text-lyo-400' },
+    { label: 'Courses Shared', value: '---', icon: BookOpen, color: 'text-accent-purple' },
+  ]
+
+  // ── Create post handler ──
+  const handleCreatePost = useCallback(async (data: { type: string; title: string; content: string; tags: string[]; category: string; pollOptions?: string[]; image?: string | null }) => {
+    try {
+      await api.feed.create(data.content)
+      setShowCreateModal(false)
+      refetchFeed()
+    } catch (err) {
+      console.error('Failed to create post:', err)
+    }
+  }, [refetchFeed])
+
+  // ── Loading spinner helper ──
+  const LoadingSpinner = () => (
+    <div className="flex items-center justify-center py-12">
+      <Loader2 className="w-6 h-6 text-lyo-400 animate-spin" />
+      <span className="ml-2 text-white/50 text-sm">Loading...</span>
+    </div>
+  )
+
+  const ErrorMessage = ({ message }: { message: string }) => (
+    <div className="flex items-center justify-center py-12">
+      <p className="text-red-400 text-sm">{message}</p>
+    </div>
+  )
 
   return (
     <div className="flex gap-6">
@@ -379,7 +269,12 @@ export default function CommunityPage() {
             {/* Feed Tab */}
             {activeTab === 'Feed' && (
               <div className="space-y-4 relative">
-                {MOCK_POSTS.map(post => (
+                {feedLoading && <LoadingSpinner />}
+                {feedError && <ErrorMessage message={feedError} />}
+                {!feedLoading && !feedError && posts.length === 0 && (
+                  <p className="text-center text-white/40 py-12 text-sm">No posts yet. Be the first to share!</p>
+                )}
+                {!feedLoading && !feedError && posts.map(post => (
                   <PostCard
                     key={post.id}
                     post={post}
@@ -401,17 +296,25 @@ export default function CommunityPage() {
 
             {/* Groups Tab */}
             {activeTab === 'Groups' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {MOCK_GROUPS.map(group => (
-                  <GroupCard key={group.id} group={group} />
-                ))}
+              <div>
+                {groupsLoading && <LoadingSpinner />}
+                {groupsError && <ErrorMessage message={groupsError} />}
+                {!groupsLoading && !groupsError && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {groups.map(group => (
+                      <GroupCard key={group.id} group={group} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Events Tab */}
             {activeTab === 'Events' && (
               <div className="space-y-4">
-                {MOCK_EVENTS.map(event => (
+                {eventsLoading && <LoadingSpinner />}
+                {eventsError && <ErrorMessage message={eventsError} />}
+                {!eventsLoading && !eventsError && events.map(event => (
                   <motion.div
                     key={event.id}
                     whileHover={{ y: -2 }}
@@ -498,22 +401,29 @@ export default function CommunityPage() {
             <Users className="w-4 h-4 text-lyo-400" />
             Suggested Groups
           </h3>
-          <div className="space-y-3">
-            {SUGGESTED_GROUPS.map(group => (
-              <div key={group.id} className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lyo-500 to-accent-purple flex items-center justify-center text-base flex-shrink-0">
-                  {group.icon}
+          {groupsLoading && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-4 h-4 text-lyo-400 animate-spin" />
+            </div>
+          )}
+          {!groupsLoading && (
+            <div className="space-y-3">
+              {suggestedGroups.map(group => (
+                <div key={group.id} className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lyo-500 to-accent-purple flex items-center justify-center text-base flex-shrink-0">
+                    {group.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{group.name}</p>
+                    <p className="text-xs text-white/40">{formatNumber(group.memberCount)} members</p>
+                  </div>
+                  <button className="text-xs px-3 py-1 rounded-lg bg-lyo-500/20 text-lyo-300 hover:bg-lyo-500/30 transition-colors font-medium">
+                    Join
+                  </button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{group.name}</p>
-                  <p className="text-xs text-white/40">{formatNumber(group.memberCount)} members</p>
-                </div>
-                <button className="text-xs px-3 py-1 rounded-lg bg-lyo-500/20 text-lyo-300 hover:bg-lyo-500/30 transition-colors font-medium">
-                  Join
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Active Members */}
@@ -543,10 +453,7 @@ export default function CommunityPage() {
       {showCreateModal && (
         <CreatePostModal
           onClose={() => setShowCreateModal(false)}
-          onSubmit={data => {
-            console.log('New post:', data)
-            setShowCreateModal(false)
-          }}
+          onSubmit={handleCreatePost}
         />
       )}
     </div>

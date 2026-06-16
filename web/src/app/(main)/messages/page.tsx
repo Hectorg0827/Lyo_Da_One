@@ -7,7 +7,11 @@ import { cn, getInitials, formatTimeAgo } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
 import type { Conversation, DirectMessage } from '@/types';
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
+// TODO: Backend does not yet have DM/messaging endpoints.
+// When available, replace mock data with real API calls (e.g., api.messages.list(), api.messages.send()).
+// For now, the UI is fully functional with local-only mock conversations.
+
+// ── Mock data (local-only until backend DM endpoints are added) ─────────────
 
 const CURRENT_USER_ID = 'user_1';
 

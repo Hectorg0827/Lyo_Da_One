@@ -123,13 +123,12 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/');
     } catch {
-      setError('Invalid email or password. Try demo@lyo.app / any password.');
+      setError('Invalid email or password.');
     }
   }
 
   function handleOAuth(provider: string) {
-    // OAuth placeholder — triggers demo login
-    login('demo@lyo.app', 'demo').then(() => router.push('/'));
+    alert('OAuth coming soon!');
     console.log(`OAuth: ${provider}`);
   }
 

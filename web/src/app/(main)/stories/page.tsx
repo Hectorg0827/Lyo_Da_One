@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Heart, Send } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Heart, Send, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
+import { formatTimeAgo } from '@/lib/utils';
 
 interface StorySlide {
   id: string;
@@ -22,93 +25,56 @@ interface StoryData {
   timeAgo: string;
 }
 
-const mockStories: StoryData[] = [
-  {
-    id: 's1',
-    author: { name: 'Sarah Chen', avatar: '', username: 'sarahcodes' },
-    slides: [
-      {
-        id: 'sl1',
-        type: 'course_completion',
-        gradient: 'from-violet-600 via-purple-600 to-pink-500',
-        emoji: '🎉',
-        text: 'Just completed "Advanced Python Patterns"!',
-        subtitle: '12 modules • 24 lessons • 8 quizzes passed',
-        duration: 5,
-      },
-      {
-        id: 'sl2',
-        type: 'text',
-        gradient: 'from-blue-600 via-indigo-600 to-violet-600',
-        text: 'The decorator patterns section was mind-blowing. Totally changed how I think about code structure.',
-        duration: 5,
-      },
-      {
-        id: 'sl3',
-        type: 'achievement',
-        gradient: 'from-amber-500 via-orange-500 to-red-500',
-        emoji: '🏆',
-        text: 'Achievement Unlocked: Code Master',
-        subtitle: 'Complete 10 programming courses • +500 XP',
-        duration: 5,
-      },
-    ],
-    timeAgo: '2h ago',
-  },
-  {
-    id: 's2',
-    author: { name: 'Alex Rivera', avatar: '', username: 'alexrivera' },
-    slides: [
-      {
-        id: 'sl4',
-        type: 'text',
-        gradient: 'from-emerald-500 via-teal-500 to-cyan-500',
-        text: 'Day 30 of my learning streak! 🔥\n\nConsistency is everything. Even 15 minutes a day adds up.',
-        duration: 5,
-      },
-      {
-        id: 'sl5',
-        type: 'course_completion',
-        gradient: 'from-pink-500 via-rose-500 to-red-500',
-        emoji: '✅',
-        text: 'Finished "UI/UX Fundamentals"',
-        subtitle: '8 modules • 16 lessons • Certificate earned',
-        duration: 5,
-      },
-    ],
-    timeAgo: '4h ago',
-  },
-  {
-    id: 's3',
-    author: { name: 'Maya Patel', avatar: '', username: 'mayapaints' },
-    slides: [
-      {
-        id: 'sl6',
-        type: 'achievement',
-        gradient: 'from-yellow-500 via-amber-500 to-orange-500',
-        emoji: '⭐',
-        text: 'Achievement Unlocked: Social Butterfly',
-        subtitle: 'Help 50 community members • +300 XP',
-        duration: 5,
-      },
-      {
-        id: 'sl7',
-        type: 'text',
-        gradient: 'from-indigo-600 via-blue-600 to-sky-500',
-        text: 'Pro tip: Teaching others is the fastest way to learn. Start sharing what you know!',
-        duration: 5,
-      },
-      {
-        id: 'sl8',
-        type: 'text',
-        gradient: 'from-fuchsia-600 via-pink-600 to-rose-500',
-        text: 'Looking for study partners for the Data Science track. Drop a comment if interested! 📊',
-        duration: 5,
-      },
-    ],
-    timeAgo: '6h ago',
-  },
+const GRADIENTS = [
+  'from-violet-600 via-purple-600 to-pink-500',
+  'from-blue-600 via-indigo-600 to-violet-600',
+  'from-amber-500 via-orange-500 to-red-500',
+  'from-emerald-500 via-teal-500 to-cyan-500',
+  'from-pink-500 via-rose-500 to-red-500',
+  'from-yellow-500 via-amber-500 to-orange-500',
+  'from-indigo-600 via-blue-600 to-sky-500',
+  'from-fuchsia-600 via-pink-600 to-rose-500',
 ];
+
+function adaptSlide(raw: Record<string, unknown>, index: number, storyId: string): StorySlide {
+  const slideType = (raw.media_type as string) || 'text';
+  let type: StorySlide['type'] = 'text';
+  if (slideType === 'course_completion') type = 'course_completion';
+  else if (slideType === 'achievement') type = 'achievement';
+
+  return {
+    id: String(raw.id || `${storyId}-slide-${index}`),
+    type,
+    gradient: GRADIENTS[(index + storyId.charCodeAt(0)) % GRADIENTS.length],
+    text: (raw.caption as string) || (raw.text as string) || '',
+    emoji: (raw.emoji as string) || undefined,
+    subtitle: (raw.subtitle as string) || undefined,
+    duration: (raw.duration as number) || 5,
+  };
+}
+
+function adaptStory(raw: Record<string, unknown>, index: number): StoryData {
+  const slides = Array.isArray(raw.slides)
+    ? (raw.slides as Record<string, unknown>[]).map((s, i) => adaptSlide(s, i, String(raw.id || index)))
+    : [{
+        id: `${raw.id}-slide-0`,
+        type: 'text' as const,
+        gradient: GRADIENTS[index % GRADIENTS.length],
+        text: (raw.caption as string) || '',
+        duration: 5,
+      }];
+
+  return {
+    id: String(raw.id || index),
+    author: {
+      name: (raw.user_name as string) || 'User',
+      avatar: (raw.user_avatar as string) || '',
+      username: (raw.username as string) || (raw.user_name as string)?.toLowerCase().replace(/\s/g, '') || 'user',
+    },
+    slides,
+    timeAgo: raw.created_at ? formatTimeAgo(raw.created_at as string) : '',
+  };
+}
 
 function SlideContent({ slide }: { slide: StorySlide }) {
   if (slide.type === 'course_completion') {
@@ -200,27 +166,40 @@ function SlideContent({ slide }: { slide: StorySlide }) {
 
 export default function StoriesPage() {
   const router = useRouter();
+  const { data: storiesData, isLoading } = useApi(() => api.stories.list(), []);
+  const stories: StoryData[] = storiesData?.stories?.map((raw, i) => adaptStory(raw, i)) ?? [];
+
   const [storyIndex, setStoryIndex] = useState(0);
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
 
-  const currentStory = mockStories[storyIndex];
+  const currentStory = stories[storyIndex];
   const currentSlide = currentStory?.slides[slideIndex];
   const slideDuration = (currentSlide?.duration || 5) * 1000;
 
+  // Mark story as seen when story index changes
+  useEffect(() => {
+    const story = stories[storyIndex];
+    if (story?.id) {
+      api.stories.seen(story.id).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyIndex, stories.length]);
+
   const goNext = useCallback(() => {
+    if (!currentStory) return;
     if (slideIndex < currentStory.slides.length - 1) {
       setSlideIndex((i) => i + 1);
       setProgress(0);
-    } else if (storyIndex < mockStories.length - 1) {
+    } else if (storyIndex < stories.length - 1) {
       setStoryIndex((i) => i + 1);
       setSlideIndex(0);
       setProgress(0);
     } else {
       router.back();
     }
-  }, [slideIndex, storyIndex, currentStory, router]);
+  }, [slideIndex, storyIndex, currentStory, stories.length, router]);
 
   const goPrev = useCallback(() => {
     if (slideIndex > 0) {
@@ -255,6 +234,26 @@ export default function StoriesPage() {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [goNext, goPrev, router]);
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-white" />
+      </div>
+    );
+  }
+
+  if (!stories.length) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black"
+        onClick={() => router.back()}
+      >
+        <p className="text-lg text-white/70">No stories yet</p>
+        <p className="mt-2 text-sm text-white/40">Tap anywhere to go back</p>
+      </div>
+    );
+  }
 
   if (!currentStory || !currentSlide) return null;
 
@@ -359,7 +358,7 @@ export default function StoriesPage() {
 
       {/* Story indicators */}
       <div className="absolute bottom-4 flex gap-1.5">
-        {mockStories.map((_, i) => (
+        {stories.map((_, i) => (
           <button
             key={i}
             onClick={() => {

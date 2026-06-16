@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+// TODO: wire to real notifications endpoint when available
+
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -16,7 +18,7 @@ import {
 import { cn, formatTimeAgo, getInitials } from '@/lib/utils';
 import type { AppNotification } from '@/types';
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
+// ── Mock data (fallback until a real notifications endpoint exists) ───────────
 
 const mockNotifications: AppNotification[] = [
   {
@@ -34,12 +36,12 @@ const mockNotifications: AppNotification[] = [
       role: 'student',
       interests: [],
       learningGoals: [],
-      streak: 5,
-      xp: 1200,
-      level: 8,
-      coursesCompleted: 7,
-      followersCount: 210,
-      followingCount: 90,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: false,
     },
@@ -63,12 +65,12 @@ const mockNotifications: AppNotification[] = [
       role: 'student',
       interests: [],
       learningGoals: [],
-      streak: 30,
-      xp: 5400,
-      level: 18,
-      coursesCompleted: 15,
-      followersCount: 890,
-      followingCount: 200,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: true,
     },
@@ -92,12 +94,12 @@ const mockNotifications: AppNotification[] = [
       role: 'creator',
       interests: [],
       learningGoals: [],
-      streak: 8,
-      xp: 3100,
-      level: 12,
-      coursesCompleted: 9,
-      followersCount: 1240,
-      followingCount: 350,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: false,
     },
@@ -127,12 +129,12 @@ const mockNotifications: AppNotification[] = [
       role: 'student',
       interests: [],
       learningGoals: [],
-      streak: 12,
-      xp: 4850,
-      level: 15,
-      coursesCompleted: 23,
-      followersCount: 342,
-      followingCount: 128,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: false,
     },
@@ -156,12 +158,12 @@ const mockNotifications: AppNotification[] = [
       role: 'student',
       interests: [],
       learningGoals: [],
-      streak: 3,
-      xp: 800,
-      level: 5,
-      coursesCompleted: 3,
-      followersCount: 45,
-      followingCount: 60,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: false,
     },
@@ -183,12 +185,12 @@ const mockNotifications: AppNotification[] = [
       role: 'mentor',
       interests: [],
       learningGoals: [],
-      streak: 45,
-      xp: 12000,
-      level: 32,
-      coursesCompleted: 60,
-      followersCount: 4200,
-      followingCount: 180,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: true,
     },
@@ -210,12 +212,12 @@ const mockNotifications: AppNotification[] = [
       role: 'mentor',
       interests: [],
       learningGoals: [],
-      streak: 45,
-      xp: 12000,
-      level: 32,
-      coursesCompleted: 60,
-      followersCount: 4200,
-      followingCount: 180,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: true,
     },
@@ -253,12 +255,12 @@ const mockNotifications: AppNotification[] = [
       role: 'creator',
       interests: [],
       learningGoals: [],
-      streak: 20,
-      xp: 7800,
-      level: 22,
-      coursesCompleted: 31,
-      followersCount: 2100,
-      followingCount: 400,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: true,
     },
@@ -288,12 +290,12 @@ const mockNotifications: AppNotification[] = [
       role: 'student',
       interests: [],
       learningGoals: [],
-      streak: 30,
-      xp: 5400,
-      level: 18,
-      coursesCompleted: 15,
-      followersCount: 890,
-      followingCount: 200,
+      streak: 0,
+      xp: 0,
+      level: 0,
+      coursesCompleted: 0,
+      followersCount: 0,
+      followingCount: 0,
       createdAt: '',
       isPremium: true,
     },
@@ -412,6 +414,50 @@ function NotifItem({ notif }: { notif: AppNotification }) {
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [notifications, setNotifications] = useState(mockNotifications);
+
+  // TODO: wire to real notifications endpoint when available
+  // Attempt to enrich notifications from available endpoints (e.g. gamification achievements)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchNotificationSources() {
+      try {
+        // Try to fetch recent achievements to generate achievement notifications
+        const { api } = await import('@/lib/api');
+        const achievements = await api.gamification.achievements(true);
+        if (cancelled || !Array.isArray(achievements)) return;
+
+        const achievementNotifs: AppNotification[] = achievements
+          .filter((a: Record<string, unknown>) => a.completed_at || a.unlocked_at)
+          .slice(0, 3)
+          .map((a: Record<string, unknown>, i: number) => ({
+            id: `api_achievement_${i}`,
+            type: 'achievement' as const,
+            title: 'Achievement unlocked!',
+            body: `You earned "${String(a.title ?? a.name ?? 'Achievement')}"${a.xp_reward ? ` — +${a.xp_reward} XP` : ''}`,
+            isRead: true,
+            createdAt: String(a.completed_at ?? a.unlocked_at ?? new Date().toISOString()),
+          }));
+
+        if (achievementNotifs.length > 0) {
+          setNotifications((prev) => {
+            // Merge API achievement notifications with mock data, avoiding duplicates
+            const existingIds = new Set(prev.map((n) => n.id));
+            const newNotifs = achievementNotifs.filter((n) => !existingIds.has(n.id));
+            if (newNotifs.length === 0) return prev;
+            return [...prev, ...newNotifs].sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          });
+        }
+      } catch {
+        // Silently fall back to mock data if API is unavailable
+      }
+    }
+
+    fetchNotificationSources();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = filterNotifications(notifications, activeTab);
   const unreadCount = notifications.filter((n) => !n.isRead).length;

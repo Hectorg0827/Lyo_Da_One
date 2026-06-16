@@ -25,6 +25,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 
 // ── Animation variants ─────────────────────────────────────────────────────────
@@ -216,7 +217,7 @@ function InterestTag({ label, active, onClick }: { label: string; active: boolea
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { user, updateUser } = useAuthStore();
+  const { user, updateUser, logout } = useAuthStore();
 
   // Account
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
@@ -262,9 +263,14 @@ export default function SettingsPage() {
     setNotifToggles((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function saveDisplayName(v: string) {
+  async function saveDisplayName(v: string) {
     setDisplayName(v);
     updateUser({ displayName: v });
+    try {
+      await api.auth.updateProfile({ full_name: v });
+    } catch {
+      // profile update failed silently — local state already updated
+    }
   }
 
   return (
@@ -586,6 +592,7 @@ export default function SettingsPage() {
               </button>
               <button
                 disabled={deleteConfirm !== 'DELETE'}
+                onClick={() => { if (deleteConfirm === 'DELETE') logout(); }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 disabled:opacity-40"
                 style={{ background: '#ef4444' }}
               >

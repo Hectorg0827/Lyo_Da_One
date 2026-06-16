@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play,
@@ -15,8 +15,11 @@ import {
   Clock,
   TrendingUp,
   Users,
+  Loader2,
 } from 'lucide-react';
 import { formatNumber, formatTimeAgo } from '@/lib/utils';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
 
 interface Clip {
   id: string;
@@ -34,132 +37,51 @@ interface Clip {
   createdAt: string;
 }
 
-const mockClips: Clip[] = [
-  {
-    id: '1',
-    title: 'Python List Comprehensions in 60 Seconds',
-    author: { name: 'Sarah Chen', avatar: '', username: 'sarahcodes' },
-    thumbnailGradient: 'from-blue-600 to-purple-600',
-    duration: '0:58',
-    views: 45200,
-    likes: 3800,
-    comments: 234,
-    tags: ['python', 'coding', 'tips'],
-    category: 'Programming',
-    isLiked: false,
-    isBookmarked: false,
-    createdAt: '2024-03-10T10:00:00Z',
-  },
-  {
-    id: '2',
-    title: 'The Dopamine Effect on Learning',
-    author: { name: 'Dr. James Wu', avatar: '', username: 'drjameswu' },
-    thumbnailGradient: 'from-pink-600 to-red-600',
-    duration: '1:23',
-    views: 89400,
-    likes: 12300,
-    comments: 567,
-    tags: ['neuroscience', 'learning', 'brain'],
-    category: 'Science',
-    isLiked: true,
-    isBookmarked: false,
-    createdAt: '2024-03-09T15:30:00Z',
-  },
-  {
-    id: '3',
-    title: 'CSS Grid vs Flexbox — When to Use What',
-    author: { name: 'Alex Rivera', avatar: '', username: 'alexcss' },
-    thumbnailGradient: 'from-teal-500 to-green-500',
-    duration: '1:45',
-    views: 23100,
-    likes: 1900,
-    comments: 145,
-    tags: ['css', 'webdev', 'frontend'],
-    category: 'Web Development',
-    isLiked: false,
-    isBookmarked: true,
-    createdAt: '2024-03-08T09:00:00Z',
-  },
-  {
-    id: '4',
-    title: 'Quick Watercolor Technique for Beginners',
-    author: { name: 'Maya Patel', avatar: '', username: 'mayapaints' },
-    thumbnailGradient: 'from-orange-500 to-yellow-500',
-    duration: '2:10',
-    views: 67800,
-    likes: 8900,
-    comments: 390,
-    tags: ['art', 'watercolor', 'tutorial'],
-    category: 'Art',
-    isLiked: false,
-    isBookmarked: false,
-    createdAt: '2024-03-07T14:00:00Z',
-  },
-  {
-    id: '5',
-    title: 'Spanish Phrases You Need for Travel',
-    author: { name: 'Carlos Mendez', avatar: '', username: 'carlosespanol' },
-    thumbnailGradient: 'from-red-500 to-orange-500',
-    duration: '1:30',
-    views: 112000,
-    likes: 15600,
-    comments: 823,
-    tags: ['spanish', 'language', 'travel'],
-    category: 'Languages',
-    isLiked: true,
-    isBookmarked: true,
-    createdAt: '2024-03-06T11:00:00Z',
-  },
-  {
-    id: '6',
-    title: 'Solve Any Quadratic Equation Instantly',
-    author: { name: 'Prof. Kim', avatar: '', username: 'profkim' },
-    thumbnailGradient: 'from-indigo-600 to-blue-500',
-    duration: '1:15',
-    views: 34500,
-    likes: 2800,
-    comments: 198,
-    tags: ['math', 'algebra', 'tips'],
-    category: 'Mathematics',
-    isLiked: false,
-    isBookmarked: false,
-    createdAt: '2024-03-05T08:00:00Z',
-  },
-  {
-    id: '7',
-    title: 'Build a Neural Network from Scratch',
-    author: { name: 'AI Academy', avatar: '', username: 'aiacademy' },
-    thumbnailGradient: 'from-violet-600 to-purple-500',
-    duration: '2:55',
-    views: 78900,
-    likes: 9200,
-    comments: 456,
-    tags: ['ai', 'machinelearning', 'coding'],
-    category: 'AI & ML',
-    isLiked: false,
-    isBookmarked: false,
-    createdAt: '2024-03-04T16:00:00Z',
-  },
-  {
-    id: '8',
-    title: 'Photography Composition Rules',
-    author: { name: 'Lens Master', avatar: '', username: 'lensmaster' },
-    thumbnailGradient: 'from-amber-500 to-red-500',
-    duration: '1:50',
-    views: 56700,
-    likes: 7100,
-    comments: 312,
-    tags: ['photography', 'composition', 'creative'],
-    category: 'Photography',
-    isLiked: true,
-    isBookmarked: false,
-    createdAt: '2024-03-03T12:00:00Z',
-  },
+const GRADIENT_LIST = [
+  'from-blue-600 to-purple-600',
+  'from-pink-600 to-red-600',
+  'from-teal-500 to-green-500',
+  'from-orange-500 to-yellow-500',
+  'from-red-500 to-orange-500',
+  'from-indigo-600 to-blue-500',
+  'from-violet-600 to-purple-500',
+  'from-amber-500 to-red-500',
+  'from-emerald-500 to-teal-500',
+  'from-rose-500 to-pink-500',
 ];
+
+function formatDuration(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function adaptClip(raw: Record<string, unknown>, index: number): Clip {
+  const durationSeconds = (raw.duration_seconds as number) || (raw.duration as number) || 0;
+  return {
+    id: String(raw.id),
+    title: (raw.title as string) || 'Untitled Clip',
+    author: {
+      name: (raw.creator_name as string) || (raw.user_name as string) || 'Anonymous',
+      avatar: (raw.creator_avatar as string) || (raw.user_avatar as string) || '',
+      username: (raw.creator_username as string) || (raw.user_username as string) || 'user',
+    },
+    thumbnailGradient: GRADIENT_LIST[index % GRADIENT_LIST.length],
+    duration: formatDuration(durationSeconds),
+    views: (raw.view_count as number) || (raw.views as number) || 0,
+    likes: (raw.like_count as number) || (raw.likes as number) || 0,
+    comments: (raw.comment_count as number) || (raw.comments as number) || 0,
+    tags: (raw.tags as string[]) || [],
+    category: (raw.subject as string) || (raw.topic as string) || (raw.category as string) || 'General',
+    isLiked: (raw.is_liked as boolean) || false,
+    isBookmarked: (raw.is_saved as boolean) || (raw.is_bookmarked as boolean) || false,
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+  };
+}
 
 const tabs = ['For You', 'Following', 'Trending'];
 
-function ClipGridCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
+function ClipGridCard({ clip, onClick, onLike }: { clip: Clip; onClick: () => void; onLike?: (clipId: string) => void }) {
   const [liked, setLiked] = useState(clip.isLiked);
 
   return (
@@ -198,6 +120,7 @@ function ClipGridCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
             onClick={(e) => {
               e.stopPropagation();
               setLiked(!liked);
+              onLike?.(clip.id);
             }}
             className={`flex items-center gap-1 transition ${liked ? 'text-red-400' : ''}`}
           >
@@ -214,10 +137,14 @@ function ClipGridCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
   );
 }
 
-function ClipFullscreen({ clip, onClose }: { clip: Clip; onClose: () => void }) {
+function ClipFullscreen({ clip, onClose, onLike, onSave, onView }: { clip: Clip; onClose: () => void; onLike?: (clipId: string) => void; onSave?: (clipId: string) => void; onView?: (clipId: string) => void }) {
   const [liked, setLiked] = useState(clip.isLiked);
   const [bookmarked, setBookmarked] = useState(clip.isBookmarked);
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    onView?.(clip.id);
+  }, [clip.id, onView]);
 
   return (
     <motion.div
@@ -261,7 +188,7 @@ function ClipFullscreen({ clip, onClose }: { clip: Clip; onClose: () => void }) 
         </div>
 
         <div className="absolute bottom-4 right-3 flex flex-col items-center gap-5">
-          <button onClick={() => setLiked(!liked)} className="flex flex-col items-center gap-1">
+          <button onClick={() => { setLiked(!liked); onLike?.(clip.id); }} className="flex flex-col items-center gap-1">
             <motion.div whileTap={{ scale: 1.3 }}>
               <Heart
                 className={`h-7 w-7 ${liked ? 'text-red-500' : 'text-white'}`}
@@ -278,7 +205,7 @@ function ClipFullscreen({ clip, onClose }: { clip: Clip; onClose: () => void }) 
             <Share2 className="h-7 w-7 text-white" />
             <span className="text-xs text-white">Share</span>
           </button>
-          <button onClick={() => setBookmarked(!bookmarked)} className="flex flex-col items-center gap-1">
+          <button onClick={() => { setBookmarked(!bookmarked); onSave?.(clip.id); }} className="flex flex-col items-center gap-1">
             <Bookmark
               className={`h-7 w-7 ${bookmarked ? 'text-yellow-400' : 'text-white'}`}
               fill={bookmarked ? 'currentColor' : 'none'}
@@ -304,6 +231,13 @@ export default function ClipsPage() {
   const [activeTab, setActiveTab] = useState('For You');
   const [viewMode, setViewMode] = useState<'grid' | 'feed'>('grid');
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
+
+  const { data: clipsData, isLoading, error } = useApi(() => api.clips.discover(), []);
+  const clips: Clip[] = clipsData?.clips?.map((raw, i) => adaptClip(raw, i)) ?? [];
+
+  const handleLike = async (clipId: string) => { try { await api.clips.like(clipId); } catch { /* ignore */ } };
+  const handleSave = async (clipId: string) => { try { await api.clips.save(clipId); } catch { /* ignore */ } };
+  const handleView = async (clipId: string) => { try { await api.clips.view(clipId); } catch { /* ignore */ } };
 
   return (
     <div className="min-h-screen p-6">
@@ -350,14 +284,24 @@ export default function ClipsPage() {
         ))}
       </div>
 
-      {viewMode === 'grid' ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-lyo-500" />
+        </div>
+      ) : clips.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <MonitorPlay className="mb-4 h-12 w-12 text-gray-500" />
+          <p className="text-lg font-medium text-white">No clips yet</p>
+          <p className="mt-1 text-sm text-gray-400">Create your first!</p>
+        </div>
+      ) : viewMode === 'grid' ? (
         <motion.div
           className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
           initial="hidden"
           animate="visible"
           variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
         >
-          {mockClips.map((clip) => (
+          {clips.map((clip) => (
             <motion.div
               key={clip.id}
               variants={{
@@ -365,14 +309,14 @@ export default function ClipsPage() {
                 visible: { opacity: 1, y: 0 },
               }}
             >
-              <ClipGridCard clip={clip} onClick={() => setSelectedClip(clip)} />
+              <ClipGridCard clip={clip} onClick={() => setSelectedClip(clip)} onLike={handleLike} />
             </motion.div>
           ))}
         </motion.div>
       ) : (
         <div className="mx-auto max-w-md">
           <div className="h-[calc(100vh-200px)] snap-y snap-mandatory overflow-y-auto rounded-2xl">
-            {mockClips.map((clip) => (
+            {clips.map((clip) => (
               <div key={clip.id} className="h-full snap-start">
                 <div className={`relative h-full rounded-2xl bg-gradient-to-br ${clip.thumbnailGradient}`}>
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -408,7 +352,7 @@ export default function ClipsPage() {
 
       <AnimatePresence>
         {selectedClip && (
-          <ClipFullscreen clip={selectedClip} onClose={() => setSelectedClip(null)} />
+          <ClipFullscreen clip={selectedClip} onClose={() => setSelectedClip(null)} onLike={handleLike} onSave={handleSave} onView={handleView} />
         )}
       </AnimatePresence>
     </div>

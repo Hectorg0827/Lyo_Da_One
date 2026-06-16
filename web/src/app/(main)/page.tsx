@@ -22,48 +22,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
-
-const inProgressCourses = [
-  {
-    id: '1',
-    title: 'Machine Learning Fundamentals',
-    category: 'AI & ML',
-    progress: 68,
-    color: '#6c63ff',
-    emoji: '🤖',
-    timeLeft: '3h 20m left',
-  },
-  {
-    id: '2',
-    title: 'UI/UX Design Principles',
-    category: 'Design',
-    progress: 42,
-    color: '#ec4899',
-    emoji: '🎨',
-    timeLeft: '5h 10m left',
-  },
-  {
-    id: '3',
-    title: 'Python for Data Science',
-    category: 'Programming',
-    progress: 81,
-    color: '#22c55e',
-    emoji: '🐍',
-    timeLeft: '1h 45m left',
-  },
-  {
-    id: '4',
-    title: 'Music Theory Basics',
-    category: 'Music',
-    progress: 25,
-    color: '#f59e0b',
-    emoji: '🎵',
-    timeLeft: '8h 0m left',
-  },
-];
+// ── Daily challenges (TODO: wire to gamification challenges when endpoint available) ──
 
 const dailyChallenges = [
   {
@@ -98,133 +61,17 @@ const dailyChallenges = [
   },
 ];
 
-const learningStats = [
-  {
-    label: 'Hours Learned',
-    value: '14.5',
-    sub: 'this week',
-    icon: Clock,
-    color: '#6c63ff',
-    trend: '+2.3h vs last week',
-  },
-  {
-    label: 'Courses Done',
-    value: '23',
-    sub: 'total completed',
-    icon: BookOpen,
-    color: '#22c55e',
-    trend: '2 this month',
-  },
-  {
-    label: 'XP Earned',
-    value: '1,240',
-    sub: 'this week',
-    icon: Zap,
-    color: '#f59e0b',
-    trend: 'Top 15%',
-  },
-  {
-    label: 'Ranking',
-    value: '#128',
-    sub: 'on leaderboard',
-    icon: Trophy,
-    color: '#ec4899',
-    trend: 'Up 34 spots',
-  },
+// Color palette for dynamically mapped courses
+const courseColors = ['#6c63ff', '#ec4899', '#22c55e', '#f59e0b', '#3b82f6'];
+const courseEmojis = ['📚', '🧠', '🎨', '🐍', '🎵', '⚛️'];
+const gradientPairs = [
+  'from-[#6c63ff] to-[#8b5cf6]',
+  'from-[#ec4899] to-[#f43f5e]',
+  'from-[#3b82f6] to-[#06b6d4]',
+  'from-[#f59e0b] to-[#ef4444]',
+  'from-[#22c55e] to-[#14b8a6]',
 ];
-
-const recommendedCourses = [
-  {
-    id: '1',
-    title: 'Deep Learning with PyTorch',
-    category: 'AI & ML',
-    duration: '12h',
-    students: '8.4k',
-    rating: 4.9,
-    difficulty: 'Intermediate',
-    emoji: '🧠',
-    color: 'from-[#6c63ff] to-[#8b5cf6]',
-    isAI: true,
-  },
-  {
-    id: '2',
-    title: 'Figma for Product Designers',
-    category: 'Design',
-    duration: '6h',
-    students: '12.1k',
-    rating: 4.8,
-    difficulty: 'Beginner',
-    emoji: '✏️',
-    color: 'from-[#ec4899] to-[#f43f5e]',
-    isAI: false,
-  },
-  {
-    id: '3',
-    title: 'React & Next.js Mastery',
-    category: 'Programming',
-    duration: '18h',
-    students: '15.7k',
-    rating: 4.9,
-    difficulty: 'Advanced',
-    emoji: '⚛️',
-    color: 'from-[#3b82f6] to-[#06b6d4]',
-    isAI: false,
-  },
-  {
-    id: '4',
-    title: 'Music Production 101',
-    category: 'Music',
-    duration: '9h',
-    students: '5.2k',
-    rating: 4.7,
-    difficulty: 'Beginner',
-    emoji: '🎧',
-    color: 'from-[#f59e0b] to-[#ef4444]',
-    isAI: true,
-  },
-];
-
-const communityActivity = [
-  {
-    id: '1',
-    author: 'Maya Chen',
-    username: 'mayalearns',
-    initials: 'MC',
-    color: '#6c63ff',
-    action: 'shared a course',
-    content: 'Just finished "Neural Networks from Scratch" — absolutely mind-bending! Highly recommend for anyone serious about ML.',
-    likes: 47,
-    comments: 12,
-    timeAgo: '15 min ago',
-    type: 'course_share',
-  },
-  {
-    id: '2',
-    author: 'Jordan Park',
-    username: 'jparkdev',
-    initials: 'JP',
-    color: '#22c55e',
-    action: 'hit a milestone',
-    content: '🔥 30-day learning streak! Started with zero Python knowledge. Now building my first ML model. LYO changed my life.',
-    likes: 134,
-    comments: 28,
-    timeAgo: '42 min ago',
-    type: 'achievement',
-  },
-  {
-    id: '3',
-    author: 'Sofia Martinez',
-    username: 'sofiadesigns',
-    initials: 'SM',
-    color: '#ec4899',
-    action: 'asked a question',
-    content: 'What\'s the best approach for responsive typography in Figma? Trying to create consistent scale across breakpoints.',
-    likes: 19,
-    comments: 35,
-    timeAgo: '1h ago',
-    type: 'question',
-  },
-];
+const activityColors = ['#6c63ff', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -241,6 +88,17 @@ function formatDate() {
     month: 'long',
     day: 'numeric',
   });
+}
+
+function formatTimeAgoShort(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 // ── Animation variants ─────────────────────────────────────────────────────────
@@ -338,11 +196,110 @@ export default function HomePage() {
   const { user } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
+  const { data: gamification } = useApi(() => api.gamification.overview(), []);
+  const { data: courses } = useApi(() => api.courses.list(0, 4), []);
+  const { data: feedData } = useApi(() => api.feed.publicFeed(1, 3), []);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const firstName = user?.displayName.split(' ')[0] ?? 'Learner';
+
+  // Derive streak from gamification or user profile
+  const streakData = gamification?.streaks as Record<string, unknown> | undefined;
+  const currentStreak = (streakData?.current as number) || user?.streak || 0;
+  const bestStreak = (streakData?.longest as number) || (streakData?.best as number) || currentStreak;
+
+  // Derive stats from gamification overview
+  const xpSummary = gamification?.xp_summary as Record<string, unknown> | undefined;
+  const userLevel = gamification?.user_level as Record<string, unknown> | undefined;
+  const achievementsData = gamification?.achievements as Record<string, unknown> | undefined;
+  const learningStats = [
+    {
+      label: 'Hours Learned',
+      value: String((userLevel?.total_hours as number) || user?.xp ? Math.round((user?.xp || 0) / 100) : 0),
+      sub: 'total',
+      icon: Clock,
+      color: '#6c63ff',
+      trend: '',
+    },
+    {
+      label: 'Courses Done',
+      value: String((achievementsData?.completed as number) || user?.coursesCompleted || 0),
+      sub: 'total completed',
+      icon: BookOpen,
+      color: '#22c55e',
+      trend: '',
+    },
+    {
+      label: 'XP Earned',
+      value: String((xpSummary?.total as number) || user?.xp || 0),
+      sub: 'total',
+      icon: Zap,
+      color: '#f59e0b',
+      trend: `Level ${(userLevel?.level as number) || user?.level || 1}`,
+    },
+    {
+      label: 'Streak',
+      value: `${currentStreak}d`,
+      sub: 'current',
+      icon: Trophy,
+      color: '#ec4899',
+      trend: bestStreak > currentStreak ? `Best: ${bestStreak}d` : '',
+    },
+  ];
+
+  // Map API courses to display format
+  const inProgressCourses = (courses || []).map((c: Record<string, unknown>, i: number) => ({
+    id: String(c.id ?? i),
+    title: (c.title as string) || 'Untitled Course',
+    category: (c.subject as string) || (c.category as string) || 'General',
+    progress: (c.progress as number) || 0,
+    color: courseColors[i % courseColors.length],
+    emoji: courseEmojis[i % courseEmojis.length],
+    timeLeft: c.estimated_duration ? `${c.estimated_duration}h total` : '',
+  }));
+
+  // Map API courses to recommended format
+  const recommendedCourses = (courses || []).map((c: Record<string, unknown>, i: number) => ({
+    id: String(c.id ?? i),
+    title: (c.title as string) || 'Untitled Course',
+    category: (c.subject as string) || (c.category as string) || 'General',
+    duration: c.estimated_duration ? `${c.estimated_duration}h` : '?',
+    students: c.enrolled_count ? `${c.enrolled_count}` : '0',
+    rating: (c.rating as number) || 0,
+    difficulty: (c.difficulty as string) || 'Beginner',
+    emoji: courseEmojis[i % courseEmojis.length],
+    color: gradientPairs[i % gradientPairs.length],
+    isAI: (c.is_ai_generated as boolean) || false,
+  }));
+
+  // Map feed posts to community activity format
+  const feedPosts = (feedData?.posts || []) as Record<string, unknown>[];
+  const communityActivity = feedPosts.map((post: Record<string, unknown>, i: number) => {
+    const author = post.author as Record<string, unknown> | undefined;
+    const authorName = (author?.display_name as string) || (author?.username as string) || 'User';
+    const initials = authorName
+      .split(' ')
+      .map((w: string) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
+    return {
+      id: String(post.id ?? i),
+      author: authorName,
+      username: (author?.username as string) || '',
+      initials,
+      color: activityColors[i % activityColors.length],
+      action: 'posted',
+      content: (post.content as string) || '',
+      likes: (post.likes_count as number) || (post.likes as number) || 0,
+      comments: (post.comments_count as number) || (post.comments as number) || 0,
+      timeAgo: post.created_at ? formatTimeAgoShort(post.created_at as string) : '',
+      type: (post.type as string) || 'post',
+    };
+  });
 
   return (
     <motion.div
@@ -360,7 +317,7 @@ export default function HomePage() {
             <span className="gradient-text">{firstName}</span> 👋
           </h1>
           <p className="text-sm text-secondary mt-1">
-            You&apos;re on a roll — {user?.streak ?? 12}-day streak and counting!
+            You&apos;re on a roll — {currentStreak}-day streak and counting!
           </p>
         </div>
         {/* Quick streak badge */}
@@ -370,7 +327,7 @@ export default function HomePage() {
         >
           <Flame size={20} className="text-orange-400" />
           <div className="text-right">
-            <p className="text-lg font-black text-orange-400 leading-none">{user?.streak ?? 12}</p>
+            <p className="text-lg font-black text-orange-400 leading-none">{currentStreak}</p>
             <p className="text-[10px] text-secondary">day streak</p>
           </div>
         </div>
@@ -400,7 +357,7 @@ export default function HomePage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black text-white">{user?.streak ?? 12}</span>
+              <span className="text-3xl font-black text-white">{currentStreak}</span>
               <span className="text-base font-semibold text-orange-300">day streak</span>
             </div>
             <p className="text-sm text-orange-200/80 mt-0.5">
@@ -409,13 +366,13 @@ export default function HomePage() {
           </div>
           <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
             <span className="text-xs text-orange-300/70">Best streak</span>
-            <span className="text-sm font-bold text-orange-300">21 days</span>
+            <span className="text-sm font-bold text-orange-300">{bestStreak} days</span>
           </div>
         </div>
         {/* Day dots */}
         <div className="mt-4 flex gap-1.5">
           {Array.from({ length: 14 }).map((_, i) => {
-            const isActive = i < (user?.streak ?? 12);
+            const isActive = i < (currentStreak);
             return (
               <div
                 key={i}
@@ -473,37 +430,48 @@ export default function HomePage() {
       {/* ── Continue Learning ─────────────────────────────────── */}
       <motion.div variants={itemVariants}>
         <SectionHeader title="Continue Learning" href="/courses" icon={BookOpen} />
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 sm:overflow-visible">
-          {inProgressCourses.map((course) => (
-            <Link
-              key={course.id}
-              href={`/courses/${course.id}`}
-              className="glass-card p-4 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.02] hover:bg-white/[0.07] shrink-0 w-52 sm:w-auto"
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
-                  style={{ backgroundColor: `${course.color}20`, border: `1px solid ${course.color}30` }}
-                >
-                  {course.emoji}
+        {inProgressCourses.length === 0 ? (
+          <Link
+            href="/discover"
+            className="glass-card p-6 flex flex-col items-center gap-2 text-center transition-all duration-200 hover:bg-white/[0.07]"
+          >
+            <BookOpen size={28} className="text-secondary" />
+            <p className="text-sm font-semibold text-primary">Start learning</p>
+            <p className="text-xs text-secondary">Browse courses and begin your journey</p>
+          </Link>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 sm:overflow-visible">
+            {inProgressCourses.map((course) => (
+              <Link
+                key={course.id}
+                href={`/courses/${course.id}`}
+                className="glass-card p-4 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.02] hover:bg-white/[0.07] shrink-0 w-52 sm:w-auto"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
+                    style={{ backgroundColor: `${course.color}20`, border: `1px solid ${course.color}30` }}
+                  >
+                    {course.emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-primary leading-tight line-clamp-2">
+                      {course.title}
+                    </p>
+                    <p className="text-[11px] text-secondary mt-0.5">{course.category}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-primary leading-tight line-clamp-2">
-                    {course.title}
-                  </p>
-                  <p className="text-[11px] text-secondary mt-0.5">{course.category}</p>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-secondary">{course.progress}% complete</span>
+                    <span className="text-[11px] text-secondary">{course.timeLeft}</span>
+                  </div>
+                  <ProgressBar value={course.progress} color={course.color} height={4} />
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] text-secondary">{course.progress}% complete</span>
-                  <span className="text-[11px] text-secondary">{course.timeLeft}</span>
-                </div>
-                <ProgressBar value={course.progress} color={course.color} height={4} />
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </motion.div>
 
       {/* ── Learning Stats ────────────────────────────────────── */}
@@ -586,101 +554,117 @@ export default function HomePage() {
       {/* ── Recommended For You ───────────────────────────────── */}
       <motion.div variants={itemVariants}>
         <SectionHeader title="Recommended For You" href="/discover" icon={Star} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {recommendedCourses.map((course) => (
-            <Link
-              key={course.id}
-              href={`/courses/${course.id}`}
-              className="glass-card overflow-hidden group transition-all duration-200 hover:scale-[1.01] hover:bg-white/[0.06]"
-            >
-              {/* Course header gradient */}
-              <div
-                className={cn('h-20 w-full flex items-center justify-center text-4xl relative', `bg-gradient-to-br ${course.color}`)}
+        {recommendedCourses.length === 0 ? (
+          <div className="glass-card p-6 flex flex-col items-center gap-2 text-center">
+            <Star size={28} className="text-secondary" />
+            <p className="text-sm text-secondary">Recommendations will appear as you learn more</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {recommendedCourses.map((course) => (
+              <Link
+                key={course.id}
+                href={`/courses/${course.id}`}
+                className="glass-card overflow-hidden group transition-all duration-200 hover:scale-[1.01] hover:bg-white/[0.06]"
               >
-                {course.isAI && (
-                  <span
-                    className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-                    style={{ background: 'rgba(0,0,0,0.35)', color: '#fff' }}
-                  >
-                    <Sparkles size={9} /> AI
-                  </span>
-                )}
-                {course.emoji}
-              </div>
-              <div className="p-4 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-bold text-primary leading-tight flex-1">{course.title}</p>
+                {/* Course header gradient */}
+                <div
+                  className={cn('h-20 w-full flex items-center justify-center text-4xl relative', `bg-gradient-to-br ${course.color}`)}
+                >
+                  {course.isAI && (
+                    <span
+                      className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+                      style={{ background: 'rgba(0,0,0,0.35)', color: '#fff' }}
+                    >
+                      <Sparkles size={9} /> AI
+                    </span>
+                  )}
+                  {course.emoji}
                 </div>
-                <p className="text-[11px] text-secondary">{course.category}</p>
-                <div className="flex items-center gap-3 text-[11px] text-secondary">
-                  <span className="flex items-center gap-1">
-                    <Clock size={11} /> {course.duration}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Users size={11} /> {course.students}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Star size={11} className="text-yellow-400" /> {course.rating}
-                  </span>
-                  <span
-                    className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium"
-                    style={{
-                      backgroundColor:
-                        course.difficulty === 'Beginner'
-                          ? 'rgba(34,197,94,0.15)'
-                          : course.difficulty === 'Advanced'
-                          ? 'rgba(239,68,68,0.15)'
-                          : 'rgba(108,99,255,0.15)',
-                      color:
-                        course.difficulty === 'Beginner'
-                          ? '#22c55e'
-                          : course.difficulty === 'Advanced'
-                          ? '#ef4444'
-                          : '#8b83ff',
-                    }}
-                  >
-                    {course.difficulty}
-                  </span>
+                <div className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-bold text-primary leading-tight flex-1">{course.title}</p>
+                  </div>
+                  <p className="text-[11px] text-secondary">{course.category}</p>
+                  <div className="flex items-center gap-3 text-[11px] text-secondary">
+                    <span className="flex items-center gap-1">
+                      <Clock size={11} /> {course.duration}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users size={11} /> {course.students}
+                    </span>
+                    {course.rating > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Star size={11} className="text-yellow-400" /> {course.rating}
+                      </span>
+                    )}
+                    <span
+                      className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium"
+                      style={{
+                        backgroundColor:
+                          course.difficulty === 'beginner' || course.difficulty === 'Beginner'
+                            ? 'rgba(34,197,94,0.15)'
+                            : course.difficulty === 'advanced' || course.difficulty === 'Advanced'
+                            ? 'rgba(239,68,68,0.15)'
+                            : 'rgba(108,99,255,0.15)',
+                        color:
+                          course.difficulty === 'beginner' || course.difficulty === 'Beginner'
+                            ? '#22c55e'
+                            : course.difficulty === 'advanced' || course.difficulty === 'Advanced'
+                            ? '#ef4444'
+                            : '#8b83ff',
+                      }}
+                    >
+                      {course.difficulty}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </motion.div>
 
       {/* ── Recent Community Activity ─────────────────────────── */}
       <motion.div variants={itemVariants}>
         <SectionHeader title="Community Activity" href="/community" icon={Users} />
-        <div className="space-y-3">
-          {communityActivity.map((post) => (
-            <div key={post.id} className="glass-card p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <MiniAvatar initials={post.initials} color={post.color} size={38} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-bold text-primary">{post.author}</span>
-                    <span className="text-[11px] text-secondary">{post.action}</span>
-                    <span className="text-[11px] text-secondary ml-auto">{post.timeAgo}</span>
+        {communityActivity.length === 0 ? (
+          <div className="glass-card p-6 flex flex-col items-center gap-2 text-center">
+            <Users size={28} className="text-secondary" />
+            <p className="text-sm text-secondary">No community activity yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {communityActivity.map((post) => (
+              <div key={post.id} className="glass-card p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <MiniAvatar initials={post.initials} color={post.color} size={38} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-bold text-primary">{post.author}</span>
+                      <span className="text-[11px] text-secondary">{post.action}</span>
+                      <span className="text-[11px] text-secondary ml-auto">{post.timeAgo}</span>
+                    </div>
+                    <p className="text-sm text-secondary leading-relaxed mt-1 line-clamp-3">
+                      {post.content}
+                    </p>
                   </div>
-                  <p className="text-sm text-secondary leading-relaxed mt-1 line-clamp-3">
-                    {post.content}
-                  </p>
+                </div>
+                <div
+                  className="flex items-center gap-4 pt-1"
+                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+                >
+                  <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-red-400 transition-colors duration-150">
+                    <Heart size={13} /> {post.likes}
+                  </button>
+                  <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-[#6c63ff] transition-colors duration-150">
+                    <MessageCircle size={13} /> {post.comments}
+                  </button>
                 </div>
               </div>
-              <div
-                className="flex items-center gap-4 pt-1"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-              >
-                <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-red-400 transition-colors duration-150">
-                  <Heart size={13} /> {post.likes}
-                </button>
-                <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-[#6c63ff] transition-colors duration-150">
-                  <MessageCircle size={13} /> {post.comments}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </motion.div>
 
       {/* ── Bottom spacer for mobile nav ─────────────────────── */}

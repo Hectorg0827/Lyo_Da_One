@@ -105,8 +105,8 @@ const AppleIcon = (
 
 function getPasswordStrength(pw: string): { label: string; color: string; width: string } {
   if (pw.length === 0) return { label: '', color: 'transparent', width: '0%' };
-  if (pw.length < 6) return { label: 'Too short', color: '#ef4444', width: '25%' };
-  if (pw.length < 8) return { label: 'Weak', color: '#f59e0b', width: '50%' };
+  if (pw.length < 8) return { label: 'Too short', color: '#ef4444', width: '25%' };
+  if (pw.length < 10) return { label: 'Weak', color: '#f59e0b', width: '50%' };
   if (/[A-Z]/.test(pw) && /[0-9]/.test(pw)) return { label: 'Strong', color: '#22c55e', width: '100%' };
   return { label: 'Fair', color: '#6c63ff', width: '75%' };
 }
@@ -137,8 +137,8 @@ export default function SignupPage() {
       setError('Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     try {
@@ -150,7 +150,7 @@ export default function SignupPage() {
   }
 
   function handleOAuth(provider: string) {
-    signup('demo@lyo.app', 'demo', 'Demo User').then(() => router.push('/'));
+    alert('OAuth coming soon!');
     console.log(`OAuth: ${provider}`);
   }
 
@@ -241,7 +241,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={setPassword}
                 icon={Lock}
-                placeholder="Min. 6 characters"
+                placeholder="Min. 8 characters"
                 rightSlot={
                   <button
                     type="button"

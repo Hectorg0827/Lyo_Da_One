@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Users, Lock, Globe, TrendingUp, Star } from 'lucide-react';
+import { Search, Plus, Users, Lock, Globe, TrendingUp, Star, Loader2 } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
 
 interface Group {
   id: string;
@@ -19,151 +21,53 @@ interface Group {
   recentActivity: string;
 }
 
-const myGroups: Group[] = [
-  {
-    id: 'g1',
-    name: 'Python Enthusiasts',
-    description: 'A community for Python developers of all levels. Share code, ask questions, and learn together.',
-    memberCount: 2340,
-    category: 'Programming',
-    isPrivate: false,
-    isJoined: true,
-    gradient: 'from-blue-600 to-cyan-500',
-    icon: '🐍',
-    recentActivity: 'New post 2 hours ago',
-  },
-  {
-    id: 'g2',
-    name: 'UI/UX Design Lab',
-    description: 'Explore design principles, share your work, get feedback from fellow designers.',
-    memberCount: 1890,
-    category: 'Design',
-    isPrivate: false,
-    isJoined: true,
-    gradient: 'from-pink-500 to-purple-600',
-    icon: '🎨',
-    recentActivity: 'New post 5 hours ago',
-  },
+const GRADIENT_OPTIONS = [
+  'from-blue-600 to-cyan-500',
+  'from-pink-500 to-purple-600',
+  'from-violet-600 to-indigo-500',
+  'from-amber-500 to-orange-600',
+  'from-emerald-500 to-teal-600',
+  'from-red-500 to-pink-600',
+  'from-yellow-500 to-amber-600',
+  'from-gray-600 to-slate-700',
+  'from-sky-500 to-blue-600',
+  'from-cyan-500 to-blue-600',
+  'from-emerald-600 to-green-500',
 ];
 
-const suggestedGroups: Group[] = [
-  {
-    id: 'g3',
-    name: 'AI & Machine Learning',
-    description: 'Deep dive into AI, ML, and deep learning. Research papers, tutorials, and project showcases.',
-    memberCount: 5670,
-    category: 'AI',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-violet-600 to-indigo-500',
-    icon: '🤖',
-    recentActivity: 'New post 1 hour ago',
-  },
-  {
-    id: 'g4',
-    name: 'Creative Writing Circle',
-    description: 'Share your stories, poems, and essays. Constructive feedback and writing prompts weekly.',
-    memberCount: 890,
-    category: 'Writing',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-amber-500 to-orange-600',
-    icon: '✍️',
-    recentActivity: 'New post 3 hours ago',
-  },
-  {
-    id: 'g5',
-    name: 'Music Theory Study Group',
-    description: 'Understanding harmony, melody, rhythm, and composition together.',
-    memberCount: 1230,
-    category: 'Music',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-emerald-500 to-teal-600',
-    icon: '🎵',
-    recentActivity: 'New post 6 hours ago',
-  },
-];
-
-const popularGroups: Group[] = [
-  {
-    id: 'g6',
-    name: 'Math Olympiad Prep',
-    description: 'Prepare for math competitions with challenging problems and solutions.',
-    memberCount: 3450,
-    category: 'Mathematics',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-red-500 to-pink-600',
-    icon: '📐',
-    recentActivity: 'New challenge posted',
-  },
-  {
-    id: 'g7',
-    name: 'Photography Masterclass',
-    description: 'Learn composition, lighting, editing. Weekly photo challenges and critique sessions.',
-    memberCount: 4120,
-    category: 'Photography',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-yellow-500 to-amber-600',
-    icon: '📸',
-    recentActivity: 'Photo challenge live',
-  },
-  {
-    id: 'g8',
-    name: 'Web3 Builders',
-    description: 'Building the decentralized web. Blockchain, smart contracts, and DApps.',
-    memberCount: 2780,
-    category: 'Blockchain',
-    isPrivate: true,
-    isJoined: false,
-    gradient: 'from-gray-600 to-slate-700',
-    icon: '⛓️',
-    recentActivity: 'New tutorial posted',
-  },
-  {
-    id: 'g9',
-    name: 'Language Exchange',
-    description: 'Practice any language with native speakers. Organized by language pairs.',
-    memberCount: 6890,
-    category: 'Languages',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-sky-500 to-blue-600',
-    icon: '🌎',
-    recentActivity: 'New session scheduled',
-  },
-  {
-    id: 'g10',
-    name: 'Data Science Hub',
-    description: 'Data analysis, visualization, statistics, and practical data projects.',
-    memberCount: 3210,
-    category: 'Data Science',
-    isPrivate: false,
-    isJoined: false,
-    gradient: 'from-cyan-500 to-blue-600',
-    icon: '📊',
-    recentActivity: 'Dataset challenge live',
-  },
-  {
-    id: 'g11',
-    name: 'Startup Founders Circle',
-    description: 'For aspiring and current founders. Business strategy, fundraising, and growth.',
-    memberCount: 1560,
-    category: 'Business',
-    isPrivate: true,
-    isJoined: false,
-    gradient: 'from-emerald-600 to-green-500',
-    icon: '🚀',
-    recentActivity: 'AMA with founder today',
-  },
-];
+function mapBackendGroup(raw: Record<string, unknown>, index: number): Group {
+  return {
+    id: String(raw.id ?? ''),
+    name: (raw.name as string) || '',
+    description: (raw.description as string) || '',
+    memberCount: (raw.member_count as number) ?? (raw.memberCount as number) ?? 0,
+    category: (raw.category as string) || 'General',
+    isPrivate: (raw.is_private as boolean) ?? false,
+    isJoined: (raw.is_joined as boolean) ?? false,
+    gradient: GRADIENT_OPTIONS[index % GRADIENT_OPTIONS.length],
+    icon: (raw.icon as string) || '👥',
+    recentActivity: (raw.recent_activity as string) || '',
+  };
+}
 
 const categories = ['All', 'Programming', 'Design', 'AI', 'Science', 'Math', 'Languages', 'Music', 'Business', 'Writing'];
 
-function GroupCard({ group }: { group: Group }) {
+function GroupCard({ group, onJoinToggle }: { group: Group; onJoinToggle: (groupId: string, currentlyJoined: boolean) => void }) {
   const [joined, setJoined] = useState(group.isJoined);
+  const [joining, setJoining] = useState(false);
+
+  const handleJoinToggle = useCallback(async () => {
+    setJoining(true);
+    const wasJoined = joined;
+    setJoined(!wasJoined);
+    try {
+      onJoinToggle(group.id, wasJoined);
+    } catch {
+      setJoined(wasJoined);
+    } finally {
+      setJoining(false);
+    }
+  }, [joined, group.id, onJoinToggle]);
 
   return (
     <motion.div
@@ -193,14 +97,15 @@ function GroupCard({ group }: { group: Group }) {
           </div>
         </div>
         <button
-          onClick={() => setJoined(!joined)}
+          onClick={handleJoinToggle}
+          disabled={joining}
           className={`mt-3 w-full rounded-xl py-2 text-sm font-medium transition ${
             joined
               ? 'border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20'
               : 'bg-gradient-to-r from-lyo-600 to-accent-purple text-white hover:shadow-lg hover:shadow-lyo-500/20'
           }`}
         >
-          {joined ? '✓ Joined' : 'Join Group'}
+          {joining ? 'Loading...' : joined ? '✓ Joined' : 'Join Group'}
         </button>
       </div>
     </motion.div>
@@ -211,12 +116,67 @@ export default function GroupsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
 
+  // ── Fetch groups from API ──
+  const {
+    data: rawGroups,
+    isLoading,
+    error,
+    refetch,
+  } = useApi(
+    () => api.community.groups(),
+    []
+  );
+
+  const allGroups: Group[] = (rawGroups ?? []).map((raw: Record<string, unknown>, i: number) =>
+    mapBackendGroup(raw, i)
+  );
+
+  // Split into categories based on isJoined
+  const myGroups = allGroups.filter((g) => g.isJoined);
+  const notJoinedGroups = allGroups.filter((g) => !g.isJoined);
+  // Suggested = first 3 not-joined, popular = rest
+  const suggestedGroups = notJoinedGroups.slice(0, 3);
+  const popularGroups = notJoinedGroups.slice(3);
+
   const filterGroups = (groups: Group[]) =>
     groups.filter(
       (g) =>
         (activeCategory === 'All' || g.category === activeCategory) &&
         (searchQuery === '' || g.name.toLowerCase().includes(searchQuery.toLowerCase()))
     );
+
+  const handleJoinToggle = useCallback(async (groupId: string, currentlyJoined: boolean) => {
+    try {
+      if (currentlyJoined) {
+        await api.community.leaveGroup(groupId);
+      } else {
+        await api.community.joinGroup(groupId);
+      }
+      refetch();
+    } catch (err) {
+      console.error('Failed to toggle group membership:', err);
+    }
+  }, [refetch]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-lyo-400 animate-spin" />
+        <span className="ml-3 text-white/50">Loading groups...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 flex flex-col items-center justify-center gap-4">
+        <p className="text-red-400">{error}</p>
+        <button onClick={refetch} className="text-sm text-lyo-400 hover:text-lyo-300">
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6">
@@ -269,35 +229,46 @@ export default function GroupsPage() {
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filterGroups(myGroups).map((group) => (
-              <GroupCard key={group.id} group={group} />
+              <GroupCard key={group.id} group={group} onJoinToggle={handleJoinToggle} />
             ))}
           </div>
         </section>
       )}
 
-      <section className="mb-8">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <TrendingUp className="h-5 w-5 text-lyo-400" />
-          Suggested For You
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filterGroups(suggestedGroups).map((group) => (
-            <GroupCard key={group.id} group={group} />
-          ))}
-        </div>
-      </section>
+      {filterGroups(suggestedGroups).length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+            <TrendingUp className="h-5 w-5 text-lyo-400" />
+            Suggested For You
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filterGroups(suggestedGroups).map((group) => (
+              <GroupCard key={group.id} group={group} onJoinToggle={handleJoinToggle} />
+            ))}
+          </div>
+        </section>
+      )}
 
-      <section>
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Globe className="h-5 w-5 text-green-400" />
-          Popular Groups
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filterGroups(popularGroups).map((group) => (
-            <GroupCard key={group.id} group={group} />
-          ))}
+      {filterGroups(popularGroups).length > 0 && (
+        <section>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+            <Globe className="h-5 w-5 text-green-400" />
+            Popular Groups
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filterGroups(popularGroups).map((group) => (
+              <GroupCard key={group.id} group={group} onJoinToggle={handleJoinToggle} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {allGroups.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Users className="w-12 h-12 text-white/20 mb-4" />
+          <p className="text-white/40 text-sm">No groups found</p>
         </div>
-      </section>
+      )}
     </div>
   );
 }

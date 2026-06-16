@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -18,174 +18,97 @@ import {
   Trophy,
   Eye,
   ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
 import CommentThread from '@/components/community/CommentThread';
+import { useApi } from '@/hooks/use-api';
+import { api, adaptUser } from '@/lib/api';
 import type { CommunityPost, Comment, User } from '@/types';
 
 // ============================================================
-// Mock Data (mirrored from community page)
+// Helpers: map backend → frontend types
 // ============================================================
 
-const MOCK_USERS: User[] = [
-  {
-    id: 'u1', email: 'alex@lyo.app', displayName: 'Alex Rivera', username: 'alexrivera',
-    avatar: '', bio: '', role: 'student', interests: [], learningGoals: [],
-    streak: 12, xp: 4850, level: 15, coursesCompleted: 23, followersCount: 342,
-    followingCount: 128, createdAt: '2024-06-01T00:00:00Z', isPremium: false,
-  },
-  {
-    id: 'u2', email: 'sarah@lyo.app', displayName: 'Sarah Chen', username: 'sarahchen',
-    avatar: '', bio: '', role: 'mentor', interests: [], learningGoals: [],
-    streak: 45, xp: 18200, level: 42, coursesCompleted: 87, followersCount: 2340,
-    followingCount: 89, createdAt: '2023-01-15T00:00:00Z', isPremium: true,
-  },
-  {
-    id: 'u3', email: 'mike@lyo.app', displayName: 'Marcus Johnson', username: 'marcusj',
-    avatar: '', bio: '', role: 'creator', interests: [], learningGoals: [],
-    streak: 30, xp: 9100, level: 28, coursesCompleted: 41, followersCount: 1120,
-    followingCount: 203, createdAt: '2023-06-20T00:00:00Z', isPremium: true,
-  },
-  {
-    id: 'u4', email: 'priya@lyo.app', displayName: 'Priya Patel', username: 'priyap',
-    avatar: '', bio: '', role: 'student', interests: [], learningGoals: [],
-    streak: 8, xp: 2300, level: 9, coursesCompleted: 12, followersCount: 89,
-    followingCount: 245, createdAt: '2024-03-10T00:00:00Z', isPremium: false,
-  },
-  {
-    id: 'u5', email: 'james@lyo.app', displayName: 'James Okafor', username: 'jamesokafor',
-    avatar: '', bio: '', role: 'mentor', interests: [], learningGoals: [],
-    streak: 60, xp: 24500, level: 55, coursesCompleted: 130, followersCount: 5670,
-    followingCount: 34, createdAt: '2022-11-01T00:00:00Z', isPremium: true,
-  },
-];
+function mapBackendPost(raw: Record<string, unknown>): CommunityPost {
+  const rawUser = (raw.user as Record<string, unknown>) || {};
+  const author: User = rawUser.id
+    ? adaptUser(rawUser)
+    : {
+        id: String(raw.user_id ?? ''),
+        email: '',
+        displayName: 'Unknown User',
+        username: 'unknown',
+        avatar: '',
+        bio: '',
+        role: 'student',
+        interests: [],
+        learningGoals: [],
+        streak: 0,
+        xp: 0,
+        level: 1,
+        coursesCompleted: 0,
+        followersCount: 0,
+        followingCount: 0,
+        createdAt: (raw.created_at as string) || new Date().toISOString(),
+        isPremium: false,
+      };
 
-const MOCK_POSTS: Record<string, CommunityPost> = {
-  p1: {
-    id: 'p1',
-    author: MOCK_USERS[1],
-    type: 'post',
-    title: 'How I mastered Neural Networks in 30 days',
-    content: `After struggling with backpropagation for weeks, I finally cracked it! Here's my complete approach and what made everything click.
+  return {
+    id: String(raw.id ?? ''),
+    author,
+    type: (raw.type as CommunityPost['type']) || 'post',
+    title: (raw.title as string) || '',
+    content: (raw.content as string) || '',
+    images: (raw.media_urls as string[]) || (raw.images as string[]) || [],
+    tags: (raw.tags as string[]) || [],
+    category: (raw.category as string) || 'General',
+    likes: (raw.like_count as number) ?? (raw.likes as number) ?? 0,
+    comments: (raw.comment_count as number) ?? (raw.comments as number) ?? 0,
+    views: (raw.view_count as number) ?? (raw.views as number) ?? 0,
+    isLiked: (raw.is_liked as boolean) ?? false,
+    isBookmarked: (raw.is_bookmarked as boolean) ?? false,
+    isPinned: (raw.is_pinned as boolean) ?? false,
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+  };
+}
 
-**Phase 1: Visual Understanding (Week 1)**
-I started with 3Blue1Brown's "Neural Networks" series. Grant's visual explanations are unmatched — you actually *see* how information flows through the network. The key insight was visualizing gradient flow as water flowing downhill to find the lowest point.
+function mapBackendComment(raw: Record<string, unknown>): Comment {
+  const rawUser = (raw.user as Record<string, unknown>) || {};
+  const author: User = rawUser.id
+    ? adaptUser(rawUser)
+    : {
+        id: String(raw.user_id ?? ''),
+        email: '',
+        displayName: 'Unknown',
+        username: 'unknown',
+        avatar: '',
+        bio: '',
+        role: 'student',
+        interests: [],
+        learningGoals: [],
+        streak: 0,
+        xp: 0,
+        level: 1,
+        coursesCompleted: 0,
+        followersCount: 0,
+        followingCount: 0,
+        createdAt: new Date().toISOString(),
+        isPremium: false,
+      };
 
-**Phase 2: Code from Scratch (Week 2)**
-I implemented a simple feedforward neural network from scratch in NumPy. No PyTorch, no TensorFlow — just numpy arrays and math. This was painful but absolutely worth it. When you write the forward pass and backprop by hand, the math becomes concrete.
+  const rawReplies = (raw.replies as Record<string, unknown>[]) || [];
 
-Here's what my training loop looked like in pseudocode:
-1. Forward pass: compute activations layer by layer
-2. Compute loss (MSE or cross-entropy)
-3. Backward pass: compute gradients using chain rule
-4. Update weights: W -= learning_rate * gradients
-
-**Phase 3: Modern Frameworks (Week 3-4)**
-Armed with real understanding, I moved to PyTorch. Now the autograd system makes perfect sense — it's just doing what I wrote manually, but differentiably and efficiently on GPU.
-
-I implemented: CNNs for image classification, RNNs for sequence data, and a simple Transformer. The results? I can now build and train custom architectures confidently.
-
-**Resources that actually helped:**
-- 3Blue1Brown "Essence of Neural Networks" (start here)
-- Andrej Karpathy's micrograd (learn autograd from scratch)
-- fast.ai Practical Deep Learning (top-down practical approach)
-- Michael Nielsen's "Neural Networks and Deep Learning" (free online, rigorous)
-
-Happy to share my Jupyter notebooks if anyone wants!`,
-    images: [],
-    tags: ['deeplearning', 'neuralnetworks', 'python', 'ai'],
-    category: 'Artificial Intelligence',
-    likes: 284,
-    comments: 47,
-    views: 1820,
-    isLiked: false,
-    isBookmarked: false,
-    isPinned: true,
-    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-};
-
-const MOCK_COMMENTS: Comment[] = [
-  {
-    id: 'c1',
-    author: MOCK_USERS[4],
-    content: 'This is exactly what I needed! The tip about implementing backprop from scratch in NumPy before using PyTorch makes so much sense. I always jumped straight to frameworks and never truly understood what was happening under the hood.',
-    likes: 34,
-    isLiked: false,
-    createdAt: new Date(Date.now() - 1.5 * 3600000).toISOString(),
-    replies: [
-      {
-        id: 'c1r1',
-        author: MOCK_USERS[1],
-        content: 'Exactly! The struggle of implementing it yourself is the learning. I spent 2 full days on backprop alone and those were the most educational 2 days of my ML journey.',
-        likes: 18,
-        isLiked: true,
-        createdAt: new Date(Date.now() - 1 * 3600000).toISOString(),
-      },
-      {
-        id: 'c1r2',
-        author: MOCK_USERS[2],
-        content: "Karpathy's micrograd tutorial is also great for this — he builds a full autograd engine in ~150 lines of Python.",
-        likes: 22,
-        createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
-      },
-    ],
-  },
-  {
-    id: 'c2',
-    author: MOCK_USERS[0],
-    content: 'Could you share which specific episodes of 3B1B helped most? The whole series or just certain videos? Also, how much math background did you have going into this?',
-    likes: 12,
-    createdAt: new Date(Date.now() - 1.2 * 3600000).toISOString(),
-    replies: [
-      {
-        id: 'c2r1',
-        author: MOCK_USERS[1],
-        content: 'The whole series is great, but episodes 1-4 are essential (Chapter 1: What is a neural network, and especially Chapter 4: Backpropagation calculus). Math background: I had Calc 1 and basic linear algebra. Honestly that\'s enough to start.',
-        likes: 8,
-        createdAt: new Date(Date.now() - 50 * 60000).toISOString(),
-      },
-    ],
-  },
-  {
-    id: 'c3',
-    author: MOCK_USERS[4],
-    content: "Please share the Jupyter notebooks! I'm at Week 2 of my own journey and would love to compare implementations.",
-    likes: 45,
-    isLiked: true,
-    createdAt: new Date(Date.now() - 0.8 * 3600000).toISOString(),
-    replies: [],
-  },
-  {
-    id: 'c4',
-    author: MOCK_USERS[2],
-    content: "Great write-up! One thing I'd add: don't skip the math completely. You don't need to derive everything, but understanding *why* the chain rule works for backprop gives you intuition that pays dividends when debugging failing training runs.",
-    likes: 67,
-    createdAt: new Date(Date.now() - 0.5 * 3600000).toISOString(),
-  },
-  {
-    id: 'c5',
-    author: MOCK_USERS[3],
-    content: 'Saved this post! Just starting my AI learning journey and this roadmap is incredibly helpful. One question: approximately how many hours per day were you studying during those 30 days?',
-    likes: 9,
-    createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
-    replies: [
-      {
-        id: 'c5r1',
-        author: MOCK_USERS[1],
-        content: 'About 2-3 hours on weekdays, 4-5 hours on weekends. Consistency was more important than volume — missing days broke the momentum.',
-        likes: 14,
-        createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
-      },
-    ],
-  },
-];
-
-const RELATED_POSTS: Pick<CommunityPost, 'id' | 'title' | 'likes' | 'comments' | 'author' | 'createdAt'>[] = [
-  { id: 'p8', title: 'The Feynman Technique actually works', likes: 1204, comments: 156, author: MOCK_USERS[4], createdAt: new Date(Date.now() - 48 * 3600000).toISOString() },
-  { id: 'p3', title: 'Best resources for learning Transformer architecture', likes: 92, comments: 34, author: MOCK_USERS[4], createdAt: new Date(Date.now() - 8 * 3600000).toISOString() },
-  { id: 'p6', title: '30-Day Linear Algebra Challenge — Week 3 Update', likes: 445, comments: 89, author: MOCK_USERS[0], createdAt: new Date(Date.now() - 20 * 3600000).toISOString() },
-];
+  return {
+    id: String(raw.id ?? ''),
+    author,
+    content: (raw.content as string) || '',
+    likes: (raw.like_count as number) ?? (raw.likes as number) ?? 0,
+    isLiked: (raw.is_liked as boolean) ?? false,
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+    replies: rawReplies.map(mapBackendComment),
+  };
+}
 
 // ============================================================
 // Post type config
@@ -214,49 +137,94 @@ export default function PostDetailPage() {
   const router = useRouter();
   const postId = params.postId as string;
 
-  // Use real data if available, otherwise fall back to p1
-  const post = MOCK_POSTS[postId] ?? MOCK_POSTS['p1'];
+  // ── Fetch post from API ──
+  const {
+    data: rawPost,
+    isLoading: postLoading,
+    error: postError,
+  } = useApi(
+    () => api.feed.get(postId),
+    [postId]
+  );
 
-  const [isLiked, setIsLiked] = useState(post.isLiked ?? false);
-  const [likeCount, setLikeCount] = useState(post.likes);
-  const [isBookmarked, setIsBookmarked] = useState(post.isBookmarked ?? false);
-  const [comments, setComments] = useState<Comment[]>(MOCK_COMMENTS);
+  const post: CommunityPost | null = rawPost ? mapBackendPost(rawPost) : null;
 
-  const typeConfig = POST_TYPE_CONFIG[post.type] ?? POST_TYPE_CONFIG.post;
-  const TypeIcon = typeConfig.icon;
+  // Extract comments from the backend response (may be nested in the post response)
+  const backendComments = rawPost
+    ? ((rawPost.comments_list as Record<string, unknown>[]) || (rawPost.comments_data as Record<string, unknown>[]) || [])
+    : [];
+  const mappedComments: Comment[] = backendComments.map(mapBackendComment);
 
-  const initials = post.author.displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [initialized, setInitialized] = useState(false);
 
-  const handleAddComment = (content: string) => {
-    const newComment: Comment = {
+  // Sync state from API response when loaded
+  if (post && !initialized) {
+    setIsLiked(post.isLiked ?? false);
+    setLikeCount(post.likes);
+    setIsBookmarked(post.isBookmarked ?? false);
+    setComments(mappedComments);
+    setInitialized(true);
+  }
+
+  // ── Like handler ──
+  const handleLike = useCallback(async () => {
+    const wasLiked = isLiked;
+    setIsLiked(!wasLiked);
+    setLikeCount((c) => wasLiked ? c - 1 : c + 1);
+    try {
+      if (wasLiked) {
+        await api.feed.unlike(postId);
+      } else {
+        await api.feed.like(postId);
+      }
+    } catch {
+      // revert on failure
+      setIsLiked(wasLiked);
+      setLikeCount((c) => wasLiked ? c + 1 : c - 1);
+    }
+  }, [isLiked, postId]);
+
+  // ── Comment handler ──
+  const handleAddComment = useCallback(async (content: string) => {
+    const tempComment: Comment = {
       id: `c_${Date.now()}`,
       author: {
-        id: 'u1', email: 'demo@lyo.app', displayName: 'Alex Rivera', username: 'alexrivera',
+        id: 'me', email: '', displayName: 'You', username: 'me',
         avatar: '', bio: '', role: 'student', interests: [], learningGoals: [],
-        streak: 12, xp: 4850, level: 15, coursesCompleted: 23, followersCount: 342,
-        followingCount: 128, createdAt: '2024-06-01T00:00:00Z', isPremium: false,
+        streak: 0, xp: 0, level: 1, coursesCompleted: 0, followersCount: 0,
+        followingCount: 0, createdAt: new Date().toISOString(), isPremium: false,
       },
       content,
       likes: 0,
       createdAt: new Date().toISOString(),
       replies: [],
     };
-    setComments((prev) => [newComment, ...prev]);
-  };
+    setComments((prev) => [tempComment, ...prev]);
+
+    try {
+      const result = await api.feed.comment(postId, content);
+      // Replace temp comment with real one if result is available
+      if (result && typeof result === 'object' && (result as Record<string, unknown>).id) {
+        const real = mapBackendComment(result as Record<string, unknown>);
+        setComments((prev) => prev.map((c) => (c.id === tempComment.id ? real : c)));
+      }
+    } catch (err) {
+      console.error('Failed to post comment:', err);
+    }
+  }, [postId]);
 
   const handleReply = (commentId: string, content: string) => {
     const reply: Comment = {
       id: `r_${Date.now()}`,
       author: {
-        id: 'u1', email: 'demo@lyo.app', displayName: 'Alex Rivera', username: 'alexrivera',
+        id: 'me', email: '', displayName: 'You', username: 'me',
         avatar: '', bio: '', role: 'student', interests: [], learningGoals: [],
-        streak: 12, xp: 4850, level: 15, coursesCompleted: 23, followersCount: 342,
-        followingCount: 128, createdAt: '2024-06-01T00:00:00Z', isPremium: false,
+        streak: 0, xp: 0, level: 1, coursesCompleted: 0, followersCount: 0,
+        followingCount: 0, createdAt: new Date().toISOString(), isPremium: false,
       },
       content,
       likes: 0,
@@ -298,6 +266,41 @@ export default function PostDetailPage() {
       );
     });
   };
+
+  // ── Loading state ──
+  if (postLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-lyo-400 animate-spin" />
+        <span className="ml-3 text-white/50">Loading post...</span>
+      </div>
+    );
+  }
+
+  // ── Error state ──
+  if (postError || !post) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4">
+        <p className="text-red-400">{postError || 'Post not found'}</p>
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-white/60 hover:text-white flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" /> Go back
+        </button>
+      </div>
+    );
+  }
+
+  const typeConfig = POST_TYPE_CONFIG[post.type] ?? POST_TYPE_CONFIG.post;
+  const TypeIcon = typeConfig.icon;
+
+  const initials = post.author.displayName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <div className="min-h-screen bg-[#0a0a0f]">
@@ -421,10 +424,7 @@ export default function PostDetailPage() {
                   {/* Like */}
                   <motion.button
                     whileTap={{ scale: 0.85 }}
-                    onClick={() => {
-                      setIsLiked((v) => !v);
-                      setLikeCount((c) => isLiked ? c - 1 : c + 1);
-                    }}
+                    onClick={handleLike}
                     className={cn(
                       'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200',
                       isLiked
@@ -497,40 +497,7 @@ export default function PostDetailPage() {
                 Related Posts
               </h3>
               <div className="space-y-3">
-                {RELATED_POSTS.map((rp) => {
-                  const init = rp.author.displayName.split(' ').map((n) => n[0]).join('').slice(0, 2);
-                  return (
-                    <button
-                      key={rp.id}
-                      onClick={() => router.push(`/community/${rp.id}`)}
-                      className="w-full text-left group"
-                    >
-                      <div className="p-3 rounded-xl bg-white/3 hover:bg-white/6 border border-white/8 hover:border-white/15 transition-all">
-                        <p className="text-sm text-white/80 group-hover:text-white transition-colors line-clamp-2 leading-snug mb-2">
-                          {rp.title}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-lyo-500 to-accent-purple flex items-center justify-center text-[8px] text-white font-bold">
-                              {init}
-                            </div>
-                            <span className="text-[10px] text-white/40 truncate max-w-[80px]">
-                              {rp.author.displayName}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px] text-white/30">
-                            <span className="flex items-center gap-0.5">
-                              <Heart className="w-2.5 h-2.5" /> {formatNumber(rp.likes)}
-                            </span>
-                            <span className="flex items-center gap-0.5">
-                              <MessageCircle className="w-2.5 h-2.5" /> {rp.comments}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                <p className="text-xs text-white/30">Related posts coming soon</p>
               </div>
 
               <button

@@ -16,6 +16,8 @@ import { cn } from '@/lib/utils';
 import { PlaceCard } from '@/components/discover/PlaceCard';
 import { EventCard } from '@/components/discover/EventCard';
 import type { EducationalPlace } from '@/types/index';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
 
 // ============================================================
 // Mock Data
@@ -28,6 +30,7 @@ type PlaceData = EducationalPlace & {
   distanceLabel: string;
 };
 
+// TODO: wire to places endpoint when available
 const MOCK_PLACES: PlaceData[] = [
   {
     id: 'p1',
@@ -148,144 +151,68 @@ type EventData = {
   coverColor: string;
 };
 
-const MOCK_EVENTS: EventData[] = [
-  {
-    id: 'e1',
-    title: 'Intro to Machine Learning with Python',
-    date: 'Jun 22, 2026',
-    time: '2:00 PM',
-    hostName: 'Dr. Sarah Chen',
-    location: 'Online',
-    isVirtual: true,
-    attendeeCount: 142,
-    maxAttendees: 200,
-    price: 0,
-    coverColor: 'from-purple-600 to-blue-500',
-  },
-  {
-    id: 'e2',
-    title: 'Urban Sketching & Architecture Walk',
-    date: 'Jun 25, 2026',
-    time: '10:00 AM',
-    hostName: 'Marcus Reyes',
-    location: 'Downtown Arts District',
-    isVirtual: false,
-    attendeeCount: 18,
-    maxAttendees: 25,
-    price: 15,
-    coverColor: 'from-orange-500 to-pink-500',
-  },
-  {
-    id: 'e3',
-    title: 'Philosophy Book Club: Existentialism',
-    date: 'Jun 28, 2026',
-    time: '7:00 PM',
-    hostName: 'Harmony Community Center',
-    location: '200 Unity Square',
-    isVirtual: false,
-    attendeeCount: 30,
-    maxAttendees: 30,
-    price: 0,
-    coverColor: 'from-teal-600 to-emerald-500',
-  },
-  {
-    id: 'e4',
-    title: 'Web3 & Blockchain for Developers',
-    date: 'Jul 1, 2026',
-    time: '6:00 PM',
-    hostName: 'TechForge Makerspace',
-    location: '88 Circuit Blvd',
-    isVirtual: false,
-    attendeeCount: 55,
-    maxAttendees: 80,
-    price: 25,
-    coverColor: 'from-violet-600 to-purple-500',
-  },
-  {
-    id: 'e5',
-    title: 'Live Spanish Conversation Practice',
-    date: 'Jul 3, 2026',
-    time: '9:00 AM',
-    hostName: 'Lingua Global',
-    location: 'Online',
-    isVirtual: true,
-    attendeeCount: 60,
-    maxAttendees: 100,
-    price: 0,
-    coverColor: 'from-yellow-500 to-orange-500',
-  },
-  {
-    id: 'e6',
-    title: 'DIY Electronics & Arduino Workshop',
-    date: 'Jul 5, 2026',
-    time: '1:00 PM',
-    hostName: 'BioLab Research Hub',
-    location: '55 Science Park',
-    isVirtual: false,
-    attendeeCount: 12,
-    maxAttendees: 20,
-    price: 40,
-    coverColor: 'from-cyan-600 to-blue-600',
-  },
+const EVENT_GRADIENTS = [
+  'from-purple-600 to-blue-500',
+  'from-orange-500 to-pink-500',
+  'from-teal-600 to-emerald-500',
+  'from-violet-600 to-purple-500',
+  'from-yellow-500 to-orange-500',
+  'from-cyan-600 to-blue-600',
 ];
 
-const ONLINE_CLASSES = [
-  {
-    id: 'oc1',
-    title: 'Advanced Calculus',
-    instructor: 'Prof. R. Newton',
-    duration: '6 hrs',
-    rating: 4.9,
-    tag: 'Mathematics',
-    isLive: false,
-    attendees: 241,
-    gradient: 'from-blue-600 to-cyan-500',
-  },
-  {
-    id: 'oc2',
-    title: 'Creative Writing 101',
-    instructor: 'Ana Ferreiro',
-    duration: '4 hrs',
-    rating: 4.7,
-    tag: 'Literature',
-    isLive: true,
-    attendees: 89,
-    gradient: 'from-pink-500 to-rose-400',
-  },
-  {
-    id: 'oc3',
-    title: 'Music Theory Fundamentals',
-    instructor: 'James Kwon',
-    duration: '5 hrs',
-    rating: 4.8,
-    tag: 'Music',
-    isLive: false,
-    attendees: 56,
-    gradient: 'from-amber-500 to-orange-400',
-  },
-  {
-    id: 'oc4',
-    title: 'React & Next.js Mastery',
-    instructor: 'Leila Nouri',
-    duration: '10 hrs',
-    rating: 4.9,
-    tag: 'Programming',
-    isLive: true,
-    attendees: 312,
-    gradient: 'from-violet-600 to-indigo-500',
-  },
-  {
-    id: 'oc5',
-    title: 'Ancient Civilizations',
-    instructor: 'Dr. P. Okafor',
-    duration: '8 hrs',
-    rating: 4.6,
-    tag: 'History',
-    isLive: false,
-    attendees: 178,
-    gradient: 'from-emerald-600 to-teal-500',
-  },
+function adaptEvent(raw: Record<string, unknown>, index: number): EventData {
+  const startDate = raw.start_date ? new Date(raw.start_date as string) : new Date();
+  return {
+    id: String(raw.id || `event-${index}`),
+    title: (raw.title as string) || 'Untitled Event',
+    date: startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    time: startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    hostName: (raw.host_name as string) || (raw.organizer as string) || 'LYO Community',
+    hostAvatar: (raw.host_avatar as string) || undefined,
+    location: (raw.location as string) || (raw.venue as string) || 'TBD',
+    isVirtual: (raw.is_virtual as boolean) || (raw.location as string)?.toLowerCase() === 'online' || false,
+    attendeeCount: (raw.current_attendees as number) || (raw.attendee_count as number) || 0,
+    maxAttendees: (raw.max_attendees as number) || 100,
+    price: (raw.price as number) || 0,
+    coverColor: EVENT_GRADIENTS[index % EVENT_GRADIENTS.length],
+  };
+}
+
+const CLASS_GRADIENTS = [
+  'from-blue-600 to-cyan-500',
+  'from-pink-500 to-rose-400',
+  'from-amber-500 to-orange-400',
+  'from-violet-600 to-indigo-500',
+  'from-emerald-600 to-teal-500',
 ];
+
+type OnlineClassData = {
+  id: string;
+  title: string;
+  instructor: string;
+  duration: string;
+  rating: number;
+  tag: string;
+  isLive: boolean;
+  attendees: number;
+  gradient: string;
+};
+
+function adaptOnlineClass(raw: Record<string, unknown>, index: number): OnlineClassData {
+  const durationMins = (raw.estimated_duration as number) || (raw.duration_hours as number) * 60 || 0;
+  const hours = Math.round(durationMins / 60);
+  return {
+    id: String(raw.id || `oc-${index}`),
+    title: (raw.title as string) || 'Untitled Course',
+    instructor: (raw.instructor_name as string) || (raw.author_name as string) || (raw.creator as string) || 'LYO Instructor',
+    duration: hours > 0 ? `${hours} hrs` : `${durationMins} min`,
+    rating: (raw.rating as number) || 4.5,
+    tag: (raw.category as string) || (raw.subject as string) || 'General',
+    isLive: (raw.is_live as boolean) || false,
+    attendees: (raw.enrolled_count as number) || (raw.enrollments as number) || 0,
+    gradient: CLASS_GRADIENTS[index % CLASS_GRADIENTS.length],
+  };
+}
 
 const CATEGORIES = [
   'Science',
@@ -336,7 +263,7 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function OnlineClassCard({ cls }: { cls: (typeof ONLINE_CLASSES)[number] }) {
+function OnlineClassCard({ cls }: { cls: OnlineClassData }) {
   return (
     <motion.div
       variants={itemVariants}
@@ -424,6 +351,16 @@ export default function DiscoverPage() {
       return next;
     });
   };
+
+  const { data: eventsRaw } = useApi(() => api.community.events(), []);
+  const { data: coursesRaw } = useApi(() => api.courses.list(0, 10), []);
+
+  const events: EventData[] = eventsRaw
+    ? eventsRaw.map((e: Record<string, unknown>, i: number) => adaptEvent(e, i))
+    : [];
+  const onlineClasses: OnlineClassData[] = coursesRaw
+    ? (coursesRaw as Record<string, unknown>[]).map((c, i) => adaptOnlineClass(c, i))
+    : [];
 
   const showPlaces = activeTab === 'All' || activeTab === 'Places';
   const showEvents = activeTab === 'All' || activeTab === 'Events';
@@ -558,11 +495,13 @@ export default function DiscoverPage() {
               variants={containerVariants}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
             >
-              {MOCK_EVENTS.map((event) => (
+              {events.length > 0 ? events.map((event) => (
                 <motion.div key={event.id} variants={itemVariants}>
                   <EventCard event={event} />
                 </motion.div>
-              ))}
+              )) : (
+                <p className="text-secondary text-sm col-span-full text-center py-8">No upcoming events yet.</p>
+              )}
             </motion.div>
           </motion.section>
         )}
@@ -582,9 +521,11 @@ export default function DiscoverPage() {
               variants={itemVariants}
               className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
             >
-              {ONLINE_CLASSES.map((cls) => (
+              {onlineClasses.length > 0 ? onlineClasses.map((cls) => (
                 <OnlineClassCard key={cls.id} cls={cls} />
-              ))}
+              )) : (
+                <p className="text-secondary text-sm py-8">No online classes available yet.</p>
+              )}
             </motion.div>
           </motion.section>
         )}

@@ -9,152 +9,40 @@ import {
   BarChart2,
   Activity,
   Eye,
-  Clock,
   CheckCircle,
   MessageCircle,
-  FileText,
   Lock,
   Zap,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import LearningStatsPanel from '@/components/profile/LearningStats';
 import { cn, formatTimeAgo } from '@/lib/utils';
 import type { LearningStats } from '@/types';
 
-// ── Mock Data ────────────────────────────────────────────────────────────────
+// ── Fallback color / emoji palettes for dynamic data ──
 
-const mockStats: LearningStats = {
-  totalHoursLearned: 142,
-  coursesCompleted: 23,
-  coursesInProgress: 4,
-  quizzesPassed: 87,
-  currentStreak: 12,
-  longestStreak: 21,
-  xpThisWeek: 1240,
-  topTopics: [
-    { topic: 'Machine Learning', hours: 38 },
-    { topic: 'Python', hours: 29 },
-    { topic: 'UI/UX Design', hours: 22 },
-    { topic: 'Mathematics', hours: 18 },
-    { topic: 'Music Theory', hours: 12 },
-  ],
-};
-
-const mockActivity = [
-  {
-    id: '1',
-    type: 'course_complete',
-    text: 'Completed "Python for Data Science"',
-    sub: 'Earned 500 XP',
-    icon: CheckCircle,
-    color: '#22c55e',
-    time: '2024-06-14T10:30:00Z',
-  },
-  {
-    id: '2',
-    type: 'clip_posted',
-    text: 'Posted a clip: "Quick Sort in 60 seconds"',
-    sub: '247 views · 34 likes',
-    icon: Play,
-    color: '#ec4899',
-    time: '2024-06-13T16:00:00Z',
-  },
-  {
-    id: '3',
-    type: 'post_created',
-    text: 'Asked a question in the community',
-    sub: '"Best resources for learning Rust?"',
-    icon: MessageCircle,
-    color: '#6c63ff',
-    time: '2024-06-12T09:45:00Z',
-  },
-  {
-    id: '4',
-    type: 'achievement',
-    text: 'Unlocked Achievement: "Week Warrior"',
-    sub: '7-day streak milestone · +200 XP',
-    icon: Trophy,
-    color: '#f59e0b',
-    time: '2024-06-10T18:00:00Z',
-  },
-  {
-    id: '5',
-    type: 'course_enrolled',
-    text: 'Enrolled in "Advanced React Patterns"',
-    sub: 'Intermediate · 8 hours',
-    icon: BookOpen,
-    color: '#3b82f6',
-    time: '2024-06-09T11:20:00Z',
-  },
+const courseGradients = [
+  'from-blue-600 to-cyan-500',
+  'from-pink-600 to-rose-500',
+  'from-purple-600 to-indigo-500',
+  'from-amber-500 to-orange-400',
+  'from-green-600 to-teal-500',
 ];
-
-const mockCompletedCourses = [
-  {
-    id: '1',
-    title: 'Python for Data Science',
-    category: 'Programming',
-    color: 'from-blue-600 to-cyan-500',
-    emoji: '🐍',
-    rating: 4.9,
-    completedAt: '2024-06-14',
-    xpEarned: 500,
-  },
-  {
-    id: '2',
-    title: 'UI/UX Design Fundamentals',
-    category: 'Design',
-    color: 'from-pink-600 to-rose-500',
-    emoji: '🎨',
-    rating: 4.8,
-    completedAt: '2024-05-28',
-    xpEarned: 450,
-  },
-  {
-    id: '3',
-    title: 'Machine Learning Basics',
-    category: 'AI & ML',
-    color: 'from-purple-600 to-indigo-500',
-    emoji: '🤖',
-    rating: 4.7,
-    completedAt: '2024-05-10',
-    xpEarned: 600,
-  },
-  {
-    id: '4',
-    title: 'Music Theory Essentials',
-    category: 'Music',
-    color: 'from-amber-500 to-orange-400',
-    emoji: '🎵',
-    rating: 4.6,
-    completedAt: '2024-04-22',
-    xpEarned: 350,
-  },
+const courseEmojis = ['📚', '🧠', '🎨', '🐍', '🎵', '⚛️'];
+const clipGradients = [
+  'from-blue-700 to-cyan-600',
+  'from-pink-600 to-rose-500',
+  'from-green-600 to-teal-500',
+  'from-purple-600 to-indigo-500',
+  'from-orange-500 to-amber-400',
+  'from-violet-600 to-purple-500',
 ];
-
-const mockClips = [
-  { id: '1', title: 'Quick Sort in 60s', views: 247, color: 'from-blue-700 to-cyan-600', emoji: '⚡' },
-  { id: '2', title: 'CSS Grid Tricks', views: 1820, color: 'from-pink-600 to-rose-500', emoji: '🎨' },
-  { id: '3', title: 'Python List Comprehensions', views: 3401, color: 'from-green-600 to-teal-500', emoji: '🐍' },
-  { id: '4', title: 'React Hooks Explained', views: 5782, color: 'from-purple-600 to-indigo-500', emoji: '⚛️' },
-  { id: '5', title: 'SQL Joins Visual', views: 892, color: 'from-orange-500 to-amber-400', emoji: '🗄️' },
-  { id: '6', title: 'Linear Algebra Basics', views: 1130, color: 'from-violet-600 to-purple-500', emoji: '📐' },
-];
-
-const mockAchievements = [
-  { id: '1', title: 'First Step', desc: 'Complete your first lesson', xp: 50, icon: '🎯', unlocked: true },
-  { id: '2', title: 'Week Warrior', desc: '7-day learning streak', xp: 200, icon: '🔥', unlocked: true },
-  { id: '3', title: 'Quiz Master', desc: 'Pass 10 quizzes with 80%+', xp: 300, icon: '🧠', unlocked: true },
-  { id: '4', title: 'Course Graduate', desc: 'Complete 5 courses', xp: 500, icon: '🎓', unlocked: true },
-  { id: '5', title: 'Speed Learner', desc: 'Finish a course in one day', xp: 400, icon: '⚡', unlocked: true },
-  { id: '6', title: 'Social Star', desc: 'Get 100 followers', xp: 250, icon: '⭐', unlocked: false },
-  { id: '7', title: 'Content Creator', desc: 'Post 10 clips', xp: 300, icon: '🎬', unlocked: false },
-  { id: '8', title: 'Legend Streak', desc: '30-day learning streak', xp: 1000, icon: '🏆', unlocked: false },
-  { id: '9', title: 'Top Contributor', desc: 'Help 50 learners', xp: 600, icon: '🤝', unlocked: false },
-  { id: '10', title: 'Master Mind', desc: 'Reach Level 20', xp: 800, icon: '💎', unlocked: false },
-  { id: '11', title: 'Marathon Learner', desc: 'Learn 100 hours total', xp: 700, icon: '🏅', unlocked: false },
-  { id: '12', title: 'XP Millionaire', desc: 'Earn 10,000 XP total', xp: 1000, icon: '💰', unlocked: false },
-];
+const clipEmojis = ['⚡', '🎨', '🐍', '⚛️', '🗄️', '📐'];
+const activityIcons = [MessageCircle, BookOpen, Play, Trophy, CheckCircle];
+const activityColorPalette = ['#6c63ff', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
 
 const tabs = [
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -178,9 +66,110 @@ const containerVariants = {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
+type ActivityItem = {
+  id: string;
+  type: string;
+  text: string;
+  sub: string;
+  icon: typeof Activity;
+  color: string;
+  time: string;
+};
+
+type CourseItem = {
+  id: string;
+  title: string;
+  category: string;
+  color: string;
+  emoji: string;
+  xpEarned: number;
+  completedAt: string;
+};
+
+type ClipItem = {
+  id: string;
+  title: string;
+  views: number;
+  color: string;
+  emoji: string;
+};
+
+type AchievementItem = {
+  id: string;
+  title: string;
+  desc: string;
+  xp: number;
+  icon: string;
+  unlocked: boolean;
+};
+
 export default function ProfilePage() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState('activity');
+
+  const { data: gamificationData } = useApi(() => api.gamification.overview(), []);
+  const { data: coursesRaw } = useApi(() => api.courses.list(0, 10), []);
+  const { data: clipsRaw } = useApi(() => api.clips.list(1, 10), []);
+  const { data: achievementsRaw } = useApi(() => api.gamification.achievements(), []);
+  const { data: feedData } = useApi(user ? () => api.users.posts(user.id) : null, [user?.id]);
+
+  const activity: ActivityItem[] = feedData?.posts
+    ? feedData.posts.slice(0, 8).map((p: Record<string, unknown>, i: number) => ({
+        id: String(p.id || i),
+        type: 'post',
+        text: String(p.content || '').slice(0, 80),
+        sub: `${p.like_count || 0} likes · ${p.comment_count || 0} comments`,
+        icon: activityIcons[i % activityIcons.length],
+        color: activityColorPalette[i % activityColorPalette.length],
+        time: (p.created_at as string) || new Date().toISOString(),
+      }))
+    : [];
+
+  const courses: CourseItem[] = coursesRaw
+    ? (coursesRaw as Record<string, unknown>[]).map((c, i) => ({
+        id: String(c.id || i),
+        title: (c.title as string) || 'Untitled',
+        category: (c.subject as string) || 'General',
+        color: courseGradients[i % courseGradients.length],
+        emoji: courseEmojis[i % courseEmojis.length],
+        xpEarned: 500,
+        completedAt: (c.created_at as string)?.slice(0, 10) || '',
+      }))
+    : [];
+
+  const clips: ClipItem[] = clipsRaw?.clips
+    ? clipsRaw.clips.map((c: Record<string, unknown>, i: number) => ({
+        id: String(c.id || i),
+        title: (c.title as string) || 'Untitled',
+        views: (c.view_count as number) || (c.views as number) || 0,
+        color: clipGradients[i % clipGradients.length],
+        emoji: clipEmojis[i % clipEmojis.length],
+      }))
+    : [];
+
+  const achievements: AchievementItem[] = achievementsRaw
+    ? achievementsRaw.map((a: Record<string, unknown>, i: number) => ({
+        id: String(a.id || i),
+        title: (a.name as string) || (a.achievement_name as string) || 'Achievement',
+        desc: (a.description as string) || '',
+        xp: (a.xp_reward as number) || 100,
+        icon: (a.icon as string) || '🏆',
+        unlocked: (a.completed as boolean) || (a.is_completed as boolean) || false,
+      }))
+    : [];
+
+  const stats: LearningStats = {
+    totalHoursLearned: (gamificationData?.xp_summary as Record<string, unknown>)?.total
+      ? Math.round(((gamificationData?.xp_summary as Record<string, unknown>)?.total as number) / 50)
+      : 0,
+    coursesCompleted: user?.coursesCompleted || 0,
+    coursesInProgress: courses.length,
+    quizzesPassed: 0,
+    currentStreak: user?.streak || 0,
+    longestStreak: (gamificationData?.streaks as Record<string, unknown>)?.longest as number || 0,
+    xpThisWeek: (gamificationData?.xp_summary as Record<string, unknown>)?.this_week as number || 0,
+    topTopics: [],
+  };
 
   if (!user) return null;
 
@@ -225,7 +214,7 @@ export default function ProfilePage() {
       {/* Activity */}
       {activeTab === 'activity' && (
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-3">
-          {mockActivity.map((item) => {
+          {activity.map((item) => {
             const Icon = item.icon;
             return (
               <motion.div key={item.id} variants={itemVariants} className="glass-card p-4 flex items-start gap-3">
@@ -254,7 +243,7 @@ export default function ProfilePage() {
           animate="visible"
           className="grid grid-cols-1 sm:grid-cols-2 gap-4"
         >
-          {mockCompletedCourses.map((course) => (
+          {courses.map((course) => (
             <motion.div
               key={course.id}
               variants={itemVariants}
@@ -290,7 +279,7 @@ export default function ProfilePage() {
           animate="visible"
           className="grid grid-cols-3 gap-3"
         >
-          {mockClips.map((clip) => (
+          {clips.map((clip) => (
             <motion.div
               key={clip.id}
               variants={itemVariants}
@@ -323,7 +312,7 @@ export default function ProfilePage() {
           animate="visible"
           className="grid grid-cols-2 sm:grid-cols-3 gap-3"
         >
-          {mockAchievements.map((ach) => (
+          {achievements.map((ach) => (
             <motion.div
               key={ach.id}
               variants={itemVariants}
@@ -368,7 +357,7 @@ export default function ProfilePage() {
 
       {/* Stats */}
       {activeTab === 'stats' && (
-        <LearningStatsPanel stats={mockStats} />
+        <LearningStatsPanel stats={stats} />
       )}
 
       {/* Bottom spacer */}

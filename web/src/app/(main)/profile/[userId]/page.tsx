@@ -14,151 +14,34 @@ import {
   Zap,
   Lock,
 } from 'lucide-react';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import LearningStatsPanel from '@/components/profile/LearningStats';
 import { cn, formatTimeAgo } from '@/lib/utils';
-import type { User, LearningStats } from '@/types';
+import type { LearningStats } from '@/types';
 
-// ── Mock other user data ─────────────────────────────────────────────────────
+// ── Fallback color / emoji palettes for dynamic data ──
 
-const mockOtherUser: User = {
-  id: 'user_2',
-  email: 'maya@lyo.app',
-  displayName: 'Maya Chen',
-  username: 'mayalearns',
-  avatar: '',
-  bio: 'AI researcher & lifelong learner. Sharing knowledge one lesson at a time. 🧠',
-  role: 'creator',
-  interests: ['AI', 'Neuroscience', 'Philosophy', 'Piano'],
-  learningGoals: ['Publish AI research paper', 'Learn Japanese'],
-  streak: 34,
-  xp: 12850,
-  level: 28,
-  coursesCompleted: 57,
-  followersCount: 2840,
-  followingCount: 312,
-  createdAt: '2023-09-15T00:00:00Z',
-  isPremium: true,
-};
-
-const mockStats: LearningStats = {
-  totalHoursLearned: 386,
-  coursesCompleted: 57,
-  coursesInProgress: 3,
-  quizzesPassed: 214,
-  currentStreak: 34,
-  longestStreak: 56,
-  xpThisWeek: 3100,
-  topTopics: [
-    { topic: 'Artificial Intelligence', hours: 95 },
-    { topic: 'Neuroscience', hours: 62 },
-    { topic: 'Philosophy', hours: 48 },
-    { topic: 'Piano / Music', hours: 35 },
-    { topic: 'Japanese', hours: 20 },
-  ],
-};
-
-const mockActivity = [
-  {
-    id: '1',
-    type: 'course_complete',
-    text: 'Completed "Deep Reinforcement Learning"',
-    sub: 'Earned 750 XP',
-    icon: CheckCircle,
-    color: '#22c55e',
-    time: '2024-06-15T08:00:00Z',
-  },
-  {
-    id: '2',
-    type: 'clip_posted',
-    text: 'Posted a clip: "Neural Networks in 90 seconds"',
-    sub: '14.2K views · 1.1K likes',
-    icon: Play,
-    color: '#ec4899',
-    time: '2024-06-14T15:30:00Z',
-  },
-  {
-    id: '3',
-    type: 'post',
-    text: 'Shared a post in the AI Research community',
-    sub: '"Attention mechanisms explained simply"',
-    icon: MessageCircle,
-    color: '#6c63ff',
-    time: '2024-06-13T10:00:00Z',
-  },
-  {
-    id: '4',
-    type: 'achievement',
-    text: 'Unlocked: "Legend Streak" — 30 days',
-    sub: '+1000 XP',
-    icon: Trophy,
-    color: '#f59e0b',
-    time: '2024-06-12T00:00:00Z',
-  },
+const courseGradients = [
+  'from-blue-600 to-cyan-500',
+  'from-pink-600 to-rose-500',
+  'from-purple-600 to-indigo-500',
+  'from-amber-500 to-orange-400',
+  'from-green-600 to-teal-500',
 ];
-
-const mockCourses = [
-  {
-    id: '1',
-    title: 'Deep Reinforcement Learning',
-    category: 'AI & ML',
-    color: 'from-purple-600 to-indigo-500',
-    emoji: '🤖',
-    xpEarned: 750,
-    completedAt: '2024-06-15',
-  },
-  {
-    id: '2',
-    title: 'Consciousness & the Brain',
-    category: 'Neuroscience',
-    color: 'from-pink-600 to-rose-500',
-    emoji: '🧠',
-    xpEarned: 600,
-    completedAt: '2024-05-20',
-  },
-  {
-    id: '3',
-    title: 'Japanese JLPT N4 Prep',
-    category: 'Languages',
-    color: 'from-red-600 to-orange-500',
-    emoji: '🇯🇵',
-    xpEarned: 500,
-    completedAt: '2024-04-30',
-  },
-  {
-    id: '4',
-    title: 'Advanced Piano Technique',
-    category: 'Music',
-    color: 'from-amber-500 to-yellow-400',
-    emoji: '🎹',
-    xpEarned: 400,
-    completedAt: '2024-04-10',
-  },
+const courseEmojis = ['📚', '🧠', '🎨', '🐍', '🎵', '⚛️'];
+const clipGradients = [
+  'from-blue-700 to-cyan-600',
+  'from-pink-600 to-rose-500',
+  'from-green-600 to-teal-500',
+  'from-purple-600 to-indigo-500',
+  'from-orange-500 to-amber-400',
+  'from-violet-600 to-purple-500',
 ];
-
-const mockClips = [
-  { id: '1', title: 'Neural Networks 90s', views: 14200, color: 'from-purple-700 to-indigo-600', emoji: '🤖' },
-  { id: '2', title: 'AI vs Human Brain', views: 8700, color: 'from-pink-600 to-rose-500', emoji: '🧠' },
-  { id: '3', title: 'Softmax Explained', views: 5400, color: 'from-blue-600 to-cyan-500', emoji: '📊' },
-  { id: '4', title: 'Piano Practice Tip', views: 3200, color: 'from-amber-500 to-yellow-400', emoji: '🎹' },
-  { id: '5', title: 'Japan Daily Life', views: 2900, color: 'from-red-600 to-orange-500', emoji: '🌸' },
-  { id: '6', title: 'Reading Nietzsche', views: 1800, color: 'from-green-600 to-teal-500', emoji: '📚' },
-];
-
-const mockAchievements = [
-  { id: '1', title: 'First Step', desc: 'Complete your first lesson', xp: 50, icon: '🎯', unlocked: true },
-  { id: '2', title: 'Week Warrior', desc: '7-day streak', xp: 200, icon: '🔥', unlocked: true },
-  { id: '3', title: 'Quiz Master', desc: 'Pass 10 quizzes', xp: 300, icon: '🧠', unlocked: true },
-  { id: '4', title: 'Course Graduate', desc: 'Complete 5 courses', xp: 500, icon: '🎓', unlocked: true },
-  { id: '5', title: 'Legend Streak', desc: '30-day streak', xp: 1000, icon: '🏆', unlocked: true },
-  { id: '6', title: 'Content Creator', desc: 'Post 10 clips', xp: 300, icon: '🎬', unlocked: true },
-  { id: '7', title: 'Social Star', desc: 'Get 1000 followers', xp: 500, icon: '⭐', unlocked: true },
-  { id: '8', title: 'XP Millionaire', desc: 'Earn 10,000 XP', xp: 1000, icon: '💰', unlocked: true },
-  { id: '9', title: 'Marathon Learner', desc: '100 hours learned', xp: 700, icon: '🏅', unlocked: true },
-  { id: '10', title: 'Top Contributor', desc: 'Help 50 learners', xp: 600, icon: '🤝', unlocked: false },
-  { id: '11', title: 'Master Mind', desc: 'Reach Level 40', xp: 800, icon: '💎', unlocked: false },
-  { id: '12', title: 'Speed Learner', desc: 'Finish 3 courses in 1 week', xp: 600, icon: '⚡', unlocked: false },
-];
+const clipEmojis = ['⚡', '🎨', '🐍', '⚛️', '🗄️', '📐'];
+const activityIcons = [MessageCircle, BookOpen, Play, Trophy, CheckCircle];
+const activityColorPalette = ['#6c63ff', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
 
 const tabs = [
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -180,12 +63,120 @@ const containerVariants = {
   visible: { opacity: 1, transition: { staggerChildren: 0.07 } },
 };
 
+// ── Types ───────────────────────────────────────────────────────────────────
+
+type ActivityItem = {
+  id: string;
+  type: string;
+  text: string;
+  sub: string;
+  icon: typeof Activity;
+  color: string;
+  time: string;
+};
+
+type CourseItem = {
+  id: string;
+  title: string;
+  category: string;
+  color: string;
+  emoji: string;
+  xpEarned: number;
+  completedAt: string;
+};
+
+type ClipItem = {
+  id: string;
+  title: string;
+  views: number;
+  color: string;
+  emoji: string;
+};
+
+type AchievementItem = {
+  id: string;
+  title: string;
+  desc: string;
+  xp: number;
+  icon: string;
+  unlocked: boolean;
+};
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function UserProfilePage({ params }: { params: { userId: string } }) {
   const [activeTab, setActiveTab] = useState('activity');
-  // In production, fetch user by params.userId. Using mock data here.
-  const user = mockOtherUser;
+
+  // Fetch user profile and related data via API
+  const { data: user, isLoading: userLoading } = useApi(() => api.users.get(params.userId), [params.userId]);
+  const { data: feedData } = useApi(() => api.users.posts(params.userId), [params.userId]);
+  const { data: coursesRaw } = useApi(() => api.courses.list(0, 10), []);
+  const { data: clipsRaw } = useApi(() => api.clips.list(1, 10), []);
+  const { data: achievementsRaw } = useApi(() => api.gamification.achievements(), []);
+  const { data: gamificationData } = useApi(() => api.gamification.overview(), []);
+
+  // Map API responses to typed arrays
+
+  const activity: ActivityItem[] = feedData?.posts
+    ? feedData.posts.slice(0, 8).map((p: Record<string, unknown>, i: number) => ({
+        id: String(p.id || i),
+        type: 'post',
+        text: String(p.content || '').slice(0, 80),
+        sub: `${p.like_count || 0} likes · ${p.comment_count || 0} comments`,
+        icon: activityIcons[i % activityIcons.length],
+        color: activityColorPalette[i % activityColorPalette.length],
+        time: (p.created_at as string) || new Date().toISOString(),
+      }))
+    : [];
+
+  const courses: CourseItem[] = coursesRaw
+    ? (coursesRaw as Record<string, unknown>[]).map((c, i) => ({
+        id: String(c.id || i),
+        title: (c.title as string) || 'Untitled',
+        category: (c.subject as string) || 'General',
+        color: courseGradients[i % courseGradients.length],
+        emoji: courseEmojis[i % courseEmojis.length],
+        xpEarned: 500,
+        completedAt: (c.created_at as string)?.slice(0, 10) || '',
+      }))
+    : [];
+
+  const clips: ClipItem[] = clipsRaw?.clips
+    ? clipsRaw.clips.map((c: Record<string, unknown>, i: number) => ({
+        id: String(c.id || i),
+        title: (c.title as string) || 'Untitled',
+        views: (c.view_count as number) || (c.views as number) || 0,
+        color: clipGradients[i % clipGradients.length],
+        emoji: clipEmojis[i % clipEmojis.length],
+      }))
+    : [];
+
+  const achievements: AchievementItem[] = achievementsRaw
+    ? achievementsRaw.map((a: Record<string, unknown>, i: number) => ({
+        id: String(a.id || i),
+        title: (a.name as string) || (a.achievement_name as string) || 'Achievement',
+        desc: (a.description as string) || '',
+        xp: (a.xp_reward as number) || 100,
+        icon: (a.icon as string) || '🏆',
+        unlocked: (a.completed as boolean) || (a.is_completed as boolean) || false,
+      }))
+    : [];
+
+  const stats: LearningStats = {
+    totalHoursLearned: (gamificationData?.xp_summary as Record<string, unknown>)?.total
+      ? Math.round(((gamificationData?.xp_summary as Record<string, unknown>)?.total as number) / 50)
+      : 0,
+    coursesCompleted: user?.coursesCompleted || 0,
+    coursesInProgress: courses.length,
+    quizzesPassed: 0,
+    currentStreak: user?.streak || 0,
+    longestStreak: (gamificationData?.streaks as Record<string, unknown>)?.longest as number || 0,
+    xpThisWeek: (gamificationData?.xp_summary as Record<string, unknown>)?.this_week as number || 0,
+    topTopics: [],
+  };
+
+  // Show nothing while user data is loading
+  if (userLoading || !user) return null;
 
   return (
     <motion.div
@@ -228,7 +219,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
       {/* Activity */}
       {activeTab === 'activity' && (
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-3">
-          {mockActivity.map((item) => {
+          {activity.map((item) => {
             const Icon = item.icon;
             return (
               <motion.div key={item.id} variants={itemVariants} className="glass-card p-4 flex items-start gap-3">
@@ -257,7 +248,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
           animate="visible"
           className="grid grid-cols-1 sm:grid-cols-2 gap-4"
         >
-          {mockCourses.map((course) => (
+          {courses.map((course) => (
             <motion.div
               key={course.id}
               variants={itemVariants}
@@ -293,7 +284,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
           animate="visible"
           className="grid grid-cols-3 gap-3"
         >
-          {mockClips.map((clip) => (
+          {clips.map((clip) => (
             <motion.div
               key={clip.id}
               variants={itemVariants}
@@ -309,7 +300,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
               </div>
               <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1 text-[10px] text-white/90">
                 <Eye size={10} />
-                <span>{(clip.views / 1000).toFixed(1)}K</span>
+                <span>{clip.views.toLocaleString()}</span>
               </div>
             </motion.div>
           ))}
@@ -324,7 +315,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
           animate="visible"
           className="grid grid-cols-2 sm:grid-cols-3 gap-3"
         >
-          {mockAchievements.map((ach) => (
+          {achievements.map((ach) => (
             <motion.div
               key={ach.id}
               variants={itemVariants}
@@ -364,7 +355,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
       )}
 
       {/* Stats */}
-      {activeTab === 'stats' && <LearningStatsPanel stats={mockStats} />}
+      {activeTab === 'stats' && <LearningStatsPanel stats={stats} />}
 
       {/* Bottom spacer */}
       <div className="h-4" />
