@@ -225,7 +225,10 @@ export default function GroupsPage() {
           <h1 className="text-2xl font-bold text-white">Groups</h1>
           <p className="text-sm text-gray-400">Find your learning community</p>
         </div>
-        <button className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-lyo-500/20">
+        <button
+          onClick={() => alert('Create Group coming soon!')}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-lyo-500/20"
+        >
           <Plus className="h-4 w-4" />
           Create Group
         </button>

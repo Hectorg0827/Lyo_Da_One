@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookOpen, Sparkles, X } from 'lucide-react';
@@ -297,14 +298,16 @@ export default function CoursesPage() {
               {MOCK_COURSES.filter((c) => c.progress === 100).length} completed
             </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-lyo-600 to-lyo-500 text-white text-sm font-semibold shadow-lg shadow-lyo-600/25 hover:shadow-lyo-500/40 transition-shadow"
-          >
-            <Sparkles className="w-4 h-4" />
-            Create with AI
-          </motion.button>
+          <Link href="/chat">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-lyo-600 to-lyo-500 text-white text-sm font-semibold shadow-lg shadow-lyo-600/25 hover:shadow-lyo-500/40 transition-shadow"
+            >
+              <Sparkles className="w-4 h-4" />
+              Create with AI
+            </motion.button>
+          </Link>
         </motion.div>
 
         {/* ── Tab Row ── */}

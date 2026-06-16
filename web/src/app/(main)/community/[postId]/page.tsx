@@ -445,7 +445,10 @@ export default function PostDetailPage() {
                   </div>
 
                   {/* Share */}
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/60 bg-white/5 hover:bg-white/10 border border-white/10 transition-all">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(window.location.href); alert('Link copied!'); }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/60 bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
+                  >
                     <Share2 className="w-4 h-4" />
                     Share
                   </button>
