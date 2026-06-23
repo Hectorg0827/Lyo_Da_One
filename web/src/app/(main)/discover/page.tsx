@@ -30,7 +30,6 @@ type PlaceData = EducationalPlace & {
   distanceLabel: string;
 };
 
-// TODO: wire to places endpoint when available
 const MOCK_PLACES: PlaceData[] = [
   {
     id: 'p1',
@@ -354,6 +353,7 @@ export default function DiscoverPage() {
 
   const { data: eventsRaw } = useApi(() => api.community.events(), []);
   const { data: coursesRaw } = useApi(() => api.courses.list(0, 10), []);
+  const { data: placesData } = useApi(() => api.discover.places(1, 20), []);
 
   const events: EventData[] = eventsRaw
     ? eventsRaw.map((e: Record<string, unknown>, i: number) => adaptEvent(e, i))
@@ -361,6 +361,27 @@ export default function DiscoverPage() {
   const onlineClasses: OnlineClassData[] = coursesRaw
     ? (coursesRaw as Record<string, unknown>[]).map((c, i) => adaptOnlineClass(c, i))
     : [];
+
+  const places: PlaceData[] = placesData?.places
+    ? placesData.places.map((p: Record<string, unknown>) => ({
+        id: String(p.id || ''),
+        name: (p.name as string) || '',
+        type: ((p.category as string) || 'library') as EducationalPlace['type'],
+        description: (p.description as string) || '',
+        address: (p.address as string) || '',
+        coordinates: { lat: (p.lat as number) || 0, lng: (p.lng as number) || 0 },
+        rating: (p.rating as number) || 0,
+        reviewCount: (p.review_count as number) || 0,
+        images: (p.image_url as string) ? [p.image_url as string] : [],
+        categories: (p.tags as string[]) || [],
+        category: (p.category as string) || '',
+        tags: (p.tags as string[]) || [],
+        distance: 0,
+        distanceLabel: (p.is_featured as boolean) ? 'Featured' : 'Nearby',
+        isOpen: true,
+        imageUrl: (p.image_url as string) || '',
+      }))
+    : MOCK_PLACES;
 
   const showPlaces = activeTab === 'All' || activeTab === 'Places';
   const showEvents = activeTab === 'All' || activeTab === 'Events';
@@ -473,7 +494,7 @@ export default function DiscoverPage() {
               variants={itemVariants}
               className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
             >
-              {MOCK_PLACES.map((place) => (
+              {places.map((place) => (
                 <PlaceCard key={place.id} place={place} variant="card" />
               ))}
             </motion.div>
@@ -580,7 +601,7 @@ export default function DiscoverPage() {
               variants={containerVariants}
               className="flex flex-col gap-3"
             >
-              {[...MOCK_PLACES]
+              {[...places]
                 .sort((a, b) => b.rating - a.rating)
                 .map((place) => (
                   <motion.div key={place.id} variants={itemVariants}>

@@ -1,8 +1,6 @@
 'use client';
 
-// TODO: wire to real notifications endpoint when available
-
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -16,7 +14,9 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { cn, formatTimeAgo, getInitials } from '@/lib/utils';
-import type { AppNotification } from '@/types';
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
+import type { AppNotification, User } from '@/types';
 
 // ── Mock data (fallback until a real notifications endpoint exists) ───────────
 
@@ -411,59 +411,58 @@ function NotifItem({ notif }: { notif: AppNotification }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+// ── Map backend notification to AppNotification ──────────────────────────────
+
+function mapApiNotification(raw: Record<string, unknown>): AppNotification {
+  const actor: User | undefined = raw.actor_id
+    ? {
+        id: String(raw.actor_id),
+        displayName: (raw.actor_display_name as string) || '',
+        username: (raw.actor_username as string) || '',
+        avatar: (raw.actor_avatar_url as string) || '',
+        email: '',
+        bio: '',
+        role: 'student',
+        interests: [],
+        learningGoals: [],
+        streak: 0,
+        xp: 0,
+        level: 0,
+        coursesCompleted: 0,
+        followersCount: 0,
+        followingCount: 0,
+        createdAt: '',
+        isPremium: false,
+      }
+    : undefined;
+
+  return {
+    id: String(raw.id),
+    type: (raw.type as AppNotification['type']) || 'system',
+    title: (raw.title as string) || '',
+    body: (raw.body as string) || '',
+    actor,
+    targetId: (raw.target_id as string) || undefined,
+    targetType: (raw.target_type as string) || undefined,
+    isRead: (raw.is_read as boolean) ?? true,
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+  };
+}
+
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('All');
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { data: notifData, refetch } = useApi(() => api.notifications.list(1, 50), []);
 
-  // TODO: wire to real notifications endpoint when available
-  // Attempt to enrich notifications from available endpoints (e.g. gamification achievements)
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchNotificationSources() {
-      try {
-        // Try to fetch recent achievements to generate achievement notifications
-        const { api } = await import('@/lib/api');
-        const achievements = await api.gamification.achievements(true);
-        if (cancelled || !Array.isArray(achievements)) return;
-
-        const achievementNotifs: AppNotification[] = achievements
-          .filter((a: Record<string, unknown>) => a.completed_at || a.unlocked_at)
-          .slice(0, 3)
-          .map((a: Record<string, unknown>, i: number) => ({
-            id: `api_achievement_${i}`,
-            type: 'achievement' as const,
-            title: 'Achievement unlocked!',
-            body: `You earned "${String(a.title ?? a.name ?? 'Achievement')}"${a.xp_reward ? ` — +${a.xp_reward} XP` : ''}`,
-            isRead: true,
-            createdAt: String(a.completed_at ?? a.unlocked_at ?? new Date().toISOString()),
-          }));
-
-        if (achievementNotifs.length > 0) {
-          setNotifications((prev) => {
-            // Merge API achievement notifications with mock data, avoiding duplicates
-            const existingIds = new Set(prev.map((n) => n.id));
-            const newNotifs = achievementNotifs.filter((n) => !existingIds.has(n.id));
-            if (newNotifs.length === 0) return prev;
-            return [...prev, ...newNotifs].sort(
-              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-          });
-        }
-      } catch {
-        // Silently fall back to mock data if API is unavailable
-      }
-    }
-
-    fetchNotificationSources();
-    return () => { cancelled = true; };
-  }, []);
+  // Map API data when available, fall back to mock data
+  const notifications: AppNotification[] = notifData?.notifications
+    ? notifData.notifications.map(mapApiNotification)
+    : mockNotifications;
 
   const filtered = filterNotifications(notifications, activeTab);
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notifData?.unread_count ?? notifications.filter((n) => !n.isRead).length;
 
   function markAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    api.notifications.markAllRead().then(() => refetch()).catch(() => {});
   }
 
   return (

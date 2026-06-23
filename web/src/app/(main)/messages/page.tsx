@@ -1,15 +1,13 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Send, MessageSquare, Phone, Video, MoreHorizontal, ArrowLeft } from 'lucide-react';
 import { cn, getInitials, formatTimeAgo } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
-import type { Conversation, DirectMessage } from '@/types';
-
-// TODO: Backend does not yet have DM/messaging endpoints.
-// When available, replace mock data with real API calls (e.g., api.messages.list(), api.messages.send()).
-// For now, the UI is fully functional with local-only mock conversations.
+import { useApi } from '@/hooks/use-api';
+import { api } from '@/lib/api';
+import type { Conversation, DirectMessage, User } from '@/types';
 
 // ── Mock data (local-only until backend DM endpoints are added) ─────────────
 
@@ -183,34 +181,126 @@ export default function MessagesPage() {
   const [localMessages, setLocalMessages] = useState<MockMessages>(mockMessages);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const activeConv = mockConversations.find((c) => c.id === activeConvId) ?? null;
-  const activeOther = activeConv?.participants[0] ?? null;
-  const activeMessages = activeConvId ? (localMessages[activeConvId] ?? []) : [];
+  // ── API data fetching ──────────────────────────────────────────────────
+  const { data: convData, refetch: refetchConvs } = useApi(() => api.messages.conversations(), []);
+  const { data: msgData } = useApi(
+    activeConvId ? () => api.messages.getMessages(activeConvId) : null,
+    [activeConvId]
+  );
 
-  const filteredConvs = mockConversations.filter((c) =>
-    c.participants[0].displayName.toLowerCase().includes(search.toLowerCase())
+  // Map API conversations to the frontend Conversation type
+  const apiConversations: Conversation[] | null = convData?.conversations
+    ? convData.conversations.map((conv) => {
+        const participants = ((conv.participants as Record<string, unknown>[]) || []).map(
+          (p): User => ({
+            id: String(p.id ?? ''),
+            email: '',
+            displayName: (p.display_name as string) || (p.username as string) || 'User',
+            username: (p.username as string) || '',
+            avatar: (p.avatar_url as string) || '',
+            bio: '',
+            role: 'student',
+            interests: [],
+            learningGoals: [],
+            streak: 0,
+            xp: 0,
+            level: 1,
+            coursesCompleted: 0,
+            followersCount: 0,
+            followingCount: 0,
+            createdAt: '',
+            isPremium: false,
+          })
+        );
+        const lm = conv.last_message as Record<string, unknown> | null;
+        const lastMessage: DirectMessage = lm
+          ? {
+              id: String(lm.id ?? ''),
+              senderId: String(lm.sender_id ?? ''),
+              content: (lm.content as string) || '',
+              type: ((lm.message_type as string) || 'text') as DirectMessage['type'],
+              mediaUrl: (lm.media_url as string) || undefined,
+              isRead: true,
+              createdAt: (lm.created_at as string) || '',
+            }
+          : { id: '', senderId: '', content: '', type: 'text', isRead: true, createdAt: '' };
+        return {
+          id: String(conv.id ?? ''),
+          participants,
+          lastMessage,
+          unreadCount: (conv.unread_count as number) || 0,
+          updatedAt: (conv.updated_at as string) || '',
+        };
+      })
+    : null;
+
+  // Map API messages to the frontend DirectMessage type
+  const apiMessages: DirectMessage[] | null = msgData?.messages
+    ? (msgData.messages as Record<string, unknown>[]).map(
+        (m): DirectMessage => ({
+          id: String(m.id ?? ''),
+          senderId: String(m.sender_id ?? ''),
+          content: (m.content as string) || '',
+          type: ((m.message_type as string) || 'text') as DirectMessage['type'],
+          mediaUrl: (m.media_url as string) || undefined,
+          isRead: true,
+          createdAt: (m.created_at as string) || '',
+        })
+      )
+    : null;
+
+  // Use API data when available, fall back to mock data
+  const conversations = apiConversations ?? mockConversations;
+  const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
+  const activeOther = activeConv?.participants[0] ?? null;
+  const activeMessages = activeConvId
+    ? apiMessages ?? localMessages[activeConvId] ?? []
+    : [];
+
+  const filteredConvs = conversations.filter((c) =>
+    c.participants[0]?.displayName.toLowerCase().includes(search.toLowerCase())
   );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeMessages.length]);
 
-  function sendMessage() {
+  // Mark conversation as read when opened
+  useEffect(() => {
+    if (activeConvId && apiConversations) {
+      api.messages.markRead(activeConvId).catch(() => {});
+    }
+  }, [activeConvId, apiConversations]);
+
+  const sendMessage = useCallback(async () => {
     if (!inputText.trim() || !activeConvId) return;
-    const newMsg: DirectMessage = {
-      id: `msg_${Date.now()}`,
-      senderId: CURRENT_USER_ID,
-      content: inputText.trim(),
-      type: 'text',
-      isRead: false,
-      createdAt: new Date().toISOString(),
-    };
-    setLocalMessages((prev) => ({
-      ...prev,
-      [activeConvId]: [...(prev[activeConvId] ?? []), newMsg],
-    }));
+    const text = inputText.trim();
     setInputText('');
-  }
+
+    if (apiConversations) {
+      // Use real API
+      try {
+        await api.messages.sendMessage(activeConvId, text);
+        refetchConvs();
+      } catch {
+        // Silently fail — user sees the input cleared
+      }
+    } else {
+      // Local mock fallback
+      const newMsg: DirectMessage = {
+        id: `msg_${Date.now()}`,
+        senderId: CURRENT_USER_ID,
+        content: text,
+        type: 'text',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setLocalMessages((prev) => ({
+        ...prev,
+        [activeConvId]: [...(prev[activeConvId] ?? []), newMsg],
+      }));
+    }
+  }, [inputText, activeConvId, apiConversations, refetchConvs]);
 
   return (
     <div className="h-[calc(100vh-120px)] max-w-5xl mx-auto flex rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -309,7 +399,7 @@ export default function MessagesPage() {
                   <MsgBubble
                     key={msg.id}
                     msg={msg}
-                    isOwn={msg.senderId === CURRENT_USER_ID}
+                    isOwn={msg.senderId === CURRENT_USER_ID || msg.senderId === (user?.id ?? '')}
                   />
                 ))}
                 <div ref={bottomRef} />

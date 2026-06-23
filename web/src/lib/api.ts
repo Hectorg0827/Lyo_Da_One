@@ -487,6 +487,37 @@ export const api = {
     },
   },
 
+  // ── Messages (DMs) ──
+  messages: {
+    async conversations() {
+      return request<{ conversations: Record<string, unknown>[] }>('/messages/conversations');
+    },
+
+    async getMessages(conversationId: string, page = 1) {
+      return request<{ messages: Record<string, unknown>[]; total: number }>(
+        `/messages/conversations/${conversationId}?page=${page}`
+      );
+    },
+
+    async createConversation(participantIds: number[]) {
+      return request<Record<string, unknown>>('/messages/conversations', {
+        method: 'POST',
+        body: JSON.stringify({ participant_ids: participantIds }),
+      });
+    },
+
+    async sendMessage(conversationId: string, content: string) {
+      return request<Record<string, unknown>>(
+        `/messages/conversations/${conversationId}/messages`,
+        { method: 'POST', body: JSON.stringify({ content }) }
+      );
+    },
+
+    async markRead(conversationId: string) {
+      return request('/messages/conversations/' + conversationId + '/read', { method: 'POST' });
+    },
+  },
+
   // ── Community (Groups & Events) ──
   community: {
     async groups() {
@@ -579,6 +610,41 @@ export const api = {
 
     async trending(limit = 20) {
       return request<Record<string, unknown>[]>(`/resources/trending?limit=${limit}`);
+    },
+  },
+
+  // ── Notifications ──
+  notifications: {
+    async list(page = 1, perPage = 20, type?: string) {
+      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+      if (type) params.set('type', type);
+      return request<{ notifications: Record<string, unknown>[]; total: number; unread_count: number }>(`/notifications?${params}`);
+    },
+    async markRead(notificationId: string) {
+      return request(`/notifications/${notificationId}/read`, { method: 'POST' });
+    },
+    async markAllRead() {
+      return request('/notifications/read-all', { method: 'POST' });
+    },
+    async unreadCount() {
+      return request<{ count: number }>('/notifications/unread-count');
+    },
+  },
+
+  // ── Discover ──
+  discover: {
+    async places(page = 1, perPage = 20, category?: string) {
+      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+      if (category) params.set('category', category);
+      return request<{ places: Record<string, unknown>[]; total: number }>(`/discover/places?${params}`);
+    },
+
+    async place(placeId: string) {
+      return request<Record<string, unknown>>(`/discover/places/${placeId}`);
+    },
+
+    async trending() {
+      return request<{ topics: Record<string, unknown>[]; resources: Record<string, unknown>[] }>('/discover/trending');
     },
   },
 
