@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -179,7 +179,7 @@ function EditableField({
         </div>
       ) : (
         <button
-          onClick={() => setEditing(true)}
+          onClick={() => { setDraft(value); setEditing(true); }}
           className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-white/[0.06] transition-all duration-150 shrink-0"
         >
           <Pencil size={13} />
@@ -219,10 +219,14 @@ function InterestTag({ label, active, onClick }: { label: string; active: boolea
 export default function SettingsPage() {
   const { user, updateUser, logout } = useAuthStore();
 
-  // Account
+  // Account — derive from the store so values appear once auth hydrates
+  // (useState initializers only run on first render, before hydrate()).
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
-  const [email] = useState(user?.email ?? '');
-  const [username] = useState(user?.username ?? '');
+  useEffect(() => {
+    if (user?.displayName) setDisplayName(user.displayName);
+  }, [user?.displayName]);
+  const email = user?.email ?? '';
+  const username = user?.username ?? '';
 
   // Learning preferences
   const [interests, setInterests] = useState<string[]>(user?.interests ?? []);

@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/Avatar';
+import { useAuthStore } from '@/stores/auth-store';
 
 /* ============================================================
    Nav item definitions
@@ -43,6 +44,7 @@ const recentChats = [
    ============================================================ */
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -188,7 +190,7 @@ export function Sidebar() {
             collapsed && 'justify-center',
           )}
         >
-          <Avatar name="Alex Johnson" size="sm" online={true} className="shrink-0" />
+          <Avatar name={user?.displayName ?? 'User'} size="sm" online={true} className="shrink-0" />
 
           <AnimatePresence>
             {!collapsed && (
@@ -200,10 +202,10 @@ export function Sidebar() {
                 className="flex-1 min-w-0 overflow-hidden"
               >
                 <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
-                  Alex Johnson
+                  {user?.displayName ?? 'User'}
                 </p>
                 <p className="text-[10px] text-[var(--text-secondary)] truncate">
-                  Level 12 · 4,820 XP
+                  Level {user?.level ?? 1} · {(user?.xp ?? 0).toLocaleString()} XP
                 </p>
               </motion.div>
             )}

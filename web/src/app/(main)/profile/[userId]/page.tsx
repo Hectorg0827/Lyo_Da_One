@@ -106,6 +106,19 @@ type AchievementItem = {
 
 export default function UserProfilePage({ params }: { params: { userId: string } }) {
   const [activeTab, setActiveTab] = useState('activity');
+  const [isFollowing, setIsFollowing] = useState(false);
+
+  // ProfileHeader toggles its local state then calls this; mirror the
+  // toggle against the backend so Follow actually persists.
+  const handleFollow = () => {
+    const next = !isFollowing;
+    setIsFollowing(next);
+    if (next) {
+      api.users.follow(params.userId).catch(() => setIsFollowing(false));
+    } else {
+      api.users.unfollow(params.userId).catch(() => setIsFollowing(true));
+    }
+  };
 
   // Fetch user profile and related data via API
   const { data: user, isLoading: userLoading } = useApi(() => api.users.get(params.userId), [params.userId]);
@@ -185,7 +198,7 @@ export default function UserProfilePage({ params }: { params: { userId: string }
       animate={{ opacity: 1 }}
     >
       {/* Profile Header — isOwnProfile=false shows Follow button */}
-      <ProfileHeader user={user} isOwnProfile={false} />
+      <ProfileHeader user={user} isOwnProfile={false} onFollow={handleFollow} />
 
       {/* Tabs */}
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar">

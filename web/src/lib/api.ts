@@ -294,7 +294,11 @@ export const api = {
     async create(content: string, mediaUrls?: string[]) {
       return request<Record<string, unknown>>('/posts', {
         method: 'POST',
-        body: JSON.stringify({ content, media_urls: mediaUrls }),
+        body: JSON.stringify({
+          content,
+          post_type: mediaUrls && mediaUrls.length > 0 ? 'image' : 'text',
+          image_url: mediaUrls?.[0],
+        }),
       });
     },
 
@@ -341,7 +345,7 @@ export const api = {
     async follow(userId: string) {
       return request('/follow', {
         method: 'POST',
-        body: JSON.stringify({ followed_user_id: Number(userId) }),
+        body: JSON.stringify({ following_id: Number(userId) }),
       });
     },
 
@@ -388,7 +392,7 @@ export const api = {
   clips: {
     async list(page = 1, perPage = 20) {
       return request<{ clips: Record<string, unknown>[]; total: number }>(
-        `/clips?page=${page}&per_page=${perPage}`
+        `/api/v1/clips?page=${page}&per_page=${perPage}`
       );
     },
 
@@ -396,35 +400,35 @@ export const api = {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
       if (subject) params.set('subject', subject);
       return request<{ clips: Record<string, unknown>[]; total: number }>(
-        `/clips/discover?${params}`
+        `/api/v1/clips/discover?${params}`
       );
     },
 
     async get(clipId: string) {
-      return request<{ clip: Record<string, unknown> }>(`/clips/${clipId}`);
+      return request<{ clip: Record<string, unknown> }>(`/api/v1/clips/${clipId}`);
     },
 
     async create(data: Record<string, unknown>) {
-      return request<{ clip: Record<string, unknown> }>('/clips', {
+      return request<{ clip: Record<string, unknown> }>('/api/v1/clips', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
 
     async like(clipId: string) {
-      return request<{ isLiked: boolean; likeCount: number }>(`/clips/${clipId}/like`, {
+      return request<{ isLiked: boolean; likeCount: number }>(`/api/v1/clips/${clipId}/like`, {
         method: 'POST',
       });
     },
 
     async save(clipId: string) {
-      return request<{ isSaved: boolean }>(`/clips/${clipId}/save`, {
+      return request<{ isSaved: boolean }>(`/api/v1/clips/${clipId}/save`, {
         method: 'POST',
       });
     },
 
     async view(clipId: string) {
-      return request(`/clips/${clipId}/view`, { method: 'POST' });
+      return request(`/api/v1/clips/${clipId}/view`, { method: 'POST' });
     },
   },
 
@@ -432,23 +436,23 @@ export const api = {
   stories: {
     async list() {
       return request<{ stories: Record<string, unknown>[]; my_story?: Record<string, unknown> }>(
-        '/stories'
+        '/api/v1/stories'
       );
     },
 
     async get(storyId: string) {
-      return request<Record<string, unknown>>(`/stories/${storyId}`);
+      return request<Record<string, unknown>>(`/api/v1/stories/${storyId}`);
     },
 
     async create(data: { media_url: string; media_type?: string; caption?: string; tags?: string[] }) {
-      return request<Record<string, unknown>>('/stories', {
+      return request<Record<string, unknown>>('/api/v1/stories', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
 
     async seen(storyId: string) {
-      return request(`/stories/${storyId}/seen`, { method: 'POST' });
+      return request(`/api/v1/stories/${storyId}/seen`, { method: 'POST' });
     },
   },
 
@@ -521,19 +525,19 @@ export const api = {
   // ── Community (Groups & Events) ──
   community: {
     async groups() {
-      return request<Record<string, unknown>[]>('/community/groups');
+      return request<Record<string, unknown>[]>('/community/study-groups');
     },
 
     async group(groupId: string) {
-      return request<Record<string, unknown>>(`/community/groups/${groupId}`);
+      return request<Record<string, unknown>>(`/community/study-groups/${groupId}`);
     },
 
     async joinGroup(groupId: string) {
-      return request(`/community/groups/${groupId}/join`, { method: 'POST' });
+      return request(`/community/study-groups/${groupId}/join`, { method: 'POST' });
     },
 
     async leaveGroup(groupId: string) {
-      return request(`/community/groups/${groupId}/leave`, { method: 'POST' });
+      return request(`/community/study-groups/${groupId}/leave`, { method: 'DELETE' });
     },
 
     async events() {
