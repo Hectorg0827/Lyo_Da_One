@@ -1,0 +1,204 @@
+package com.lyo.app.data.api
+
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import retrofit2.http.Body
+import retrofit2.http.DELETE
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.Path
+import retrofit2.http.Query
+
+/**
+ * Retrofit surface for the LYO backend (api.lyoapp.com).
+ * Mirrors web/src/lib/api.ts endpoint-for-endpoint.
+ */
+interface LyoApiService {
+
+    // ── Auth ──
+    @POST("auth/login")
+    suspend fun login(@Body body: LoginRequest): AuthResponse
+
+    @POST("auth/register")
+    suspend fun register(@Body body: RegisterRequest): AuthResponse
+
+    @GET("auth/me")
+    suspend fun me(): UserDto
+
+    @PUT("auth/profile")
+    suspend fun updateProfile(@Body body: UpdateProfileRequest): UserDto
+
+    @POST("auth/logout")
+    suspend fun logout(): JsonObject
+
+    @GET("auth/users/{userId}")
+    suspend fun getUser(@Path("userId") userId: String): UserDto
+
+    // ── Feed ──
+    @GET("feed")
+    suspend fun feed(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+    ): PostsResponse
+
+    @GET("feed/public")
+    suspend fun publicFeed(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+    ): PostsResponse
+
+    @GET("posts/{postId}")
+    suspend fun getPost(@Path("postId") postId: String): JsonObject
+
+    @POST("posts")
+    suspend fun createPost(@Body body: CreatePostRequest): JsonObject
+
+    @POST("posts/{postId}/reactions")
+    suspend fun reactToPost(
+        @Path("postId") postId: String,
+        @Body body: ReactionRequest,
+    ): JsonObject
+
+    @POST("comments")
+    suspend fun createComment(@Body body: CommentRequest): JsonObject
+
+    // ── Users / social ──
+    @GET("users/{userId}/posts")
+    suspend fun userPosts(
+        @Path("userId") userId: String,
+        @Query("page") page: Int = 1,
+    ): PostsResponse
+
+    @POST("follow")
+    suspend fun follow(@Body body: FollowRequest): JsonObject
+
+    @DELETE("follow/{userId}")
+    suspend fun unfollow(@Path("userId") userId: String): JsonObject
+
+    // ── Courses ──
+    @GET("api/v1/learning/courses")
+    suspend fun courses(
+        @Query("skip") skip: Int = 0,
+        @Query("limit") limit: Int = 20,
+        @Query("subject") subject: String? = null,
+        @Query("difficulty") difficulty: String? = null,
+    ): List<CourseDto>
+
+    @GET("api/v1/learning/courses/{courseId}")
+    suspend fun course(@Path("courseId") courseId: String): CourseDto
+
+    @POST("api/v1/learning/courses/generate")
+    suspend fun generateCourse(@Body body: GenerateCourseRequest): JsonObject
+
+    // ── Clips ──
+    @GET("clips")
+    suspend fun clips(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+    ): ClipsResponse
+
+    @GET("clips/discover")
+    suspend fun discoverClips(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+        @Query("subject") subject: String? = null,
+    ): ClipsResponse
+
+    @POST("clips/{clipId}/like")
+    suspend fun likeClip(@Path("clipId") clipId: String): JsonObject
+
+    @POST("clips/{clipId}/save")
+    suspend fun saveClip(@Path("clipId") clipId: String): JsonObject
+
+    @POST("clips/{clipId}/view")
+    suspend fun viewClip(@Path("clipId") clipId: String): JsonObject
+
+    // ── Stories ──
+    @GET("stories")
+    suspend fun stories(): StoriesResponse
+
+    @POST("stories/{storyId}/seen")
+    suspend fun markStorySeen(@Path("storyId") storyId: String): JsonObject
+
+    // ── Gamification ──
+    @GET("gamification/overview")
+    suspend fun gamificationOverview(): JsonObject
+
+    @GET("gamification/my-achievements")
+    suspend fun achievements(
+        @Query("completed_only") completedOnly: Boolean = false,
+    ): JsonArray
+
+    @GET("gamification/leaderboards/{type}")
+    suspend fun leaderboard(
+        @Path("type") type: String = "xp",
+        @Query("period") period: String = "weekly",
+        @Query("limit") limit: Int = 20,
+    ): JsonObject
+
+    // ── Community ──
+    @GET("community/groups")
+    suspend fun groups(): List<GroupDto>
+
+    @POST("community/groups/{groupId}/join")
+    suspend fun joinGroup(@Path("groupId") groupId: String): JsonObject
+
+    @POST("community/groups/{groupId}/leave")
+    suspend fun leaveGroup(@Path("groupId") groupId: String): JsonObject
+
+    @GET("community/events")
+    suspend fun events(): List<EventDto>
+
+    // ── Messages ──
+    @GET("messages/conversations")
+    suspend fun conversations(): ConversationsResponse
+
+    @GET("messages/conversations/{conversationId}")
+    suspend fun messages(
+        @Path("conversationId") conversationId: String,
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 50,
+    ): MessagesResponse
+
+    @POST("messages/conversations")
+    suspend fun createConversation(@Body body: CreateConversationRequest): ConversationDto
+
+    @POST("messages/conversations/{conversationId}/messages")
+    suspend fun sendMessage(
+        @Path("conversationId") conversationId: String,
+        @Body body: SendMessageRequest,
+    ): MessageDto
+
+    @POST("messages/conversations/{conversationId}/read")
+    suspend fun markConversationRead(@Path("conversationId") conversationId: String): JsonObject
+
+    // ── Notifications ──
+    @GET("notifications")
+    suspend fun notifications(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 50,
+        @Query("type") type: String? = null,
+    ): NotificationsResponse
+
+    @POST("notifications/{notificationId}/read")
+    suspend fun markNotificationRead(@Path("notificationId") notificationId: String): JsonObject
+
+    @POST("notifications/read-all")
+    suspend fun markAllNotificationsRead(): JsonObject
+
+    // ── Discover ──
+    @GET("discover/places")
+    suspend fun places(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+        @Query("category") category: String? = null,
+    ): PlacesResponse
+
+    @GET("discover/trending")
+    suspend fun trending(): JsonObject
+
+    // ── AI Chat (simple, non-streaming fallback) ──
+    @POST("api/v1/ai/chat")
+    suspend fun simpleChat(@Body body: SimpleChatRequest): SimpleChatResponse
+}
