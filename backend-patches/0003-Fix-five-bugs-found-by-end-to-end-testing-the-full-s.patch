@@ -1,0 +1,194 @@
+From cc4e3eaf617a84cc774e40ae68f5d6505cfadbb1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 6 Jul 2026 21:52:12 +0000
+Subject: [PATCH 3/3] Fix five bugs found by end-to-end testing the full stack
+ locally
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- enhanced_main: mount the basic feeds router (/posts, /comments,
+  /posts/{id}/reactions, /follow, /feed, /feed/public, /users/{id}/posts).
+  It was shadowed by enhanced_routes and never registered, so none of
+  those paths existed and the notification triggers were unreachable.
+- exceptions: register the RFC 7807 ProblemDetail handler — routes using
+  jwt_auth.get_current_user returned 500 instead of 401 on missing token.
+- community/routes: GET /community/events returned a dict envelope that
+  failed its List[CommunityEventRead] response model and 500'd on every
+  call; return the list directly.
+- feeds/service: eagerly load Comment.replies before returning from
+  create/update/list — CommentRead serialization lazy-loaded the
+  relationship and raised MissingGreenlet under the async session.
+- auth/routes: PUT /auth/profile assigned a non-mapped user.full_name
+  (silent no-op — renames never persisted); split into
+  first_name/last_name.
+
+Verified locally: 43/43 API checks and 21/21 Playwright browser checks
+pass, including cross-user notification triggers and DM round-trips.
+
+https://claude.ai/code/session_01Q1rk7BZrjN1to3WbJRAPyR
+---
+ lyo_app/auth/routes.py      |  6 +++++-
+ lyo_app/community/routes.py | 18 +++---------------
+ lyo_app/core/exceptions.py  |  8 +++++++-
+ lyo_app/enhanced_main.py    | 13 +++++++++++++
+ lyo_app/feeds/service.py    | 32 +++++++++++++++++++++++---------
+ 5 files changed, 51 insertions(+), 26 deletions(-)
+
+diff --git a/lyo_app/auth/routes.py b/lyo_app/auth/routes.py
+index 2310dab..7c9f490 100644
+--- a/lyo_app/auth/routes.py
++++ b/lyo_app/auth/routes.py
+@@ -497,7 +497,11 @@ async def update_profile(
+     
+     # Update fields if provided
+     if request.full_name is not None:
+-        user.full_name = request.full_name
++        # User model stores first_name/last_name; assigning a non-mapped
++        # full_name attribute was a silent no-op that never persisted.
++        parts = request.full_name.strip().split(None, 1)
++        user.first_name = parts[0] if parts else None
++        user.last_name = parts[1] if len(parts) > 1 else None
+     if request.bio is not None:
+         user.bio = request.bio
+     if request.avatar_url is not None:
+diff --git a/lyo_app/community/routes.py b/lyo_app/community/routes.py
+index 9191c0d..240735b 100644
+--- a/lyo_app/community/routes.py
++++ b/lyo_app/community/routes.py
+@@ -315,21 +315,9 @@ async def list_community_events(
+             user_id=current_user.id
+         )
+         
+-        total = await community_service.get_community_events_count(
+-            db=db,
+-            event_type=event_type,
+-            study_group_id=study_group_id,
+-            upcoming_only=upcoming_only,
+-            user_id=current_user.id
+-        )
+-        
+-        return {
+-            "events": events,
+-            "total": total,
+-            "page": (skip // limit) + 1 if limit > 0 else 1,
+-            "per_page": limit,
+-            "has_next": (skip + limit) < total
+-        }
++        # response_model is List[CommunityEventRead]; the previous dict
++        # envelope failed response validation and 500'd on every call.
++        return events
+     except Exception as e:
+         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch events: {str(e)}")
+ 
+diff --git a/lyo_app/core/exceptions.py b/lyo_app/core/exceptions.py
+index 4da5480..dbaeaf8 100644
+--- a/lyo_app/core/exceptions.py
++++ b/lyo_app/core/exceptions.py
+@@ -295,7 +295,13 @@ def setup_error_handlers(app):
+     
+     # Custom exceptions
+     app.add_exception_handler(LyoAppException, lyoapp_exception_handler)
+-    
++
++    # RFC 7807 problem details (AuthenticationProblem etc.) — without this,
++    # routes using jwt_auth.get_current_user return 500 instead of 401/403
++    # when no token is supplied.
++    from lyo_app.core.problems import ProblemDetail, problem_details_handler
++    app.add_exception_handler(ProblemDetail, problem_details_handler)
++
+     # FastAPI exceptions
+     app.add_exception_handler(HTTPException, http_exception_handler)
+     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+diff --git a/lyo_app/enhanced_main.py b/lyo_app/enhanced_main.py
+index def46ff..8dcd86d 100755
+--- a/lyo_app/enhanced_main.py
++++ b/lyo_app/enhanced_main.py
+@@ -387,6 +387,19 @@ def create_app() -> FastAPI:
+     app.include_router(auth_router, prefix="/auth", tags=["auth"])
+     app.include_router(ai_study_router)
+     app.include_router(feeds_router, prefix="/api/v1")
++
++    # Basic social feed routes: /posts, /comments, /posts/{id}/reactions,
++    # /follow, /feed, /feed/public, /users/{id}/posts, /users/{id}/stats.
++    # The enhanced feeds router above only serves /api/v1/feeds/*; without
++    # this, the paths the web/Android clients call do not exist and the
++    # notification triggers in feeds/service.py are unreachable.
++    try:
++        from lyo_app.feeds.routes import router as basic_feeds_router
++        app.include_router(basic_feeds_router, tags=["feeds"])
++        logger.info("✅ Basic feeds routes integrated - posts/comments/reactions/follow active!")
++    except ImportError as e:
++        logger.warning(f"Basic feeds routes not available: {e}")
++
+     if storage_router:
+         app.include_router(storage_router)
+     # app.include_router(ads_router)  # TODO: Monetization module incomplete
+diff --git a/lyo_app/feeds/service.py b/lyo_app/feeds/service.py
+index 56ba6c2..bd36ab3 100644
+--- a/lyo_app/feeds/service.py
++++ b/lyo_app/feeds/service.py
+@@ -305,25 +305,34 @@ class FeedsService:
+         except Exception:  # noqa: BLE001
+             pass
+ 
+-        return db_comment
++        # Re-select with replies eagerly loaded: CommentRead serializes the
++        # `replies` relationship, and a lazy load during response rendering
++        # raises MissingGreenlet under the async session.
++        result = await db.execute(
++            select(Comment)
++            .options(selectinload(Comment.replies))
++            .where(Comment.id == db_comment.id)
++        )
++        return result.scalar_one()
+ 
+     async def get_comments_by_post(
+-        self, 
+-        db: AsyncSession, 
++        self,
++        db: AsyncSession,
+         post_id: int
+     ) -> List[Comment]:
+         """
+         Get all comments for a post, ordered by creation time.
+-        
++
+         Args:
+             db: Database session
+             post_id: Post ID
+-            
++
+         Returns:
+             List of comments
+         """
+         result = await db.execute(
+             select(Comment)
++            .options(selectinload(Comment.replies))
+             .where(Comment.post_id == post_id)
+             .order_by(Comment.created_at)
+         )
+@@ -961,11 +970,16 @@ class FeedsService:
+         # Update content
+         comment.content = comment_data.content
+         comment.updated_at = datetime.utcnow()
+-        
++
+         await db.commit()
+-        await db.refresh(comment)
+-        
+-        return comment
++
++        # Reload with replies eagerly loaded for CommentRead serialization
++        result = await db.execute(
++            select(Comment)
++            .options(selectinload(Comment.replies))
++            .where(Comment.id == comment.id)
++        )
++        return result.scalar_one()
+ 
+     async def delete_comment(
+         self, 
+-- 
+2.43.0
+
