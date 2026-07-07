@@ -1,7 +1,7 @@
 From cc4e3eaf617a84cc774e40ae68f5d6505cfadbb1 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 6 Jul 2026 21:52:12 +0000
-Subject: [PATCH 3/3] Fix five bugs found by end-to-end testing the full stack
+Subject: [PATCH 3/4] Fix five bugs found by end-to-end testing the full stack
  locally
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

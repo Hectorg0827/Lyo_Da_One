@@ -1,7 +1,7 @@
 From 001a7b9c8138d968f2590fcc23a99d90afdfec04 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Fri, 3 Jul 2026 18:13:52 +0000
-Subject: [PATCH 2/3] Emit in-app notifications on social actions and
+Subject: [PATCH 2/4] Emit in-app notifications on social actions and
  achievement unlocks
 
 Adds reusable create_notification() and get_actor_display_name() helpers
