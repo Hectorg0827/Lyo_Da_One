@@ -1,0 +1,102 @@
+From 29c8c5594d02a33d5e54fac0fecc3a322a6546de Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 7 Jul 2026 02:24:41 +0000
+Subject: [PATCH 4/4] Make init_db schema sync resilient to individual model
+ import failures
+
+init_db imported ~20 model modules inline; any single failure (e.g. a
+duplicate-table definition in one module) aborted the whole function
+before Base.metadata.create_all ran, so newly added tables were never
+created in production.
+
+Imports now run independently via importlib with per-module warnings,
+and the list adds lyo_app.models.social (DM tables),
+lyo_app.routers.notifications (notifications table), and
+lyo_app.skills.models (resolves the goal_skill_mappings FK).
+
+Verified on a fresh SQLite database: init_db completes and creates all
+133 tables including notifications, conversations, and messages.
+
+https://claude.ai/code/session_01Q1rk7BZrjN1to3WbJRAPyR
+---
+ lyo_app/core/database.py | 63 ++++++++++++++++++++++------------------
+ 1 file changed, 34 insertions(+), 29 deletions(-)
+
+diff --git a/lyo_app/core/database.py b/lyo_app/core/database.py
+index 903038f..8132bad 100644
+--- a/lyo_app/core/database.py
++++ b/lyo_app/core/database.py
+@@ -162,36 +162,41 @@ async def init_db() -> None:
+         except Exception:
+             pass # SQLite doesn't support extensions this way
+ 
+-        # Import all models here to ensure they are registered
+-        from lyo_app.auth.models import User  # noqa: F401
+-        from lyo_app.auth.rbac import Role, Permission, user_roles, role_permissions  # noqa: F401
+-        from lyo_app.models.enhanced import Task, PushDevice, GamificationProfile  # noqa: F401
+-        from lyo_app.models.clips import Clip, ClipLike, ClipView  # noqa: F401
+-        from lyo_app.learning.models import Course, Lesson, CourseEnrollment, LessonCompletion  # noqa: F401
+-        from lyo_app.community.models import StudyGroup, GroupMembership, CommunityEvent, EventAttendance  # noqa: F401
+-        from lyo_app.feeds.models import Post, Comment, PostReaction, CommentReaction, UserFollow  # noqa: F401
+-        from lyo_app.tenants.models import Organization, APIKey  # noqa: F401
+-        from lyo_app.stack.models import StackItem  # noqa: F401
+-        from lyo_app.ai_study.models import StudySession, GeneratedQuiz, QuizAttempt, StudySessionAnalytics  # noqa: F401
+-        from lyo_app.ai_agents.models import UserEngagementState, MentorInteraction  # noqa: F401
+-        from lyo_app.personalization.models import LearnerState, LearnerMastery, AffectSample, SpacedRepetitionSchedule  # noqa: F401
+-        # Chat module models (for session continuity + notes/courses)
+-        from lyo_app.chat.models import ChatConversation, ChatMessage, ChatNote, ChatCourse, ChatTelemetry  # noqa: F401
+-        # Import new mentor chat models
+-        from lyo_app.ai_chat.mentor_models import MentorConversation, MentorMessage, MentorAction, MentorSuggestion  # noqa: F401
+-        from lyo_app.classroom.models import ClassroomSession, ClassroomInteraction  # noqa: F401
+-        
+-        # Import phase 7 chat enhancements models
+-        from lyo_app.models.notebook import NotebookNote  # noqa: F401
+-
+-        # Stage B1 — per-user learning profile (fed into chat context)
+-        from lyo_app.learning_profile.models import LearningProfile  # noqa: F401
++        # Import all models here to ensure they are registered on Base.
++        # Each import is independent: one broken module must not prevent
++        # create_all from running for everything else (a duplicate-table
++        # error in one module used to abort the entire schema sync, which
++        # meant newly added tables were never created in production).
++        import importlib
++        model_modules = [
++            "lyo_app.auth.models",
++            "lyo_app.auth.rbac",
++            "lyo_app.models.enhanced",
++            "lyo_app.models.clips",
++            "lyo_app.learning.models",
++            "lyo_app.community.models",
++            "lyo_app.feeds.models",
++            "lyo_app.tenants.models",
++            "lyo_app.stack.models",
++            "lyo_app.ai_study.models",
++            "lyo_app.ai_agents.models",
++            "lyo_app.personalization.models",
++            "lyo_app.chat.models",
++            "lyo_app.ai_chat.mentor_models",
++            "lyo_app.classroom.models",
++            "lyo_app.models.notebook",
++            "lyo_app.learning_profile.models",
++            "lyo_app.study_plans.models",
++            "lyo_app.models.social",          # DM conversations/messages
++            "lyo_app.routers.notifications",  # notifications table
++            "lyo_app.skills.models",          # resolves goal_skill_mappings FK
++        ]
++        for mod in model_modules:
++            try:
++                importlib.import_module(mod)
++            except Exception as e:  # noqa: BLE001
++                logger.warning(f"Model import skipped during init_db ({mod}): {e}")
+ 
+-        # Stage B2 — persistent study plans created from chat
+-        from lyo_app.study_plans.models import (  # noqa: F401
+-            TestProfile, StudyPlan, StudySession, SessionReminder, PlanEvent
+-        )
+-        
+         # Enable automatic schema updates to ensure all tables exist
+         logger.info("Synchronizing database schema...")
+         await conn.run_sync(Base.metadata.create_all)
+-- 
+2.43.0
+

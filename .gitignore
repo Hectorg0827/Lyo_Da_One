@@ -42,3 +42,46 @@ SourcePackages/
 *.dSYM.zip
 *.dSYM
 Pods/
+
+# === merged from web/android branch ===
+# macOS System Files
+
+# Swift Package Manager
+.build/
+
+# Xcode / CocoaPods
+.derived-data-sim/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/
+build/EagerLinkingTBDs/
+build/Lyo.build/
+build/XCBuildData/
+build/lyo_dd/
+build/lyo_sim_dd/
+build/*.txt
+build/*.log
+
+# Logs and temporary files
+*.log
+build-log-sim-*.txt
+build-log-sim.txt
+build-verify-*.txt
+build-verify.log
+build_*.txt
+pkg_resolve*.log
+settings_check.log
+
+# Node/Web development
+node_modules/
+.next/
+dist/
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude / Agent folders
+.claude/
