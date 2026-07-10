@@ -441,7 +441,22 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 } catch {
                     Log.ai.error("Lyo2 Decoding Error (smart_blocks): \(error)")
                 }
-                
+
+            case "scene_start", "scene_update":
+                didReceiveContentEvent = true
+                if let sceneDict = json["scene"],
+                   let sceneData = try? JSONSerialization.data(withJSONObject: sceneDict) {
+                    do {
+                        let scene = try JSONDecoder().decode(ClassroomScenePayload.self, from: sceneData)
+                        Log.ai.info("🎬 Lyo2 SSE: \(eventType) event — \(scene.components.count) components")
+                        callback?(.sceneStart(scene: scene))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (\(eventType)): \(error)")
+                    }
+                } else {
+                    Log.ai.warning("Lyo2 SSE: \(eventType) missing scene payload, keys: \(json.keys.sorted())")
+                }
+
             default:
                 Log.ai.warning("Lyo2 unknown event type: \(eventType)")
             }

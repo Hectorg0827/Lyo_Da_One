@@ -5,9 +5,16 @@ import Foundation
 /// A single Server-Driven UI component sent progressively over the WebSocket stream
 struct SDUIComponent: Identifiable, Codable, Equatable {
     static func == (lhs: SDUIComponent, rhs: SDUIComponent) -> Bool {
-        // Identity-based equality is sufficient — id is unique per stream and any
-        // change in the rest of the payload necessarily changes the id.
-        return lhs.id == rhs.id && lhs.type == rhs.type
+        return lhs.id == rhs.id &&
+        lhs.type == rhs.type &&
+        lhs.content == rhs.content &&
+        lhs.delayMs == rhs.delayMs &&
+        lhs.animation == rhs.animation &&
+        lhs.emotion == rhs.emotion &&
+        lhs.studentName == rhs.studentName &&
+        lhs.question == rhs.question &&
+        lhs.options == rhs.options &&
+        lhs.actionIntent == rhs.actionIntent
     }
 
     let id: String

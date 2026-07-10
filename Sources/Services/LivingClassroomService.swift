@@ -12,6 +12,19 @@ class LivingClassroomService: ObservableObject {
     @Published var error: Error?
     @Published private(set) var sceneRevision: Int = 0
 
+    // MARK: - Continuous-lesson state (drives the never-dead-end experience)
+
+    /// True while the next scene is being prepared (network or on-device engine).
+    @Published var isGenerating: Bool = false
+    /// True once a scene has finished revealing and the learner can advance.
+    @Published var canContinue: Bool = false
+    /// True when the full curriculum has been delivered.
+    @Published var lessonComplete: Bool = false
+    /// Whether content is currently being produced by the on-device engine.
+    @Published var usingLocalEngine: Bool = false
+    /// Short status string for the UI (e.g. "Designing your lesson…").
+    @Published var statusText: String?
+
     private var componentQueue: [SDUIComponent] = []
 
     private var webSocketTask: URLSessionWebSocketTask?
@@ -21,6 +34,24 @@ class LivingClassroomService: ObservableObject {
     private var connectedSessionId: String = ""
     private var localFallbackSceneIndex: Int = 0
     private let logger = Logger(subsystem: "com.lyo.app", category: "LivingClassroomService")
+
+    // MARK: - On-device engine + continuation
+
+    private let engine = LivingClassroomEngine()
+    private var topic: String = ""
+    /// Whether the backend has ever delivered a scene on this connection.
+    private var didReceiveBackendScene: Bool = false
+    /// Watchdog that switches to the on-device engine if the backend stalls.
+    private var stallTask: Task<Void, Never>?
+    /// Marks the can-continue state after a scene's staggered reveal finishes.
+    private var revealTask: Task<Void, Never>?
+
+    /// How long to wait for the backend to deliver the *first* scene before the
+    /// on-device engine takes over.
+    private let firstSceneTimeout: TimeInterval = 8.0
+    /// How long to wait for the backend to deliver the *next* scene (after the
+    /// learner taps Continue) before the on-device engine takes over.
+    private let nextSceneTimeout: TimeInterval = 6.0
 
     deinit {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
@@ -33,8 +64,14 @@ class LivingClassroomService: ObservableObject {
             : rawSessionId
     }
 
-    /// Connects to the real-time Server-Driven UI WebSockets
+    /// Connects to the real-time Server-Driven UI WebSockets.
+    /// - Parameters:
+    ///   - sessionId: The classroom session / course identifier.
+    ///   - topic: Human-readable lesson topic used by the on-device engine if the
+    ///     backend is unavailable or stalls. Defaults to the sessionId.
     func connect(sessionId: String, topic: String? = nil) {
+        self.topic = (topic?.isEmpty == false ? topic! : sessionId)
+
         guard webSocketTask == nil, !isConnecting else {
             logger.info(
                 "WebSocket is already connecting or connected. Ignoring duplicate connect request.")
@@ -43,6 +80,12 @@ class LivingClassroomService: ObservableObject {
 
         isConnecting = true
         self.sessionId = sessionId
+        self.isGenerating = true
+        self.statusText = "Connecting to your live classroom…"
+
+        // Start a watchdog: if the backend doesn't deliver a first scene in time,
+        // seamlessly switch to the on-device engine so the lesson never stalls.
+        startStallWatchdog(timeout: firstSceneTimeout, reason: "first scene")
 
         Task {
             do {
@@ -106,7 +149,10 @@ class LivingClassroomService: ObservableObject {
                 let session = URLSession(configuration: .default)
                 self.urlSession = session
 
-                let request = URLRequest(url: url)
+                // Send the token both as a query param (required) and as a header for
+                // backends that also honor Authorization.
+                var request = URLRequest(url: url)
+                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
                 self.webSocketTask = session.webSocketTask(with: request)
                 self.webSocketTask?.resume()
@@ -117,16 +163,21 @@ class LivingClassroomService: ObservableObject {
                 self.receiveMessages()
             } catch {
                 self.logger.error("Failed to connect: \(error.localizedDescription)")
-                self.error = error
                 self.isConnected = false
                 self.isConnecting = false
                 self.webSocketTask = nil
+                // Don't surface the error or dead-end — run the on-device lesson.
+                self.startLocalLesson()
             }
         }
     }
 
     /// Gracefully closes the connection
     func disconnect() {
+        stallTask?.cancel()
+        stallTask = nil
+        revealTask?.cancel()
+        revealTask = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
@@ -155,11 +206,16 @@ class LivingClassroomService: ObservableObject {
         connect(sessionId: sessionId)
     }
 
-    /// Sends a user action (e.g. button tap) back to the backend
+    /// Sends a user action (e.g. button tap) back to the backend.
+    /// Also captures the interaction for the on-device engine so the lesson can
+    /// adapt to the learner (and so it works even with no backend).
     func sendUserAction(actionIntent: String, componentId: String, actionData: [String: Any]? = nil)
     {
+        captureLearnerInteraction(
+            actionIntent: actionIntent, componentId: componentId, actionData: actionData)
+
         guard let task = webSocketTask else {
-            logger.warning("Cannot send user action — WebSocket not connected")
+            logger.info("WebSocket not connected — handling action on-device")
             return
         }
 
@@ -219,6 +275,46 @@ class LivingClassroomService: ObservableObject {
         startSceneRender(scene)
     }
 
+    /// Translate a UI action into an engine learner-signal and, in on-device mode,
+    /// drive the lesson accordingly (answer questions immediately, adapt to quiz).
+    private func captureLearnerInteraction(
+        actionIntent: String, componentId: String, actionData: [String: Any]?
+    ) {
+        switch actionIntent {
+        case "quiz_answer":
+            let selectedId = actionData?["selected_option_id"] as? String
+            let selectedLabel = (actionData?["selected_option_label"] as? String) ?? selectedId ?? ""
+            // Determine correctness from the component's known answer, if present.
+            var correct = false
+            if let component = renderedComponents.first(where: { $0.id == componentId }),
+                let answerId = component.actionPayload?["answer_option_id"] {
+                correct = (answerId == selectedId)
+            }
+            recordLearnerSignal(
+                .init(kind: .answeredQuiz(correct: correct, choice: selectedLabel),
+                      detail: selectedLabel))
+
+        case "user_message", "ask_question":
+            let message = (actionData?["message"] as? String) ?? ""
+            guard !message.isEmpty else { return }
+            recordLearnerSignal(.init(kind: .askedQuestion(message), detail: message))
+            // In on-device mode, answer the question right away as a new scene.
+            if usingLocalEngine, !isGenerating {
+                isGenerating = true
+                canContinue = false
+                statusText = "Thinking about your question…"
+                produceLocalScene()
+            }
+
+        case "confused":
+            recordLearnerSignal(.init(kind: .confused, detail: ""))
+        case "too_easy":
+            recordLearnerSignal(.init(kind: .tooEasy, detail: ""))
+        default:
+            break
+        }
+    }
+
     /// Constantly listens for incoming WebSocket messages
     private func receiveMessages() {
         guard let task = webSocketTask else { return }
@@ -248,8 +344,11 @@ class LivingClassroomService: ObservableObject {
                     self.logger.error("WebSocket receiving error: \(error.localizedDescription)")
                     self.isConnected = false
                     self.isConnecting = false
-                    self.error = error
                     self.webSocketTask = nil
+                    // Never dead-end: if the lesson isn't finished, continue on-device.
+                    if !self.lessonComplete && !self.usingLocalEngine {
+                        self.startLocalLesson()
+                    }
                 }
             }
         }
@@ -338,18 +437,43 @@ class LivingClassroomService: ObservableObject {
     // MARK: - Handlers
 
     private func startSceneRender(_ scene: SDUIScene) {
+        // A scene arrived (from backend or engine) — cancel any stall watchdog.
+        stallTask?.cancel()
+        stallTask = nil
+        didReceiveBackendScene = didReceiveBackendScene || !usingLocalEngine
+
         self.sceneRevision += 1
         self.currentScene = scene
         self.renderedComponents = []
         self.componentQueue = scene.components
         self.hasQueuedComponents = !self.componentQueue.isEmpty
+        self.isGenerating = false
+        self.canContinue = false
+        self.statusText = nil
 
         logger.info(
             "Started rendering scene: \(scene.sceneType) [\(scene.id)] with \(scene.components.count) components"
         )
 
-        // Auto-reveal the first chunk
+        // Auto-reveal the first chunk (staggered, teacher-paced)
         revealNextComponent()
+        // Once the staggered reveal completes, allow the learner to continue.
+        scheduleCanContinue(after: scene)
+    }
+
+    /// Computes when the last component will have appeared and flips `canContinue`.
+    private func scheduleCanContinue(after scene: SDUIScene) {
+        revealTask?.cancel()
+        let maxDelayMs = scene.components.map { $0.delayMs }.max() ?? 0
+        let totalDelay = TimeInterval(maxDelayMs) / 1000.0 + 0.6
+        revealTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(totalDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                if !self.lessonComplete { self.canContinue = true }
+            }
+        }
     }
 
     private func renderComponent(_ component: SDUIComponent) {
@@ -416,7 +540,9 @@ class LivingClassroomService: ObservableObject {
 
     private func completeSceneRender() {
         logger.info("Completed rendering scene")
-        // Can trigger any completion logic here, like haptics or auto-scroll
+        // Backend signaled the scene is done — let the learner advance.
+        isGenerating = false
+        if !lessonComplete { canContinue = true }
     }
 
     private func makeLocalFallbackScene(topic: String, sceneIndex: Int) -> SDUIScene {
@@ -560,5 +686,101 @@ class LivingClassroomService: ObservableObject {
             sceneType: "quiz",
             components: components
         )
+    }
+
+    // MARK: - Continuation Loop (the core "never dead-ends" fix)
+
+    /// Advance the lesson. Called when the learner taps "Continue".
+    /// Prefers the backend, but falls back to the on-device engine if the backend
+    /// stalls — guaranteeing the lesson always progresses.
+    func requestNextScene() {
+        guard !isGenerating, !lessonComplete else { return }
+        canContinue = false
+        isGenerating = true
+        statusText = "Preparing the next part…"
+
+        if usingLocalEngine {
+            produceLocalScene()
+            return
+        }
+
+        // Ask the backend for the next scene…
+        sendUserAction(actionIntent: "next_scene", componentId: "continue")
+        // …but don't trust it to answer. If it stalls, the engine takes over.
+        startStallWatchdog(timeout: nextSceneTimeout, reason: "next scene")
+    }
+
+    /// Allow the learner to jump straight into the on-device, unlimited lesson.
+    func switchToLocalLesson() {
+        guard !usingLocalEngine else { return }
+        startLocalLesson()
+    }
+
+    // MARK: - On-device engine driving
+
+    private func startStallWatchdog(timeout: TimeInterval, reason: String) {
+        stallTask?.cancel()
+        stallTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                guard !self.usingLocalEngine else { return }
+                self.logger.warning("Backend stalled (\(reason)) — switching to on-device classroom engine")
+                self.startLocalLesson()
+            }
+        }
+    }
+
+    private func startLocalLesson() {
+        stallTask?.cancel()
+        stallTask = nil
+        usingLocalEngine = true
+        isGenerating = true
+        canContinue = false
+        statusText = "Designing your lesson…"
+
+        // Capture whatever the backend already showed so the engine can continue
+        // the thread instead of starting over.
+        let priorContent = renderedComponents
+            .filter { $0.type == .teacherMessage || $0.type == .textBlock }
+            .map { $0.content }
+
+        Task { [weak self] in
+            guard let self else { return }
+            if !self.engine.isReady {
+                await self.engine.bootstrap(topic: self.topic)
+                if self.didReceiveBackendScene {
+                    self.engine.primePriorKnowledge(priorContent)
+                }
+            }
+            await self.produceNextLocalSceneAsync()
+        }
+    }
+
+    private func produceLocalScene() {
+        Task { [weak self] in
+            await self?.produceNextLocalSceneAsync()
+        }
+    }
+
+    private func produceNextLocalSceneAsync() async {
+        isGenerating = true
+        statusText = "Lyo is teaching…"
+        if let scene = await engine.generateNextScene() {
+            startSceneRender(scene)
+        } else {
+            // Curriculum complete.
+            isGenerating = false
+            canContinue = false
+            lessonComplete = true
+            statusText = nil
+            logger.info("On-device lesson complete for topic: \(self.topic)")
+        }
+    }
+
+    /// Feed learner interactions into the engine for adaptivity.
+    func recordLearnerSignal(_ signal: LivingClassroomEngine.LearnerSignal) {
+        engine.record(signal)
     }
 }
