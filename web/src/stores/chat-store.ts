@@ -123,6 +123,79 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               || (chunk.content as string)
               || '';
             if (text) appendToAiMessage(text);
+          } else if (chunk.type === 'open_classroom') {
+            const courseData = chunk.block?.content?.course || chunk.block?.content;
+            if (courseData) {
+              // Normalize difficulty
+              if (courseData.difficulty) {
+                courseData.difficulty = courseData.difficulty.toLowerCase();
+              }
+              // Normalize duration string/number
+              const rawDuration = courseData.estimated_duration || courseData.duration;
+              let sanitizedDuration = 60; // fallback to 60 mins
+              if (typeof rawDuration === 'number') {
+                sanitizedDuration = rawDuration;
+              } else if (typeof rawDuration === 'string') {
+                const numMatch = rawDuration.match(/\d+/);
+                if (numMatch) {
+                  const num = parseInt(numMatch[0]);
+                  if (rawDuration.toLowerCase().includes('hour')) {
+                    sanitizedDuration = num * 60;
+                  } else {
+                    sanitizedDuration = num;
+                  }
+                }
+              }
+              courseData.estimatedDuration = sanitizedDuration;
+
+              // Normalize lessons to modules
+              if (!courseData.modules && courseData.lessons) {
+                courseData.modules = courseData.lessons.map((lesson: any, index: number) => ({
+                  id: lesson.id || `l-${index}`,
+                  title: lesson.title,
+                  description: lesson.description || '',
+                  order: index + 1,
+                  lessons: [lesson]
+                }));
+              }
+
+              set((s) => ({
+                conversations: s.conversations.map((c) => {
+                  if (c.id !== convoId) return c;
+                  const existing = c.messages.find((m) => m.id === aiMessageId);
+                  if (existing) {
+                    return {
+                      ...c,
+                      messages: c.messages.map((m) =>
+                        m.id === aiMessageId
+                          ? {
+                              ...m,
+                              type: 'course_proposal' as const,
+                              metadata: { ...m.metadata, course: courseData },
+                            }
+                          : m
+                      ),
+                      updatedAt: new Date().toISOString(),
+                    };
+                  }
+                  return {
+                    ...c,
+                    messages: [
+                      ...c.messages,
+                      {
+                        id: aiMessageId,
+                        role: 'assistant' as const,
+                        content: '',
+                        type: 'course_proposal' as const,
+                        metadata: { course: courseData },
+                        createdAt: new Date().toISOString(),
+                      },
+                    ],
+                    updatedAt: new Date().toISOString(),
+                  };
+                }),
+              }));
+            }
           } else if (chunk.data) {
             const text = typeof chunk.data === 'string' ? chunk.data : '';
             if (text) appendToAiMessage(text);

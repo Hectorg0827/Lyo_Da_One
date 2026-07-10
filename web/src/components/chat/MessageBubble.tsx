@@ -7,6 +7,7 @@ import { Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
+import { useChatStore } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -113,6 +114,77 @@ const markdownComponents = {
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [hovered, setHovered] = useState(false);
+  
+  const { isGenerating, generationProgress, getActiveConversation } = useChatStore();
+
+  // Helper to extract OPEN_CLASSROOM JSON block from assistant messages
+  const getOpenClassroomData = (content: string) => {
+    if (isUser) return null;
+    
+    // Pattern to look for JSON block that has "type": "OPEN_CLASSROOM"
+    const jsonRegex = /(?:```json\s*)?(\{\s*"type"\s*:\s*"OPEN_CLASSROOM"[\s\S]*?\})(?:\s*```)?/i;
+    const match = content.match(jsonRegex);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        const cleanText = content.replace(match[0], '').trim();
+        const courseData = parsed.payload?.course || parsed.course;
+        
+        if (courseData) {
+          // Normalize difficulty
+          if (courseData.difficulty) {
+            courseData.difficulty = courseData.difficulty.toLowerCase();
+          }
+          // Normalize duration string/number
+          const rawDuration = courseData.estimated_duration || courseData.duration;
+          let sanitizedDuration = 60; // fallback to 60 mins
+          if (typeof rawDuration === 'number') {
+            sanitizedDuration = rawDuration;
+          } else if (typeof rawDuration === 'string') {
+            const numMatch = rawDuration.match(/\d+/);
+            if (numMatch) {
+              const num = parseInt(numMatch[0]);
+              if (rawDuration.toLowerCase().includes('hour')) {
+                sanitizedDuration = num * 60;
+              } else {
+                sanitizedDuration = num;
+              }
+            }
+          }
+          courseData.estimatedDuration = sanitizedDuration;
+
+          // Normalize lessons to modules
+          if (!courseData.modules && courseData.lessons) {
+            courseData.modules = courseData.lessons.map((lesson: any, index: number) => ({
+              id: lesson.id || `l-${index}`,
+              title: lesson.title,
+              description: lesson.description || '',
+              order: index + 1,
+              lessons: [lesson]
+            }));
+          }
+        }
+        
+        return {
+          course: courseData,
+          cleanText
+        };
+      } catch (e) {
+        console.error("Failed to parse OPEN_CLASSROOM JSON:", e);
+      }
+    }
+    return null;
+  };
+
+  const ocData = getOpenClassroomData(message.content);
+  const displayContent = ocData ? ocData.cleanText : message.content;
+  const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
+  const displayType = ocData ? 'course_proposal' : message.type;
+
+  // Determine if this specific card is active and currently generating in the store
+  const activeConvo = getActiveConversation();
+  const isLatestMessage = activeConvo?.messages[activeConvo.messages.length - 1]?.id === message.id;
+  const isCurrentlyGeneratingThis = isLatestMessage && isGenerating && displayType === 'course_proposal';
 
   return (
     <motion.div
@@ -138,15 +210,16 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         )}
       >
         {/* Course proposal card */}
-        {message.type === 'course_proposal' && !isUser && (
+        {displayType === 'course_proposal' && !isUser && (
           <CourseGenerationCard
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            course={message.metadata?.course as any}
+            course={displayCourse as any}
+            isGenerating={isCurrentlyGeneratingThis}
+            generationProgress={generationProgress}
           />
         )}
 
         {/* Regular text bubble */}
-        {(message.type === 'text' || !message.type) && (
+        {(displayType === 'text' || !displayType) && displayContent && (
           <div
             className={cn(
               'px-4 py-3 rounded-2xl text-sm leading-relaxed',
@@ -156,11 +229,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             )}
           >
             {isUser ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="whitespace-pre-wrap">{displayContent}</p>
             ) : (
               <div className="prose-invert prose-sm max-w-none">
                 <ReactMarkdown components={markdownComponents}>
-                  {message.content}
+                  {displayContent}
                 </ReactMarkdown>
               </div>
             )}
