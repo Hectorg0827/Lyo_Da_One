@@ -87,9 +87,10 @@ public struct SmartBlock: Codable, Identifiable, Sendable {
         
         // Decode content dict, then route to typed payload based on `type`
         let contentDict = try container.decode([String: AnyCodable].self, forKey: .content)
-        let contentData = try JSONSerialization.data(
-            withJSONObject: contentDict.mapValues { $0.value }
-        )
+        // Re-encode using JSONEncoder which handles AnyCodable natively.
+        // IMPORTANT: Do NOT use JSONSerialization.data(withJSONObject: contentDict.mapValues { $0.value })
+        // because .value unwraps to raw Swift types (__SwiftValue) that JSONSerialization cannot bridge.
+        let contentData = try JSONEncoder().encode(contentDict)
         let dec = JSONDecoder()
         dec.keyDecodingStrategy = .convertFromSnakeCase
         

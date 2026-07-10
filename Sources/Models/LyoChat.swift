@@ -1,4 +1,6 @@
+
 import Foundation
+
 
 // MARK: - Message Models
 
@@ -191,78 +193,6 @@ struct LioGreetingResponse: Codable {
     }
 }
 
-// MARK: - Open Classroom Payload
-// Note: StackItemPayload and CoursePayload are defined in AICommandResponse.swift
-
-struct OpenClassroomPayload: Codable {
-    let stackItem: StackItemPayload?  // Optional - backend may not include it
-    let course: CoursePayload
-    var components: [OpenClassroomComponent]? = nil
-
-    enum CodingKeys: String, CodingKey {
-        case stackItem = "stack_item"
-        case course
-        case components
-    }
-}
-
-// MARK: - Open Classroom Components
-enum OpenClassroomComponent: Codable {
-    case text(TextComponent)
-    case image(ImageComponent)
-    case media(InlineMediaComponent)
-    case chart(ChartComponent)
-    case quiz(QuizComponent)
-    case roadmap(RoadmapComponent)
-    case rawPayload([String: AnyCodable])
-
-    private enum CodingKeys: String, CodingKey { case type, payload }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(String.self, forKey: .type)
-        switch type {
-        case "text": self = .text(try container.decode(TextComponent.self, forKey: .payload))
-        case "image": self = .image(try container.decode(ImageComponent.self, forKey: .payload))
-        case "media":
-            self = .media(try container.decode(InlineMediaComponent.self, forKey: .payload))
-        case "chart": self = .chart(try container.decode(ChartComponent.self, forKey: .payload))
-        case "quiz": self = .quiz(try container.decode(QuizComponent.self, forKey: .payload))
-        case "roadmap":
-            self = .roadmap(try container.decode(RoadmapComponent.self, forKey: .payload))
-        default:
-            let raw = try container.decode([String: AnyCodable].self, forKey: .payload)
-            self = .rawPayload(raw)
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        switch self {
-        case .text(let v):
-            try container.encode("text", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        case .image(let v):
-            try container.encode("image", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        case .media(let v):
-            try container.encode("media", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        case .chart(let v):
-            try container.encode("chart", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        case .quiz(let v):
-            try container.encode("quiz", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        case .roadmap(let v):
-            try container.encode("roadmap", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        case .rawPayload(let v):
-            try container.encode("raw", forKey: .type)
-            try container.encode(v, forKey: .payload)
-        }
-    }
-}
 
 struct TextComponent: Codable {
     let id: String?
@@ -298,7 +228,6 @@ struct InlineMediaComponent: Codable {
     let controls: Bool?
 }
 
-enum MediaType: String, Codable { case video, gif }
 
 struct ChartComponent: Codable {
     let id: String?
@@ -306,6 +235,7 @@ struct ChartComponent: Codable {
     let data: [String: AnyCodable]
     let options: [String: AnyCodable]?
 }
+
 
 struct QuizComponent: Codable {
     let id: String?
@@ -316,6 +246,8 @@ struct QuizComponent: Codable {
     let maxQuestions: Int?
     let scoring: Scoring?
 }
+
+// If you reference RoadmapComponent elsewhere, replace with OpenClassroomRoadmapComponent
 
 struct LyoChatQuestion: Codable {
     let id: String
@@ -329,45 +261,12 @@ struct LyoChatQuestion: Codable {
     let metadata: [String: AnyCodable]?
 }
 
-enum QuestionType: String, Codable { case mcq, tf, fib, code, match, short }
 
-struct Choice: Codable {
-    let id: String
-    let text: String
-    let metadata: [String: AnyCodable]?
-}
 
-struct AnswerRepresentation: Codable {
-    let correctChoiceIds: [String]?
-    let textAnswer: String?
-    let regex: String?
-    let rubric: [RubricItem]?
-}
 
-struct RubricItem: Codable {
-    let criterion: String
-    let points: Double?
-}
 
-struct Scoring: Codable {
-    let pointsPerQuestion: Double?
-    let partialCredit: Bool?
-}
 
-struct RoadmapComponent: Codable {
-    let id: String?
-    let title: String?
-    let milestones: [Milestone]
-    let etaSeconds: Int?
-    let percent: Double?
-}
 
-struct Milestone: Codable {
-    let id: String
-    let title: String
-    let description: String?
-    let percent: Double?
-}
 
 // MARK: - Test Prep Content
 

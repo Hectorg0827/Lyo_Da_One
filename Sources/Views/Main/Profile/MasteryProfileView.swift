@@ -1,9 +1,25 @@
 import SwiftUI
 
+// MARK: - Safe Number Formatter
+private func safeFormat(_ format: String, _ value: Any?) -> String {
+    if let n = value as? NSNumber {
+        return String(format: format, n.doubleValue)
+    } else if let d = value as? Double {
+        return String(format: format, d)
+    } else if let f = value as? Float {
+        return String(format: format, Double(f))
+    } else if let i = value as? Int {
+        return String(format: format, Double(i))
+    } else if let s = value as? String, let d = Double(s) {
+        return String(format: format, d)
+    }
+    return "–"
+}
+
 struct MasteryProfileView: View {
     @EnvironmentObject var viewModel: LyoAIViewModel
     @Environment(\.dismiss) var dismiss
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -11,18 +27,25 @@ struct MasteryProfileView: View {
                     if let profile = viewModel.masteryProfile {
                         // Header Stats
                         HStack(spacing: 20) {
-                            MasteryStatCard(title: "Velocity", value: String(format: "%.1fx", profile.learningVelocity), icon: "bolt.fill", color: .orange)
-                            MasteryStatCard(title: "Optimal Diff", value: String(format: "%.1f", profile.optimalDifficulty), icon: "target", color: .blue)
+                            MasteryStatCard(
+                                title: "Velocity",
+                                value: safeFormat("%.1fx", profile.learningVelocity),
+                                icon: "bolt.fill", color: .orange)
+                            MasteryStatCard(
+                                title: "Optimal Diff",
+                                value: safeFormat("%.1f", profile.optimalDifficulty),
+                                icon: "target", color: .blue)
                         }
                         .padding(.horizontal)
-                        
+
                         // Skill Mastery List
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Skill Mastery")
                                 .font(.headline)
                                 .padding(.horizontal)
-                            
-                            ForEach(profile.skills.sorted(by: { $0.value > $1.value }), id: \.key) { skill, level in
+
+                            ForEach(profile.skills.sorted(by: { $0.value > $1.value }), id: \.key) {
+                                skill, level in
                                 SkillRow(name: skill, level: level)
                             }
                         }
@@ -30,14 +53,14 @@ struct MasteryProfileView: View {
                         .background(Color(uiColor: .secondarySystemBackground))
                         .cornerRadius(16)
                         .padding(.horizontal)
-                        
+
                         // Strengths & Weaknesses
                         HStack(alignment: .top, spacing: 16) {
                             VStack(alignment: .leading, spacing: 12) {
                                 Label("Strengths", systemImage: "checkmark.circle.fill")
                                     .foregroundColor(.green)
                                     .font(.subheadline.bold())
-                                
+
                                 ForEach(profile.strengths, id: \.self) { strength in
                                     Text(strength)
                                         .font(.caption)
@@ -48,12 +71,12 @@ struct MasteryProfileView: View {
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            
+
                             VStack(alignment: .leading, spacing: 12) {
                                 Label("Focus Areas", systemImage: "exclamationmark.triangle.fill")
                                     .foregroundColor(.orange)
                                     .font(.subheadline.bold())
-                                
+
                                 ForEach(profile.weaknesses, id: \.self) { weakness in
                                     Text(weakness)
                                         .font(.caption)
@@ -69,14 +92,14 @@ struct MasteryProfileView: View {
                         .background(Color(uiColor: .secondarySystemBackground))
                         .cornerRadius(16)
                         .padding(.horizontal)
-                        
+
                         // Recommended Focus
                         if !profile.recommendedFocus.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Label("Recommended Next Steps", systemImage: "sparkles")
                                     .font(.headline)
                                     .foregroundColor(.purple)
-                                
+
                                 ForEach(profile.recommendedFocus, id: \.self) { focus in
                                     HStack {
                                         Image(systemName: "arrow.right.circle.fill")
@@ -97,7 +120,7 @@ struct MasteryProfileView: View {
                             )
                             .padding(.horizontal)
                         }
-                        
+
                     } else {
                         VStack(spacing: 20) {
                             ProgressView()
@@ -130,7 +153,7 @@ struct MasteryStatCard: View {
     let value: String
     let icon: String
     let color: Color
-    
+
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
@@ -152,7 +175,7 @@ struct MasteryStatCard: View {
 struct SkillRow: View {
     let name: String
     let level: Double
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -163,15 +186,18 @@ struct SkillRow: View {
                     .font(.caption.bold())
                     .foregroundColor(.secondary)
             }
-            
+
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(Color.gray.opacity(0.2))
                         .frame(height: 8)
-                    
+
                     Capsule()
-                        .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing)
+                        )
                         .frame(width: geo.size.width * CGFloat(level), height: 8)
                 }
             }

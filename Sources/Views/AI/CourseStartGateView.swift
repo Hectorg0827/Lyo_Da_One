@@ -10,9 +10,8 @@
 //  After the gate resolves it calls `onProceed()` which triggers the real classroom.
 //
 
-import SwiftUI
-
 import Combine
+import SwiftUI
 
 struct CourseStartGateView: View {
     let courseId: String
@@ -22,6 +21,8 @@ struct CourseStartGateView: View {
     @StateObject private var createViewModel = CreateViewModel()
 
     @StateObject private var monetization = MonetizationService.shared
+    @ObservedObject private var generationService = CourseGenerationService.shared
+    @State private var hasProceeded = false
     @Environment(\.presentationMode) var presentationMode
 
     // ── Ad-gate state ──────────────────────────────────────────────────
@@ -35,18 +36,25 @@ struct CourseStartGateView: View {
     @State private var stepIndex: Int = 0
     @State private var stepsDone: [Bool] = [false, false, false, false]
 
+    // ── Failure state (Sprint 14) ──────────────────────────────────────
+    // When generationState transitions to .failed mid-gate we capture the
+    // message here, freeze auto-proceed, and surface an error overlay so the
+    // user isn't silently dumped into a broken classroom after the countdown.
+    @State private var failureMessage: String?
+
     private let premiumSteps: [(icon: String, label: String)] = [
-        ("sparkles",              "Planning your curriculum"),
-        ("books.vertical.fill",   "Building learning modules"),
-        ("brain.head.profile",    "Personalizing content for you"),
-        ("checkmark.seal.fill",   "Finalizing your course")
+        ("sparkles", "Planning your curriculum"),
+        ("books.vertical.fill", "Building learning modules"),
+        ("brain.head.profile", "Personalizing content for you"),
+        ("checkmark.seal.fill", "Finalizing your course"),
     ]
 
     private var teaserTags: [String] {
         let lowercased = courseTitle.lowercased()
         var tags: [String] = []
 
-        if lowercased.contains("swift") || lowercased.contains("ios") || lowercased.contains("code") {
+        if lowercased.contains("swift") || lowercased.contains("ios") || lowercased.contains("code")
+        {
             tags.append("Hands-on project")
             tags.append("Code walk-through")
         }
@@ -54,7 +62,9 @@ struct CourseStartGateView: View {
             tags.append("Worked examples")
             tags.append("Quick mastery checks")
         }
-        if lowercased.contains("language") || lowercased.contains("english") || lowercased.contains("spanish") {
+        if lowercased.contains("language") || lowercased.contains("english")
+            || lowercased.contains("spanish")
+        {
             tags.append("Speaking practice")
             tags.append("Recall drills")
         }
@@ -97,15 +107,151 @@ struct CourseStartGateView: View {
             }
         }
         .onAppear {
-            Log.ai.info("🎬 CourseStartGateView onAppear — isPremium: \(monetization.isPremium), courseId: \(courseId)")
+            Log.ai.info(
+                "🎬 CourseStartGateView onAppear — isPremium: \(monetization.isPremium), courseId: \(courseId)"
+            )
+            // If prewarm already finished Phase A while the user was reading the
+            // proposal card, skip the gate immediately.
+            if isGenerationReady(generationService.generationState) {
+                Log.ai.info("🔥 CourseStartGateView: prewarm already ready — fast-forwarding gate")
+                LyoAnalyticsManager.shared.trackEvent(
+                    "course_gate_prewarm_hit",
+                    parameters: [
+                        "courseId": courseId,
+                        "state": String(describing: generationService.generationState),
+                    ])
+                proceedOnce(after: 0.6)
+                return
+            }
             if monetization.isPremium {
                 startPremiumAnimation()
             } else {
                 startAdCountdown()
             }
         }
+        .onChange(of: generationService.generationState) { _, newState in
+            // Sprint 14 — if generation failed (whether prewarm or live) catch
+            // it here so we don't proceed into a broken classroom.
+            if case .failed(let msg) = newState, failureMessage == nil, !hasProceeded {
+                Log.ai.warning("🚨 CourseStartGateView: generation failed mid-gate — \(msg)")
+                LyoAnalyticsManager.shared.trackEvent(
+                    "course_gate_generation_failed",
+                    parameters: [
+                        "courseId": courseId,
+                        "error": msg,
+                    ])
+                countdownTimer?.invalidate()
+                hasProceeded = true  // block any pending DispatchQueue proceed
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    failureMessage = msg
+                }
+                return
+            }
+            // Real backend state passed Phase A while the gate was running —
+            // collapse remaining fake animation steps and proceed early.
+            guard isGenerationReady(newState), !hasProceeded else { return }
+            Log.ai.info(
+                "🔥 CourseStartGateView: generation reached \(String(describing: newState)) — fast-forwarding"
+            )
+            LyoAnalyticsManager.shared.trackEvent(
+                "course_gate_prewarm_late_hit",
+                parameters: [
+                    "courseId": courseId,
+                    "state": String(describing: newState),
+                ])
+            withAnimation(.easeInOut(duration: 0.3)) {
+                stepsDone = Array(repeating: true, count: premiumSteps.count)
+                stepIndex = premiumSteps.count - 1
+                canSkip = true
+            }
+            proceedOnce(after: 0.6)
+        }
         .onDisappear {
             countdownTimer?.invalidate()
+        }
+        .overlay {
+            if let failureMessage {
+                failureOverlay(message: failureMessage)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+    }
+
+    // MARK: - Failure overlay (Sprint 14)
+
+    private func failureOverlay(message: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.72).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundColor(Color(hex: "FCA5A5"))
+                Text("We couldn't start your course")
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                Button(action: {
+                    LyoAnalyticsManager.shared.trackEvent(
+                        "course_gate_failure_dismissed",
+                        parameters: ["courseId": courseId])
+                    presentationMode.wrappedValue.dismiss()
+                }) {
+                    Text("Back to chat")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(hex: "6366F1"), Color(hex: "8B5CF6")],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 6)
+            }
+            .padding(.vertical, 28)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: 340)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(hex: "14162B"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color(hex: "FCA5A5").opacity(0.3), lineWidth: 1)
+                    )
+            )
+            .padding(.horizontal, 32)
+        }
+    }
+
+    // MARK: - Prewarm hook
+
+    private func isGenerationReady(_ state: CourseGenerationService.GenerationState) -> Bool {
+        switch state {
+        case .engagementBridge, .pollingForModules, .complete:
+            return true
+        case .idle, .startingGeneration, .failed:
+            return false
+        }
+    }
+
+    private func proceedOnce(after delay: TimeInterval) {
+        guard !hasProceeded else { return }
+        // Sprint 14 — never proceed if we're showing a failure overlay.
+        guard failureMessage == nil else { return }
+        hasProceeded = true
+        countdownTimer?.invalidate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            onProceed()
         }
     }
 
@@ -120,7 +266,7 @@ struct CourseStartGateView: View {
                     .foregroundColor(.white.opacity(0.45))
                 Spacer()
                 if canSkip {
-                    Button(action: onProceed) {
+                    Button(action: { proceedOnce(after: 0) }) {
                         Text("Skip  ›")
                             .font(.caption.weight(.semibold))
                             .foregroundColor(Color(hex: "A78BFA"))
@@ -242,17 +388,19 @@ struct CourseStartGateView: View {
                                     .font(.headline.weight(.semibold))
                                     .foregroundColor(.white)
 
-                                Text("Enjoy this short video format while we build your curriculum.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.75))
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 24)
+                                Text(
+                                    "Enjoy this short video format while we build your curriculum."
+                                )
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.75))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 24)
 
                                 Spacer()
 
                                 // CTA + Countdown
                                 HStack(spacing: 12) {
-                                    Button(action: { /* open advertiser link */ }) {
+                                    Button(action: { /* open advertiser link */  }) {
                                         Text("Learn More")
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundColor(.black)
@@ -263,7 +411,7 @@ struct CourseStartGateView: View {
                                     }
 
                                     Button(action: {
-                                        if canSkip { onProceed() }
+                                        if canSkip { proceedOnce(after: 0) }
                                     }) {
                                         Text(canSkip ? "Continue" : "Wait…")
                                             .font(.subheadline.weight(.semibold))
@@ -271,7 +419,9 @@ struct CourseStartGateView: View {
                                             .frame(width: 120, height: 44)
                                             .background(
                                                 LinearGradient(
-                                                    colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
+                                                    colors: [
+                                                        Color(hex: "A855F7"), Color(hex: "6366F1"),
+                                                    ],
                                                     startPoint: .leading,
                                                     endPoint: .trailing
                                                 ).opacity(canSkip ? 1.0 : 0.5)
@@ -297,12 +447,14 @@ struct CourseStartGateView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                Text("We’re packaging the first lesson, activity flow, and AI checkpoints so you can jump straight in.")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-                
+                Text(
+                    "We’re packaging the first lesson, activity flow, and AI checkpoints so you can jump straight in."
+                )
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
                 Button(action: {
                     Log.ai.info("🔒 User tapped upgrade from gate")
                 }) {
@@ -347,7 +499,7 @@ struct CourseStartGateView: View {
                             LinearGradient(
                                 colors: [
                                     Color(hex: "7C3AED").opacity(0.45),
-                                    Color(hex: "6366F1").opacity(0.08)
+                                    Color(hex: "6366F1").opacity(0.08),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -391,7 +543,7 @@ struct CourseStartGateView: View {
                             colors: [
                                 Color(hex: "C084FC"),
                                 Color(hex: "6366F1"),
-                                Color(hex: "2D1B69")
+                                Color(hex: "2D1B69"),
                             ],
                             center: .center,
                             startRadius: 4,
@@ -518,9 +670,7 @@ struct CourseStartGateView: View {
                 t.invalidate()
                 Log.ai.info("🎬 CourseStartGateView: Ad countdown done — proceeding to classroom")
                 withAnimation { canSkip = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    onProceed()
-                }
+                proceedOnce(after: 0.45)
             }
         }
     }
@@ -538,14 +688,16 @@ struct CourseStartGateView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i)) {
                 withAnimation(.easeInOut(duration: 0.35)) { stepIndex = i }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i) + stepDuration * 0.82) {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + stepDuration * Double(i) + stepDuration * 0.82
+            ) {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { stepsDone[i] = true }
             }
         }
         // Proceed once all steps are marked done (+ 0.6 s buffer)
         let totalTime = stepDuration * Double(premiumSteps.count) + 0.6
         DispatchQueue.main.asyncAfter(deadline: .now() + totalTime) {
-            onProceed()
+            proceedOnce(after: 0)
         }
     }
 
@@ -563,12 +715,15 @@ struct CourseStartGateView: View {
                         .lineLimit(2)
                 }
                 Spacer()
-                Image(systemName: monetization.isPremium ? "sparkles.rectangle.stack.fill" : "play.tv.fill")
-                    .font(.title3)
-                    .foregroundColor(accent)
-                    .padding(10)
-                    .background(accent.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                Image(
+                    systemName: monetization.isPremium
+                        ? "sparkles.rectangle.stack.fill" : "play.tv.fill"
+                )
+                .font(.title3)
+                .foregroundColor(accent)
+                .padding(10)
+                .background(accent.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -612,9 +767,13 @@ struct CourseStartGateView: View {
                 }
             }
 
-            Text(monetization.isPremium ? "Premium unlocks an ad-free handoff into the live classroom." : "Your course is still being assembled while the sponsor spot plays.")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.5))
+            Text(
+                monetization.isPremium
+                    ? "Premium unlocks an ad-free handoff into the live classroom."
+                    : "Your course is still being assembled while the sponsor spot plays."
+            )
+            .font(.caption)
+            .foregroundColor(.white.opacity(0.5))
         }
         .padding(18)
         .background(Color.white.opacity(0.05))
@@ -629,24 +788,24 @@ struct CourseStartGateView: View {
 // MARK: - Preview
 
 #if DEBUG
-#Preview("Non-Premium") {
-    CourseStartGateView(
-        courseId: "demo-001",
-        courseTitle: "SwiftUI Mastery: Build Beautiful Apps"
-    ) {
-        print("Proceed to classroom")
+    #Preview("Non-Premium") {
+        CourseStartGateView(
+            courseId: "demo-001",
+            courseTitle: "SwiftUI Mastery: Build Beautiful Apps"
+        ) {
+            print("Proceed to classroom")
+        }
     }
-}
 
-#Preview("Premium") {
-    CourseStartGateView(
-        courseId: "demo-002",
-        courseTitle: "Machine Learning for iOS Developers"
-    ) {
-        print("Proceed to classroom")
+    #Preview("Premium") {
+        CourseStartGateView(
+            courseId: "demo-002",
+            courseTitle: "Machine Learning for iOS Developers"
+        ) {
+            print("Proceed to classroom")
+        }
+        .onAppear {
+            // Simulate premium for preview
+        }
     }
-    .onAppear {
-        // Simulate premium for preview
-    }
-}
 #endif

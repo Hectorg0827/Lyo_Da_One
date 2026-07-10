@@ -119,24 +119,11 @@ enum Endpoints {
                 return ["email": email, "password": password]
 
             case .register(let email, let password, let name):
-                // Extract username from email and sanitize to only letters, numbers, underscores, hyphens
-                let rawUsername = email.components(separatedBy: "@").first ?? email
-                var username = rawUsername.replacingOccurrences(of: ".", with: "_")
-                    .filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
-                
-                // Ensure username is at least 3 characters
-                while username.count < 3 {
-                    username += "0"
-                }
-                
-                let nameParts = name.split(separator: " ", maxSplits: 1)
                 return [
                     "email": email,
-                    "username": String(username),
                     "password": password,
-                    "confirm_password": password,
-                    "first_name": nameParts.first.map(String.init) ?? "",
-                    "last_name": nameParts.count > 1 ? String(nameParts[1]) : ""
+                    "full_name": name,
+                    "username": email.components(separatedBy: "@").first ?? email
                 ]
 
             case .refresh(let token):
@@ -755,7 +742,7 @@ enum Endpoints {
         
         var path: String {
             switch self {
-            case .stream: return "/api/v2/courses/stream"
+            case .stream: return "/api/v2/courses/generate/stream"
             case .generate: return "/api/v2/courses/generate"
             case .outline: return "/api/v2/courses/outline"
             case .estimateCost: return "/api/v2/courses/estimate-cost"

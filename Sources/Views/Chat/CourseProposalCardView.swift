@@ -13,17 +13,23 @@ struct CourseProposalCardView: View {
     let payload: CoursePayload
     let onStart: () -> Void
     let onAdjust: (() -> Void)?
-    
+
     @State private var isExpanded = false
     @State private var isGenerating = false
-    
+
+    // Sprint 11 — live prewarm signal. When CourseGenerationService crosses
+    // past Phase A (engagementBridge / pollingForModules / complete) the card
+    // swaps the CTA copy + shows a subtle ready dot so users know the tap
+    // will be instant rather than triggering work.
+    @ObservedObject private var generationService = CourseGenerationService.shared
+
     /// Convenience init matching older call sites
     init(coursePayload: CoursePayload, onStartLearning: @escaping () -> Void) {
         self.payload = coursePayload
         self.onStart = onStartLearning
         self.onAdjust = nil
     }
-    
+
     /// Full init with adjust support (EnhancedMessageBubble)
     init(payload: CoursePayload, onStart: @escaping () -> Void, onAdjust: (() -> Void)? = nil) {
         self.payload = payload
@@ -76,16 +82,31 @@ struct CourseProposalCardView: View {
     private var firstModuleTitle: String? {
         previewObjectives.first
     }
-    
+
+    /// True once prewarm has crossed Phase A *for this card's* (topic, level).
+    /// Sprint 16 — keyed check via the service so older proposal cards in
+    /// chat scrollback don't falsely light up when a newer card's prewarm
+    /// completes against a different topic.
+    private var isPrewarmReady: Bool {
+        generationService.isPrewarmReady(topic: payload.topic, level: payload.level)
+    }
+
+    /// Sprint 12 — prewarm hit `.failed`. Surface a quiet retry affordance on
+    /// the card instead of silently letting the user tap into full-latency.
+    /// Sprint 16 — also keyed to this card's (topic, level).
+    private var isPrewarmFailed: Bool {
+        generationService.isPrewarmFailed(topic: payload.topic, level: payload.level)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             heroCard
             statRow
-            
+
             if let firstModuleTitle {
                 firstLessonPreview(title: firstModuleTitle)
             }
-            
+
             // Learning Objectives (expandable)
             if !payload.objectives.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -104,10 +125,11 @@ struct CourseProposalCardView: View {
                                 .foregroundColor(.white.opacity(0.6))
                         }
                     }
-                    
+
                     if isExpanded {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(Array(payload.objectives.prefix(6).enumerated()), id: \.offset) { index, objective in
+                            ForEach(Array(payload.objectives.prefix(6).enumerated()), id: \.offset)
+                            { index, objective in
                                 HStack(alignment: .top, spacing: 8) {
                                     ZStack {
                                         Circle()
@@ -118,7 +140,7 @@ struct CourseProposalCardView: View {
                                             .foregroundColor(Color(hex: "C4B5FD"))
                                     }
                                     .padding(.top, 1)
-                                    
+
                                     Text(objective)
                                         .font(.caption)
                                         .foregroundColor(.white.opacity(0.8))
@@ -130,7 +152,7 @@ struct CourseProposalCardView: View {
                     }
                 }
             }
-            
+
             // CTA Buttons
             HStack(spacing: 12) {
                 Button(action: {
@@ -145,6 +167,12 @@ struct CourseProposalCardView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(0.8)
                             Text("Starting...")
+                        } else if isPrewarmReady {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Open Course")
+                        } else if isPrewarmFailed {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Retry")
                         } else {
                             Image(systemName: "play.fill")
                             Text("Start Course")
@@ -157,7 +185,10 @@ struct CourseProposalCardView: View {
                     .background(
                         LinearGradient(
                             colors: isGenerating
-                                ? [Color(hex: "6366F1").opacity(0.6), Color(hex: "8B5CF6").opacity(0.6)]
+                                ? [
+                                    Color(hex: "6366F1").opacity(0.6),
+                                    Color(hex: "8B5CF6").opacity(0.6),
+                                ]
                                 : [Color(hex: "6366F1"), Color(hex: "8B5CF6")],
                             startPoint: .leading,
                             endPoint: .trailing
@@ -166,10 +197,26 @@ struct CourseProposalCardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .disabled(isGenerating)
-                
+
                 if let onAdjust {
                     Button(action: {
                         HapticManager.shared.light()
+                        // Sprint 13 — user is rejecting this exact proposal.
+                        // Cancel the in-flight prewarm so we don't burn backend
+                        // budget on a course they no longer want, AND so the
+                        // refined proposal that comes back next is free to
+                        // prewarm again instead of being dedup-skipped.
+                        let wasReady = isPrewarmReady
+                        let wasFailed = isPrewarmFailed
+                        generationService.resetPrewarm()
+                        LyoAnalyticsManager.shared.trackEvent(
+                            "course_proposal_adjusted",
+                            parameters: [
+                                "topic": payload.topic,
+                                "level": payload.level,
+                                "was_prewarm_ready": wasReady,
+                                "was_prewarm_failed": wasFailed,
+                            ])
                         onAdjust()
                     }) {
                         HStack(spacing: 6) {
@@ -199,7 +246,10 @@ struct CourseProposalCardView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(
                             LinearGradient(
-                                colors: [Color(hex: "8B5CF6").opacity(0.45), Color(hex: "6366F1").opacity(0.2)],
+                                colors: [
+                                    Color(hex: "8B5CF6").opacity(0.45),
+                                    Color(hex: "6366F1").opacity(0.2),
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -208,14 +258,57 @@ struct CourseProposalCardView: View {
                 )
         )
         .overlay(alignment: .topTrailing) {
-            Text("AI Draft")
-                .font(.caption2.bold())
-                .foregroundColor(Color(hex: "DDD6FE"))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Capsule())
-                .padding(12)
+            HStack(spacing: 6) {
+                if isPrewarmReady {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(hex: "34D399"))
+                            .frame(width: 6, height: 6)
+                        Text("Ready")
+                            .font(.caption2.bold())
+                            .foregroundColor(Color(hex: "D1FAE5"))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color(hex: "065F46").opacity(0.55))
+                    .clipShape(Capsule())
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else if isPrewarmFailed {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(Color(hex: "FCA5A5"))
+                        Text("Tap to retry")
+                            .font(.caption2.bold())
+                            .foregroundColor(Color(hex: "FECACA"))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color(hex: "7F1D1D").opacity(0.55))
+                    .clipShape(Capsule())
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+                Text("AI Draft")
+                    .font(.caption2.bold())
+                    .foregroundColor(Color(hex: "DDD6FE"))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+            .animation(.easeInOut(duration: 0.25), value: isPrewarmReady)
+            .animation(.easeInOut(duration: 0.25), value: isPrewarmFailed)
+            .padding(12)
+        }
+        .task {
+            // Sprint 2 — Pre-warm course generation the moment this proposal
+            // appears in chat. By the time the user taps "Start Course", Phase A
+            // is already in flight (or done), so the CourseStartGateView's 10s
+            // countdown overlaps real backend work instead of a fake animation.
+            CourseGenerationService.shared.prewarm(
+                topic: payload.topic,
+                level: payload.level
+            )
         }
     }
 
@@ -268,7 +361,9 @@ struct CourseProposalCardView: View {
                 HStack(spacing: 8) {
                     heroChip(icon: "chart.bar.fill", text: payload.level)
                     heroChip(icon: "clock.fill", text: payload.duration ?? lessonEstimateText)
-                    heroChip(icon: "list.bullet.rectangle.portrait.fill", text: "\(max(1, payload.objectives.count)) outcomes")
+                    heroChip(
+                        icon: "list.bullet.rectangle.portrait.fill",
+                        text: "\(max(1, payload.objectives.count)) outcomes")
                 }
             }
             .padding(18)
@@ -300,10 +395,12 @@ struct CourseProposalCardView: View {
                     .font(.subheadline.bold())
                     .foregroundColor(.white)
 
-                Text("You’ll begin with the core mental model, a guided walkthrough, and a quick checkpoint before moving deeper.")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.76))
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "You’ll begin with the core mental model, a guided walkthrough, and a quick checkpoint before moving deeper."
+                )
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)

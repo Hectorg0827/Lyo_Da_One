@@ -145,6 +145,9 @@ enum Lyo2StreamEvent {
     /// v1 backward-compat events (still emitted by deployed backend)
     case actions(blocks: [Lyo2UIBlock])
     case openClassroom(block: Lyo2UIBlock)
+
+    /// Scene-based classroom events (structured UI components)
+    case sceneStart(scene: ClassroomScenePayload)
     
     /// v2 events (LyoResponse envelope — primary path)
     case lyoUI(response: LyoResponse)

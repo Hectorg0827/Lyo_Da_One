@@ -36,6 +36,12 @@ final class A2ACourseService: ObservableObject {
     var newModulePublisher: AnyPublisher<LyoModule, Never> {
         newModuleSubject.eraseToAnyPublisher()
     }
+
+    /// Publisher for scene-based classroom blocks 🎬
+    private let sceneBlocksSubject = PassthroughSubject<[LiveLessonBlock], Never>()
+    var sceneBlocksPublisher: AnyPublisher<[LiveLessonBlock], Never> {
+        sceneBlocksSubject.eraseToAnyPublisher()
+    }
     
     // MARK: - Private
     
@@ -757,6 +763,16 @@ extension A2ACourseService {
             }
         case .unknown:
             Log.ai.debug("❓ Unknown event: \(event.message ?? "")")
+        case .sceneStart, .sceneUpdate:
+            if let scene = event.scene {
+                let blocks = scene.toLessonBlocks()
+                Log.ai.info("🎬 Scene \(event.type.rawValue): \(scene.sceneId) — \(blocks.count) components → blocks")
+                self.sceneBlocksSubject.send(blocks)
+            } else {
+                Log.ai.warning("🎬 \(event.type.rawValue) event missing scene payload")
+            }
+        case .sceneComplete:
+            Log.ai.info("🎬 Scene complete: \(event.scene?.sceneId ?? "unknown")")
         default:
             break
         }

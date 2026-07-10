@@ -61,10 +61,18 @@ struct SelectableTextView: UIViewRepresentable {
         context.coordinator.onAction = onAction
 
         let attributed = Self.buildAttributedString(content: content, highlights: highlights)
-        uiView.attributedText = attributed
-        // Ensure coordinator is up-to-date
-        uiView.coordinator = context.coordinator
-        uiView.invalidateIntrinsicContentSize()
+        
+        // Only trigger heavy updates if content actually changed during the stream
+        if uiView.attributedText?.string != attributed.string {
+            uiView.attributedText = attributed
+            uiView.coordinator = context.coordinator
+            
+            // Dispatch layout pass to next runloop so SwiftUI can process the frame change
+            DispatchQueue.main.async {
+                uiView.invalidateIntrinsicContentSize()
+                uiView.setNeedsLayout()
+            }
+        }
     }
 
     // MARK: - Attributed String Builder
@@ -264,6 +272,26 @@ class LyoSelectableUITextView: UITextView {
             return coordinator
         }
         return super.target(forAction: action, withSender: sender)
+    }
+    
+    // MARK: - Safe Auto-Sizing for SwiftUI
+    
+    // Natively allows the UITextView to expand vertically in a SwiftUI container
+    // without clipping its text mid-word during streaming updates.
+    override var intrinsicContentSize: CGSize {
+        // Fallback width if bounds haven't been resolved by SwiftUI yet
+        let targetWidth = self.frame.width > 0 ? self.frame.width : UIScreen.main.bounds.width - 64
+        let size = self.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
+        return CGSize(width: UIView.noIntrinsicMetric, height: size.height)
+    }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Invalidate intrinsic size if the bounds change (e.g. rotation or padding change),
+        // forcing SwiftUI to allocate enough vertical space.
+        if abs(bounds.size.height - intrinsicContentSize.height) > 1 {
+            invalidateIntrinsicContentSize()
+        }
     }
 }
 

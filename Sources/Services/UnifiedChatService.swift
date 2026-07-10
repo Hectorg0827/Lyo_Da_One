@@ -98,6 +98,12 @@ final class UnifiedChatService: ObservableObject {
         shouldNavigateToClassroom = false
         suggestions = []
 
+        // 5. Clear any in-progress intent refinement
+        IntentRefinementEngine.shared.reset()
+
+        // 6. Drop any prewarmed course generation tied to the previous chat
+        CourseGenerationService.shared.resetPrewarm()
+
         Log.ai.info("🆕 Started new chat session: \(self.currentConversationId)")
     }
 
@@ -141,6 +147,54 @@ final class UnifiedChatService: ObservableObject {
             lastMessage: trimmedText
         )
 
+        // 4b. Intent refinement gate (Sprint 1)
+        // For course-creation requests, run the on-device refinement FSM before
+        // hitting the backend. Either short-circuit with a chip-driven clarification,
+        // or pass through with an enriched forcedIntent payload.
+        var routedForcedIntent = forcedIntent
+        switch IntentRefinementEngine.shared.process(message: trimmedText) {
+        case .notACourseRequest:
+            break  // normal routing
+
+        case .needsClarification(let prompt):
+            // Append an assistant clarification bubble using the existing
+            // `.suggestions(title:options:)` content type and short-circuit.
+            // Tapping a chip triggers another sendMessage(...) which the engine
+            // will consume as the answer.
+            let clarMsg = LyoMessage(
+                id: UUID().uuidString,
+                sessionId: currentConversationId,
+                content: prompt.title,
+                isFromUser: false,
+                timestamp: Date(),
+                contentTypes: [.suggestions(title: prompt.title, options: prompt.chips)]
+            )
+            messages.append(clarMsg)
+            conversationHistory.append(ConversationMessage(role: "assistant", content: prompt.title))
+            isLoading = false
+            await saveConversation()
+            Log.ai.info("🧭 Intent clarification (\(prompt.dimension.rawValue)): \(prompt.title)")
+            return nil
+
+        case .ready(let refined):
+            // Pass refined intent into the routing layer via forcedIntent JSON.
+            // Backend can use it; we've also already persisted the level into
+            // LearnerProfile so the next request skips the clarification.
+            let payload: [String: String] = [
+                "intent": refined.forcedIntentTag,
+                "topic": refined.topic,
+                "level": refined.level.backendLevel,
+                "goal": refined.goal.rawValue,
+                "format": refined.format.rawValue,
+                "session_minutes": String(refined.timeBudgetMinutes)
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: payload),
+               let json = String(data: data, encoding: .utf8) {
+                routedForcedIntent = json
+            }
+            Log.ai.info("🧭 Intent refined → \(refined.topic) [\(refined.level.backendLevel)]")
+        }
+
         isLoading = true
         error = nil
 
@@ -155,7 +209,7 @@ final class UnifiedChatService: ObservableObject {
             message: trimmedText,
             attachmentIds: attachmentIds,
             mode: mode,
-            forcedIntent: forcedIntent,
+            forcedIntent: routedForcedIntent,
             conversationHistory: conversationHistory,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
@@ -878,7 +932,7 @@ final class UnifiedChatService: ObservableObject {
             if let command = response.command {
                 if command.action == "open_classroom",
                    let payload = command.payload,
-                   let payloadData = try? JSONSerialization.data(withJSONObject: payload),
+                   let payloadData = try? JSONSerialization.data(withJSONObject: payload.mapValues { $0.value }),
                    let courseDict = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
                    let coursePayload = tryDecodeOpenClassroomDict(courseDict) {
                     let proposalContent =
@@ -953,6 +1007,17 @@ final class UnifiedChatService: ObservableObject {
                 
                 messages[idx] = msg
             }
+
+        case .sceneStart(let scene):
+            Log.ai.info("🎬 Scene start received in chat: \(scene.sceneId) type=\(scene.sceneType)")
+            NotificationCenter.default.post(
+                name: .openLivingClassroom,
+                object: nil,
+                userInfo: [
+                    "courseId": scene.sceneId,
+                    "courseTitle": scene.metadata?["title"]?.value as? String ?? "Live Session"
+                ]
+            )
 
         case .done:
             // ✅ Stream completed — cancel the safety timeout

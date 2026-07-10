@@ -121,9 +121,6 @@ enum MessageContentType: Codable, Equatable {
             let title = try container.decode(String.self, forKey: .title)
             let options = try container.decode([String].self, forKey: .options)
             self = .suggestions(title: title, options: options)
-        case "recursive_ui", "a2ui":
-            // Legacy types removed — decode as plain text fallback
-            self = .text
         case "study_plan":
             let plan = try container.decode(StudyPlan.self, forKey: .studyPlan)
             self = .studyPlan(plan: plan)

@@ -43,9 +43,23 @@ struct ChatOverlayView: View {
                                     viewModel.inputText = chip
                                     Task { await viewModel.sendMessage() }
                                 },
-                                onCourseStart: { course in
-                                    viewModel.inputText = "Start course: \(course.title)"
-                                    Task { await viewModel.sendMessage() }
+                                onCourseStart: { data in
+                                    let payload = CoursePayload(
+                                        id: nil,
+                                        title: data.title,
+                                        topic: data.subtext,
+                                        level: data.summary,
+                                        language: nil,
+                                        duration: nil,
+                                        objectives: data.modules
+                                    )
+                                    AICommandHandler.shared.executeOpenClassroom(for: payload)
+                                },
+                                onCourseStart_A2A: { course in
+                                    viewModel.onCourseStart(course: course)
+                                },
+                                onQuizAnswer_A2A: { question, answerIndex in
+                                    viewModel.onQuizAnswer(question: question, answerIndex: answerIndex)
                                 }
                             )
                         }
