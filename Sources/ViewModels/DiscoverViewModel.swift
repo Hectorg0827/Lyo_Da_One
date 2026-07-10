@@ -131,9 +131,9 @@ final class DiscoverViewModel: ObservableObject {
         Task { 
             do {
                 if updatedItem.isLiked {
-                    try await DiscoveryService.shared.likeDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.likeDiscovery(discoveryId: Int(item.id) ?? 0)
                 } else {
-                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: Int(item.id) ?? 0)
                 }
             } catch {
                 print("Failed to toggle like: \(error)")
@@ -164,9 +164,9 @@ final class DiscoverViewModel: ObservableObject {
         Task {
             do {
                 if updatedItem.isSaved {
-                    try await DiscoveryService.shared.saveDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.saveDiscovery(discoveryId: Int(item.id) ?? 0)
                 } else {
-                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: item.id)
+                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: Int(item.id) ?? 0)
                 }
             } catch {
                 // Revert on failure
@@ -209,21 +209,13 @@ final class DiscoverViewModel: ObservableObject {
         Log.ui.info("Generating mini-course for: \(item.title)")
         
         Task {
-            do {
-                let topic = item.topic ?? item.title
-                let level = item.level.rawValue
-                _ = try await CourseGenerationService.shared.generateCourse(
-                    topic: topic,
-                    level: level,
-                    outcomes: item.keyPoints.isEmpty ? nil : item.keyPoints
-                )
-                Log.ui.info("Mini-course generated for: \(item.title)")
-            } catch {
-                Log.ui.warning("Failed to generate mini-course: \(error.localizedDescription)")
-                await MainActor.run {
-                    errorMessage = "Failed to generate course: \(error.localizedDescription)"
-                }
-            }
+            let topic = item.topic ?? item.title
+            let level = item.level.rawValue
+            await CourseGenerationService.shared.startCourseGeneration(
+                topic: topic,
+                level: level
+            )
+            Log.ui.info("Mini-course generation started for: \(item.title)")
         }
     }
     

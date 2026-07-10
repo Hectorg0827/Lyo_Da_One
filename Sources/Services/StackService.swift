@@ -22,7 +22,13 @@ class StackService: ObservableObject {
     }
     
     func createStackItem(type: StackItemType, refId: String, tags: [String]? = nil, contextData: [String: String]? = nil) async {
-        let request = CreateStackItemRequest(type: type, refId: refId, tags: tags, contextData: contextData)
+        let request = CreateStackItemRequest(
+            type: type,
+            refId: refId,
+            title: contextData?["title"] ?? refId,
+            tags: tags,
+            contextData: contextData
+        )
         do {
             let newItem = try await repository.createStackItem(request: request)
             self.items.insert(newItem, at: 0)

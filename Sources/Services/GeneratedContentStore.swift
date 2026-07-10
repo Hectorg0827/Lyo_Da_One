@@ -20,7 +20,8 @@ struct StoredContentEntry: Codable {
     let title: String
     let content: String                        // Raw markdown/text
     let agentBlocks: [AgentBlock]?             // Multipart agent blocks (if available)
-    let a2uiComponentJSON: Data?               // Serialized A2UI DynamicComponent tree
+    let smartBlocks: [SmartBlock]?             // Unified SmartBlock content (new format)
+    let a2uiComponentJSON: Data?               // Serialized component tree (legacy, unused)
     let createdAt: Date
     let lastAccessedAt: Date
     let metadata: [String: String]?
@@ -34,6 +35,7 @@ struct StoredContentEntry: Codable {
             title: title,
             content: content,
             agentBlocks: agentBlocks,
+            smartBlocks: smartBlocks,
             a2uiComponentJSON: a2uiComponentJSON,
             createdAt: createdAt,
             lastAccessedAt: Date(),
@@ -120,6 +122,7 @@ final class GeneratedContentStore: ObservableObject {
         title: String,
         content: String,
         agentBlocks: [AgentBlock]? = nil,
+        smartBlocks: [SmartBlock]? = nil,
         metadata: [String: String]? = nil
     ) {
         let entry = StoredContentEntry(
@@ -129,6 +132,7 @@ final class GeneratedContentStore: ObservableObject {
             title: title,
             content: content,
             agentBlocks: agentBlocks,
+            smartBlocks: smartBlocks,
             a2uiComponentJSON: nil,
             createdAt: Date(),
             lastAccessedAt: Date(),

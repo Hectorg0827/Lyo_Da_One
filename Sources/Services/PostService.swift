@@ -51,11 +51,8 @@ class PostService: ObservableObject {
             self.error = error.localizedDescription
             
             // Fallback to mock data only if explicitly allowed and on first load
-            if postsFeed.isEmpty && AppConfig.allowMockFallbacks {
-                Log.social.warning("Using mock posts as fallback (AppConfig.allowMockFallbacks = true)")
-                loadMockPosts()
-            } else if postsFeed.isEmpty {
-                // Propagate error if mocks are not allowed
+            if postsFeed.isEmpty {
+                // Propagate error
                 self.error = error.localizedDescription
             }
         }

@@ -339,7 +339,30 @@ class LyoRepository: ObservableObject {
     // MARK: - Course Management
     
     func saveCourse(data: CourseCreationData) async throws {
-        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Learning.createCourse(data: data))
+        // Patch: Send required backend fields using a dictionary for compatibility
+        let payload: [String: Any] = [
+            "id": data.id,
+            "title": data.title,
+            "topic": data.topic,
+            "level": data.level,
+            "modules": data.modules.map { mod in
+                [
+                    "id": mod.id,
+                    "title": mod.title,
+                    "description": mod.description,
+                    "lessons": mod.lessons.map { les in
+                        [
+                            "id": les.id,
+                            "title": les.title,
+                            "duration": les.duration
+                        ]
+                    }
+                ]
+            },
+            "difficulty_level": data.difficultyLevel,
+            "instructor_id": data.instructorId
+        ]
+        let _: EmptyResponse = try await post(endpoint: "/api/v1/learning/courses", body: payload)
         Log.data.info("Course saved to backend: \(data.title)")
     }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import Combine
 import os
 
@@ -63,7 +64,7 @@ enum StudioPreset: String, CaseIterable, Identifiable {
         case .normal: return .clear
         case .warmOffice: return Color.orange.opacity(0.15)
         case .cleanTech: return Color.cyan.opacity(0.1)
-        case .bwProfessional: return .black // Or .clear, depending on implementation
+        case .bwProfessional: return .black
         case .lyoBlue: return Color(hex: "6366F1").opacity(0.2)
         }
     }
@@ -71,6 +72,17 @@ enum StudioPreset: String, CaseIterable, Identifiable {
     var filterDesaturation: Double {
         return self == .bwProfessional ? 1.0 : 0.0
     }
+}
+
+// MARK: - Story Segment
+
+/// A single recorded snippet in a multi-segment story.
+struct StorySegment: Identifiable {
+    let id = UUID()
+    var videoURL: URL?
+    var image: UIImage?
+    var duration: TimeInterval
+    var isVideo: Bool { videoURL != nil }
 }
 
 // MARK: - Stories ViewModel
@@ -81,7 +93,24 @@ final class StoriesViewModel: ObservableObject {
     // MARK: - Recording State
     @Published var isRecording: Bool = false
     @Published var isHandsFreeMode: Bool = false
-    @Published var recordedSnippetsCount: Int = 0 // Max 4 for 60s total / 15s each
+    
+    // MARK: - Multi-Segment State
+    @Published var segments: [StorySegment] = []
+    let maxSegments = 4
+    let maxSegmentDuration: TimeInterval = 15.0
+    
+    var recordedSnippetsCount: Int { segments.count }
+    var canRecordMore: Bool { segments.count < maxSegments }
+    var hasSegments: Bool { !segments.isEmpty }
+    
+    var totalDuration: TimeInterval {
+        segments.reduce(0) { $0 + $1.duration }
+    }
+    
+    var formattedTotalDuration: String {
+        let seconds = Int(totalDuration)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
     
     // MARK: - Preset State
     @Published var currentPreset: StudioPreset = .normal
@@ -100,7 +129,7 @@ final class StoriesViewModel: ObservableObject {
     private let storyService = StoryService.shared
     private let haptics = HapticManager.shared
     
-    // MARK: - Actions
+    // MARK: - Preset Actions
     
     func cyclePreset(forward: Bool = true) {
         let all = StudioPreset.allCases
@@ -109,15 +138,162 @@ final class StoriesViewModel: ObservableObject {
                 ? (currentIdx + 1) % all.count
                 : (currentIdx - 1 + all.count) % all.count
             currentPreset = all[nextIdx]
-            
             haptics.light()
+        }
+    }
+    
+    // MARK: - Segment Management
+    
+    /// Called when a video recording finishes — adds a new segment.
+    func addVideoSegment(url: URL, duration: TimeInterval) {
+        guard canRecordMore else { return }
+        let segment = StorySegment(
+            videoURL: url,
+            image: nil,
+            duration: min(duration, maxSegmentDuration)
+        )
+        segments.append(segment)
+        haptics.success()
+    }
+    
+    /// Called when a photo is captured — adds as a static segment (5s display).
+    func addPhotoSegment(image: UIImage) {
+        guard canRecordMore else { return }
+        let segment = StorySegment(
+            videoURL: nil,
+            image: image,
+            duration: 5.0  // Photo stories display for 5s
+        )
+        segments.append(segment)
+        haptics.success()
+    }
+    
+    /// Delete the last segment (undo-style).
+    func deleteLastSegment() {
+        guard let last = segments.popLast() else { return }
+        // Clean up video file
+        if let url = last.videoURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        haptics.medium()
+    }
+    
+    // MARK: - Sticker Actions
+    
+    /// Add a sticker of the given type at the center of the screen.
+    func addSticker(type: StoryStickerType) {
+        let sticker = StorySticker(
+            type: type,
+            position: CGPoint(x: 0.5, y: 0.4),  // Center-ish
+            content: type.rawValue
+        )
+        activeStickers.append(sticker)
+        haptics.light()
+    }
+    
+    /// Update sticker position (for drag gestures).
+    func updateStickerPosition(_ id: UUID, to newPosition: CGPoint) {
+        if let index = activeStickers.firstIndex(where: { $0.id == id }) {
+            activeStickers[index].position = newPosition
+        }
+    }
+    
+    /// Remove a sticker.
+    func removeSticker(_ id: UUID) {
+        activeStickers.removeAll { $0.id == id }
+    }
+    
+    // MARK: - Video Merging
+    
+    /// Merge all video segments into one file for upload.
+    func mergeSegments() async throws -> URL {
+        let videoURLs = segments.compactMap(\.videoURL)
+        
+        guard !videoURLs.isEmpty else {
+            throw StoryError.uploadFailed
+        }
+        
+        // Single segment — return directly
+        if videoURLs.count == 1 {
+            return videoURLs[0]
+        }
+        
+        let composition = AVMutableComposition()
+        
+        guard let videoTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ),
+        let audioTrack = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw StoryError.uploadFailed
+        }
+        
+        var currentTime = CMTime.zero
+        
+        for url in videoURLs {
+            let asset = AVAsset(url: url)
+            let duration = try await asset.load(.duration)
+            let timeRange = CMTimeRange(start: .zero, duration: duration)
+            
+            if let sourceVideo = try await asset.loadTracks(withMediaType: .video).first {
+                try videoTrack.insertTimeRange(timeRange, of: sourceVideo, at: currentTime)
+                if currentTime == .zero {
+                    let transform = try await sourceVideo.load(.preferredTransform)
+                    videoTrack.preferredTransform = transform
+                }
+            }
+            
+            if let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first {
+                try audioTrack.insertTimeRange(timeRange, of: sourceAudio, at: currentTime)
+            }
+            
+            currentTime = CMTimeAdd(currentTime, duration)
+        }
+        
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lyo_story_\(UUID().uuidString).mp4")
+        
+        guard let exportSession = AVAssetExportSession(
+            asset: composition,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            throw StoryError.uploadFailed
+        }
+        
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mp4
+        exportSession.shouldOptimizeForNetworkUse = true
+        
+        await exportSession.export()
+        
+        switch exportSession.status {
+        case .completed:
+            Log.ui.info("✅ Merged \(videoURLs.count) story segments into: \(outputURL)")
+            return outputURL
+        default:
+            let msg = exportSession.error?.localizedDescription ?? "Unknown"
+            Log.ui.error("❌ Story merge failed: \(msg)")
+            throw StoryError.uploadFailed
         }
     }
     
     // MARK: - Publishing
     
+    /// Publish the story — merges segments if needed, then uploads via StoryService.
     func publishStory(videoURL: URL?, image: UIImage?) async {
-        guard videoURL != nil || image != nil else { return }
+        // If called with a direct URL/image from single-shot recording
+        if segments.isEmpty {
+            if let url = videoURL {
+                addVideoSegment(url: url, duration: 15.0)
+            } else if let img = image {
+                addPhotoSegment(image: img)
+            }
+        }
+        
+        guard hasSegments else { return }
         
         isPublishing = true
         publishProgress = 0.1
@@ -126,24 +302,37 @@ final class StoriesViewModel: ObservableObject {
             var mediaPublicURL: String
             var mediaType: Story.MediaType
             
-            if let videoURL = videoURL {
-                mediaPublicURL = try await storyService.uploadStoryMedia(videoURL: videoURL)
+            let videoSegments = segments.filter(\.isVideo)
+            let photoSegments = segments.filter { !$0.isVideo }
+            
+            if !videoSegments.isEmpty {
+                // Merge video segments
+                publishProgress = 0.2
+                let mergedURL = try await mergeSegments()
+                
+                publishProgress = 0.4
+                mediaPublicURL = try await storyService.uploadStoryMedia(videoURL: mergedURL)
                 mediaType = .video
-            } else if let image = image {
-                mediaPublicURL = try await storyService.uploadStoryMedia(image: image)
+                
+                // Clean up merged temp file
+                if mergedURL.lastPathComponent.contains("lyo_story_") {
+                    try? FileManager.default.removeItem(at: mergedURL)
+                }
+            } else if let firstPhoto = photoSegments.first?.image {
+                publishProgress = 0.4
+                mediaPublicURL = try await storyService.uploadStoryMedia(image: firstPhoto)
                 mediaType = .image
             } else {
                 throw StoryError.uploadFailed
             }
             
-            publishProgress = 0.6
+            publishProgress = 0.7
             
-            // For Stories, typically no caption from UI yet, but we could add one
             try await storyService.addStory(
                 mediaURL: mediaPublicURL,
                 mediaType: mediaType,
                 caption: nil,
-                isLive: false // Or true if hands-free streaming
+                isLive: false
             )
             
             publishProgress = 1.0
@@ -161,9 +350,19 @@ final class StoriesViewModel: ObservableObject {
         isPublishing = false
     }
     
+    // MARK: - Reset
+    
     func reset() {
         isRecording = false
-        recordedSnippetsCount = 0
+        
+        // Clean up segment files
+        for segment in segments {
+            if let url = segment.videoURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        segments = []
+        
         activeStickers = []
         isStickerTrayVisible = false
         currentPreset = .normal

@@ -55,7 +55,7 @@ final class LiveClassroomSmokeTests: XCTestCase {
         XCTAssertGreaterThan(viewModel.lesson?.blocks.count ?? 0, 0, "Lesson should have blocks")
         XCTAssertNotNil(viewModel.currentBlock, "Should have a current block")
     }
-    
+
     func testGenerateCourseFlow() async {
         // Test graph-based course generation
         await viewModel.loadLesson(courseId: "GENERATE:Python Basics", lessonId: "generated")

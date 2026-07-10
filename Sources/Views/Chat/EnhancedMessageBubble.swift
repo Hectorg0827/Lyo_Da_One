@@ -9,6 +9,10 @@ import SwiftUI
 import AVKit
 import os
 
+#if canImport(LaTeXSwiftUI)
+import LaTeXSwiftUI
+#endif
+
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
     let onTTSToggle: (() -> Void)?
@@ -17,7 +21,8 @@ struct EnhancedMessageBubble: View {
     let onTopicSelect: ((TopicOption) -> Void)?
     let onModuleSelect: ((CourseModule) -> Void)?
     let onSuggestionSelect: ((String) -> Void)?
-    let onCinematicPlay: ((A2UICinematic) -> Void)?
+    let highlights: [ChatHighlight]
+    let onTextSelectionAction: ((TextSelectionAction) -> Void)?
     
     @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
@@ -31,7 +36,8 @@ struct EnhancedMessageBubble: View {
         onTopicSelect: ((TopicOption) -> Void)? = nil,
         onModuleSelect: ((CourseModule) -> Void)? = nil,
         onSuggestionSelect: ((String) -> Void)? = nil,
-        onCinematicPlay: ((A2UICinematic) -> Void)? = nil
+        highlights: [ChatHighlight] = [],
+        onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil
     ) {
         self.message = message
         self.onTTSToggle = onTTSToggle
@@ -40,7 +46,8 @@ struct EnhancedMessageBubble: View {
         self.onTopicSelect = onTopicSelect
         self.onModuleSelect = onModuleSelect
         self.onSuggestionSelect = onSuggestionSelect
-        self.onCinematicPlay = onCinematicPlay
+        self.highlights = highlights
+        self.onTextSelectionAction = onTextSelectionAction
     }
     
     /// True when contentTypes contains rich content that should suppress raw text rendering
@@ -48,14 +55,11 @@ struct EnhancedMessageBubble: View {
     private var hasRichContent: Bool {
         message.contentTypes.contains { contentType in
             switch contentType {
-            case .a2ui: return true
             case .courseProposal: return true
             case .courseRoadmap: return true
             case .quiz: return true
             case .flashcards: return true
             case .studyPlan: return true
-            case .recursiveUI: return true
-            case .cinematic: return true
             default: return false
             }
         }
@@ -80,11 +84,20 @@ struct EnhancedMessageBubble: View {
             // Header showing Mascot and "Lyo" (Standardized to original mascot)
             HStack(alignment: .center, spacing: 10) {
                 HStack(spacing: 8) {
-                    Image("Mascot_Standing")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 28, height: 28)
-                        .clipShape(Circle())
+                    // Assuming message streaming implies thinking
+                    if message.contentTypes.contains(where: {
+                        if case .processing = $0 { return true }
+                        return false
+                    }) || message.content.isEmpty {
+                        AnimatedReadingMascotView(size: 28)
+                    } else {
+                        Image("Mascot_Standing")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
+                            .offset(y: 10)
+                    }
                     
                     Text("Lyo")
                         .font(.caption.bold())
@@ -118,14 +131,18 @@ struct EnhancedMessageBubble: View {
                         
                         switch contentType {
                         case .text:
-                            // Suppress raw text when rich content (A2UI, courseProposal, quiz, etc.) is present
+                            // Suppress raw text when rich content (courseProposal, quiz, etc.) is present
                             if !hasRichContent && !message.content.isEmpty {
-                                Text(LocalizedStringKey(message.content))
-                                    .font(.body)
-                                    .foregroundColor(.white)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                SelectableTextView(
+                                    content: stripEmojis(message.content),
+                                    messageId: message.id,
+                                    highlights: highlights,
+                                    onAction: { action in
+                                        onTextSelectionAction?(action)
+                                    }
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
                             }
                             
                         case .processing(let step, let progress):
@@ -190,74 +207,39 @@ struct EnhancedMessageBubble: View {
                                 onSuggestionSelect?(selected)
                             }
 
-                        case .recursiveUI(let component):
-                            A2UIRecursiveRenderer(component: component) { actionId in
-                                handleA2UIAction(actionId)
-                            }
-
                         case .courseProposal(let payload):
-                            CourseProposalCardView(
-                                payload: payload,
+                            ChatInteractiveCardView(
+                                type: .course(
+                                    title: payload.title,
+                                    topic: payload.topic,
+                                    level: payload.level,
+                                    duration: payload.duration,
+                                    imageURL: nil
+                                ),
                                 onStart: {
+                                    // Save to Focus stack then open classroom
+                                    _ = AICommandHandler.shared.handleOpenClassroom(
+                                        AICommandPayload(stackItem: nil, course: payload)
+                                    )
+                                    UIStackStore.shared.upsertCourse(
+                                        courseId: payload.id ?? UUID().uuidString,
+                                        title: payload.title,
+                                        subtitle: payload.topic
+                                    )
                                     AICommandHandler.shared.executeOpenClassroom(for: payload)
                                 },
-                                onAdjust: {
-                                    onSuggestionSelect?("I'd like to adjust the course: \(payload.title). Can you modify it?")
+                                onRefine: {
+                                    onSuggestionSelect?("I want to refine the course '\(payload.title)' on \(payload.topic). Please offer options to adjust the difficulty, duration, or focus areas.")
+                                },
+                                onSave: {
+                                    UIStackStore.shared.upsertCourse(
+                                        courseId: payload.id ?? UUID().uuidString,
+                                        title: payload.title,
+                                        subtitle: payload.topic
+                                    )
+                                    HapticManager.shared.playSuccess()
                                 }
                             )
-                            .padding(.horizontal, -8)
-
-                        case .a2ui(let component):
-                            A2UIRenderer(component: component, onAction: { (action: A2UIAction, _ childComponent: A2UIComponent) in
-                                let actionId = action.payload?["id"]?.stringValue ?? action.id
-                                handleA2UIAction(actionId, rootComponent: childComponent)
-                            })
-                            .padding(.horizontal, -14) // fully negate parent padding so A2UI fills ~99% width
-                            .environment(\.colorScheme, .dark) // force dark so semantic colors blend with bubble bg
-
-                        case .cinematic(let data):
-                            // Render a "Trailer" card that invites the user to tap
-                            Button {
-                                // Trigger callback
-                                onCinematicPlay?(data)
-                            } label: {
-                                ZStack {
-                                    Color.black
-                                    
-                                    // Placeholder Gradient
-                                    LinearGradient(colors: [.purple, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                        .opacity(0.6)
-                                    
-                                    VStack(spacing: 16) {
-                                        Image(systemName: "play.circle.fill")
-                                            .font(.system(size: 48))
-                                            .foregroundColor(.white)
-                                            .shadow(radius: 10)
-                                        
-                                        VStack(spacing: 4) {
-                                            Text(data.title.uppercased())
-                                                .font(.headline)
-                                                .fontWeight(.bold)
-                                                .foregroundColor(.white)
-                                                .multilineTextAlignment(.center)
-                                            
-                                            if let subtitle = data.subtitle {
-                                                Text(subtitle)
-                                                    .font(.caption)
-                                                    .foregroundColor(.white.opacity(0.8))
-                                                    .multilineTextAlignment(.center)
-                                            }
-                                        }
-                                    }
-                                    .padding()
-                                }
-                                .frame(height: 180)
-                                .cornerRadius(12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                            }
                             .padding(.horizontal, -8)
 
                         case .studyPlan(let plan):
@@ -313,13 +295,12 @@ struct EnhancedMessageBubble: View {
                 } // end if !message.content.isEmpty
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DesignTokens.Spacing.xs)
             .padding(.vertical, 14)
-            .background(Color.black.opacity(0.65))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .background(Color.clear)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 0) // Edge-to-edge Gemini style
+        .padding(.horizontal, 1) // Near edge-to-edge
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
                 showFullImage = false
@@ -334,11 +315,15 @@ struct EnhancedMessageBubble: View {
             Spacer(minLength: 60)
             
             VStack(alignment: .trailing, spacing: 8) {
-                // Main content
-                Text(LocalizedStringKey(message.content))
-                    .font(.body)
-                    .foregroundColor(.white)
-                    .textSelection(.enabled)
+                // Main content — user bubbles still use native text selection
+                SelectableTextView(
+                    content: message.content,
+                    messageId: message.id,
+                    highlights: [],
+                    onAction: { action in
+                        onTextSelectionAction?(action)
+                    }
+                )
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Color.accentColor)
@@ -449,66 +434,63 @@ struct EnhancedMessageBubble: View {
         }
     }
 
-    // MARK: - A2UI Action Handling
-
-    private func handleA2UIAction(_ actionId: String, rootComponent: A2UIComponent? = nil) {
-        Log.ai.info("A2UI Action triggered: \(actionId)")
-        HapticManager.shared.light()
-
-        // Parse action and route to appropriate handler
-        if actionId == "create_course_from_topic" {
-            // Extract title and topic from the root component if possible
-            var title = "AI Generated Course"
-            var topic = "AI Generated Course"
-            
-            if let root = rootComponent {
-                title = root.props.title ?? title
-                topic = root.props.subtitle ?? root.props.hint ?? title
-            }
-            
-            let payload = CoursePayload(
-                id: nil,
-                title: title,
-                topic: topic,
-                level: "Beginner",
-                language: nil,
-                duration: nil,
-                objectives: []
-            )
-            
-            AICommandHandler.shared.executeOpenClassroom(for: payload)
-        } else if actionId.hasPrefix("quiz_answer_") {
-            if let indexString = actionId.components(separatedBy: "_").last,
-               let index = Int(indexString) {
-                onQuizAnswer?(index)
-            }
-        } else if actionId.hasPrefix("start_module_") {
-            if let moduleId = actionId.components(separatedBy: "_").last {
-                // Create a CourseModule for the callback (simplified)
-                let module = CourseModule(
-                    id: moduleId,
-                    title: "Module \(moduleId)",
-                    duration: "30 min",
-                    isCompleted: false,
-                    isLocked: false
-                )
-                onModuleSelect?(module)
-            }
-        } else if actionId.hasPrefix("start_topic_") {
-            if let topicId = actionId.components(separatedBy: "_").last {
-                // Create a TopicOption for the callback
-                let topic = TopicOption(
-                    title: "Topic \(topicId)",
-                    icon: "book.fill",
-                    gradientColors: ["#3B82F6", "#8B5CF6"]
-                )
-                onTopicSelect?(topic)
-            }
-        } else {
-            // Handle other actions as suggestions
-            onSuggestionSelect?(actionId)
-        }
+    // MARK: - Action Handling
+    
+    /// Strips emoji characters from text for cleaner UI presentation
+    private func stripEmojis(_ text: String) -> String {
+        text.unicodeScalars.filter { scalar in
+            // Keep everything except emoji-range scalars
+            !(scalar.properties.isEmoji && scalar.properties.isEmojiPresentation)
+            && scalar.value != 0xFE0F // variation selector
+        }.map { String($0) }.joined()
     }
+
+    /// Renders content with inline Markdown styling for a modern, polished look:
+    /// Handles bold, italics, inline code, and links with distinct visual hierarchy.
+    private func styledMarkdownText(_ content: String) -> Text {
+        var options = AttributedString.MarkdownParsingOptions()
+        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+        
+        guard let attributed = try? AttributedString(markdown: content, options: options) else {
+            return Text(content)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundColor(.white.opacity(0.9))
+        }
+        
+        var styled = attributed
+        // Base styling for modern look
+        styled.font = .system(size: 16, weight: .regular, design: .default)
+        styled.foregroundColor = .white.opacity(0.9)
+        
+        for run in styled.runs {
+            if let intent = run.inlinePresentationIntent {
+                if intent.contains(.stronglyEmphasized) {
+                    // Bold: Slightly larger, crisp white for emphasis
+                    styled[run.range].font = .system(size: 17, weight: .bold, design: .default)
+                    styled[run.range].foregroundColor = .white
+                } 
+                if intent.contains(.emphasized) {
+                    // Italic: Softer
+                    styled[run.range].font = .system(size: 16, weight: .regular, design: .default).italic()
+                    styled[run.range].foregroundColor = .white.opacity(0.85)
+                }
+                if intent.contains(.code) {
+                    // Inline Code: Monospaced, soft blue tint, subtle background
+                    styled[run.range].font = .system(size: 15, weight: .semibold, design: .monospaced)
+                    styled[run.range].foregroundColor = Color(red: 0.6, green: 0.85, blue: 1.0)
+                    styled[run.range].backgroundColor = Color.white.opacity(0.12)
+                }
+            }
+            if run.link != nil {
+                // Links: Bright blue with underline
+                styled[run.range].foregroundColor = Color(red: 0.4, green: 0.7, blue: 1.0)
+                styled[run.range].underlineStyle = .single
+            }
+        }
+        
+        return Text(styled)
+    }
+
 }
 
 

@@ -35,10 +35,7 @@ class OpenAIService {
         systemPrompt: String? = nil
     ) async throws -> String {
         if useMockMode {
-            guard AppConfig.allowMockFallbacks else {
-                throw OpenAIError.invalidURL
-            }
-            return try await getMockResponse(for: message, history: conversationHistory)
+            throw OpenAIError.invalidURL
         }
 
         do {
@@ -49,10 +46,7 @@ class OpenAIService {
             )
         } catch {
             // Backend unavailable or response unexpected.
-            if AppConfig.allowMockFallbacks {
-                Log.ai.warning("Backend AI failed: \(error.localizedDescription). Falling back to mock because LYO_ALLOW_MOCKS=1")
-                return try await getMockResponse(for: message, history: conversationHistory)
-            }
+
             throw error
         }
     }

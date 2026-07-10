@@ -47,55 +47,38 @@ final class DataService: ObservableObject {
         }
         
         do {
-            // Fetch real posts from public feed
-            let posts = try await apiClient.fetchPublicFeed(limit: 20)
+            // Fetch real discoveries from clips/discover
+            let response = try await apiClient.fetchDiscoveriesFeed(limit: 20, offset: 0)
             
-            // Map posts to DiscoverItems
-            let postItems = posts.compactMap { post -> DiscoverItem? in
-                // Only show posts with content or attachments
-                guard !post.content.isEmpty || (post.attachments?.isEmpty == false) else { return nil }
-                
-                // Determine video/image URL
-                var videoURL: URL?
-                var thumbnailURL: URL?
-                
-                if let attachments = post.attachments {
-                    for urlStr in attachments {
-                        if urlStr.hasSuffix(".mp4") || urlStr.contains("video") {
-                            videoURL = URL(string: urlStr)
-                        } else if urlStr.hasSuffix(".jpg") || urlStr.hasSuffix(".png") {
-                            thumbnailURL = URL(string: urlStr)
-                        }
-                    }
-                }
-                
+            // Map Discovery models to DiscoverItems
+            let discoveryItems = response.discoveries.map { discovery -> DiscoverItem in
                 return DiscoverItem(
-                    id: post.id,
+                    id: String(discovery.id),
                     type: .userClip,
-                    title: post.content.components(separatedBy: "\n").first ?? "New Clip",
-                    subtitle: post.content,
-                    tag: post.author.name,
-                    estimatedMinutes: 1,
-                    thumbnailURL: thumbnailURL,
-                    videoURL: videoURL,
-                    aiInsight: nil, // Could generate this later
+                    title: discovery.title,
+                    subtitle: discovery.description ?? "",
+                    tag: discovery.userName ?? "New",
+                    estimatedMinutes: 2, // Placeholder
+                    thumbnailURL: discovery.thumbnailURL.flatMap { URL(string: $0) },
+                    videoURL: discovery.videoURL.flatMap { URL(string: $0) },
+                    aiInsight: nil,
                     subject: "Community",
                     level: .beginner,
-                    xpReward: 10,
+                    xpReward: 20,
                     keyPoints: [],
                     quizMoments: [],
-                    isLiked: post.isLiked,
-                    likeCount: post.likes,
-                    viewCount: 0,
+                    isLiked: discovery.isLiked,
+                    likeCount: discovery.likes,
+                    viewCount: discovery.views,
                     shareCount: 0,
-                    isSaved: false,
-                    authorName: post.author.name,
-                    authorAvatarURL: post.author.avatarURL.flatMap { URL(string: $0) }
+                    isSaved: discovery.isSaved,
+                    authorName: discovery.userName ?? "Lyo User",
+                    authorAvatarURL: nil // Could add if available in model
                 )
             }
             
-            Log.data.info("Fetched \(postItems.count) posts for discover feed")
-            return postItems
+            Log.data.info("Fetched \(discoveryItems.count) discoveries from backend")
+            return discoveryItems
             
         } catch {
             Log.data.error("Failed to fetch discover feed: \(error.localizedDescription)")
@@ -342,7 +325,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 8,
                 maxAttendees: 12,
-                tags: ["SwiftUI", "iOS"]
+                tags: ["SwiftUI", "iOS"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "c2",
@@ -358,7 +342,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 45,
                 maxAttendees: 100,
-                tags: ["Python", "Backend"]
+                tags: ["Python", "Backend"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "c3",
@@ -374,7 +359,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 4,
                 maxAttendees: 6,
-                tags: ["Hackathon", "Team"]
+                tags: ["Hackathon", "Team"],
+                userAttendanceStatus: nil
             ),
             CampusItem(
                 id: "c4",
@@ -390,7 +376,8 @@ final class DataService: ObservableObject {
                 hostAvatarURL: nil,
                 attendeeCount: 156,
                 maxAttendees: 500,
-                tags: ["Career", "Advice"]
+                tags: ["Career", "Advice"],
+                userAttendanceStatus: nil
             )
         ]
     }
@@ -398,34 +385,38 @@ final class DataService: ObservableObject {
     private func mockCommunityEvents() -> [CommunityEvent] {
         [
             CommunityEvent(
-                id: "ev1",
+                id: 1,
                 title: "iOS Study Group",
                 description: "Weekly iOS development meetup",
                 eventType: "study_group",
                 startTime: Date().addingTimeInterval(3600),
                 endTime: Date().addingTimeInterval(7200),
                 location: "Virtual",
-                hostId: "host-1",
+                organizerId: 1,
                 hostName: "Alex Chen",
                 attendeeCount: 12,
                 maxAttendees: 20,
                 isOnline: true,
-                imageUrl: nil
+                imageUrl: nil,
+                organizerProfile: nil,
+                userAttendanceStatus: nil
             ),
             CommunityEvent(
-                id: "ev2",
+                id: 2,
                 title: "Algorithm Challenge",
                 description: "Solve coding problems together",
                 eventType: "workshop",
                 startTime: Date().addingTimeInterval(86400),
                 endTime: Date().addingTimeInterval(90000),
                 location: "Online",
-                hostId: "host-2",
+                organizerId: 2,
                 hostName: "Maria Santos",
                 attendeeCount: 8,
                 maxAttendees: 15,
                 isOnline: true,
-                imageUrl: nil
+                imageUrl: nil,
+                organizerProfile: nil,
+                userAttendanceStatus: nil
             )
         ]
     }

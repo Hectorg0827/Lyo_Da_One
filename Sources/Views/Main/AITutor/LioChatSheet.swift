@@ -11,20 +11,26 @@ struct LioChatSheet: View {
     @State private var errorMessage: String?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showMasteryProfile = false
-    @State private var isArtifactExpanded: Bool = true
-    /// Tracks the ID of the artifact the user explicitly dismissed, so Combine re-firing
-    /// the same component doesn't immediately re-show the pane.
-    @State private var dismissedArtifactId: String? = nil
     
     // Current mode for display
     private var currentModeName: String {
+        if let explicit = viewModel.selectedIntent {
+            switch explicit {
+            case "STUDY_PLAN": return "Study Plan"
+            case "QUIZ": return "Quiz"
+            case "CHAT": return "Chat"
+            case "COURSE": return "Course"
+            default: return "Auto"
+            }
+        }
+        
         // This could be enhanced to reflect actual mode state
         // For now, using the tab context
         switch uiState.currentTab {
         case .focus: return "Study"
         case .discover: return "Explore"
         case .campus: return "Chat"
-        default: return "Study"
+        default: return "Auto"
         }
     }
     
@@ -35,100 +41,17 @@ struct LioChatSheet: View {
     @StateObject private var commandHandler = AICommandHandler.shared
     @State private var showingClassroom = false
     
+    // Waiting Room State
+    @State private var showingWaitingRoom = false
+    @State private var courseTitleToGenerate: String = ""
+    @State private var pendingCourseCallback: (() -> Void)? = nil
+    @Namespace private var mascotAnimation
+    
     // MARK: - Body
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                // FORCE BLACK BACKGROUND
-                Color.black.ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    // Custom Header
-                    headerView
-
-                    // ── Artifact Pane (pinned, collapsible) ─────────────────────
-                    if let artifact = viewModel.activeArtifact, artifact.id != dismissedArtifactId {
-                        artifactPane(component: artifact)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isArtifactExpanded)
-                            // Reset dismiss state whenever a brand-new artifact arrives
-                            .onChange(of: artifact.id) { _, newId in
-                                if newId != dismissedArtifactId {
-                                    dismissedArtifactId = nil
-                                    isArtifactExpanded = true
-                                }
-                            }
-                    }
-
-                    // Messages area
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 16) {
-                                if viewModel.messages.isEmpty {
-                                    emptyStateView
-                                } else {
-                                    ForEach(viewModel.messages) { msg in
-                                        LyoMessageBubbleView(
-                                            message: msg,
-                                            onActionTap: { action in
-                                                viewModel.executeAction(action)
-                                            },
-                                            onQuickChipTap: { chip in
-                                                viewModel.inputText = chip
-                                                Task { await viewModel.sendMessage() }
-                                            },
-                                            onAudioToggle: { messageId, text in
-                                                viewModel.toggleMessageAudio(messageId: messageId, text: text)
-                                            },
-                                            isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
-                                            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
-                                            onA2UICourseStart: { course in
-                                                viewModel.onA2UICourseStart(course: course)
-                                            },
-                                            onA2UIQuizAnswer: { question, answerIndex in
-                                                viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
-                                            }
-                                        )
-                                        .id(msg.id)
-                                    }
-                                }
-                                
-                                // Typing indicator when sending
-                                if viewModel.isLoading {
-                                    LyoUnifiedThinkingIndicator()
-                                        .id("typing")
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 20)
-                            .padding(.bottom, 100) // Space for input bar
-                        }
-                        .onAppear { scrollProxy = proxy }
-                        .onChange(of: viewModel.messages.count) {
-                            scrollToBottom(using: proxy)
-                        }
-                    }
-                }
-                
-                // Floating Input Bar
-                VStack {
-                    Spacer()
-                    
-                    if !viewModel.isVoiceActive {
-                        nextActionView
-                    }
-                    
-                    if viewModel.isVoiceActive {
-                        voiceListeningView
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else {
-                        inputBar
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 16)
-                    }
-                }
-            }
+            mainContentView
             .navigationBarHidden(true)
             .sheet(isPresented: $showMasteryProfile) {
                 MasteryProfileView()
@@ -190,6 +113,125 @@ struct LioChatSheet: View {
         }
     }
     
+    // MARK: - Main Content (extracted for type-checker)
+    
+    private var mainContentView: some View {
+        ZStack {
+            // FORCE BLACK BACKGROUND
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Custom Header
+                headerView
+
+                // Messages area
+                chatMessagesArea
+            }
+            
+            // Floating Input Bar
+            VStack {
+                Spacer()
+                
+                if !viewModel.isVoiceActive {
+                    nextActionView
+                }
+                
+                if viewModel.isVoiceActive {
+                    voiceListeningView
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    inputBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                }
+            }
+            
+            // Waiting Room Overlay
+            if showingWaitingRoom {
+                Color.black.opacity(0.8).ignoresSafeArea()
+                WaitingRoomView(
+                    courseTitle: courseTitleToGenerate,
+                    mascotNamespace: mascotAnimation
+                ) {
+                    showingWaitingRoom = false
+                    pendingCourseCallback?()
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+    
+    // MARK: - Chat Messages Area (extracted for type-checker)
+    
+    private var chatMessagesArea: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if viewModel.messages.isEmpty {
+                        emptyStateView
+                    } else {
+                        ForEach(viewModel.messages) { msg in
+                            messageBubble(for: msg)
+                                .id(msg.id)
+                        }
+                    }
+                    
+                    // Typing indicator when sending
+                    if viewModel.isLoading {
+                        LyoUnifiedThinkingIndicator()
+                            .id("typing")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                .padding(.bottom, 100) // Space for input bar
+            }
+            .onAppear { scrollProxy = proxy }
+            .onChange(of: viewModel.messages.count) {
+                scrollToBottom(using: proxy)
+            }
+        }
+    }
+    
+    // MARK: - Message Bubble Helper (extracted for type-checker)
+    
+    private func messageBubble(for msg: LyoMessage) -> some View {
+        LyoMessageBubbleView(
+            message: msg,
+            onActionTap: { action in
+                viewModel.executeAction(action)
+            },
+            onQuickChipTap: { chip in
+                viewModel.inputText = chip
+                Task { await viewModel.sendMessage() }
+            },
+            onCourseStart: { data in
+                let payload = CoursePayload(
+                    id: nil,
+                    title: data.title,
+                    topic: data.subtext,
+                    level: data.summary,
+                    language: nil,
+                    duration: nil,
+                    objectives: data.modules
+                )
+                AICommandHandler.shared.executeOpenClassroom(for: payload)
+            },
+            onAudioToggle: { messageId, text in
+                viewModel.toggleMessageAudio(messageId: messageId, text: text)
+            },
+            isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
+            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
+            onSmartBlockQuizAnswer: { question, selected, isCorrect in
+                viewModel.reportQuizResult(question: question, selectedAnswer: selected, isCorrect: isCorrect)
+            },
+            onSmartBlockTestPrepScheduled: { date, course, desc, attachmentIds in
+                viewModel.handleTestPrepScheduled(date: date, course: course, description: desc, attachmentIds: attachmentIds)
+            },
+            mascotNamespace: mascotAnimation
+        )
+    }
+    
     // MARK: - Subviews
     
     private var headerView: some View {
@@ -244,123 +286,6 @@ struct LioChatSheet: View {
         .padding(.top, 16)
         .padding(.bottom, 8)
         .background(Material.thinMaterial)
-    }
-
-    // MARK: - Artifact Pane
-
-    /// Pinned "Claw"-style artifact pane — shows the active A2UI component above the chat stream.
-    /// The user can collapse it to a compact handle or dismiss it entirely.
-    @ViewBuilder
-    private func artifactPane(component: A2UIComponent) -> some View {
-        VStack(spacing: 0) {
-            // Drag handle / collapse row
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundColor(.blue)
-                Text("Artifact")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        isArtifactExpanded.toggle()
-                    }
-                } label: {
-                    Image(systemName: isArtifactExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .padding(6)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-                // Dismiss / clear artifact for this session
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        dismissedArtifactId = component.id
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .padding(6)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color(white: 0.1))
-
-            // Expanded content area
-            if isArtifactExpanded {
-                Group {
-                    if component.type.isCourseArtifact {
-                        // Rich course-specific artifact view
-                        CourseArtifactView(
-                            component: component,
-                            onAction: { action in
-                                handleArtifactAction(action)
-                            }
-                        )
-                        .padding(.horizontal, 4)
-                    } else {
-                        ScrollView {
-                            A2UIRenderer(
-                                component: component,
-                                onAction: { action, _ in
-                                    handleArtifactAction(action)
-                                }
-                            )
-                            .padding(12)
-                        }
-                    }
-                }
-                .frame(maxHeight: 320)
-                .background(Color(white: 0.08))
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            Divider().background(Color.white.opacity(0.12))
-        }
-    }
-
-    /// Shared handler for A2UI actions fired from the Artifact Pane.
-    /// Routes action semantics back to the chat or triggers navigation.
-    private func handleArtifactAction(_ action: A2UIAction) {
-        Log.ai.info("🎨 Artifact action tapped: \(action.type.rawValue)")
-        let messageText: String? = {
-            if let payload = action.payload {
-                if let text = payload["message"]?.value as? String { return text }
-                if let text = payload["label"]?.value as? String { return text }
-                if let text = payload["query"]?.value as? String { return text }
-            }
-            return nil
-        }()
-        switch action.type {
-        case .sendMessage, .askAI, .requestHint, .requestExplanation:
-            if let text = messageText, !text.isEmpty {
-                viewModel.inputText = text
-                Task { await viewModel.sendMessage() }
-            }
-        case .startStudy, .navigate:
-            if let text = messageText, !text.isEmpty {
-                viewModel.inputText = text
-                Task { await viewModel.sendMessage() }
-            } else if let courseId = action.payload?["course_id"]?.value as? String {
-                Log.ai.info("🎨 Artifact: navigate to course \(courseId)")
-                NotificationCenter.default.post(
-                    name: .init("OpenClassroomById"),
-                    object: nil,
-                    userInfo: ["courseId": courseId]
-                )
-            }
-        default:
-            if let text = messageText {
-                viewModel.inputText = text
-                Task { await viewModel.sendMessage() }
-            }
-        }
     }
 
     private var modeIndicator: some View {
@@ -613,17 +538,25 @@ struct LioChatSheet: View {
                 
                 // Middle: Mode Selector
                 Menu {
-                    Button(action: { /* Switch to Study mode */ }) {
-                        Label("Study", systemImage: "book.fill")
+                    Button(action: { viewModel.selectedIntent = nil }) {
+                        Label("Auto", systemImage: "sparkles")
+                        if viewModel.selectedIntent == nil { Image(systemName: "checkmark") }
                     }
-                    Button(action: { /* Switch to Quiz mode */ }) {
+                    Button(action: { viewModel.selectedIntent = "STUDY_PLAN" }) {
+                        Label("Study Plan", systemImage: "book.fill")
+                        if viewModel.selectedIntent == "STUDY_PLAN" { Image(systemName: "checkmark") }
+                    }
+                    Button(action: { viewModel.selectedIntent = "QUIZ" }) {
                         Label("Quiz", systemImage: "questionmark.circle")
+                        if viewModel.selectedIntent == "QUIZ" { Image(systemName: "checkmark") }
                     }
-                    Button(action: { /* Switch to Chat mode */ }) {
+                    Button(action: { viewModel.selectedIntent = "CHAT" }) {
                         Label("Chat", systemImage: "message")
+                        if viewModel.selectedIntent == "CHAT" { Image(systemName: "checkmark") }
                     }
-                    Button(action: { /* Switch to Course mode */ }) {
+                    Button(action: { viewModel.selectedIntent = "COURSE" }) {
                         Label("Course", systemImage: "graduationcap")
+                        if viewModel.selectedIntent == "COURSE" { Image(systemName: "checkmark") }
                     }
                 } label: {
                     HStack(spacing: 6) {

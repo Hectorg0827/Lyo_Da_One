@@ -2,7 +2,7 @@
 //  ProcessingBubbleView.swift
 //  Lyo
 //
-//  Created for A2UI Dynamic Chat
+//  Created for Dynamic Chat
 //
 
 import SwiftUI
@@ -15,29 +15,7 @@ struct ProcessingBubbleView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Animated Orb / Indicator
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.purple.opacity(0.5), .blue.opacity(0.5)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 24, height: 24)
-                    .scaleEffect(animate ? 1.2 : 0.8)
-                    .opacity(animate ? 1.0 : 0.6)
-                
-                Circle()
-                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    .frame(width: 24, height: 24)
-            }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.0).repeatForever()) {
-                    animate = true
-                }
-            }
+            AnimatedReadingMascotView(size: 24)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(step)

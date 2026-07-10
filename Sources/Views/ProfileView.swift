@@ -34,6 +34,49 @@ struct ProfileView: View {
                         PersonalizedRecapView(memory: memory)
                     }
 
+                    // Self-Evolution Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Self Evolution")
+                            .font(.headline)
+                        HStack(spacing: 12) {
+                            NavigationLink(destination: InsightsDashboardView()) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Image(systemName: "chart.xyaxis.line")
+                                        .font(.title2)
+                                        .foregroundColor(.purple)
+                                    Text("Insights")
+                                        .font(.subheadline.bold())
+                                    Text("Evolution & risk")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color(.secondarySystemBackground))
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+
+                            NavigationLink(destination: GoalsView()) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Image(systemName: "target")
+                                        .font(.title2)
+                                        .foregroundColor(.green)
+                                    Text("Goals")
+                                        .font(.subheadline.bold())
+                                    Text("Track progress")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color(.secondarySystemBackground))
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
                     // Active Courses Section
                     if !viewModel.activeStacks.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {

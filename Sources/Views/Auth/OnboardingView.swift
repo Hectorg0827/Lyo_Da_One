@@ -164,7 +164,7 @@ struct OnboardingView: View {
                                 HStack(spacing: 16) {
                                     SignInWithAppleButton(
                                         onRequest: { request in
-                                            request.requestedScopes = [.fullName, .email]
+                                            authService.prepareAppleSignInRequest(request)
                                         },
                                         onCompletion: { result in
                                             handleSocialLogin {
@@ -239,6 +239,7 @@ struct OnboardingView: View {
     // MARK: - Logic
     
     private func startOnboarding() {
+        LyoAnalyticsManager.shared.trackEvent("onboarding_started")
         typeWriterEffect("Hello! I'm Lyo. I'm here to help you learn anything you want.") {
             withAnimation { showInput = true }
         }
@@ -250,18 +251,21 @@ struct OnboardingView: View {
         switch currentStep {
         case .intro:
             currentStep = .name
+            LyoAnalyticsManager.shared.trackEvent("onboarding_step_completed", parameters: ["step": "intro"])
             typeWriterEffect("First things first, what should I call you?") {
                 withAnimation { showInput = true }
             }
             
         case .name:
             currentStep = .goal
+            LyoAnalyticsManager.shared.trackEvent("onboarding_step_completed", parameters: ["step": "name", "user_name": name])
             typeWriterEffect("Nice to meet you, \(name)! What are you most interested in learning right now?") {
                 withAnimation { showInput = true }
             }
             
         case .goal:
             currentStep = .credentials
+            LyoAnalyticsManager.shared.trackEvent("onboarding_step_completed", parameters: ["step": "goal", "goals": Array(selectedGoals)])
             let goalText = selectedGoals.count > 1 ? "Those are great choices!" : "\(selectedGoals.first ?? "That")? That's awesome!"
             typeWriterEffect("\(goalText) Let's create your secure profile so we can save your progress.") {
                 withAnimation { showInput = true }
@@ -270,6 +274,7 @@ struct OnboardingView: View {
         case .credentials:
             currentStep = .creating
             isThinking = true
+            LyoAnalyticsManager.shared.trackEvent("onboarding_step_completed", parameters: ["step": "credentials"])
             typeWriterEffect("Setting up your personal campus...") {
                 createAccount()
             }
@@ -290,6 +295,7 @@ struct OnboardingView: View {
             // Wait for auth state change
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 if authService.isAuthenticated {
+                    LyoAnalyticsManager.shared.trackEvent("onboarding_signup_completed", parameters: ["method": "social"])
                     rootViewModel.isAuthenticated = true
                     isPresented = false
                 } else {
@@ -312,6 +318,7 @@ struct OnboardingView: View {
             await MainActor.run {
                 isThinking = false
                 if authService.isAuthenticated {
+                    LyoAnalyticsManager.shared.trackEvent("onboarding_signup_completed", parameters: ["method": "email"])
                     rootViewModel.isAuthenticated = true
                     isPresented = false
                 } else {

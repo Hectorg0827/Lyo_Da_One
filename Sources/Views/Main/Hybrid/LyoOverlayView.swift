@@ -8,9 +8,12 @@ struct LyoOverlayView: View {
     @EnvironmentObject var viewModel: LyoAIViewModel
     @EnvironmentObject var rootViewModel: RootViewModel
     @ObservedObject var conversationManager = ConversationManager.shared
+    @StateObject var notebookStore = NotebookStore()
+    @State private var showNotesSheet = false
     
     @State private var animationState: AnimationState = .initial
     @State private var isThinking = false
+    @State private var showVoiceSheet = false
     @State private var showGreeting = false
     @State private var showHistory = false
     @State private var selectedMode: ChatMode = .chat
@@ -51,8 +54,6 @@ struct LyoOverlayView: View {
                 switch contentType {
                 case .processing:
                     return true
-                case .a2ui(let component):
-                    return containsThinkingIndicator(in: component)
                 default:
                     return false
                 }
@@ -60,15 +61,6 @@ struct LyoOverlayView: View {
         }
     }
 
-    private func containsThinkingIndicator(in component: A2UIComponent) -> Bool {
-        switch component.type {
-        case .aiThinking, .aiTyping, .typingIndicator, .processingSpinner, .loading, .loadingSkeleton, .skeleton:
-            return true
-        default:
-            return (component.children ?? []).contains { containsThinkingIndicator(in: $0) }
-        }
-    }
-    
     // ChatMessage struct removed, using LyoMessage from ViewModel
     
     var body: some View {
@@ -114,7 +106,7 @@ struct LyoOverlayView: View {
                                 VStack(spacing: 24) { // Increased spacing between bubbles
                                     ForEach(viewModel.messages) { message in
                                         VStack(alignment: .leading, spacing: 0) {
-                                            // Convert LyoMessage to MultimodalMessage for A2UI widgets
+                                            // Convert LyoMessage to MultimodalMessage for message bubble
                                             EnhancedMessageBubble(
                                                 message: MultimodalMessage(from: message),
                                                 onTTSToggle: nil,
@@ -127,6 +119,10 @@ struct LyoOverlayView: View {
                                                 onSuggestionSelect: { suggestion in
                                                     viewModel.inputText = suggestion
                                                     submitText()
+                                                },
+                                                highlights: notebookStore.highlights(for: message.id),
+                                                onTextSelectionAction: { action in
+                                                    handleTextSelectionAction(action, messageId: message.id, isFromUser: message.isFromUser)
                                                 }
                                             )
                                         }
@@ -135,8 +131,9 @@ struct LyoOverlayView: View {
                                     
                                     // Thinking indicator bubble
                                     if isThinking && !hasAssistantPlaceholderBubble {
-                                        LyoUnifiedThinkingIndicator()
+                                        LyoThinkingView()
                                             .id("thinking")
+                                            .padding(.leading, 12)
                                     }
                                 }
                                 .padding(.top, 60) // Space for header/back button
@@ -343,6 +340,9 @@ struct LyoOverlayView: View {
                             
                             Spacer()
                             
+                            // Notebook Icon (only visible when notes exist)
+                            NotebookIconButton(store: notebookStore, showSheet: $showNotesSheet)
+                            
                             // New Chat Button
                             Button(action: createNewChat) {
                                 Image(systemName: "square.and.pencil")
@@ -365,6 +365,7 @@ struct LyoOverlayView: View {
                         }
                         .padding(.horizontal)
                         .padding(.top, 8)
+                        
                         Spacer()
                     }
                 }
@@ -395,6 +396,11 @@ struct LyoOverlayView: View {
             withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
                 thinkingRotation = 360
             }
+            
+            // Activate notebook store for current conversation
+            if let convId = conversationManager.currentConversation?.id {
+                notebookStore.activateConversation(convId)
+            }
         }
         .sheet(isPresented: $showHistory) {
             ChatHistoryView(
@@ -406,6 +412,34 @@ struct LyoOverlayView: View {
                     createNewChat()
                 }
             )
+        }
+        .sheet(isPresented: $showVoiceSheet) {
+            VoiceSessionBottomSheet(viewModel: viewModel)
+        }
+        .onChange(of: viewModel.isVoiceActive) { _, newValue in
+            if newValue {
+                showVoiceSheet = true
+            }
+        }
+        .sheet(isPresented: $showNotesSheet) {
+            ChatNotesSheetView(
+                store: notebookStore,
+                isPresented: $showNotesSheet,
+                onExplainFurther: { note in
+                    showNotesSheet = false
+                    viewModel.inputText = "Explain this further: \(note.text)"
+                    submitText()
+                },
+                onBranchToNewChat: { note in
+                    showNotesSheet = false
+                    branchToNewChat(seedText: note.text)
+                }
+            )
+        }
+        .onChange(of: conversationManager.currentConversation?.id) { _, newId in
+            if let id = newId {
+                notebookStore.activateConversation(id)
+            }
         }
     }
     
@@ -423,7 +457,8 @@ struct LyoOverlayView: View {
     }
     
     private func createNewChat() {
-        _ = conversationManager.createNewConversation()
+        let conversation = conversationManager.createNewConversation()
+        notebookStore.activateConversation(conversation.id)
         viewModel.messages.removeAll()
         // Add personalized welcome message
         let welcomeMessage = "Hello, \(userFirstName)! I'm Lyo, your AI learning assistant. \(motivationalMessages.randomElement() ?? "What would you like to learn today?")"
@@ -439,6 +474,7 @@ struct LyoOverlayView: View {
     private func loadConversation(_ conversation: SavedConversation) {
         // Clear current messages and load from saved conversation
         viewModel.messages.removeAll()
+        notebookStore.activateConversation(conversation.id)
         for message in conversation.messages {
             var lyoMsg = LyoMessage(
                 id: message.id,
@@ -450,6 +486,48 @@ struct LyoOverlayView: View {
             viewModel.messages.append(lyoMsg)
         }
         conversationManager.loadConversation(conversation)
+    }
+    
+    // MARK: - Text Selection Actions
+    
+    private func handleTextSelectionAction(_ action: TextSelectionAction, messageId: String, isFromUser: Bool) {
+        switch action {
+        case .copy(let text):
+            UIPasteboard.general.string = text
+            HapticManager.shared.playLightImpact()
+            
+        case .note(let selectedText, _):
+            let context = isFromUser ? "My Question" : "Lyo's Explanation"
+            notebookStore.saveNote(
+                text: selectedText,
+                messageId: messageId,
+                sourceContext: context
+            )
+            HapticManager.shared.playSuccess()
+            
+        case .highlight(let selectedText, let range):
+            notebookStore.saveHighlight(
+                text: selectedText,
+                range: range,
+                messageId: messageId
+            )
+            HapticManager.shared.playMediumImpact()
+            
+        case .explain(let text):
+            viewModel.inputText = "Explain this: \(text)"
+            submitText()
+        }
+    }
+    
+    private func branchToNewChat(seedText: String) {
+        let conversation = conversationManager.createNewConversation()
+        notebookStore.activateConversation(conversation.id)
+        viewModel.messages.removeAll()
+        
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            viewModel.inputText = "Let's explore this topic: \(seedText)"
+            submitText()
+        }
     }
     
     private func submitText() {

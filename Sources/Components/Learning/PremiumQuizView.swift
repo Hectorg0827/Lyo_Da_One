@@ -58,7 +58,7 @@ struct PremiumQuizView: View {
             // Options
             VStack(spacing: 12) {
                 ForEach(0..<options.count, id: \.self) { index in
-                    OptionRow(
+                    PremiumOptionRow(
                         text: options[index],
                         isSelected: selectedIndex == index,
                         isCorrect: index == correctIndex,
@@ -166,7 +166,7 @@ struct PremiumQuizView: View {
 
 // MARK: - Option Row
 
-struct OptionRow: View {
+struct PremiumOptionRow: View {
     let text: String
     let isSelected: Bool
     let isCorrect: Bool

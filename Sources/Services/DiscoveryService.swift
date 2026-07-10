@@ -29,18 +29,12 @@ class DiscoveryService: ObservableObject {
         error = nil
         
         do {
-            myDiscoveries = try await apiClient.fetchMyDiscoveries()
+            let response = try await apiClient.fetchMyDiscoveries()
+            myDiscoveries = response.discoveries
             Log.discover.info("Loaded \(self.myDiscoveries.count) my discoveries from backend")
         } catch {
             Log.discover.error("Failed to load my discoveries: \(error.localizedDescription)")
             self.error = error.localizedDescription
-            // Fallback to mock data only if explicitly allowed
-            if AppConfig.allowMockFallbacks {
-                Log.discover.warning("Using mock discoveries as fallback (AppConfig.allowMockFallbacks = true)")
-                loadMockDiscoveries()
-            } else {
-                 self.error = error.localizedDescription
-            }
         }
         
         isLoading = false
@@ -48,7 +42,8 @@ class DiscoveryService: ObservableObject {
     
     func loadSavedDiscoveries() async {
         do {
-            savedDiscoveries = try await apiClient.fetchSavedDiscoveries()
+            let response = try await apiClient.fetchSavedDiscoveries()
+            savedDiscoveries = response.discoveries
             Log.discover.info("Loaded \(self.savedDiscoveries.count) saved discoveries from backend")
         } catch {
             Log.discover.error("Failed to load saved discoveries: \(error.localizedDescription)")
@@ -87,9 +82,9 @@ class DiscoveryService: ObservableObject {
     
     // MARK: - Save/Unsave Discovery
     
-    func saveDiscovery(discoveryId: String) async throws {
+    func saveDiscovery(discoveryId: Int) async throws {
         do {
-            try await apiClient.saveDiscovery(discoveryId: discoveryId)
+            try await apiClient.saveDiscovery(discoveryId: String(discoveryId))
             await loadSavedDiscoveries()
             Log.discover.info("Discovery saved")
         } catch {
@@ -98,9 +93,9 @@ class DiscoveryService: ObservableObject {
         }
     }
     
-    func unsaveDiscovery(discoveryId: String) async throws {
+    func unsaveDiscovery(discoveryId: Int) async throws {
         do {
-            try await apiClient.unsaveDiscovery(discoveryId: discoveryId)
+            try await apiClient.unsaveDiscovery(discoveryId: String(discoveryId))
             savedDiscoveries.removeAll { $0.id == discoveryId }
             Log.discover.info("Discovery unsaved")
         } catch {
@@ -111,9 +106,9 @@ class DiscoveryService: ObservableObject {
     
     // MARK: - Social Interactions
     
-    func likeDiscovery(discoveryId: String) async throws {
-        // Assume discoveryId maps to a Post ID
-        try await apiClient.likePost(id: discoveryId)
+    func likeDiscovery(discoveryId: Int) async throws {
+        // Assume discoveryId maps to a Post ID (backend might expect String or Int, request() handles both)
+        _ = try await apiClient.likePost(id: String(discoveryId))
         
         // Optimistically update local state if present
         if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {
@@ -126,8 +121,8 @@ class DiscoveryService: ObservableObject {
         Log.discover.info("Discovery liked: \(discoveryId)")
     }
     
-    func unlikeDiscovery(discoveryId: String) async throws {
-        try await apiClient.unlikePost(id: discoveryId)
+    func unlikeDiscovery(discoveryId: Int) async throws {
+        try await apiClient.unlikePost(id: String(discoveryId))
         
         if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {
             var item = myDiscoveries[index]
@@ -139,12 +134,12 @@ class DiscoveryService: ObservableObject {
         Log.discover.info("Discovery unliked: \(discoveryId)")
     }
     
-    func fetchComments(discoveryId: String) async throws -> [Comment] {
-        return try await apiClient.fetchComments(postId: discoveryId)
+    func fetchComments(discoveryId: Int) async throws -> [Comment] {
+        return try await apiClient.fetchComments(postId: String(discoveryId))
     }
     
-    func postComment(discoveryId: String, content: String) async throws -> Comment {
-        let comment = try await apiClient.createComment(postId: discoveryId, content: content)
+    func postComment(discoveryId: Int, content: String) async throws -> Comment {
+        let comment = try await apiClient.createComment(postId: String(discoveryId), content: content)
         Log.discover.info("Comment posted on: \(discoveryId)")
         return comment
     }
@@ -182,8 +177,8 @@ class DiscoveryService: ObservableObject {
     private func loadMockDiscoveries() {
         self.myDiscoveries = [
             Discovery(
-                id: UUID().uuidString,
-                userId: "currentUser",
+                id: 1,
+                userId: 1,
                 userName: "You",
                 title: "My First Reel",
                 description: nil,
@@ -196,8 +191,8 @@ class DiscoveryService: ObservableObject {
                 createdAt: Date()
             ),
             Discovery(
-                id: UUID().uuidString,
-                userId: "currentUser",
+                id: 2,
+                userId: 1,
                 userName: "You",
                 title: "Physics Experiment",
                 description: nil,
@@ -210,8 +205,8 @@ class DiscoveryService: ObservableObject {
                 createdAt: Date()
             ),
             Discovery(
-                id: UUID().uuidString,
-                userId: "currentUser",
+                id: 3,
+                userId: 1,
                 userName: "You",
                 title: "Campus Tour",
                 description: nil,
@@ -227,8 +222,8 @@ class DiscoveryService: ObservableObject {
         
         self.savedDiscoveries = [
             Discovery(
-                id: UUID().uuidString,
-                userId: "otherUser",
+                id: 4,
+                userId: 2,
                 userName: "Jane",
                 title: "Math Hacks",
                 description: nil,
@@ -241,8 +236,8 @@ class DiscoveryService: ObservableObject {
                 createdAt: Date()
             ),
             Discovery(
-                id: UUID().uuidString,
-                userId: "otherUser2",
+                id: 5,
+                userId: 3,
                 userName: "Bob",
                 title: "Study Tips",
                 description: nil,

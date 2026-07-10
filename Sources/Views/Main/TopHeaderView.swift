@@ -57,18 +57,20 @@ private struct VisualEffectBlur: View {
     }
 }
 
-#Preview {
-    ZStack {
-        LinearGradient(
-            colors: [Color(hex: "0F172A"), Color(hex: "1E293B")],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+struct TopHeaderView_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(hex: "0F172A"), Color(hex: "1E293B")],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-        VStack(spacing: 0) {
-            TopHeaderView(title: "Focus", onProfileTap: {})
-            Spacer()
+            VStack(spacing: 0) {
+                TopHeaderView(title: "Focus", onProfileTap: {})
+                Spacer()
+            }
         }
     }
 }

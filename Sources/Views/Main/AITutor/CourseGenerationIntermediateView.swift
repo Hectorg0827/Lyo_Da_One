@@ -126,7 +126,7 @@ struct CourseGenerationIntermediateView: View {
                 let course = try await courseService.generateCourse(
                     topic: topic,
                     level: level,
-                    outcomes: objectives.isEmpty ? nil : objectives,
+                    outcomes: objectives.isEmpty ? [] : objectives,
                     teachingStyle: "interactive"
                 )
                 

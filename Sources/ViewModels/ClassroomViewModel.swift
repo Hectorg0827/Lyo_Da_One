@@ -19,9 +19,6 @@ class ClassroomViewModel: NSObject, ObservableObject {
     @Published var reteachContent: ReteachContent?
     @Published var errorMessage: String?
     
-    // A2UI Migration
-    @Published var a2uiComponent: A2UIComponent?
-    
     // TTS State
     @Published var isNarrating: Bool = false
     @Published var narrationProgress: Double = 0.0
@@ -72,38 +69,10 @@ class ClassroomViewModel: NSObject, ObservableObject {
                 startNarration()
             }
             
-            // Try loading A2UI version
-            await loadA2UISession(sessionId: sessionId)
-            
         } catch {
             Log.classroom.error("Failed to load session: \(error.localizedDescription)")
             errorMessage = "Failed to load lesson. Please check your internet connection and try again."
             state = .error
-        }
-    }
-    
-    func loadA2UISession(sessionId: String) async {
-        // Attempt to fetch dynamic server-driven UI from backend
-        Log.classroom.info("🎨 Fetching A2UI session for: \(sessionId)")
-        
-        do {
-            // Backend returns { screen_id, component: A2UIComponent, metadata: {...} }
-            struct A2UIScreenResponse: Codable {
-                let screen_id: String
-                let component: A2UIComponent
-            }
-            
-            let response: A2UIScreenResponse = try await NetworkClient.shared.request(
-                Endpoints.A2UI.classroomScreen(sessionId: sessionId)
-            )
-            
-            withAnimation(.easeIn(duration: 0.3)) {
-                self.a2uiComponent = response.component
-            }
-            Log.classroom.info("✅ A2UI classroom screen loaded — \(response.screen_id)")
-        } catch {
-            // Non-fatal: ClassroomView falls back to ModuleCardView slides
-            Log.classroom.info("ℹ️ A2UI screen not available — using slide view (\(error.localizedDescription))")
         }
     }
     

@@ -20,7 +20,10 @@ class Lyo2ChatService: ObservableObject {
     func sendMessageStreaming(
         text: String,
         media: [Lyo2MediaRef]? = nil,
+        attachmentIds: [String]? = nil,
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
+        forcedIntent: String? = nil,
+        stateSummary: [String: AnyCodable] = [:],
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         onEvent: @escaping (Lyo2StreamEvent) -> Void
     ) {
@@ -37,7 +40,10 @@ class Lyo2ChatService: ObservableObject {
             userId: userId,
             text: text,
             media: media,
+            attachmentIds: attachmentIds,
             activeArtifact: activeArtifact,
+            forcedIntent: forcedIntent,
+            stateSummary: stateSummary,
             conversationHistory: conversationHistory
         )
         
@@ -93,7 +99,10 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
     private var buffer = Data()
     private var callback: ((Lyo2StreamEvent) -> Void)?
     
-    /// Tracks whether the stream delivered any real content events (answer, artifact, clarification, a2ui, etc.).
+    /// Last SSE event ID received — used for reconnection replay
+    private(set) var lastEventId: String?
+    
+    /// Tracks whether the stream delivered any real content events (answer, artifact, clarification, etc.).
     /// When the stream completes with zero content events, we surface an error instead of a silent blank.
     private var didReceiveContentEvent = false
     
@@ -106,7 +115,7 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
     /// "invalid reuse after initialization failure" crashes.
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForRequest = 200 // Increased from 60 to allow for complex planning/execution
         config.httpAdditionalHeaders = [
             "Accept": "text/event-stream",
             "Cache-Control": "no-cache"
@@ -155,6 +164,14 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
             request.setValue(
                 Bundle.main.bundleIdentifier ?? "com.lyo.app",
                 forHTTPHeaderField: "X-Bundle-Id"
+            )
+            request.setValue(
+                ClientCapabilities.shared.versionHeader,
+                forHTTPHeaderField: "X-Client-Version"
+            )
+            request.setValue(
+                ClientCapabilities.shared.componentsHeader,
+                forHTTPHeaderField: "X-Client-Capabilities"
             )
             if let tenantId {
                 request.setValue(tenantId, forHTTPHeaderField: "X-Tenant-Id")
@@ -258,6 +275,9 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
         for line in lines {
             if line.hasPrefix("data: ") {
                 data = String(line.dropFirst(6))
+            } else if line.hasPrefix("id: ") {
+                // Track event ID for potential reconnection replay
+                lastEventId = String(line.dropFirst(4))
             }
         }
         
@@ -328,6 +348,7 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 }
                 
             case "actions":
+                // v1 backward compat — deployed backend still emits this
                 didReceiveContentEvent = true
                 if let blocksArray = json["blocks"] as? [[String: Any]] {
                     var blocks: [Lyo2UIBlock] = []
@@ -347,13 +368,13 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 callback?(.error(message: msg))
                 
             case "open_classroom":
-                // Backend explicitly signals course creation
+                // v1 backward compat — deployed backend still emits this
                 didReceiveContentEvent = true
                 if let blockDict = json["block"],
                    let blockData = try? JSONSerialization.data(withJSONObject: blockDict) {
                     do {
                         let block = try JSONDecoder().decode(Lyo2UIBlock.self, from: blockData)
-                        Log.ai.info("Lyo2 SSE: open_classroom event received")
+                        Log.ai.info("Lyo2 SSE: open_classroom event received (v1 compat)")
                         callback?(.openClassroom(block: block))
                     } catch {
                         Log.ai.error("Lyo2 Decoding Error (OpenClassroom): \(error)")
@@ -361,16 +382,62 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 }
                 
             case "a2ui":
-                // Backend sends a full A2UI component tree
+                // Stale event type — log and ignore
+                Log.ai.info("🎨 Lyo2 SSE: stale event type received — ignoring")
+
+            // ── v2 events (LyoResponse envelope — primary path) ──────
+
+            case "lyo_ui":
                 didReceiveContentEvent = true
-                if let blockDict = json["block"],
-                   let blockData = try? JSONSerialization.data(withJSONObject: blockDict) {
+                if let responseDict = json["response"],
+                   let responseData = try? JSONSerialization.data(withJSONObject: responseDict) {
                     do {
-                        let block = try JSONDecoder().decode(Lyo2UIBlock.self, from: blockData)
-                        Log.ai.info("🎨 Lyo2 SSE: a2ui event received")
-                        callback?(.a2ui(block: block))
+                        let response = try JSONDecoder().decode(LyoResponse.self, from: responseData)
+                        Log.ai.info("🎨 Lyo2 SSE: lyo_ui v2 event received")
+                        callback?(.lyoUI(response: response))
                     } catch {
-                        Log.ai.error("Lyo2 Decoding Error (A2UI): \(error)")
+                        Log.ai.error("Lyo2 Decoding Error (lyo_ui): \(error)")
+                    }
+                }
+
+            case "lyo_command":
+                didReceiveContentEvent = true
+                if let responseDict = json["response"],
+                   let responseData = try? JSONSerialization.data(withJSONObject: responseDict) {
+                    do {
+                        let response = try JSONDecoder().decode(LyoResponse.self, from: responseData)
+                        Log.ai.info("🎨 Lyo2 SSE: lyo_command v2 event received")
+                        callback?(.lyoCommand(response: response))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (lyo_command): \(error)")
+                    }
+                }
+
+            case "lyo_suggestions":
+                didReceiveContentEvent = true
+                if let responseDict = json["response"],
+                   let responseData = try? JSONSerialization.data(withJSONObject: responseDict) {
+                    do {
+                        let response = try JSONDecoder().decode(LyoResponse.self, from: responseData)
+                        Log.ai.info("🎨 Lyo2 SSE: lyo_suggestions v2 event received")
+                        callback?(.lyoSuggestions(response: response))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (lyo_suggestions): \(error)")
+                    }
+                }
+
+            case "smart_blocks":
+                didReceiveContentEvent = true
+                if let blocksArray = json["blocks"],
+                   let blocksData = try? JSONSerialization.data(withJSONObject: blocksArray) {
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    do {
+                        let blocks = try decoder.decode([SmartBlock].self, from: blocksData)
+                        Log.ai.info("🧱 Lyo2 SSE: decoded \(blocks.count) SmartBlocks")
+                        callback?(.smartBlocks(blocks: blocks))
+                    } catch {
+                        Log.ai.error("Lyo2 Decoding Error (smart_blocks): \(error)")
                     }
                 }
                 

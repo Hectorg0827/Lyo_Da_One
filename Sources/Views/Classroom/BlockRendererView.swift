@@ -2,13 +2,17 @@ import SwiftUI
 import AVKit
 import Charts
 
+#if canImport(LaTeXSwiftUI)
+import LaTeXSwiftUI
+#endif
+
 // MARK: - Main Block Renderer
 
-/// Renders ANY LessonBlock type dynamically
+/// Renders ANY LiveLessonBlock type dynamically
 /// This is the SINGLE entry point for all block rendering in the classroom
 /// Production-ready: handles ALL 30+ block types with graceful fallbacks
 struct BlockRendererView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     // Callbacks for interactive blocks (to be wired to ViewModel)
     var onQuizAnswer: ((Int) -> Void)?
@@ -115,11 +119,74 @@ struct BlockRendererView: View {
             case .checkpoint:
                 CheckpointBlockView(block: block, onSave: { onAction?("save_progress") })
                 
+            // MARK: - Cinematic Blocks
+            case .hook:
+                HookView(
+                    title: block.title ?? "",
+                    subtitle: block.subtitle,
+                    lyoCommentary: block.lyoCommentary
+                )
+                
+            case .revelation:
+                RevelationView(
+                    insight: block.content ?? block.title ?? "",
+                    context: block.subtitle
+                )
+                
+            case .celebration:
+                CelebrationView(
+                    title: block.title ?? "Achievement Unlocked!",
+                    message: block.safeContent
+                )
+                
             case .unknown:
                 UnknownBlockView(block: block)
             }
         }
         .padding(.horizontal)
+        .overlay(alignment: .topTrailing) {
+            // Meta-commentary overlay for standard blocks (Cinematic blocks handle it internally)
+            if let lyo = block.lyoCommentary, block.type != .hook {
+                LyoBadgeView(text: lyo)
+                    .padding(.top, -10)
+                    .padding(.trailing, 10)
+            }
+        }
+        .onAppear {
+            // Auto-narration for Lyo persona beats (Phase 22)
+            if let lyo = block.lyoCommentary {
+                LyoVoiceService.shared.narrate(lyo, mood: block.mood)
+            }
+        }
+    }
+}
+
+// MARK: - Lyo Components
+
+struct LyoBadgeView: View {
+    let text: String
+    
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: .purple.opacity(0.3), radius: 4)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            )
     }
 }
 
@@ -163,7 +230,7 @@ struct HeadingBlockView: View {
 }
 
 struct CalloutBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -297,7 +364,7 @@ struct CodeBlockView: View {
 }
 
 struct QuizMCQBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onAnswer: ((Int) -> Void)?
     
     var body: some View {
@@ -317,7 +384,7 @@ struct QuizMCQBlockView: View {
 // MARK: - Summary Block
 
 struct SummaryBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -493,7 +560,7 @@ struct AnimationBlockView: View {
 // MARK: - Quiz True/False Block
 
 struct QuizTrueFalseBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onAnswer: ((Bool) -> Void)?
     
     @State private var selectedAnswer: Bool?
@@ -566,7 +633,7 @@ struct QuizTrueFalseBlockView: View {
 // MARK: - Quiz Fill Blank Block
 
 struct QuizFillBlankBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onSubmit: ((String) -> Void)?
     
     @State private var answer = ""
@@ -621,7 +688,7 @@ struct QuizFillBlankBlockView: View {
 // MARK: - Text Input Block
 
 struct TextInputBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onSubmit: ((String) -> Void)?
     
     @State private var text = ""
@@ -666,7 +733,7 @@ struct TextInputBlockView: View {
 // MARK: - Poll Block
 
 struct PollBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onVote: ((Int) -> Void)?
     
     @State private var selectedIndex: Int?
@@ -715,13 +782,13 @@ struct PollBlockView: View {
 // MARK: - Code Playground Block
 
 struct CodePlaygroundBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onRun: (() -> Void)?
     
     @State private var code: String
     @State private var output = ""
     
-    init(block: LessonBlock, onRun: (() -> Void)?) {
+    init(block: LiveLessonBlock, onRun: (() -> Void)?) {
         self.block = block
         self.onRun = onRun
         self._code = State(initialValue: block.code ?? "")
@@ -817,51 +884,95 @@ struct TerminalBlockView: View {
 // MARK: - Chart Block
 
 struct ChartBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let title = block.title {
-                Text(title)
-                    .font(.headline)
-            }
+        VStack(alignment: .leading, spacing: 16) {
+            headerSection
             
-            if #available(iOS 16.0, *), let chartData = block.chartData {
-                // Use Swift Charts
-                Chart {
-                    if let datasets = chartData.datasets {
-                        ForEach(0..<(datasets.first?.data.count ?? 0), id: \.self) { index in
-                            let labels = chartData.labels ?? []
-                            let label = index < labels.count ? labels[index] : "Item \(index)"
-                            let value = datasets.first?.data[index] ?? 0
-                            
-                            BarMark(
-                                x: .value("Category", label),
-                                y: .value("Value", value)
-                            )
-                            .foregroundStyle(Color.blue.gradient)
-                        }
-                    }
-                }
-                .frame(height: 200)
-                .chartXAxis {
-                    AxisMarks(values: .automatic)
-                }
+            if #available(iOS 16.0, *) {
+                chartContainer
             } else {
-                // Fallback chart placeholder
                 ChartPlaceholderView(block: block)
             }
+            
+            if let footer = block.caption {
+                Text(footer)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 10)
-        .padding(.vertical, 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
+    }
+    
+    private var headerSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                if let title = block.title {
+                    Text(title)
+                        .font(.system(size: 16, weight: .bold))
+                }
+                if let subtitle = block.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "chart.bar.fill")
+                .foregroundColor(.blue.opacity(0.8))
+        }
+    }
+    
+    @available(iOS 16.0, *)
+    private var chartContainer: some View {
+        chartView
+    }
+    
+    @available(iOS 16.0, *)
+    private var chartView: some View {
+        let flatData = buildFlatChartData()
+        return Chart(flatData, id: \.id) { item in
+            BarMark(
+                x: .value("Category", item.label),
+                y: .value("Value", item.value)
+            )
+            .foregroundStyle(by: .value("Dataset", item.series))
+            .cornerRadius(4)
+        }
+        .frame(height: 220)
+    }
+    
+    private struct FlatChartItem: Identifiable {
+        let id: String
+        let label: String
+        let value: Double
+        let series: String
+    }
+    
+    private func buildFlatChartData() -> [FlatChartItem] {
+        guard let chartData = block.chartData, let datasets = chartData.datasets else { return [] }
+        let labels = chartData.labels ?? []
+        var items: [FlatChartItem] = []
+        for dataset in datasets {
+            let series = dataset.label ?? "Default"
+            for (index, value) in dataset.data.enumerated() {
+                let label = index < labels.count ? labels[index] : "\(index)"
+                items.append(FlatChartItem(id: "\(series)-\(index)", label: label, value: value, series: series))
+            }
+        }
+        return items
     }
 }
 
 struct ChartPlaceholderView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack {
@@ -882,7 +993,7 @@ struct ChartPlaceholderView: View {
 // MARK: - Diagram Block
 
 struct DiagramBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -982,7 +1093,16 @@ struct MathBlockView: View {
                     .foregroundColor(.orange)
             }
             
-            // LaTeX rendering placeholder - could use MathJax WebView
+            #if canImport(LaTeXSwiftUI)
+            LaTeX(latex)
+                .parsingMode(.all)
+                .font(.system(size: 16))
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .background(Color.orange.opacity(0.05))
+                .cornerRadius(8)
+            #else
+            // LaTeX rendering placeholder - requires LaTeXSwiftUI package
             Text(latex)
                 .font(.system(.body, design: .monospaced))
                 .italic()
@@ -990,6 +1110,7 @@ struct MathBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .background(Color.orange.opacity(0.05))
                 .cornerRadius(8)
+            #endif
         }
         .padding()
         .background(Color(.systemBackground))
@@ -1064,7 +1185,7 @@ struct FlashcardDeckBlockView: View {
 // MARK: - Timeline Block
 
 struct TimelineBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1108,7 +1229,7 @@ struct TimelineBlockView: View {
 // MARK: - Comparison Block
 
 struct ComparisonBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1160,7 +1281,7 @@ struct ComparisonBlockView: View {
 // MARK: - Step by Step Block
 
 struct StepByStepBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     @State private var currentStep = 0
     
@@ -1227,7 +1348,7 @@ struct StepByStepBlockView: View {
 // MARK: - Progress Block
 
 struct ProgressBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1265,7 +1386,7 @@ struct ProgressBlockView: View {
 // MARK: - Checkpoint Block
 
 struct CheckpointBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     var onSave: (() -> Void)?
     
     @State private var saved = false
@@ -1303,10 +1424,94 @@ struct CheckpointBlockView: View {
     }
 }
 
+// MARK: - Cinematic Blocks
+
+struct HookView: View {
+    let title: String
+    var subtitle: String?
+    var lyoCommentary: String?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(title)
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let lyo = lyoCommentary {
+                Text(lyo)
+                    .font(.caption)
+                    .italic()
+                    .foregroundStyle(.purple)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.vertical, 8)
+    }
+}
+
+struct RevelationView: View {
+    let insight: String
+    var context: String?
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lightbulb.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.yellow)
+            Text(insight)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+            if let context {
+                Text(context)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.vertical, 8)
+    }
+}
+
+struct CelebrationView: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "party.popper.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.orange)
+            Text(title)
+                .font(.title3.bold())
+            if !message.isEmpty {
+                Text(message)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.vertical, 8)
+    }
+}
+
 // MARK: - Unknown Block (Graceful Fallback)
 
 struct UnknownBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

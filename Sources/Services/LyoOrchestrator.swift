@@ -1,6 +1,6 @@
+import Combine
 import Foundation
 import SwiftUI
-import Combine
 import os
 
 // MARK: - Core Models
@@ -68,10 +68,10 @@ struct LyoActions: Codable {
 }
 
 struct ContentDiscoveryAction: Codable {
-    let discoverClips: [String] // Topic keywords to search
-    let communities: [String]   // Community types to suggest
-    let suggestedPosts: [PostTemplate] // Templates for sharing
-    let relatedCourses: [String] // Course recommendations
+    let discoverClips: [String]  // Topic keywords to search
+    let communities: [String]  // Community types to suggest
+    let suggestedPosts: [PostTemplate]  // Templates for sharing
+    let relatedCourses: [String]  // Course recommendations
 
     init(
         discoverClips: [String] = [],
@@ -96,7 +96,7 @@ struct CourseCreationAction: Codable {
 struct QuickExplainerAction: Codable {
     let topic: String
     let keyPoints: [String]
-    let estimatedReadTime: Int // minutes
+    let estimatedReadTime: Int  // minutes
 }
 
 struct QuizGenerationAction: Codable {
@@ -140,7 +140,7 @@ struct ContextualHint: Codable, Identifiable {
     let description: String
     let icon: String
     let action: String?
-    let priority: Int // 1-5, 1 being highest
+    let priority: Int  // 1-5, 1 being highest
 }
 
 struct LearningIntent: Codable {
@@ -192,7 +192,6 @@ class LyoOrchestrator: ObservableObject {
     // Added from extension (fixing stored property error)
     @Published var detectedIntents: [LearningIntent] = []
 
-
     // MARK: - Private Services
     private let aiService = BackendAIService.shared
     private let userDefaults = UserDefaults.standard
@@ -232,7 +231,8 @@ class LyoOrchestrator: ObservableObject {
             let learningLevel = detectUserExperience(message)
 
             // 2. Build enhanced context for AI
-            let enhancedContext = buildEnhancedContext(message: message, learningLevel: learningLevel)
+            let enhancedContext = buildEnhancedContext(
+                message: message, learningLevel: learningLevel)
 
             // 3. Send to AI for intent detection and response
             let aiResponse = try await aiService.studySession(
@@ -247,7 +247,6 @@ class LyoOrchestrator: ObservableObject {
                 learningLevel: learningLevel,
                 context: enhancedContext
             )
-
 
             // 5. Execute orchestrated actions
             await executeOrchestration(orchestratedResponse)
@@ -269,17 +268,17 @@ class LyoOrchestrator: ObservableObject {
         let lowercaseMessage = message.lowercased()
 
         // Advanced indicators
-        if lowercaseMessage.contains("optimize") ||
-           lowercaseMessage.contains("algorithm") ||
-           lowercaseMessage.contains("architecture") ||
-           lowercaseMessage.contains("best practices") {
+        if lowercaseMessage.contains("optimize") || lowercaseMessage.contains("algorithm")
+            || lowercaseMessage.contains("architecture")
+            || lowercaseMessage.contains("best practices")
+        {
             return .advanced
         }
 
         // Intermediate indicators
-        if lowercaseMessage.contains("explain") ||
-           lowercaseMessage.contains("how does") ||
-           lowercaseMessage.contains("why") {
+        if lowercaseMessage.contains("explain") || lowercaseMessage.contains("how does")
+            || lowercaseMessage.contains("why")
+        {
             return .intermediate
         }
 
@@ -287,14 +286,15 @@ class LyoOrchestrator: ObservableObject {
         return .beginner
     }
 
-    private func buildEnhancedContext(message: String, learningLevel: LearningLevel) -> [String: String] {
+    private func buildEnhancedContext(message: String, learningLevel: LearningLevel) -> [String:
+        String]
+    {
         var context: [String: String] = [
             "mode": "orchestrator",
             "user_level": learningLevel.rawValue,
             "interaction_count": String(interactionCount),
-            "show_hints": shouldShowHints().description
+            "show_hints": shouldShowHints().description,
         ]
-
 
         if let activeContext = activeContext {
             context["topic"] = activeContext.topic
@@ -322,11 +322,11 @@ class LyoOrchestrator: ObservableObject {
         return createFallbackResponse(response, learningLevel: learningLevel, context: context)
     }
 
-
     private func parseJSONResponse(_ response: String) -> LyoOrchestratedResponse? {
         // Look for JSON in response
         guard let jsonStart = response.firstIndex(of: "{"),
-              let jsonEnd = response.lastIndex(of: "}") else {
+            let jsonEnd = response.lastIndex(of: "}")
+        else {
             return nil
         }
 
@@ -363,7 +363,6 @@ class LyoOrchestrator: ObservableObject {
         )
     }
 
-
     private func enhanceWithUXFeatures(
         _ response: LyoOrchestratedResponse,
         learningLevel: LearningLevel
@@ -385,10 +384,11 @@ class LyoOrchestrator: ObservableObject {
         )
     }
 
-
     // MARK: - Action Inference
 
-    private func inferActionsFromResponse(_ response: String, learningLevel: LearningLevel) -> LyoActions {
+    private func inferActionsFromResponse(_ response: String, learningLevel: LearningLevel)
+        -> LyoActions
+    {
         var actions = LyoActions()
         let lowercaseResponse = response.lowercased()
 
@@ -436,7 +436,10 @@ class LyoOrchestrator: ObservableObject {
         let words = response.components(separatedBy: .whitespacesAndNewlines)
 
         // Look for common learning topics
-        let topics = ["calculus", "physics", "chemistry", "biology", "history", "programming", "swift", "python"]
+        let topics = [
+            "calculus", "physics", "chemistry", "biology", "history", "programming", "swift",
+            "python",
+        ]
 
         for word in words {
             if topics.contains(word.lowercased()) {
@@ -463,40 +466,44 @@ class LyoOrchestrator: ObservableObject {
 
         // Interaction-based hints
         if interactionCount <= 3 {
-            hints.append(ContextualHint(
-                title: "Voice Input",
-                description: "Hold the Lyo button to speak instead of typing",
-                icon: "mic.fill",
-                action: "enable_voice",
-                priority: 1
-            ))
+            hints.append(
+                ContextualHint(
+                    title: "Voice Input",
+                    description: "Hold the Lyo button to speak instead of typing",
+                    icon: "mic.fill",
+                    action: "enable_voice",
+                    priority: 1
+                ))
         }
 
         if interactionCount <= 5 && response.contains("course") {
-            hints.append(ContextualHint(
-                title: "Course Creation",
-                description: "I can create complete courses for any topic you want to learn",
-                icon: "book.fill",
-                action: "show_course_features",
-                priority: 2
-            ))
+            hints.append(
+                ContextualHint(
+                    title: "Course Creation",
+                    description: "I can create complete courses for any topic you want to learn",
+                    icon: "book.fill",
+                    action: "show_course_features",
+                    priority: 2
+                ))
         }
 
         if interactionCount <= 7 && response.contains("explain") {
-            hints.append(ContextualHint(
-                title: "Quick Explainers",
-                description: "Ask me for quick explanations when you need fast answers",
-                icon: "lightbulb.fill",
-                action: "show_explainer_examples",
-                priority: 3
-            ))
+            hints.append(
+                ContextualHint(
+                    title: "Quick Explainers",
+                    description: "Ask me for quick explanations when you need fast answers",
+                    icon: "lightbulb.fill",
+                    action: "show_explainer_examples",
+                    priority: 3
+                ))
         }
 
         return hints.sorted { $0.priority < $1.priority }
     }
 
     private func shouldShowHints() -> Bool {
-        return interactionCount < 10 && (userProficiency == .newUser || userProficiency == .developing)
+        return interactionCount < 10
+            && (userProficiency == .newUser || userProficiency == .developing)
     }
 
     private func getUnlockedFeatures(_ learningLevel: LearningLevel) -> [String] {
@@ -518,7 +525,6 @@ class LyoOrchestrator: ObservableObject {
         if learningLevel == .advanced {
             features.append(contentsOf: ["api_access", "custom_prompts"])
         }
-
 
         return features
     }
@@ -569,7 +575,7 @@ class LyoOrchestrator: ObservableObject {
             userInfo: [
                 "topic": action.topic,
                 "level": action.level,
-                "outline": action.outline
+                "outline": action.outline,
             ]
         )
     }
@@ -579,21 +585,23 @@ class LyoOrchestrator: ObservableObject {
         var suggestions: [ContentSuggestion] = []
 
         for clip in action.discoverClips {
-            suggestions.append(ContentSuggestion(
-                type: .clip,
-                topic: clip,
-                title: "Videos about \(clip)",
-                priority: .high
-            ))
+            suggestions.append(
+                ContentSuggestion(
+                    type: .clip,
+                    topic: clip,
+                    title: "Videos about \(clip)",
+                    priority: .high
+                ))
         }
 
         for community in action.communities {
-            suggestions.append(ContentSuggestion(
-                type: .community,
-                topic: community,
-                title: community,
-                priority: .medium
-            ))
+            suggestions.append(
+                ContentSuggestion(
+                    type: .community,
+                    topic: community,
+                    title: community,
+                    priority: .medium
+                ))
         }
 
         suggestedContent = suggestions
@@ -603,7 +611,7 @@ class LyoOrchestrator: ObservableObject {
         // Add to UI stack - convert StackItem to UIStackItem
         let uiItem = UIStackItem(
             id: item.id,
-            type: .course, // Default type for now
+            type: .course,  // Default type for now
             title: item.title,
             subtitle: item.subtitle,
             updatedAt: Date()
@@ -619,7 +627,7 @@ class LyoOrchestrator: ObservableObject {
             userInfo: [
                 "topic": action.topic,
                 "questionCount": action.questionCount,
-                "difficulty": action.difficulty
+                "difficulty": action.difficulty,
             ]
         )
     }
@@ -648,7 +656,7 @@ class LyoOrchestrator: ObservableObject {
             userInfo: [
                 "destination": action.destination,
                 "context": action.context,
-                "transition": action.transition.rawValue
+                "transition": action.transition.rawValue,
             ]
         )
     }
@@ -668,7 +676,8 @@ class LyoOrchestrator: ObservableObject {
 
         // Generate helpful offline response
         return LyoOrchestratedResponse(
-            primaryResponse: "I'm offline right now, but I can still help! Here's what I know about this topic from my cached knowledge...",
+            primaryResponse:
+                "I'm offline right now, but I can still help! Here's what I know about this topic from my cached knowledge...",
             actions: LyoActions(
                 offlineMode: true,
                 syncWhenOnline: true
@@ -691,8 +700,9 @@ class LyoOrchestrator: ObservableObject {
         let lowercaseMessage = message.lowercased()
 
         for (cachedMessage, response) in cachedResponses {
-            if lowercaseMessage.contains(cachedMessage.lowercased()) ||
-               cachedMessage.lowercased().contains(lowercaseMessage) {
+            if lowercaseMessage.contains(cachedMessage.lowercased())
+                || cachedMessage.lowercased().contains(lowercaseMessage)
+            {
                 return response
             }
         }
@@ -701,7 +711,7 @@ class LyoOrchestrator: ObservableObject {
     }
 
     private func cacheResponse(_ message: String, _ response: LyoOrchestratedResponse) {
-        let key = String(message.prefix(50)) // Cache key
+        let key = String(message.prefix(50))  // Cache key
         cachedResponses[key] = response
 
         // Limit cache size
@@ -733,13 +743,14 @@ class LyoOrchestrator: ObservableObject {
             suggestions.append("Focus on practical applications")
         }
 
-        return Array(suggestions.prefix(3)) // Limit to 3 suggestions
+        return Array(suggestions.prefix(3))  // Limit to 3 suggestions
     }
 
     private func inferEmotionFromResponse(_ response: String) -> LyoEmotion {
         let lowercaseResponse = response.lowercased()
 
-        if lowercaseResponse.contains("congratulations") || lowercaseResponse.contains("great job") {
+        if lowercaseResponse.contains("congratulations") || lowercaseResponse.contains("great job")
+        {
             return .proud
         }
 
@@ -760,7 +771,8 @@ class LyoOrchestrator: ObservableObject {
 
     private func createErrorResponse(error: Error) -> LyoOrchestratedResponse {
         return LyoOrchestratedResponse(
-            primaryResponse: "Oops! I encountered an issue: \(error.localizedDescription). Let me try to help in a different way!",
+            primaryResponse:
+                "Oops! I encountered an issue: \(error.localizedDescription). Let me try to help in a different way!",
             actions: LyoActions(),
             confidence: 0.5,
             onboardingHints: [
@@ -778,7 +790,8 @@ class LyoOrchestrator: ObservableObject {
 
     private func loadUserProficiency() {
         if let storedProficiency = UserDefaults.standard.string(forKey: "userProficiency"),
-           let proficiency = UserProficiency(rawValue: storedProficiency) {
+            let proficiency = UserProficiency(rawValue: storedProficiency)
+        {
             self.userProficiency = proficiency
         }
 
@@ -865,36 +878,40 @@ extension LyoOrchestrator {
         var newSuggestions: [ContentSuggestion] = []
 
         // Topic-based suggestions
-        newSuggestions.append(ContentSuggestion(
-            type: .course,
-            topic: context.topic,
-            title: "Continue learning \(context.topic)",
-            priority: .high
-        ))
+        newSuggestions.append(
+            ContentSuggestion(
+                type: .course,
+                topic: context.topic,
+                title: "Continue learning \(context.topic)",
+                priority: .high
+            ))
 
         // Level-appropriate suggestions
         switch context.learningLevel {
         case .beginner:
-            newSuggestions.append(ContentSuggestion(
-                type: .course,
-                topic: context.topic,
-                title: "Fundamentals of \(context.topic)",
-                priority: .medium
-            ))
+            newSuggestions.append(
+                ContentSuggestion(
+                    type: .course,
+                    topic: context.topic,
+                    title: "Fundamentals of \(context.topic)",
+                    priority: .medium
+                ))
         case .intermediate:
-            newSuggestions.append(ContentSuggestion(
-                type: .clip,
-                topic: context.topic,
-                title: "Advanced \(context.topic) techniques",
-                priority: .medium
-            ))
+            newSuggestions.append(
+                ContentSuggestion(
+                    type: .clip,
+                    topic: context.topic,
+                    title: "Advanced \(context.topic) techniques",
+                    priority: .medium
+                ))
         case .advanced:
-            newSuggestions.append(ContentSuggestion(
-                type: .quiz,
-                topic: context.topic,
-                title: "Master-level \(context.topic) challenges",
-                priority: .medium
-            ))
+            newSuggestions.append(
+                ContentSuggestion(
+                    type: .quiz,
+                    topic: context.topic,
+                    title: "Master-level \(context.topic) challenges",
+                    priority: .medium
+                ))
         }
 
         // Update suggestions
@@ -908,14 +925,15 @@ extension LyoOrchestrator {
         DispatchQueue.main.async {
             self.suggestedContent.append(suggestion)
             // Keep only the most relevant suggestions
-            self.suggestedContent = Array(self.suggestedContent.sorted { 
-                switch ($0.priority, $1.priority) {
-                case (.high, .high), (.medium, .medium), (.low, .low): return false
-                case (.high, _): return true
-                case (.medium, .low): return true
-                default: return false
-                }
-            }.prefix(10))
+            self.suggestedContent = Array(
+                self.suggestedContent.sorted {
+                    switch ($0.priority, $1.priority) {
+                    case (.high, .high), (.medium, .medium), (.low, .low): return false
+                    case (.high, _): return true
+                    case (.medium, .low): return true
+                    default: return false
+                    }
+                }.prefix(10))
         }
     }
 
@@ -964,12 +982,13 @@ extension LyoOrchestratedResponse {
                 offlineMode: true,
                 syncWhenOnline: true
             ),
-            confidence: self.confidence * 0.8, // Lower confidence for offline
+            confidence: self.confidence * 0.8,  // Lower confidence for offline
             suggestedFollowUps: self.suggestedFollowUps,
             onboardingHints: self.onboardingHints + [
                 ContextualHint(
                     title: "Offline Mode",
-                    description: "Limited features available. Full functionality returns when online.",
+                    description:
+                        "Limited features available. Full functionality returns when online.",
                     icon: "wifi.slash",
                     action: nil,
                     priority: 1

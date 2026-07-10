@@ -126,6 +126,16 @@ final class MessageIntentClassifier {
         "gotta go", "talk later", "peace", "adios"
     ]
     
+    private let smallTalkPatterns: Set<String> = [
+        "how are you", "how r you", "how are u", "how r u",
+        "how's it going", "hows it going", "how is it going",
+        "how do you do", "what's new", "whats new",
+        "what's good", "whats good", "you good", "are you good",
+        "how have you been", "how have u been",
+        "are you okay", "are you ok", "you okay", "you ok",
+        "what are you", "who are you", "what can you do"
+    ]
+    
     private let acknowledgmentPatterns: Set<String> = [
         "ok", "okay", "thanks", "thank you", "got it", "understood",
         "makes sense", "cool", "nice", "great", "awesome", "perfect",
@@ -217,7 +227,18 @@ final class MessageIntentClassifier {
             }
         }
         
-        // 3. Frustration detection (standard — needs sentiment agent)
+        // 3. Small talk / social queries (fast — no need for deep pipeline)
+        if matchesAny(lowered, in: smallTalkPatterns) {
+            return ClassifiedIntent(
+                tier: .fast,
+                category: .smallTalk,
+                confidence: 0.90,
+                extractedTopic: nil,
+                emotionalContext: .neutral
+            )
+        }
+        
+        // 4. Frustration detection (standard — needs sentiment agent)
         if matchesAny(lowered, in: frustrationIndicators) {
             return ClassifiedIntent(
                 tier: .standard,

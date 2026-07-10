@@ -96,7 +96,8 @@ struct CampusView: View {
                     isPresented: $showDetailSheet,
                     onJoin: { joinItem(item) },
                     onSave: { viewModel.saveToStack(item: item) },
-                    onAskLio: { askLioAbout(item) }
+                    onAskLio: { askLioAbout(item) },
+                    onRSVP: { viewModel.toggleAttendance(for: item) }
                 )
                 .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
             }
@@ -410,20 +411,11 @@ struct CampusView: View {
     }
     
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "mappin.slash")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary.opacity(0.5))
-            
-            Text("No events found")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            
-            Text("Try a different search or filter")
-                .font(.subheadline)
-                .foregroundColor(.secondary.opacity(0.7))
-        }
-        .frame(maxWidth: .infinity)
+        EmptyStateView(
+            iconName: "mappin.slash",
+            title: "No events found",
+            message: "Try a different search or filter to find events."
+        )
         .padding(.vertical, 60)
     }
     

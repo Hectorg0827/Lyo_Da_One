@@ -80,6 +80,11 @@ final class MonetizationService: ObservableObject {
             ]
         }
         
+        LyoAnalyticsManager.shared.trackEvent("paywall_viewed", parameters: [
+            "product_count": products.count,
+            "has_error": errorMessage != nil
+        ])
+        
         isLoading = false
     }
     
@@ -138,6 +143,11 @@ final class MonetizationService: ObservableObject {
         errorMessage = nil
         
         defer { isLoading = false }
+        
+        LyoAnalyticsManager.shared.trackEvent("purchase_initiated", parameters: [
+            "product_id": product.id,
+            "price": product.price.description
+        ])
         
         let result = try await product.purchase()
         
@@ -241,6 +251,11 @@ final class MonetizationService: ObservableObject {
             
             _ = try await sendPurchaseValidation(request)
             Log.monetization.info("Purchase validated with backend")
+            
+            LyoAnalyticsManager.shared.trackEvent("subscription_activated", parameters: [
+                "product_id": transaction.productID,
+                "transaction_id": String(transaction.id)
+            ])
             
         } catch {
             Log.monetization.warning("Backend validation failed: \(error)")

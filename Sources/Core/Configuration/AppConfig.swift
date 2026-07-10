@@ -12,11 +12,11 @@ struct AppConfig {
 
         static var current: Environment {
             #if DEBUG
-            return .development
+                return .development
             #elseif STAGING
-            return .staging
+                return .staging
             #else
-            return .production
+                return .production
             #endif
         }
     }
@@ -37,25 +37,25 @@ struct AppConfig {
             return "https://lyo-backend-830162750094.us-central1.run.app"
         }
     }
-    
+
     // MARK: - Multi-Tenant API Key
     /// API key for SaaS authentication. All requests include this key.
     /// Stored securely in Keychain - initialized on first launch.
     private static let apiKeyKeychainKey = "com.lyo.app.apiKey"
-    
+
     static var apiKey: String {
         // First, try to read from Keychain (secure storage)
         if let storedKey = KeychainHelper.shared.readString(forKey: apiKeyKeychainKey) {
             return storedKey
         }
-        
+
         // If not in Keychain, use bundle-embedded key and store it securely
         // In production builds, this is obfuscated at compile time
         let bundleKey = Self.deobfuscateAPIKey()
         KeychainHelper.shared.saveString(bundleKey, forKey: apiKeyKeychainKey)
         return bundleKey
     }
-    
+
     /// Deobfuscates the API key at runtime. In production, use a more sophisticated approach.
     private static func deobfuscateAPIKey() -> String {
         // XOR-based obfuscation - not perfect but better than plaintext
@@ -65,11 +65,11 @@ struct AppConfig {
             0x53, 0x35, 0x41, 0x4c, 0x74, 0x57, 0x33, 0x57, 0x44, 0x6a, 0x68, 0x46,
             0x2d, 0x54, 0x41, 0x67, 0x6e, 0x37, 0x36, 0x37, 0x4f, 0x52, 0x43, 0x43,
             0x67, 0x61, 0x34, 0x4e, 0x78, 0x35, 0x32, 0x78, 0x42, 0x6c, 0x41, 0x6b,
-            0x4d, 0x48, 0x67, 0x32, 0x2d, 0x54, 0x51
+            0x4d, 0x48, 0x67, 0x32, 0x2d, 0x54, 0x51,
         ]
         return String(bytes: obfuscated, encoding: .utf8) ?? ""
     }
-    
+
     /// Clear stored API key (for logout/reset)
     static func clearStoredAPIKey() {
         KeychainHelper.shared.delete(forKey: apiKeyKeychainKey)
@@ -108,18 +108,18 @@ struct AppConfig {
     }
 
     // MARK: - Network Timeouts
-    static let requestTimeout: TimeInterval = 30 // seconds
-    static let uploadTimeout: TimeInterval = 60 // seconds
-    static let streamTimeout: TimeInterval = 300 // 5 minutes for long streams
+    static let requestTimeout: TimeInterval = 30  // seconds
+    static let uploadTimeout: TimeInterval = 60  // seconds
+    static let streamTimeout: TimeInterval = 300  // 5 minutes for long streams
 
     // MARK: - Retry Configuration
     static let maxRetryAttempts = 3
-    static let retryDelay: TimeInterval = 1 // Base delay, exponential backoff applied
+    static let retryDelay: TimeInterval = 1  // Base delay, exponential backoff applied
 
     // MARK: - Cache Configuration
-    static let memoryCacheLimit = 50 // items
-    static let diskCacheLimit: Int64 = 100 * 1024 * 1024 // 100 MB
-    static let defaultCacheTTL: TimeInterval = 300 // 5 minutes
+    static let memoryCacheLimit = 50  // items
+    static let diskCacheLimit: Int64 = 100 * 1024 * 1024  // 100 MB
+    static let defaultCacheTTL: TimeInterval = 300  // 5 minutes
 
     // MARK: - AI Configuration
     static let maxAIResponseTokens = 4000
@@ -127,8 +127,8 @@ struct AppConfig {
     static let streamingChunkSize = 1024
 
     // MARK: - Media Configuration
-    static let maxImageUploadSize: Int64 = 10 * 1024 * 1024 // 10 MB
-    static let maxVideoUploadSize: Int64 = 100 * 1024 * 1024 // 100 MB
+    static let maxImageUploadSize: Int64 = 10 * 1024 * 1024  // 10 MB
+    static let maxVideoUploadSize: Int64 = 100 * 1024 * 1024  // 100 MB
     static let supportedImageFormats = ["jpg", "jpeg", "png", "heic"]
     static let supportedVideoFormats = ["mp4", "mov"]
 
@@ -147,23 +147,23 @@ struct AppConfig {
     /// When enabled, the app may fall back to local/mock responses on backend failures.
     /// Default is OFF so failures surface during real backend integration.
     static var allowMockFallbacks: Bool {
-        ProcessInfo.processInfo.environment["LYO_ALLOW_MOCKS"] == "1"
+        return false  // Forced false for Market Readiness
     }
 
     // Debug-only features
     static var isLoggingEnabled: Bool {
         #if DEBUG
-        return true
+            return true
         #else
-        return false
+            return false
         #endif
     }
 
     static var isNetworkLoggingEnabled: Bool {
         #if DEBUG
-        return true
+            return true
         #else
-        return false
+            return false
         #endif
     }
 
@@ -235,8 +235,8 @@ struct AppConfig {
     // MARK: - Community
     static let maxStudyGroupAttendees = 20
     static let maxMarketplacePhotoCount = 5
-    static let communitySearchRadius: Double = 10.0 // miles
-    static let mapDefaultZoom: Double = 0.05 // coordinate delta
+    static let communitySearchRadius: Double = 10.0  // miles
+    static let mapDefaultZoom: Double = 0.05  // coordinate delta
 
     // MARK: - Performance
     static let feedPreloadCount = 5
@@ -261,24 +261,25 @@ struct AppConfig {
     // MARK: - Debug Helpers
     static func printConfiguration() {
         #if DEBUG
-        print("""
-        ================================
-        🔧 Lyo App Configuration
-        ================================
-        Environment: \(Environment.current)
-        Base URL: \(baseURL)
-        WebSocket URL: \(wsURL)
-        Version: \(version) (\(buildNumber))
-        Bundle ID: \(bundleIdentifier)
-        ================================
-        Features:
-        - Streaming: \(isStreamingEnabled)
-        - WebSocket: \(isWebSocketEnabled)
-        - Vision: \(isVisionEnabled)
-        - TTS: \(isTTSEnabled)
-        - Community: \(isCommunityEnabled)
-        ================================
-        """)
+            print(
+                """
+                ================================
+                🔧 Lyo App Configuration
+                ================================
+                Environment: \(Environment.current)
+                Base URL: \(baseURL)
+                WebSocket URL: \(wsURL)
+                Version: \(version) (\(buildNumber))
+                Bundle ID: \(bundleIdentifier)
+                ================================
+                Features:
+                - Streaming: \(isStreamingEnabled)
+                - WebSocket: \(isWebSocketEnabled)
+                - Vision: \(isVisionEnabled)
+                - TTS: \(isTTSEnabled)
+                - Community: \(isCommunityEnabled)
+                ================================
+                """)
         #endif
     }
 }

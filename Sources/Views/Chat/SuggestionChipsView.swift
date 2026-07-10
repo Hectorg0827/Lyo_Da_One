@@ -271,7 +271,7 @@ struct QuickActionsBar: View {
     .padding()
 }
 
-// MARK: - Inline Suggestions View (A2UI)
+// MARK: - Inline Suggestions View
 /// Renders suggestions directly inline within a message bubble
 /// Used by EnhancedMessageBubble for .suggestions content type
 
@@ -284,12 +284,17 @@ struct InlineSuggestionsView: View {
     
     private func iconForOption(_ option: String) -> String {
         let lowered = option.lowercased()
-        if lowered.contains("course") { return "plus.circle" }
-        if lowered.contains("quiz") { return "brain" }
-        if lowered.contains("example") { return "lightbulb" }
-        if lowered.contains("more") { return "text.bubble" }
-        if lowered.contains("explain") { return "questionmark.circle" }
-        if lowered.contains("help") { return "lifepreserver" }
+        if lowered.contains("course") || lowered.contains("create") { return "plus.circle.fill" }
+        if lowered.contains("quiz") { return "questionmark.circle.fill" }
+        if lowered.contains("deep dive") || lowered.contains("dive") { return "text.magnifyingglass" }
+        if lowered.contains("flashcard") || lowered.contains("cards") { return "rectangle.stack.fill" }
+        if lowered.contains("example") { return "lightbulb.fill" }
+        if lowered.contains("more") || lowered.contains("tell me") { return "text.bubble.fill" }
+        if lowered.contains("explain") { return "questionmark.circle.fill" }
+        if lowered.contains("review") { return "arrow.counterclockwise.circle.fill" }
+        if lowered.contains("plan") || lowered.contains("modify") { return "list.bullet.clipboard.fill" }
+        if lowered.contains("start") { return "play.circle.fill" }
+        if lowered.contains("help") { return "lifepreserver.fill" }
         return "sparkles"
     }
     
@@ -299,10 +304,10 @@ struct InlineSuggestionsView: View {
             if !title.isEmpty {
                 Text(title)
                     .font(.subheadline.weight(.medium))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.6))
             }
             
-            // Horizontal scrollable chips
+            // Horizontal scrollable chips — premium styling
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(Array(options.enumerated()), id: \.offset) { index, option in
@@ -312,21 +317,52 @@ struct InlineSuggestionsView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: iconForOption(option))
-                                    .font(.caption)
+                                    .font(.system(size: 14, weight: .semibold))
                                 Text(option)
-                                    .font(.subheadline)
+                                    .font(DesignTokens.Typography.labelMedium)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, DesignTokens.Spacing.md)
+                            .padding(.vertical, DesignTokens.Spacing.sm)
                             .background(
-                                RoundedRectangle(cornerRadius: 18)
-                                    .fill(Color(.systemGray6))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18)
-                                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
-                                    )
+                                ZStack {
+                                    Capsule()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    DesignTokens.Colors.surface,
+                                                    DesignTokens.Colors.surfaceElevated
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                    Capsule()
+                                        .strokeBorder(
+                                            LinearGradient(
+                                                colors: [
+                                                    DesignTokens.Colors.accent.opacity(0.6),
+                                                    DesignTokens.Colors.accentSecondary.opacity(0.4)
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 1.5
+                                        )
+                                    Capsule()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    Color.white.opacity(0.15),
+                                                    Color.white.opacity(0)
+                                                ],
+                                                startPoint: .top,
+                                                endPoint: .center
+                                            )
+                                        )
+                                }
                             )
-                            .foregroundColor(.primary)
+                            .applyShadow(DesignTokens.Shadow.sm)
                         }
                         .buttonStyle(.plain)
                         .opacity(appeared ? 1 : 0)

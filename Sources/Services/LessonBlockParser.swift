@@ -1,22 +1,22 @@
 import Foundation
 import os
 
-/// Parses JSON or Markdown into LessonBlock - NEVER throws, always returns something usable
-struct LessonBlockParser {
+/// Parses JSON or Markdown into LiveLessonBlock - NEVER throws, always returns something usable
+struct LiveLessonBlockParser {
     
     // MARK: - Parse from Data
     
     /// Parse JSON data into blocks - guaranteed to return at least one block
-    static func parse(from jsonData: Data) -> [LessonBlock] {
+    static func parse(from jsonData: Data) -> [LiveLessonBlock] {
         // Try array first (most common)
-        if let blocks = try? JSONDecoder().decode([LessonBlock].self, from: jsonData) {
-            Log.classroom.info("LessonBlockParser: Decoded \(blocks.count) blocks from array")
+        if let blocks = try? JSONDecoder().decode([LiveLessonBlock].self, from: jsonData) {
+            Log.classroom.info("LiveLessonBlockParser: Decoded \(blocks.count) blocks from array")
             return blocks.isEmpty ? [errorBlock("Empty blocks array")] : blocks
         }
         
         // Try single block
-        if let block = try? JSONDecoder().decode(LessonBlock.self, from: jsonData) {
-            Log.classroom.info("LessonBlockParser: Decoded single block")
+        if let block = try? JSONDecoder().decode(LiveLessonBlock.self, from: jsonData) {
+            Log.classroom.info("LiveLessonBlockParser: Decoded single block")
             return [block]
         }
         
@@ -26,7 +26,7 @@ struct LessonBlockParser {
             
             if let array = json as? [[String: Any]] {
                 let blocks = array.enumerated().map { parseFromDictionary($1, index: $0) }
-                Log.classroom.info("LessonBlockParser: Parsed \(blocks.count) blocks from JSON array")
+                Log.classroom.info("LiveLessonBlockParser: Parsed \(blocks.count) blocks from JSON array")
                 return blocks
             }
             
@@ -34,7 +34,7 @@ struct LessonBlockParser {
                 // Check if this is a wrapper with "blocks" key
                 if let blocksArray = dict["blocks"] as? [[String: Any]] {
                     let blocks = blocksArray.enumerated().map { parseFromDictionary($1, index: $0) }
-                    Log.classroom.info("LessonBlockParser: Parsed \(blocks.count) blocks from 'blocks' key")
+                    Log.classroom.info("LiveLessonBlockParser: Parsed \(blocks.count) blocks from 'blocks' key")
                     return blocks
                 }
                 
@@ -42,19 +42,19 @@ struct LessonBlockParser {
                 return [parseFromDictionary(dict, index: 0)]
             }
         } catch {
-            Log.classroom.warning("LessonBlockParser: JSON serialization failed: \(error)")
+            Log.classroom.warning("LiveLessonBlockParser: JSON serialization failed: \(error)")
         }
         
         // Ultimate fallback
-        Log.classroom.error("LessonBlockParser: All parsing attempts failed")
+        Log.classroom.error("LiveLessonBlockParser: All parsing attempts failed")
         return [errorBlock("Failed to parse lesson content")]
     }
     
     // MARK: - Parse from String (Markdown/HTML)
     
     /// Parse markdown or plain text content into blocks
-    static func parseFromMarkdown(_ markdown: String) -> [LessonBlock] {
-        var blocks: [LessonBlock] = []
+    static func parseFromMarkdown(_ markdown: String) -> [LiveLessonBlock] {
+        var blocks: [LiveLessonBlock] = []
         let lines = markdown.components(separatedBy: "\n")
         var currentParagraph: [String] = []
         var inCodeBlock = false
@@ -65,7 +65,7 @@ struct LessonBlockParser {
             guard !currentParagraph.isEmpty else { return }
             let text = currentParagraph.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
-                blocks.append(LessonBlock(
+                blocks.append(LiveLessonBlock(
                     id: "para_\(blocks.count)",
                     type: .paragraph,
                     content: text
@@ -76,7 +76,7 @@ struct LessonBlockParser {
         
         func flushCodeBlock() {
             guard !codeContent.isEmpty else { return }
-            blocks.append(LessonBlock(
+            blocks.append(LiveLessonBlock(
                 id: "code_\(blocks.count)",
                 type: .code,
                 code: codeContent.joined(separator: "\n"),
@@ -112,19 +112,19 @@ struct LessonBlockParser {
             if trimmed.hasPrefix("###") {
                 flushParagraph()
                 let title = trimmed.replacingOccurrences(of: "###", with: "").trimmingCharacters(in: .whitespaces)
-                blocks.append(LessonBlock(id: "h3_\(blocks.count)", type: .heading, title: title, subtitle: "h3"))
+                blocks.append(LiveLessonBlock(id: "h3_\(blocks.count)", type: .heading, title: title, subtitle: "h3"))
                 continue
             }
             if trimmed.hasPrefix("##") {
                 flushParagraph()
                 let title = trimmed.replacingOccurrences(of: "##", with: "").trimmingCharacters(in: .whitespaces)
-                blocks.append(LessonBlock(id: "h2_\(blocks.count)", type: .heading, title: title, subtitle: "h2"))
+                blocks.append(LiveLessonBlock(id: "h2_\(blocks.count)", type: .heading, title: title, subtitle: "h2"))
                 continue
             }
             if trimmed.hasPrefix("#") {
                 flushParagraph()
                 let title = trimmed.replacingOccurrences(of: "#", with: "").trimmingCharacters(in: .whitespaces)
-                blocks.append(LessonBlock(id: "h1_\(blocks.count)", type: .heading, title: title, subtitle: "h1"))
+                blocks.append(LiveLessonBlock(id: "h1_\(blocks.count)", type: .heading, title: title, subtitle: "h1"))
                 continue
             }
             
@@ -137,7 +137,7 @@ struct LessonBlockParser {
                 let urlRange = Range(match.range(at: 2), in: trimmed)
                 let alt = altRange.map { String(trimmed[$0]) }
                 let urlString = urlRange.map { String(trimmed[$0]) }
-                blocks.append(LessonBlock(
+                blocks.append(LiveLessonBlock(
                     id: "img_\(blocks.count)",
                     type: .image,
                     imageURL: urlString.flatMap { URL(string: $0) },
@@ -150,7 +150,7 @@ struct LessonBlockParser {
             // Horizontal rule
             if trimmed == "---" || trimmed == "***" || trimmed == "___" {
                 flushParagraph()
-                blocks.append(LessonBlock(id: "div_\(blocks.count)", type: .divider))
+                blocks.append(LiveLessonBlock(id: "div_\(blocks.count)", type: .divider))
                 continue
             }
             
@@ -168,30 +168,30 @@ struct LessonBlockParser {
         if inCodeBlock { flushCodeBlock() }
         flushParagraph()
         
-        return blocks.isEmpty ? [LessonBlock(id: "empty", type: .paragraph, content: markdown)] : blocks
+        return blocks.isEmpty ? [LiveLessonBlock(id: "empty", type: .paragraph, content: markdown)] : blocks
     }
     
     // MARK: - Dictionary Parser
     
-    private static func parseFromDictionary(_ dict: [String: Any], index: Int) -> LessonBlock {
+    private static func parseFromDictionary(_ dict: [String: Any], index: Int) -> LiveLessonBlock {
         let id = dict["id"] as? String ?? "block_\(index)"
         _ = dict["type"] as? String ?? "text"
         
         // Use memberwise init fallback or a proxy if Codable init is hard from dict
         // For simplicity, let's just use JSONSerialization to go back to Data then decode
         if let data = try? JSONSerialization.data(withJSONObject: dict),
-           let block = try? JSONDecoder().decode(LessonBlock.self, from: data) {
+           let block = try? JSONDecoder().decode(LiveLessonBlock.self, from: data) {
             return block
         }
         
         // Absolute fallback construction
-        return LessonBlock(id: id, type: .unknown, content: "Block parsing failed")
+        return LiveLessonBlock(id: id, type: .unknown, content: "Block parsing failed")
     }
     
     // MARK: - Error Block
     
-    private static func errorBlock(_ message: String) -> LessonBlock {
-        LessonBlock(
+    private static func errorBlock(_ message: String) -> LiveLessonBlock {
+        LiveLessonBlock(
             id: "error_\(UUID().uuidString.prefix(8))",
             type: .callout,
             title: "Content Error",
@@ -207,4 +207,4 @@ struct LessonBlockParser {
     }
 }
 
-// NOTE: LessonBlock memberwise init lives in LiveLessonModels.swift — do NOT duplicate here.
+// NOTE: LiveLessonBlock memberwise init lives in LiveLessonModels.swift — do NOT duplicate here.

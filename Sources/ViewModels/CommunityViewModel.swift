@@ -438,12 +438,9 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
     
     private func fetchPrivateLessons() async -> [APIPrivateLesson] {
-        do {
-            return try await network.request(Endpoints.Community.getListings(filters: nil, location: region.center))
-        } catch {
-            Log.social.warning("Community: private lessons fetch failed – \(error.localizedDescription)")
-            return []
-        }
+        // Return empty for now as there's no plural endpoint, or implement correct fetch logic
+        Log.social.info("Community: plural lessons fetch not implemented in backend")
+        return []
     }
     
     private func fetchEducationalCenters() async -> [APIEducationalCenter] {
@@ -459,11 +456,12 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     private func fetchBeacons() async -> [APIBeacon] {
         do {
             // Fetch beacons within ~50km radius of center (approx 0.5 deg)
-            return try await network.request(Endpoints.Community.getBeacons(
+            let beacons: [APIBeacon] = try await network.request(Endpoints.Community.getBeacons(
                 lat: region.center.latitude,
                 lng: region.center.longitude,
                 radius: 50
             ))
+            return beacons
         } catch {
             Log.social.warning("Community: beacons fetch failed – \(error.localizedDescription)")
             return []

@@ -2,7 +2,7 @@
 //  InteractiveQuizBubbleView.swift
 //  Lyo
 //
-//  Created for A2UI Dynamic Chat
+//  Created for Dynamic Chat
 //
 
 import SwiftUI

@@ -442,9 +442,20 @@ struct FeedResponse: Codable {
     let hasNext: Bool
     
     enum CodingKeys: String, CodingKey {
-        case posts, total, page
-        case perPage = "per_page"
-        case hasNext = "has_next"
+        case posts = "items"
+        case total
+        case page = "offset"
+        case perPage = "limit"
+        case hasNext = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.posts = try container.decodeIfPresent([SocialPost].self, forKey: .posts) ?? []
+        self.total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 0
+        self.perPage = try container.decodeIfPresent(Int.self, forKey: .perPage) ?? 10
+        self.hasNext = try container.decodeIfPresent(Bool.self, forKey: .hasNext) ?? false
     }
 }
 
@@ -596,34 +607,7 @@ struct CourseProgressResponse: Codable {
 }
 
 // MARK: - AI Content Generation Models
-struct GeneratedCourse: Codable {
-    let title: String
-    let description: String
-    let lessons: [GeneratedLesson]
-    let estimatedDurationHours: Int
-    let difficultyLevel: String
-    
-    enum CodingKeys: String, CodingKey {
-        case title, description, lessons
-        case estimatedDurationHours = "estimated_duration_hours"
-        case difficultyLevel = "difficulty_level"
-    }
-}
-
-struct GeneratedLesson: Codable, Identifiable {
-    var id: String { title }
-    let title: String
-    let description: String
-    let content: String?
-    let durationMinutes: Int
-    let orderIndex: Int
-    
-    enum CodingKeys: String, CodingKey {
-        case title, description, content
-        case durationMinutes = "duration_minutes"
-        case orderIndex = "order_index"
-    }
-}
+// (Moved to ProgressiveCourseModels.swift)
 
 struct AssembledLessonContent: Codable {
     let title: String
@@ -646,33 +630,61 @@ struct EmptyResponse: Codable {
     // Intentionally empty - used for endpoints that return 204 or empty JSON
 }
 
+struct EventAttendanceResponse: Codable {
+    let id: Int
+    let userId: Int
+    let communityEventId: Int
+    let status: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case communityEventId = "community_event_id"
+        case status
+    }
+}
+
 struct CommunityEvent: Codable, Identifiable {
-    let id: String
+    let id: Int
     let title: String
     let description: String
     let eventType: String
     let startTime: Date
     let endTime: Date?
     let location: String?
-    let hostId: String?
+    let organizerId: Int?
     let hostName: String?
     let attendeeCount: Int
     let maxAttendees: Int?
     let isOnline: Bool
     let imageUrl: String?
+    let organizerProfile: UserPreview?
+    let userAttendanceStatus: String?
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, location
         case eventType = "event_type"
         case startTime = "start_time"
         case endTime = "end_time"
-        case hostId = "host_id"
+        case organizerId = "organizer_id"
         case hostName = "host_name"
         case attendeeCount = "attendee_count"
         case maxAttendees = "max_attendees"
         case isOnline = "is_online"
         case imageUrl = "image_url"
+        case organizerProfile = "organizer_profile"
+        case userAttendanceStatus = "user_attendance_status"
     }
+    
+    var effectiveHostName: String {
+        return hostName ?? organizerProfile?.name ?? "Unknown"
+    }
+}
+
+struct UserPreview: Codable {
+    let id: Int
+    let name: String
+    let avatar: String?
 }
 
 struct CommunityQuestion: Codable, Identifiable {

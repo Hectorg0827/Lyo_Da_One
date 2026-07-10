@@ -17,6 +17,9 @@ struct ClipsRecordingView: View {
     @ObservedObject var cameraManager: EnhancedCameraManager
     @Environment(\.dismiss) private var dismiss
     
+    @State private var currentZoomScale: CGFloat = 1.0
+    @State private var showZoomBadge: Bool = false
+    
     var body: some View {
         ZStack {
             // MARK: - Camera Preview Layer
@@ -66,6 +69,26 @@ struct ClipsRecordingView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             
+            // MARK: - Zoom Badge
+            if showZoomBadge {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text(String(format: "%.1f×", cameraManager.zoomFactor))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(.ultraThinMaterial))
+                        Spacer()
+                    }
+                    .padding(.bottom, 300)
+                }
+                .transition(.opacity)
+                .allowsHitTesting(false)
+            }
+            
             // MARK: - Publish Success Overlay
             if viewModel.isPublishComplete {
                 publishSuccessOverlay
@@ -85,6 +108,27 @@ struct ClipsRecordingView: View {
                 )
             }
         }
+        // Auto-stop recording when chapter time limit is reached
+        .onChange(of: viewModel.chapterElapsed) { _, _ in
+            if viewModel.shouldAutoStopRecording && viewModel.isRecordingChapter {
+                cameraManager.stopRecording()
+            }
+        }
+        // Music preset changes
+        .onChange(of: viewModel.selectedMusic?.name) { _, _ in
+            viewModel.onMusicPresetChanged()
+        }
+        // Volume slider changes
+        .onChange(of: viewModel.musicVolume) { _, newVolume in
+            viewModel.updateMusicVolume(newVolume)
+        }
+        .onAppear {
+            // Safety net: ensure the camera session is alive when this view appears
+            cameraManager.ensureSessionRunning()
+        }
+        .onDisappear {
+            viewModel.stopMusic()
+        }
     }
     
     // MARK: - Camera Preview
@@ -97,6 +141,35 @@ struct ClipsRecordingView: View {
                 focusPoint: .constant(cameraManager.focusPoint)
             )
             .ignoresSafeArea()
+            // Pinch-to-zoom gesture
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in
+                        let newZoom = max(1.0, min(currentZoomScale * value, 10.0))
+                        cameraManager.setZoom(newZoom)
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showZoomBadge = true
+                        }
+                    }
+                    .onEnded { value in
+                        currentZoomScale = cameraManager.zoomFactor
+                        // Hide badge after a delay
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                showZoomBadge = false
+                            }
+                        }
+                    }
+            )
+            // Tap to focus
+            .onTapGesture { location in
+                let screenSize = UIScreen.main.bounds.size
+                let point = CGPoint(
+                    x: location.x / screenSize.width,
+                    y: location.y / screenSize.height
+                )
+                cameraManager.setFocus(at: point)
+            }
             
             // Gradient scrim at top & bottom
             VStack {
@@ -108,17 +181,20 @@ struct ClipsRecordingView: View {
             }
             .ignoresSafeArea()
             
-            // Active overlay elements (rendered on the camera)
+            // Active overlay elements (rendered on the camera) — draggable
             ForEach(viewModel.activeOverlays) { overlay in
-                overlayElement(overlay)
+                draggableOverlayElement(overlay)
             }
         }
     }
     
-    // MARK: - Overlay Element Rendered on Camera
+    // MARK: - Draggable Overlay Element
     
-    private func overlayElement(_ overlay: EducationalOverlay) -> some View {
-        VStack(spacing: 4) {
+    private func draggableOverlayElement(_ overlay: EducationalOverlay) -> some View {
+        let screenWidth = UIScreen.main.bounds.width
+        let screenHeight = UIScreen.main.bounds.height
+        
+        return VStack(spacing: 4) {
             Image(systemName: overlay.type.icon)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
@@ -138,8 +214,19 @@ struct ClipsRecordingView: View {
         )
         .shadow(color: overlay.type.color.opacity(0.4), radius: 10)
         .position(
-            x: UIScreen.main.bounds.width * overlay.position.x,
-            y: UIScreen.main.bounds.height * overlay.position.y
+            x: screenWidth * overlay.position.x,
+            y: screenHeight * overlay.position.y
+        )
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    let newX = value.location.x / screenWidth
+                    let newY = value.location.y / screenHeight
+                    // Clamp to 5-95% of screen
+                    let clampedX = max(0.05, min(0.95, newX))
+                    let clampedY = max(0.05, min(0.95, newY))
+                    viewModel.updateOverlayPosition(overlay.id, to: CGPoint(x: clampedX, y: clampedY))
+                }
         )
     }
     
@@ -196,9 +283,16 @@ struct ClipsRecordingView: View {
                         .fill(viewModel.isRecordingChapter ? .red : .white.opacity(0.5))
                         .frame(width: 8, height: 8)
                     
-                    Text(viewModel.formattedTotalDuration)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
+                    if viewModel.isRecordingChapter {
+                        // Show per-chapter countdown while recording
+                        Text(viewModel.formattedChapterRemaining)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.red)
+                    } else {
+                        Text(viewModel.formattedTotalDuration)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -230,6 +324,26 @@ struct ClipsRecordingView: View {
         VStack(spacing: 16) {
             // Right-side tool strip (vertical)
             HStack {
+                // Left side — music indicator
+                if viewModel.isMusicPlaying {
+                    VStack(spacing: 4) {
+                        Button {
+                            viewModel.pauseMusic()
+                        } label: {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(hex: "8B5CF6"))
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(.ultraThinMaterial))
+                        }
+                        Text(viewModel.selectedMusic?.name ?? "")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                            .lineLimit(1)
+                    }
+                    .padding(.leading, 16)
+                }
+                
                 Spacer()
                 
                 VStack(spacing: 16) {
@@ -251,6 +365,19 @@ struct ClipsRecordingView: View {
                     // Educational Overlays
                     toolButton(icon: "sparkles.rectangle.stack", label: "Learn", isActive: viewModel.isOverlayTrayVisible) {
                         viewModel.toggleOverlayTray()
+                    }
+                    
+                    // Music toggle
+                    toolButton(
+                        icon: viewModel.isMusicPlaying ? "music.note" : "music.note.list",
+                        label: "Music",
+                        isActive: viewModel.isMusicPlaying
+                    ) {
+                        if viewModel.isMusicPlaying {
+                            viewModel.pauseMusic()
+                        } else {
+                            viewModel.playMusic()
+                        }
                     }
                 }
                 .padding(.trailing, 16)
@@ -323,15 +450,23 @@ struct ClipsRecordingView: View {
             }
         } label: {
             ZStack {
-                // Outer ring
-                Circle()
-                    .stroke(
-                        viewModel.isRecordingChapter
-                        ? Color.red
-                        : viewModel.activeChapter.color,
-                        lineWidth: 4
-                    )
-                    .frame(width: 72, height: 72)
+                // Outer ring with chapter progress
+                if viewModel.isRecordingChapter {
+                    // Animated countdown ring
+                    Circle()
+                        .trim(from: 0, to: CGFloat(viewModel.chapterTimeRemaining / viewModel.maxChapterDuration))
+                        .stroke(Color.red, lineWidth: 4)
+                        .frame(width: 72, height: 72)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.1), value: viewModel.chapterElapsed)
+                } else {
+                    Circle()
+                        .stroke(
+                            viewModel.activeChapter.color,
+                            lineWidth: 4
+                        )
+                        .frame(width: 72, height: 72)
+                }
                 
                 // Inner shape
                 if viewModel.isRecordingChapter {
@@ -460,6 +595,36 @@ struct ClipsRecordingView: View {
                         .pickerStyle(.segmented)
                     }
                     
+                    // Clip summary
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Clip Summary", systemImage: "info.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                        
+                        HStack(spacing: 16) {
+                            summaryItem(
+                                icon: "film.stack",
+                                value: "\(viewModel.completedChapterCount)",
+                                label: "Chapters"
+                            )
+                            summaryItem(
+                                icon: "clock",
+                                value: viewModel.formattedTotalDuration,
+                                label: "Duration"
+                            )
+                            summaryItem(
+                                icon: "sparkles",
+                                value: "\(viewModel.activeOverlays.count)",
+                                label: "Overlays"
+                            )
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.white.opacity(0.05))
+                        )
+                    }
+                    
                     // Course generation toggle
                     Toggle(isOn: $viewModel.enableCourseGeneration) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -478,7 +643,7 @@ struct ClipsRecordingView: View {
                             ProgressView(value: viewModel.publishProgress)
                                 .tint(Color(hex: "6366F1"))
                             
-                            Text("Publishing your clip...")
+                            Text(publishStatusText)
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(.white.opacity(0.6))
                         }
@@ -521,6 +686,36 @@ struct ClipsRecordingView: View {
             }
         }
         .presentationDetents([.large])
+    }
+    
+    // MARK: - Summary Item
+    
+    private func summaryItem(icon: String, value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(Color(hex: "6366F1"))
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    /// Dynamic publish status text based on progress.
+    private var publishStatusText: String {
+        if viewModel.publishProgress < 0.2 {
+            return "Merging chapter videos..."
+        } else if viewModel.publishProgress < 0.4 {
+            return "Generating thumbnail..."
+        } else if viewModel.publishProgress < 0.85 {
+            return "Uploading your clip..."
+        } else {
+            return "Finalizing..."
+        }
     }
     
     // MARK: - Publish Success Overlay

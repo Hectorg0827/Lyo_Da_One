@@ -183,11 +183,7 @@ final class CloudStorageService {
         let filename = "image_\(UUID().uuidString).jpg"
 
         // For development, return mock URL
-        if AppConfig.allowMockFallbacks {
-            // Simulate upload delay
-            try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            return "https://mock-storage.lyo.app/\(folder)/\(filename)"
-        }
+
 
         let result = try await uploadFile(
             data: imageData,
@@ -210,12 +206,7 @@ final class CloudStorageService {
         let filename = "video_\(UUID().uuidString).mp4"
 
         // For development, return mock URL
-        if AppConfig.allowMockFallbacks {
-            // Simulate upload delay based on file size
-            let uploadSeconds = min(Double(videoData.count) / 1_000_000, 5.0) // Max 5 seconds
-            try await Task.sleep(nanoseconds: UInt64(uploadSeconds * 1_000_000_000))
-            return "https://mock-storage.lyo.app/\(folder)/\(filename)"
-        }
+
 
         let result = try await uploadFile(
             data: videoData,

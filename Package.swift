@@ -17,7 +17,8 @@ let package = Package(
             dependencies: [
                 .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS"),
                 .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
-                .product(name: "FirebaseCore", package: "firebase-ios-sdk")
+                .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
+                .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk")
             ],
             path: "Sources",
             exclude: ["Resources/Info.plist", "Tests"],

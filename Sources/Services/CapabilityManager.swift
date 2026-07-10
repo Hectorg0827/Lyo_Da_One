@@ -1,6 +1,6 @@
 import Foundation
 
-/// Manages A2UI capabilities for the client
+/// Manages client capabilities for the backend
 class CapabilityManager {
     static let shared = CapabilityManager()
     
@@ -9,7 +9,7 @@ class CapabilityManager {
     /// Current supported capabilities
     var capabilities: [String] {
         return [
-            "a2ui_v1",
+            "voice_input",
             "voice_input",
             "camera_capture",
             "quiz_adaptive",

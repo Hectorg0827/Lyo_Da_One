@@ -45,6 +45,10 @@ struct MainTabView: View {
     
     // Runtime State (New Architecture)
     @State private var runtimeViewModel: LyoCourseRuntime?
+
+    // Course Start Gate (monetization intercept before classroom)
+    @State private var isCourseGatePresented = false
+    @State private var pendingClassroomFromGate: (courseId: String, lessonId: String, courseTitle: String, lessonTitle: String)? = nil
     
     // Computed property for App Drawer visibility
     private var shouldShowAppDrawer: Bool {
@@ -233,6 +237,32 @@ struct MainTabView: View {
                 .environmentObject(uiState)
             }
         }
+        // ── Monetization gate (shown before classroom for every course start) ──
+        .fullScreenCover(isPresented: $isCourseGatePresented) {
+            CourseStartGateView(
+                courseId: pendingClassroomFromGate?.courseId ?? "pending",
+                courseTitle: pendingClassroomFromGate?.courseTitle ?? "Preparing Your Course…"
+            ) {
+                // Gate completed → dismiss gate then open classroom
+                isCourseGatePresented = false
+                if let finalData = pendingClassroomFromGate {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        liveClassroomData = finalData
+                        withAnimation { isLiveClassroomPresented = true }
+                        Log.ui.info("MainTabView: Gate done → LiveClassroomView for \(finalData.courseTitle)")
+                    }
+                } else {
+                    Log.ui.error("MainTabView: Gate done but pendingClassroomFromGate is STILL nil")
+                }
+            }
+            .onAppear {
+                if let dg = pendingClassroomFromGate {
+                    Log.ui.info("🎬 CourseStartGateView appeared for: \(dg.courseTitle)")
+                } else {
+                    Log.ui.warning("⚠️ CourseStartGateView fallback — pendingClassroomFromGate was nil")
+                }
+            }
+        }
         .fullScreenCover(isPresented: $isLiveClassroomPresented) {
             if let data = liveClassroomData {
                 LiveClassroomView(
@@ -325,11 +355,11 @@ struct MainTabView: View {
             let lessonId: String = courseItem.lessonId ?? "lesson-1"
             let courseTitle: String = courseItem.title
             let lessonTitle: String = courseItem.subtitle ?? "Lesson"
-            liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
+            pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
         } else {
-            liveClassroomData = (courseId, "lesson-1", "Shared Course", "Introduction")
+            pendingClassroomFromGate = (courseId, "lesson-1", "Shared Course", "Introduction")
         }
-        isLiveClassroomPresented = true
+        withAnimation { isCourseGatePresented = true }
     }
     
     // MARK: - Deep Link Handler Logic
@@ -342,8 +372,8 @@ struct MainTabView: View {
             navigateToCourse(id)
             
         case .openLesson(let courseId, let lessonId):
-            liveClassroomData = (courseId, lessonId, "Shared Course", "Lesson")
-            isLiveClassroomPresented = true
+            pendingClassroomFromGate = (courseId, lessonId, "Shared Course", "Lesson")
+            withAnimation { isCourseGatePresented = true }
             
         case .openProfile:
             selectedTab = .profile
@@ -387,37 +417,56 @@ extension MainTabView {
                     // Check if we need to generate a course first
                     if lessonId == "intro_1", let topic = userInfo["topic"] as? String {
                         // Pass special "GENERATE:" prefix to signal LiveClassroomViewModel
-                        liveClassroomData = ("GENERATE:\(topic)", lessonId, topic, "Introduction")
+                        pendingClassroomFromGate = ("GENERATE:\(topic)", lessonId, topic, "Introduction")
                     } else {
                         // Read actual course info from userInfo
                         let courseId = userInfo["courseId"] as? String ?? "GENERATE:\(userInfo["topic"] as? String ?? "Course")"
                         let courseTitle = userInfo["courseTitle"] as? String ?? userInfo["topic"] as? String ?? "Course"
                         let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
-                        liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
+                        pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
                     }
-                    isLiveClassroomPresented = true
+                    withAnimation { isCourseGatePresented = true }
                 }
             }
             .onReceive(openClassroomPublisher) { notification in
-                Log.ui.info("MainTabView: Received openClassroom notification")
-                
-                // Wait 0.7 s — the chat sheet dismiss animation takes ~0.4 s;
-                // this ensures it's fully gone before we present the fullScreenCover.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                    if let userInfo = notification.userInfo,
-                       let courseId = userInfo["courseId"] as? String {
-                        
-                        let lessonId = userInfo["lessonId"] as? String ?? "intro_1"
-                        let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
-                        let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
-                        
-                        self.liveClassroomData = (courseId, lessonId, courseTitle, lessonTitle)
-                        
+                Log.ui.info("🎬 MainTabView: Received openClassroom notification — routing through gate")
+
+                // Ensure chat sheet is dismissed first — must be fully gone before
+                // fullScreenCover can present reliably on iOS.
+                if uiState.isLioChatPresented {
+                    Log.ui.info("🎬 Dismissing chat sheet before gate presentation")
+                    uiState.isLioChatPresented = false
+                }
+
+                // Wait for any chat-sheet / overlay dismiss animation to finish
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    guard let userInfo = notification.userInfo,
+                          var courseId = userInfo["courseId"] as? String else {
+                        Log.ui.warning("🎬 openClassroom notification missing courseId — aborting gate")
+                        return
+                    }
+
+                    let lessonId    = userInfo["lessonId"]    as? String ?? "intro_1"
+                    let courseTitle = userInfo["courseTitle"] as? String ?? "New Course"
+                    let lessonTitle = userInfo["lessonTitle"] as? String ?? "Introduction"
+                    let shouldGenerate = userInfo["shouldGenerateCourse"] as? Bool ?? false
+
+                    // Prepend GENERATE: for new AI-originated courses
+                    if let topic = userInfo["topic"] as? String,
+                       shouldGenerate || courseId.starts(with: "gen_") {
+                        courseId = "GENERATE:\(topic)"
+                    }
+
+                    // Store the destination; the gate's onProceed will open the classroom
+                    self.pendingClassroomFromGate = (courseId, lessonId, courseTitle, lessonTitle)
+
+                    Log.ui.info("🎬 MainTabView: pendingClassroomFromGate set — courseId=\(courseId) title=\(courseTitle)")
+                    Log.ui.info("🎬 MainTabView: isCourseGatePresented → true (chat sheet open: \(self.uiState.isLioChatPresented))")
+
+                    DispatchQueue.main.async {
                         withAnimation {
-                            self.isLiveClassroomPresented = true
+                            self.isCourseGatePresented = true
                         }
-                        
-                        Log.ui.info("MainTabView: Transitioning to LiveClassroomView for \(courseTitle)")
                     }
                 }
             }

@@ -93,8 +93,8 @@ public final class InteractiveCinemaService: ObservableObject {
             if generatedCourse.courseId == courseId {
                 Log.ai.info("Found generated course in cache: \(generatedCourse.title)")
                 Log.ai.info("   Modules: \(generatedCourse.modules.count)")
-                if let first = generatedCourse.modules.first?.lessons.first {
-                     Log.ai.info("   First Lesson Content Length: \(first.content.count)")
+                if let first = generatedCourse.modules.first?.lessons?.first {
+                     Log.ai.info("   First Lesson Content Length: \(first.content?.count ?? 0)")
                 }
                 return convertGeneratedCourseToPlayback(course: generatedCourse, courseId: courseId)
             } else {
@@ -150,7 +150,7 @@ public final class InteractiveCinemaService: ObservableObject {
         return createWelcomePlaybackState(courseId: courseId)
     }
     
-    private func convertGeneratedCourseToPlayback(course: GeneratedCourseResponse, courseId: String) -> PlaybackState {
+    private func convertGeneratedCourseToPlayback(course: GeneratedCourse, courseId: String) -> PlaybackState {
         Log.ai.info("Converting course '\(course.title)' to playback - Modules: \(course.modules.count)")
         
         guard !course.modules.isEmpty else {
@@ -159,25 +159,26 @@ public final class InteractiveCinemaService: ObservableObject {
         }
         
         let firstModule = course.modules[0]
-        Log.ai.info("📚 First module: '\(firstModule.title)' - Lessons: \(firstModule.lessons.count)")
+        let moduleLessons = firstModule.lessons ?? []
+        Log.ai.info("📚 First module: '\(firstModule.title)' - Lessons: \(moduleLessons.count)")
         
-        guard !firstModule.lessons.isEmpty else {
+        guard !moduleLessons.isEmpty else {
             Log.ai.warning("No lessons in first module!")
             return createWelcomePlaybackState(courseId: courseId)
         }
         
-        let firstLesson = firstModule.lessons[0]
-        Log.ai.info("Starting with lesson: '\(firstLesson.title)'")
+        let firstLesson = moduleLessons[0]
+        Log.ai.info("Starting with lesson: '\(firstLesson.title ?? "Untitled")'")
         
         // Create main content node
         var contentDict: [String: AnyCodable] = [:]
-        contentDict["text"] = AnyCodable(firstLesson.content)
-        contentDict["title"] = AnyCodable(firstLesson.title)
+        contentDict["text"] = AnyCodable(firstLesson.content ?? "")
+        contentDict["title"] = AnyCodable(firstLesson.title ?? "")
         
         let currentNode = LearningNodeWithAssets(
             id: firstLesson.id,
             nodeType: "explain",
-            title: firstLesson.title,
+            title: firstLesson.title ?? "Lesson",
             content: contentDict,
             orderIndex: 1,
             conceptId: nil,
@@ -186,15 +187,15 @@ public final class InteractiveCinemaService: ObservableObject {
         )
         
         // Create next nodes from remaining lessons
-        let nextNodes: [LearningNode] = firstModule.lessons.dropFirst().prefix(3).enumerated().map { index, lesson in
+        let nextNodes: [LearningNode] = moduleLessons.dropFirst().prefix(3).enumerated().map { index, lesson in
             var lessonContent: [String: AnyCodable] = [:]
-            lessonContent["text"] = AnyCodable(lesson.content)
-            lessonContent["title"] = AnyCodable(lesson.title)
+            lessonContent["text"] = AnyCodable(lesson.content ?? "")
+            lessonContent["title"] = AnyCodable(lesson.title ?? "")
             
             return LearningNode(
                 id: lesson.id,
                 nodeType: "explain",
-                title: lesson.title,
+                title: lesson.title ?? "Lesson",
                 content: lessonContent,
                 orderIndex: index + 2
             )
@@ -297,10 +298,10 @@ public final class InteractiveCinemaService: ObservableObject {
             
             // Find current node index
             var currentIndex = -1
-            var allNodes: [GenerationCourseLesson] = []
+            var allNodes: [ProgressiveLesson] = []
             
             for module in generatedCourse.modules {
-                for lesson in module.lessons {
+                for lesson in module.lessons ?? [] {
                     allNodes.append(lesson)
                     if lesson.id == currentNodeId {
                         currentIndex = allNodes.count - 1
@@ -318,13 +319,13 @@ public final class InteractiveCinemaService: ObservableObject {
             
             // Create playback state for next node
             var contentDict: [String: AnyCodable] = [:]
-            contentDict["text"] = AnyCodable(nextLesson.content)
-            contentDict["title"] = AnyCodable(nextLesson.title)
+            contentDict["text"] = AnyCodable(nextLesson.content ?? "")
+            contentDict["title"] = AnyCodable(nextLesson.title ?? "")
             
             let currentNode = LearningNodeWithAssets(
                 id: nextLesson.id,
                 nodeType: "explain",
-                title: nextLesson.title,
+                title: nextLesson.title ?? "Lesson",
                 content: contentDict,
                 orderIndex: currentIndex + 2,
                 conceptId: nil,
@@ -335,13 +336,13 @@ public final class InteractiveCinemaService: ObservableObject {
             // Create next nodes list (up to 3 upcoming lessons)
             let nextNodes: [LearningNode] = allNodes.dropFirst(currentIndex + 2).prefix(3).enumerated().map { index, lesson in
                 var lessonContent: [String: AnyCodable] = [:]
-                lessonContent["text"] = AnyCodable(lesson.content)
-                lessonContent["title"] = AnyCodable(lesson.title)
+                lessonContent["text"] = AnyCodable(lesson.content ?? "")
+                lessonContent["title"] = AnyCodable(lesson.title ?? "")
                 
                 return LearningNode(
                     id: lesson.id,
                     nodeType: "explain",
-                    title: lesson.title,
+                    title: lesson.title ?? "Lesson",
                     content: lessonContent,
                     orderIndex: currentIndex + 3 + index
                 )

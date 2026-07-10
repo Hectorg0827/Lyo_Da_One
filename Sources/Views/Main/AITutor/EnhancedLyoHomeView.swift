@@ -17,11 +17,16 @@ struct EnhancedLyoHomeView: View {
     @State private var showBottomNav = true
     @State private var lastScrollOffset: CGFloat = 0
     @State private var drawerAutoHideTimer: Timer?
+    // Session creation state
+    @State private var isCreatingSession = false
     
     // Classroom navigation
-    @State private var showClassroom = false
-    @State private var classroomSessionId: String?
-    @State private var isCreatingSession = false
+    @State private var classroomSession: ClassroomSession?
+    
+    // Wrapper for using item-based fullScreenCover with a String id
+    struct ClassroomSession: Identifiable, Equatable {
+        let id: String
+    }
     
     // Accessibility
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -91,10 +96,16 @@ struct EnhancedLyoHomeView: View {
             }
             .zIndex(99)
             
-            // Loading overlay
+            // Loading overlay - always visible during session creation
             if isCreatingSession {
                 loadingOverlay
+                    .zIndex(150)
             }
+        }
+        // Present ClassroomView as fullScreenCover when classroomSession is set
+        .fullScreenCover(item: $classroomSession) { session in
+            ClassroomView(sessionId: session.id)
+                .zIndex(200)
         }
         .onAppear {
             viewModel.loadInitialSuggestions()
@@ -123,11 +134,11 @@ struct EnhancedLyoHomeView: View {
                     onActionTap: { action in
                         handleAction(action)
                     },
-                    onA2UICourseStart: { course in
-                        viewModel.onA2UICourseStart(course: course)
+                    onCourseStart_A2A: { course in
+                        viewModel.onCourseStart(course: course)
                     },
-                    onA2UIQuizAnswer: { question, answerIndex in
-                        viewModel.onA2UIQuizAnswer(question: question, answerIndex: answerIndex)
+                    onQuizAnswer_A2A: { question, answerIndex in
+                        viewModel.onQuizAnswer(question: question, answerIndex: answerIndex)
                     }
                 )
             }
@@ -146,9 +157,7 @@ struct EnhancedLyoHomeView: View {
             // Composer with attached avatar
             if !isAvatarFloating {
                 EnhancedComposerBar(
-                    text: $viewModel.inputText,
-                    isLoading: viewModel.isLoading,
-                    showAvatar: true,
+                    viewModel: viewModel,
                     onSend: {
                         Task {
                             await viewModel.sendMessage()
@@ -405,6 +414,10 @@ struct EnhancedLyoHomeView: View {
             VStack(spacing: 20) {
                 EnhancedAnimatedLyoAvatar(state: .thinking, size: 80)
                 
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.4)
+                
                 Text("Creating your lesson...")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundColor(.white)
@@ -468,7 +481,16 @@ struct EnhancedLyoHomeView: View {
             }
         case .openDrawer:
             viewModel.isDrawerOpen = true
-        case .createCourse, .createCourseA2A, .quizMe, .addToLibrary, .generateSyllabus, .quickExplainer, .makeFlashcards, .extractKeyPoints:
+        case .generateSyllabus:
+            // "Refine Course" button tapped — inject a refinement prompt into chat
+            if let data = action.data, data["refine"] == "true",
+               let title = data["title"], let topic = data["topic"] {
+                viewModel.inputText = "I want to refine the course '\(title)' on \(topic). Please offer options to adjust the difficulty level, duration, or focus areas."
+                Task { await viewModel.sendMessage() }
+            } else {
+                Log.ui.info("Action: generateSyllabus")
+            }
+        case .createCourse, .createCourseA2A, .quizMe, .addToLibrary, .quickExplainer, .makeFlashcards, .extractKeyPoints:
             Log.ui.info("Action: \(action.actionType.rawValue)")
         }
     }
@@ -485,13 +507,13 @@ struct EnhancedLyoHomeView: View {
                 )
                 
                 await MainActor.run {
-                    self.classroomSessionId = session.id
+                    self.classroomSession = ClassroomSession(id: session.id)
                     self.isCreatingSession = false
                     
                     // Post global notification for cinematic flow
                     NotificationCenter.default.post(
-                        name: .openClassroom, 
-                        object: nil, 
+                        name: .openClassroom,
+                        object: nil,
                         userInfo: [
                             "courseId": session.id,
                             "courseTitle": lessonData["title"] as? String ?? "New Lesson",
@@ -1010,9 +1032,7 @@ struct PremiumTabBarButtonStyle: ButtonStyle {
 }
 
 struct EnhancedComposerBar: View {
-    @Binding var text: String
-    let isLoading: Bool
-    let showAvatar: Bool
+    @ObservedObject var viewModel: LyoAIViewModel
     let onSend: () -> Void
     
     @FocusState private var isFocused: Bool
@@ -1021,38 +1041,44 @@ struct EnhancedComposerBar: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
             // Avatar (attached to composer)
-            if showAvatar {
-                EnhancedAnimatedLyoAvatar(state: isFocused ? .listening : .idle, size: 56)
-            }
+            EnhancedAnimatedLyoAvatar(
+                state: viewModel.isAISpeaking ? .speaking : (viewModel.isAIThinking ? .thinking : (viewModel.isVoiceActive ? .listening : .idle)),
+                size: 56
+            )
             
             // Input field
             HStack(spacing: 8) {
-                // Camera button
-                Button(action: {}) {
-                    Image(systemName: "camera")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color("LyoTextSecondary"))
+                // Speaker toggle
+                Button(action: {
+                    HapticManager.shared.light()
+                    viewModel.isAudioOutputEnabled.toggle()
+                }) {
+                    Image(systemName: viewModel.isAudioOutputEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(viewModel.isAudioOutputEnabled ? Color("LyoAccent") : Color("LyoTextSecondary"))
                 }
                 
                 // Text input
                 ZStack(alignment: .leading) {
-                    if text.isEmpty {
+                    if viewModel.inputText.isEmpty {
                         Text("Ask anything… or say 'build me a 2-week course'")
                             .font(.system(size: 15))
                             .foregroundColor(Color("LyoTextSecondary"))
                     }
                     
-                    TextField("", text: $text)
+                    TextField("", text: $viewModel.inputText)
                         .font(.system(size: 15))
                         .foregroundColor(.white)
                         .focused($isFocused)
                 }
                 
-                // Gallery button
-                Button(action: {}) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color("LyoTextSecondary"))
+                // Camera button (Optional: only show if not recording)
+                if !viewModel.isVoiceActive {
+                    Button(action: {}) {
+                        Image(systemName: "camera")
+                            .font(.system(size: 18))
+                            .foregroundColor(Color("LyoTextSecondary"))
+                    }
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.md)
@@ -1060,17 +1086,18 @@ struct EnhancedComposerBar: View {
             .glassmorphic(cornerRadius: DesignTokens.Radius.md)
             
             // Voice / Send button
-            if text.isEmpty {
+            if viewModel.inputText.isEmpty {
                 Button(action: {
                     HapticManager.shared.light()
+                    viewModel.toggleVoiceMode()
                 }) {
-                    Image(systemName: "mic.fill")
+                    Image(systemName: viewModel.isVoiceActive ? "stop.fill" : "mic.fill")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 44, height: 44)
                         .background(
                             Circle()
-                                .fill(DesignTokens.Colors.accentGradient)
+                                .fill(AnyShapeStyle(viewModel.isVoiceActive ? AnyShapeStyle(Color.red.gradient) : AnyShapeStyle(DesignTokens.Colors.accentGradient)))
                         )
                         .applyShadow(DesignTokens.Shadow.glow)
                 }

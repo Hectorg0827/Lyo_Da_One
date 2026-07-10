@@ -9,6 +9,7 @@ struct CampusItemDetailSheet: View {
     let onJoin: () -> Void
     let onSave: () -> Void
     let onAskLio: () -> Void
+    let onRSVP: () -> Void
     
     var body: some View {
         NavigationStack {
@@ -187,6 +188,26 @@ struct CampusItemDetailSheet: View {
     
     private var actionButtons: some View {
         VStack(spacing: 12) {
+            // RSVP button
+            let isAttending = item.userAttendanceStatus?.uppercased() == "GOING"
+            Button(action: onRSVP) {
+                HStack {
+                    Image(systemName: isAttending ? "checkmark.circle.fill" : "calendar.badge.plus")
+                    Text(isAttending ? "Attending" : "RSVP")
+                }
+                .font(.headline)
+                .foregroundColor(isAttending ? accentColor : .white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(item.isFull && !isAttending ? Color.gray : (isAttending ? accentColor.opacity(0.15) : accentColor))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isAttending ? accentColor : Color.clear, lineWidth: 2)
+                )
+            }
+            .disabled(item.isFull && !isAttending)
+            
             // Join button (primary action)
             if item.roomId != nil {
                 Button(action: onJoin) {
@@ -289,6 +310,7 @@ struct DetailRow: View {
         isPresented: .constant(true),
         onJoin: {},
         onSave: {},
-        onAskLio: {}
+        onAskLio: {},
+        onRSVP: {}
     )
 }

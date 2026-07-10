@@ -149,6 +149,8 @@ final class CourseLibraryService: ObservableObject {
     // MARK: - Course Management
     
     func saveCourse(courseId: String) async {
+        let courseTitle = allCourses.first(where: { $0.id == courseId })?.title ?? "Course"
+
         // Add to saved courses
         if let course = allCourses.first(where: { $0.id == courseId }) {
             if !savedCourses.contains(where: { $0.id == courseId }) {
@@ -160,6 +162,7 @@ final class CourseLibraryService: ObservableObject {
         _ = try? await repository.createStackItem(request: CreateStackItemRequest(
             type: .course,
             refId: courseId,
+            title: courseTitle,
             tags: ["saved"],
             contextData: ["courseId": courseId]
         ))

@@ -49,6 +49,41 @@ struct CreateHubView: View {
             // Mode Detail View (Inline) - The "Canvas"
             modeDetailView
                 .zIndex(5)
+
+            // Error Overlay
+            if case .error(let errorMsg) = viewModel.state {
+                Color.black.opacity(0.7)
+                    .ignoresSafeArea()
+                    .zIndex(10)
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.yellow)
+                    Text("Something went wrong")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                    Text(errorMsg)
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    Button(action: { viewModel.state = .idle }) {
+                        Text("Dismiss")
+                            .font(.headline)
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 12)
+                            .background(Color.yellow)
+                            .cornerRadius(10)
+                    }
+                }
+                .padding(40)
+                .background(Color.black.opacity(0.85))
+                .cornerRadius(24)
+                .shadow(radius: 30)
+                .frame(maxWidth: 400)
+                .zIndex(11)
+            }
             
             // UI Overlay
             VStack(spacing: 0) {

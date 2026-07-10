@@ -472,7 +472,7 @@ class CreateViewModel: ObservableObject {
         let generatedCourse = try await courseService.generateCourse(
             topic: courseTopic,
             level: courseLevel,
-            outcomes: courseOutcomes.isEmpty ? nil : courseOutcomes,
+            outcomes: courseOutcomes.isEmpty ? [] : courseOutcomes,
             teachingStyle: "interactive"
         )
         
@@ -493,7 +493,9 @@ class CreateViewModel: ObservableObject {
                         CourseLessonData(id: les.id, title: les.title, duration: "\(les.durationMinutes) min")
                     }
                 )
-            }
+            },
+            difficultyLevel: courseLevel,
+            instructorId: await TokenManager.shared.getUserId() ?? "unknown"
         )
         try await repository.saveCourse(data: persistenceData)
         

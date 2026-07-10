@@ -299,7 +299,7 @@ struct MarkdownTextView: View {
 // MARK: - Notes Block View (for Classroom)
 
 struct NotesBlockView: View {
-    let block: LessonBlock
+    let block: LiveLessonBlock
     
     private var notesPayload: NotesPayload? {
         // Try to parse from block content

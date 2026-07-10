@@ -739,36 +739,6 @@ enum Endpoints {
         }
     }
 
-    // MARK: - A2UI Server-Driven UI
-    /// Endpoints for fetching dynamic server-driven UI component trees.
-    /// Backend: /api/v1/a2ui/* (lyo_app/api/v1/a2ui_routes.py)
-    enum A2UI: Endpoint {
-        /// Fetch a pre-defined screen layout (dashboard, course, quiz, chat)
-        case screen(screenId: String)
-        /// Generate a classroom A2UI component tree for a specific session
-        case classroomScreen(sessionId: String)
-
-        var path: String {
-            switch self {
-            case .screen(let screenId): return "/api/v1/a2ui/screen/\(screenId)"
-            case .classroomScreen(let sessionId): return "/api/v1/a2ui/screen/classroom?session_id=\(sessionId)"
-            }
-        }
-
-        var method: HTTPMethod {
-            switch self {
-            case .screen: return .get
-            case .classroomScreen: return .get
-            }
-        }
-
-        var body: Encodable? { nil }
-
-        var cacheTTL: TimeInterval {
-            return 300 // 5 minute cache for server-driven layouts
-        }
-    }
-
     // MARK: - Course Generation V2
     enum CourseGenerationV2: Endpoint {
         case stream(topic: String, options: CourseGenerationOptions)
@@ -865,7 +835,7 @@ enum Endpoints {
             case .stream: return "/api/v2/courses/stream-a2a"
             case .generate: return "/api/v2/courses/generate"
             case .status(let taskId): return "/api/v2/courses/status/\(taskId)"
-            case .result(let taskId): return "/api/v2/courses/result/\(taskId)"
+            case .result(let taskId): return "/api/v2/courses/\(taskId)/result"
             case .discoverAgents: return "/api/v2/agents"
             case .getAgentCard(let name): return "/api/v2/agents/\(name)"
             case .protocolDiscovery: return "/.well-known/agent.json"
@@ -2098,6 +2068,220 @@ enum Endpoints {
 
         var cacheTTL: TimeInterval { 0 }
     }
+
+    // MARK: - Evolution (Goals, Reflections, Events, Recommendations)
+    enum Evolution: Endpoint {
+        // Goals
+        case createGoal(body: Encodable)
+        case listGoals(statusFilter: String?)
+        case updateGoalStatus(goalId: Int, body: Encodable)
+        case deleteGoal(goalId: Int)
+        case mapSkillToGoal(goalId: Int, body: Encodable)
+        case recordProgress(goalId: Int, body: Encodable)
+        // Reflections
+        case submitReflection(body: Encodable)
+        // Events
+        case logEvent(body: Encodable)
+        // Recommendations
+        case nextUpgrade
+
+        var path: String {
+            switch self {
+            case .createGoal, .listGoals:
+                return "/api/v1/evolution/goals"
+            case .updateGoalStatus(let goalId, _):
+                return "/api/v1/evolution/goals/\(goalId)/status"
+            case .deleteGoal(let goalId):
+                return "/api/v1/evolution/goals/\(goalId)"
+            case .mapSkillToGoal(let goalId, _):
+                return "/api/v1/evolution/goals/\(goalId)/skills"
+            case .recordProgress(let goalId, _):
+                return "/api/v1/evolution/goals/\(goalId)/progress"
+            case .submitReflection:
+                return "/api/v1/evolution/reflections"
+            case .logEvent:
+                return "/api/v1/evolution/events"
+            case .nextUpgrade:
+                return "/api/v1/evolution/next-upgrade"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .listGoals, .nextUpgrade: return .get
+            case .createGoal, .submitReflection, .logEvent, .mapSkillToGoal, .recordProgress:
+                return .post
+            case .updateGoalStatus: return .patch
+            case .deleteGoal: return .delete
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .createGoal(let body), .updateGoalStatus(_, let body),
+                 .mapSkillToGoal(_, let body), .recordProgress(_, let body),
+                 .submitReflection(let body), .logEvent(let body):
+                return body
+            default: return nil
+            }
+        }
+
+        var queryItems: [URLQueryItem]? {
+            switch self {
+            case .listGoals(let statusFilter):
+                if let s = statusFilter {
+                    return [URLQueryItem(name: "status_filter", value: s)]
+                }
+                return nil
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval {
+            switch self {
+            case .listGoals, .nextUpgrade: return 60
+            default: return 0
+            }
+        }
+    }
+
+    // MARK: - Ambient Presence
+    enum Ambient: Endpoint {
+        case updatePresence(body: Encodable)
+        case checkInlineHelp(body: Encodable)
+        case logInlineHelp(body: Encodable)
+        case recordHelpResponse(body: Encodable)
+        case getQuickActions(body: Encodable)
+
+        var path: String {
+            switch self {
+            case .updatePresence: return "/api/v1/ambient/presence/update"
+            case .checkInlineHelp: return "/api/v1/ambient/inline-help/check"
+            case .logInlineHelp: return "/api/v1/ambient/inline-help/log"
+            case .recordHelpResponse: return "/api/v1/ambient/inline-help/response"
+            case .getQuickActions: return "/api/v1/ambient/quick-actions"
+            }
+        }
+
+        var method: HTTPMethod { .post }
+
+        var body: Encodable? {
+            switch self {
+            case .updatePresence(let body), .checkInlineHelp(let body),
+                 .logInlineHelp(let body), .recordHelpResponse(let body),
+                 .getQuickActions(let body):
+                return body
+            }
+        }
+
+        var cacheTTL: TimeInterval { 0 }
+    }
+
+    // MARK: - Proactive Interventions
+    enum Proactive: Endpoint {
+        case getInterventions
+        case logIntervention(body: Encodable)
+        case recordResponse(body: Encodable)
+        case getPreferences
+        case updatePreferences(body: Encodable)
+
+        var path: String {
+            switch self {
+            case .getInterventions: return "/api/v1/proactive/interventions"
+            case .logIntervention: return "/api/v1/proactive/interventions/log"
+            case .recordResponse: return "/api/v1/proactive/interventions/response"
+            case .getPreferences: return "/api/v1/proactive/preferences"
+            case .updatePreferences: return "/api/v1/proactive/preferences"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .getInterventions, .getPreferences: return .get
+            case .logIntervention, .recordResponse: return .post
+            case .updatePreferences: return .put
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .logIntervention(let body), .recordResponse(let body),
+                 .updatePreferences(let body):
+                return body
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval {
+            switch self {
+            case .getInterventions: return 30
+            case .getPreferences: return 300
+            default: return 0
+            }
+        }
+    }
+
+    // MARK: - Predictive Intelligence
+    enum Predictive: Endpoint {
+        case predictStruggle(body: Encodable)
+        case recordOutcome(body: Encodable)
+        case dropoutRisk
+        case timingProfile
+        case insights
+
+        var path: String {
+            switch self {
+            case .predictStruggle: return "/api/v1/predictive/struggle/predict"
+            case .recordOutcome: return "/api/v1/predictive/struggle/record-outcome"
+            case .dropoutRisk: return "/api/v1/predictive/dropout/risk"
+            case .timingProfile: return "/api/v1/predictive/timing/profile"
+            case .insights: return "/api/v1/predictive/insights"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .predictStruggle, .recordOutcome: return .post
+            default: return .get
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .predictStruggle(let body), .recordOutcome(let body):
+                return body
+            default: return nil
+            }
+        }
+
+        var cacheTTL: TimeInterval {
+            switch self {
+            case .dropoutRisk, .timingProfile, .insights: return 120
+            default: return 0
+            }
+        }
+    }
+
+    // MARK: - Relationship System
+    enum Relationship: Endpoint {
+        case getMilestones
+        case getJourneySummary
+        case getPersonality
+        case getWeeklyReview
+
+        var path: String {
+            switch self {
+            case .getMilestones: return "/api/v1/relationship/milestones"
+            case .getJourneySummary: return "/api/v1/relationship/journey"
+            case .getPersonality: return "/api/v1/relationship/personality"
+            case .getWeeklyReview: return "/api/v1/relationship/weekly-review"
+            }
+        }
+
+        var method: HTTPMethod { .get }
+
+        var cacheTTL: TimeInterval { 300 }
+    }
 }
 
 // MARK: - Supporting Enums
@@ -2347,8 +2531,6 @@ extension Endpoints {
                 return "/api/v1/community/posts/\(postId)/comments"
             case .createComment(let postId, _):
                 return "/api/v1/community/posts/\(postId)/comments"
-            case .likeComment(let commentId):
-                return "/api/v1/community/comments/\(commentId)/like"
             case .deleteComment(let postId, let commentId):
                 return "/api/v1/community/posts/\(postId)/comments/\(commentId)"
             case .likeComment(let postId, let commentId):
@@ -2445,6 +2627,50 @@ extension Endpoints {
         }
 
         var requiresAuth: Bool { true }
+    }
+
+    // MARK: - Progressive Course Generation
+    enum CourseGen: Endpoint {
+        case start(topic: String, level: String)
+        case status(jobId: String)
+        case module(courseId: String, index: Int)
+        case fullCourse(courseId: String)
+        
+        var path: String {
+            switch self {
+            case .start: return "/course/generate"
+            case .status: return "/course/generate/status"
+            case .module(let courseId, let index): return "/course/\(courseId)/module/\(index)"
+            case .fullCourse(let courseId): return "/course/\(courseId)"
+            }
+        }
+        
+        var method: HTTPMethod {
+            switch self {
+            case .start: return .post
+            case .status, .module, .fullCourse: return .get
+            }
+        }
+        
+        var body: Encodable? {
+            switch self {
+            case .start(let topic, let level):
+                return ["topic": topic, "user_level": level]
+            default:
+                return nil
+            }
+        }
+        
+        var queryItems: [URLQueryItem]? {
+            switch self {
+            case .status(let jobId):
+                return [URLQueryItem(name: "job_id", value: jobId)]
+            default:
+                return nil
+            }
+        }
+        
+        var cacheTTL: TimeInterval { 0 }
     }
 }
 

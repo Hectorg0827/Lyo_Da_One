@@ -1,0 +1,29 @@
+{
+  "id": "sample-course-1",
+  "title": "Sample AI Classroom",
+  "components": [
+    {
+      "type": "courseCard",
+      "courseModel": {
+        "id": "c1",
+        "title": "Intro to Algebra",
+        "summary": "3 lessons • 45m"
+      }
+    },
+    {
+      "type": "quiz",
+      "quizModel": {
+        "id": "q1",
+        "title": "Algebra Basics",
+        "questions": [
+          {
+            "id": "q1-1",
+            "text": "Solve 2x + 3 = 7",
+            "choices": ["x=1", "x=2", "x=3"],
+            "answerIndex": 1
+          }
+        ]
+      }
+    }
+  ]
+}

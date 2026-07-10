@@ -85,3 +85,4 @@ __pycache__/
 
 # Claude / Agent folders
 .claude/
+build_temp*/

@@ -55,9 +55,6 @@ enum Log {
     /// App lifecycle, config, feature flags
     static let app = Logger(subsystem: subsystem, category: "app")
 
-    /// A2UI rendering engine
-    static let a2ui = Logger(subsystem: subsystem, category: "a2ui")
-
     /// Deep links, URL handling
     static let deeplink = Logger(subsystem: subsystem, category: "deeplink")
 

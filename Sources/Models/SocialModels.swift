@@ -143,8 +143,8 @@ struct CreateStoryRequest: Codable {
 // MARK: - Discovery Models
 
 struct Discovery: Identifiable, Codable {
-    let id: String
-    let userId: String
+    let id: Int
+    let userId: Int
     let userName: String?
     let title: String
     let description: String?
@@ -158,17 +158,17 @@ struct Discovery: Identifiable, Codable {
     
     enum CodingKeys: String, CodingKey {
         case id
-        case userId = "user_id"
-        case userName = "user_name"
+        case userId = "userId"
+        case userName = "authorName"
         case title
         case description
-        case thumbnailURL = "thumbnail_url"
-        case videoURL = "video_url"
-        case likes
-        case views
-        case isLiked = "is_liked"
-        case isSaved = "is_saved"
-        case createdAt = "created_at"
+        case thumbnailURL = "thumbnailURL"
+        case videoURL = "videoURL"
+        case likes = "likeCount"
+        case views = "viewCount"
+        case isLiked = "isLiked"
+        case isSaved = "isSaved"
+        case createdAt = "createdAt"
     }
 }
 
@@ -261,8 +261,38 @@ struct DiscoveriesResponse: Codable {
     
     enum CodingKeys: String, CodingKey {
         case discoveries
+        case items
+        case posts 
+        case clips // backend use "clips"
         case total
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try multiple keys for discoveries
+        if let d = try container.decodeIfPresent([Discovery].self, forKey: .discoveries) {
+            self.discoveries = d
+        } else if let items = try container.decodeIfPresent([Discovery].self, forKey: .items) {
+            self.discoveries = items
+        } else if let posts = try container.decodeIfPresent([Discovery].self, forKey: .posts) {
+            self.discoveries = posts
+        } else if let clips = try container.decodeIfPresent([Discovery].self, forKey: .clips) {
+            self.discoveries = clips
+        } else {
+            self.discoveries = []
+        }
+        
+        self.total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(discoveries, forKey: .discoveries)
+        try container.encode(total, forKey: .total)
+        try container.encode(hasMore, forKey: .hasMore)
     }
 }
 
@@ -272,8 +302,16 @@ struct PostsResponse: Codable {
     let hasMore: Bool
     
     enum CodingKeys: String, CodingKey {
-        case posts
+        case posts = "items" // API returns "items"
         case total
         case hasMore = "has_more"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.posts = try container.decodeIfPresent([Post].self, forKey: .posts) ?? []
+        self.total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+    }
 }
+

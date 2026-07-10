@@ -193,6 +193,9 @@ class LyoOnboardingManager: ObservableObject {
         // Save progress
         saveProgress()
 
+        // Track event
+        LyoAnalyticsManager.shared.trackEvent("tutorial_step_completed", parameters: ["step_id": currentStep.id])
+
         // Check if onboarding is complete
         checkOnboardingCompletion()
 
@@ -209,6 +212,9 @@ class LyoOnboardingManager: ObservableObject {
         currentOnboardingStep = nil
 
         saveProgress()
+
+        // Track event
+        LyoAnalyticsManager.shared.trackEvent("tutorial_step_skipped", parameters: ["step_id": currentStep.id])
 
         // Show next step
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

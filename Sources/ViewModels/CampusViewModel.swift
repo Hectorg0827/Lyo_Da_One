@@ -206,6 +206,47 @@ class CampusViewModel: ObservableObject {
         return context
     }
     
+    // MARK: - RSVP actions
+    
+    func toggleAttendance(for item: CampusItem) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        
+        let isAttending = items[index].userAttendanceStatus?.uppercased() == "GOING"
+        let copy = items[index]
+        
+        // Optimistic update
+        let newStatus = isAttending ? nil : "GOING"
+        let newCount = isAttending ? max(0, copy.attendeeCount - 1) : copy.attendeeCount + 1
+        
+        items[index] = CampusItem(
+            id: copy.id, type: copy.type, title: copy.title, subtitle: copy.subtitle,
+            locationName: copy.locationName, coordinate: copy.coordinate,
+            startTime: copy.startTime, endTime: copy.endTime, roomId: copy.roomId,
+            hostName: copy.hostName, hostAvatarURL: copy.hostAvatarURL,
+            attendeeCount: newCount, maxAttendees: copy.maxAttendees,
+            tags: copy.tags, userAttendanceStatus: newStatus
+        )
+        
+        Task {
+            do {
+                if isAttending {
+                    _ = try await LyoAPIClient.shared.cancelAttendance(eventId: item.id)
+                } else {
+                    _ = try await LyoAPIClient.shared.attendEvent(eventId: item.id)
+                }
+                
+                // Refresh list to ensure sync
+                // await loadEvents() 
+            } catch {
+                // Revert local changes on failure
+                await MainActor.run {
+                    self.items[index] = copy
+                    self.errorMessage = "Failed to update RSVP. Please try again."
+                }
+            }
+        }
+    }
+    
     // MARK: - Filter Helpers
     
     func toggleTypeFilter(_ type: CampusItemType) {

@@ -159,6 +159,16 @@ struct EnhancedChatInputBar: View {
     
     private var voiceModeIndicator: some View {
         HStack(spacing: 12) {
+            
+            // Lyo Avatar / Voice Orb
+            InlineVoiceOrbView(
+                isSpeaking: voiceService.isRecording,
+                accent: Color.accentColor,
+                amplitude: voiceService.isRecording ? 0.5 : 0.0
+            )
+            .scaleEffect(40.0 / 90.0)
+            .frame(width: 40, height: 40)
+            
             // Animated waveform
             HStack(spacing: 3) {
                 ForEach(0..<5, id: \.self) { index in
@@ -491,6 +501,45 @@ struct EnhancedChatInputBar: View {
                 for: nil
             )
         }
+    }
+}
+
+private struct InlineVoiceOrbView: View {
+    let isSpeaking: Bool
+    let accent: Color
+    let amplitude: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(accent.opacity(isSpeaking ? 0.28 : 0.14))
+                .frame(width: 90, height: 90)
+                .blur(radius: isSpeaking ? 9 : 5)
+
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            accent.opacity(0.95),
+                            accent.opacity(0.45)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 72, height: 72)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                )
+
+            Image(systemName: isSpeaking ? "waveform" : "mic.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .scaleEffect(isSpeaking ? (1.0 + (amplitude * 0.12)) : 1.0)
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: amplitude)
+        .animation(.easeInOut(duration: 0.2), value: isSpeaking)
     }
 }
 
