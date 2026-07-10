@@ -81,7 +81,7 @@ final class DiscoverViewModel: ObservableObject {
     func prepareShareItems(for item: DiscoverItem) -> [Any] {
         // If it's linked to a course, share as a course
         if let courseId = item.courseId {
-            return CourseShareService.shared.getShareItems(
+            return CourseShareService.shared.shareItems(
                 courseId: courseId,
                 title: item.title,
                 description: item.subtitle
@@ -131,9 +131,9 @@ final class DiscoverViewModel: ObservableObject {
         Task { 
             do {
                 if updatedItem.isLiked {
-                    try await DiscoveryService.shared.likeDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.likeDiscovery(discoveryId: item.id)
                 } else {
-                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
                 }
             } catch {
                 print("Failed to toggle like: \(error)")
@@ -164,9 +164,9 @@ final class DiscoverViewModel: ObservableObject {
         Task {
             do {
                 if updatedItem.isSaved {
-                    try await DiscoveryService.shared.saveDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.saveDiscovery(discoveryId: item.id)
                 } else {
-                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: item.id)
                 }
             } catch {
                 // Revert on failure
@@ -211,10 +211,7 @@ final class DiscoverViewModel: ObservableObject {
         Task {
             let topic = item.topic ?? item.title
             let level = item.level.rawValue
-            await CourseGenerationService.shared.startCourseGeneration(
-                topic: topic,
-                level: level
-            )
+            _ = try? await CourseGenerationService.shared.generateCourse(topic: topic, level: level)
             Log.ui.info("Mini-course generation started for: \(item.title)")
         }
     }

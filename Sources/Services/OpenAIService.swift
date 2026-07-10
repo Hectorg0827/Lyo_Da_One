@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import os
 
 // Note: This service uses models from Models/LyoChat.swift (LyoMessage, SuggestionChip)
 
@@ -21,9 +20,9 @@ class OpenAIService {
     
     private init() {
         if useMockMode {
-            Log.ai.warning("Leo AI: Running in MOCK mode (no backend URL)")
+            print("⚠️ Leo AI: Running in MOCK mode (no backend URL)")
         } else {
-            Log.ai.info("Leo AI: Using Backend AI")
+            print("✅ Leo AI: Using Backend AI")
         }
     }
     
@@ -35,7 +34,10 @@ class OpenAIService {
         systemPrompt: String? = nil
     ) async throws -> String {
         if useMockMode {
-            throw OpenAIError.invalidURL
+            guard AppConfig.allowMockFallbacks else {
+                throw OpenAIError.invalidURL
+            }
+            return try await getMockResponse(for: message, history: conversationHistory)
         }
 
         do {
@@ -46,7 +48,10 @@ class OpenAIService {
             )
         } catch {
             // Backend unavailable or response unexpected.
-
+            if AppConfig.allowMockFallbacks {
+                print("⚠️ Backend AI failed: \(error.localizedDescription). Falling back to mock because LYO_ALLOW_MOCKS=1")
+                return try await getMockResponse(for: message, history: conversationHistory)
+            }
             throw error
         }
     }
@@ -63,20 +68,34 @@ class OpenAIService {
         conversationHistory: [LyoMessage],
         systemPrompt: String?
     ) async throws -> String {
-        let cleanMessage = message
-
-        // Build conversation history for multi-turn context
-        let historyPayload: [[String: String]] = conversationHistory.suffix(8).map { msg in
-            [
-                "role": msg.isFromUser ? "user" : "assistant",
-                "content": msg.content
-            ]
+        // The classroom endpoint doesn't accept system prompts/history directly,
+        // so we fold them into the message in a predictable way.
+        var composed = ""
+        if let systemPrompt, !systemPrompt.isEmpty {
+            composed += "SYSTEM:\n\(systemPrompt)\n\n"
         }
+        if !conversationHistory.isEmpty {
+            composed += "CONVERSATION_HISTORY:\n"
+            for msg in conversationHistory.suffix(10) {
+                let role = msg.isFromUser ? "user" : "assistant"
+                composed += "- \(role): \(msg.content)\n"
+            }
+            composed += "\n"
+        }
+        composed += message
 
-        let endpoint = Endpoints.Classroom.classroomChat(
-            message: cleanMessage,
-            conversationHistory: historyPayload,
-            systemPrompt: systemPrompt
+        let body: [String: Any] = [
+            "message": composed,
+            "session_id": NSNull(),
+            "include_audio": false
+        ]
+        
+        let encodableBody = body.mapValues { AnyEncodable(value: $0) }
+        
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/classroom/chat",
+            method: .post,
+            body: encodableBody
         )
 
         let chat: BackendClassroomChatResponse = try await NetworkClient.shared.request(endpoint)

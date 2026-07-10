@@ -204,7 +204,6 @@ class AICommandHandler: ObservableObject {
             let request = CreateStackItemRequest(
                 type: itemType,
                 refId: item.title, // Using title as refId for now
-                title: item.title,
                 tags: course.map { [$0.topic, $0.level] } ?? [],
                 contextData: contextData
             )

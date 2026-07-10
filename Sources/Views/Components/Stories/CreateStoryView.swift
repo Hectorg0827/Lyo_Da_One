@@ -242,8 +242,7 @@ struct CreateStoryView: View {
                 
                 try await storyService.addStory(
                     mediaURL: mediaURL,
-                    mediaType: type,
-                    caption: caption.isEmpty ? nil : caption
+                    mediaType: type
                 )
                 
                 isUploading = false

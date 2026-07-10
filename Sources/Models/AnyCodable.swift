@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Helper for dynamic JSON values
-public struct AnyCodable: Codable {
+public struct AnyCodable: Codable, @unchecked Sendable {
     public let value: Any
 
     public init<T>(_ value: T?) {

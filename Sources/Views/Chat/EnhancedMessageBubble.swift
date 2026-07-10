@@ -13,6 +13,15 @@ import os
 import LaTeXSwiftUI
 #endif
 
+struct AnimatedReadingMascotView: View {
+    let size: CGFloat
+
+    var body: some View {
+        ProgressView()
+            .frame(width: size, height: size)
+    }
+}
+
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
     let onTTSToggle: (() -> Void)?
@@ -21,13 +30,15 @@ struct EnhancedMessageBubble: View {
     let onTopicSelect: ((TopicOption) -> Void)?
     let onModuleSelect: ((CourseModule) -> Void)?
     let onSuggestionSelect: ((String) -> Void)?
+    /// Stage A — primary tap on a SuggestedActionCard.
+    let onSuggestedAction: ((SuggestedActionCard) -> Void)?
     let highlights: [ChatHighlight]
     let onTextSelectionAction: ((TextSelectionAction) -> Void)?
-    
+
     @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
     @State private var selectedImageURL: URL?
-    
+
     init(
         message: MultimodalMessage,
         onTTSToggle: (() -> Void)? = nil,
@@ -36,6 +47,7 @@ struct EnhancedMessageBubble: View {
         onTopicSelect: ((TopicOption) -> Void)? = nil,
         onModuleSelect: ((CourseModule) -> Void)? = nil,
         onSuggestionSelect: ((String) -> Void)? = nil,
+        onSuggestedAction: ((SuggestedActionCard) -> Void)? = nil,
         highlights: [ChatHighlight] = [],
         onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil
     ) {
@@ -46,6 +58,7 @@ struct EnhancedMessageBubble: View {
         self.onTopicSelect = onTopicSelect
         self.onModuleSelect = onModuleSelect
         self.onSuggestionSelect = onSuggestionSelect
+        self.onSuggestedAction = onSuggestedAction
         self.highlights = highlights
         self.onTextSelectionAction = onTextSelectionAction
     }
@@ -53,16 +66,17 @@ struct EnhancedMessageBubble: View {
     /// True when contentTypes contains rich content that should suppress raw text rendering
     /// to prevent duplicate display (text + card both showing)
     private var hasRichContent: Bool {
-        message.contentTypes.contains { contentType in
+        message.contentTypes.contains(where: { contentType in
             switch contentType {
             case .courseProposal: return true
             case .courseRoadmap: return true
             case .quiz: return true
+            case .quizDeck: return true
             case .flashcards: return true
             case .studyPlan: return true
             default: return false
             }
-        }
+        })
     }
     
     var body: some View {
@@ -94,9 +108,8 @@ struct EnhancedMessageBubble: View {
                         Image("Mascot_Standing")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
-                            .offset(y: 10)
+                            .frame(width: 32, height: 32)
+                            .offset(y: 5)
                     }
                     
                     Text("Lyo")
@@ -133,17 +146,16 @@ struct EnhancedMessageBubble: View {
                         case .text:
                             // Suppress raw text when rich content (courseProposal, quiz, etc.) is present
                             if !hasRichContent && !message.content.isEmpty {
-                                SelectableTextView(
-                                    content: stripEmojis(message.content),
-                                    messageId: message.id,
+                                LyoRichContentRenderer(
+                                    text: message.content,
                                     highlights: highlights,
                                     onAction: { action in
                                         onTextSelectionAction?(action)
                                     }
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true)
                             }
+
                             
                         case .processing(let step, let progress):
                             ProcessingBubbleView(step: step, progress: progress)
@@ -186,6 +198,12 @@ struct EnhancedMessageBubble: View {
                                     onQuizAnswer?(index)
                                 }
                             )
+                            .padding(.horizontal, -8)
+                            
+                        case .quizDeck(let deck):
+                            ChatQuizDeckView(deck: deck) { action in
+                                onSuggestionSelect?(action)
+                            }
                             .padding(.horizontal, -8)
                             
                         case .courseCard(let courseId, let title, let subtitle, _):
@@ -247,6 +265,14 @@ struct EnhancedMessageBubble: View {
                                 .background(Color.white.opacity(0.06))
                                 .clipShape(RoundedRectangle(cornerRadius: 14))
                                 .padding(.horizontal, -8)
+
+                        case .suggestedActionCard(let card):
+                            SuggestedActionCardView(
+                                card: card,
+                                onPrimary: { c in onSuggestedAction?(c) },
+                                onChip: { label, _ in onSuggestionSelect?(label) }
+                            )
+                            .padding(.horizontal, -8)
 
                         case .notes(let title, let sections):
                             NotesView(notes: NotesPayload(title: title, sections: sections))
@@ -363,11 +389,6 @@ struct EnhancedMessageBubble: View {
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 40, height: 40)
-            .clipShape(Circle())
-            .overlay(
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.2), lineWidth: 2)
-            )
     }
     
     // MARK: - TTS Button
@@ -520,4 +541,3 @@ struct EnhancedMessageBubble: View {
     }
     .padding()
 }
-

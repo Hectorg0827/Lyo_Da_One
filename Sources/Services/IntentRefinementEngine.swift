@@ -19,14 +19,14 @@ import os
 // MARK: - Refined Intent
 
 public struct RefinedCourseIntent: Equatable {
-    public let topic: String           // Display-cased topic ("Algebra 1")
-    public let normalizedTopic: String // Lowercased ("algebra 1")
-    public let scope: String?          // Optional sub-area ("Algebra 1 — quadratics")
+    public let topic: String  // Display-cased topic ("Algebra 1")
+    public let normalizedTopic: String  // Lowercased ("algebra 1")
+    public let scope: String?  // Optional sub-area ("Algebra 1 — quadratics")
     public let level: SkillBand
     public let goal: LearningGoal
     public let format: ContentFormat
     public let timeBudgetMinutes: Int
-    public let confidence: Double      // 0.0 – 1.0
+    public let confidence: Double  // 0.0 – 1.0
 
     /// Backend hint string ("course_creation_refined") for forcedIntent routing.
     public var forcedIntentTag: String { "course_creation_refined" }
@@ -47,12 +47,12 @@ public enum RefinementOutcome {
 public struct ClarificationPrompt: Equatable {
     public let dimension: Dimension
     public let title: String
-    public let chips: [String]   // Plain strings; tapping a chip sends it as a new message.
+    public let chips: [String]  // Plain strings; tapping a chip sends it as a new message.
 
     public enum Dimension: String, Equatable {
-        case scope     // "Which kind of algebra?"
-        case level     // "How comfortable are you?"
-        case goal      // "What's this for?" (rarely used)
+        case scope  // "Which kind of algebra?"
+        case level  // "How comfortable are you?"
+        case goal  // "What's this for?" (rarely used)
     }
 }
 
@@ -110,11 +110,15 @@ public final class IntentRefinementEngine: ObservableObject {
             // Course intent but no topic extracted — start by asking what to learn.
             pendingTopic = ""  // sentinel: refinement in progress, no topic yet
             roundsAsked = 1
-            return .needsClarification(.init(
-                dimension: .scope,
-                title: "What would you like to learn?",
-                chips: ["Algebra basics", "Spanish for travel", "Python fundamentals", "Public speaking"]
-            ))
+            return .needsClarification(
+                .init(
+                    dimension: .scope,
+                    title: "What would you like to learn?",
+                    chips: [
+                        "Algebra basics", "Spanish for travel", "Python fundamentals",
+                        "Public speaking",
+                    ]
+                ))
         }
 
         return startRefinement(rawTopic: extracted, rawMessage: trimmed)
@@ -188,7 +192,9 @@ public final class IntentRefinementEngine: ObservableObject {
         // After consuming the answer, decide what's next.
         if let topic = pendingTopic, !topic.isEmpty {
             // Maybe the now-known topic is itself ambiguous.
-            if pendingScope == nil, let prompt = scopePromptIfAmbiguous(topic: topic, fullMessage: lower) {
+            if pendingScope == nil,
+                let prompt = scopePromptIfAmbiguous(topic: topic, fullMessage: lower)
+            {
                 if roundsAsked < maxRounds {
                     roundsAsked += 1
                     return .needsClarification(prompt)
@@ -210,11 +216,15 @@ public final class IntentRefinementEngine: ObservableObject {
         // Still no topic — re-ask once.
         if roundsAsked < maxRounds {
             roundsAsked += 1
-            return .needsClarification(.init(
-                dimension: .scope,
-                title: "What would you like to learn?",
-                chips: ["Algebra basics", "Spanish for travel", "Python fundamentals", "Public speaking"]
-            ))
+            return .needsClarification(
+                .init(
+                    dimension: .scope,
+                    title: "What would you like to learn?",
+                    chips: [
+                        "Algebra basics", "Spanish for travel", "Python fundamentals",
+                        "Public speaking",
+                    ]
+                ))
         }
 
         reset()
@@ -248,7 +258,9 @@ public final class IntentRefinementEngine: ObservableObject {
             confidence: confidence
         )
 
-        log.info("✅ Refined intent: \(scoped) | \(level.rawValue) | goal=\(goal.rawValue) | conf=\(confidence)")
+        log.info(
+            "✅ Refined intent: \(scoped) | \(level.rawValue) | goal=\(goal.rawValue) | conf=\(confidence)"
+        )
         reset()
         return refined
     }
@@ -256,7 +268,13 @@ public final class IntentRefinementEngine: ObservableObject {
     // MARK: - Heuristics
 
     private func inferLevel(from lowered: String) -> SkillBand? {
-        if containsAny(lowered, ["from scratch", "no idea", "never done", "complete beginner", "for beginners", "beginner"]) {
+        if containsAny(
+            lowered,
+            [
+                "from scratch", "no idea", "never done", "complete beginner", "for beginners",
+                "beginner",
+            ])
+        {
             return .beginner
         }
         if containsAny(lowered, ["refresh", "brush up", "review", "i used to", "rusty"]) {
@@ -272,16 +290,23 @@ public final class IntentRefinementEngine: ObservableObject {
     }
 
     private func inferGoal(from lowered: String) -> LearningGoal? {
-        if containsAny(lowered, ["exam", "test", "sat", "gre", "mcat", "lsat", "final"]) { return .examPrep }
-        if containsAny(lowered, ["work", "job", "interview", "career", "promotion"]) { return .career }
-        if containsAny(lowered, ["homework", "class", "school", "professor", "teacher"]) { return .school }
+        if containsAny(lowered, ["exam", "test", "sat", "gre", "mcat", "lsat", "final"]) {
+            return .examPrep
+        }
+        if containsAny(lowered, ["work", "job", "interview", "career", "promotion"]) {
+            return .career
+        }
+        if containsAny(lowered, ["homework", "class", "school", "professor", "teacher"]) {
+            return .school
+        }
         if containsAny(lowered, ["refresh", "brush up", "review"]) { return .refresher }
         return nil
     }
 
     /// Topics where one word maps to many real courses.
     /// Returns a chip prompt if the user message doesn't already disambiguate.
-    private func scopePromptIfAmbiguous(topic: String, fullMessage: String) -> ClarificationPrompt? {
+    private func scopePromptIfAmbiguous(topic: String, fullMessage: String) -> ClarificationPrompt?
+    {
         let key = topic.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard let options = Self.ambiguousTopics[key] else { return nil }
 
@@ -301,7 +326,9 @@ public final class IntentRefinementEngine: ObservableObject {
         ClarificationPrompt(
             dimension: .level,
             title: "How comfortable are you with \(topic.lowercased())?",
-            chips: ["I'm new to this", "I need a refresher", "I'm comfortable", "Help me figure it out"]
+            chips: [
+                "I'm new to this", "I need a refresher", "I'm comfortable", "Help me figure it out",
+            ]
         )
     }
 
@@ -322,7 +349,9 @@ public final class IntentRefinementEngine: ObservableObject {
         guard !trimmed.isEmpty else { return trimmed }
         // If the user shouted ("ALGEBRA") or mumbled ("algebra"), title-case it.
         // Preserve mixed-case multi-word strings ("Algebra 1 — Quadratics").
-        let hasMixedCase = trimmed.contains(where: { $0.isUppercase }) && trimmed.contains(where: { $0.isLowercase })
+        let hasMixedCase =
+            trimmed.contains(where: { $0.isUppercase })
+            && trimmed.contains(where: { $0.isLowercase })
         if hasMixedCase { return trimmed }
         return trimmed.capitalized
     }
@@ -333,21 +362,33 @@ public final class IntentRefinementEngine: ObservableObject {
     // chip round, which is friction. Only add when one word truly maps to
     // multiple distinct real courses.
     private static let ambiguousTopics: [String: [String]] = [
-        "algebra":   ["Pre-Algebra", "Algebra 1", "Algebra 2", "Linear Algebra", "Abstract Algebra"],
-        "math":      ["Arithmetic", "Algebra", "Geometry", "Calculus", "Statistics"],
-        "spanish":   ["Travel Spanish", "Conversational Spanish", "Business Spanish", "Spanish for school"],
-        "french":    ["Travel French", "Conversational French", "Business French", "French for school"],
-        "english":   ["English grammar", "Business English", "English for IELTS/TOEFL", "Conversational English"],
-        "physics":   ["Classical mechanics", "Electromagnetism", "Modern physics", "AP Physics"],
+        "algebra": ["Pre-Algebra", "Algebra 1", "Algebra 2", "Linear Algebra", "Abstract Algebra"],
+        "math": ["Arithmetic", "Algebra", "Geometry", "Calculus", "Statistics"],
+        "spanish": [
+            "Travel Spanish", "Conversational Spanish", "Business Spanish", "Spanish for school",
+        ],
+        "french": [
+            "Travel French", "Conversational French", "Business French", "French for school",
+        ],
+        "english": [
+            "English grammar", "Business English", "English for IELTS/TOEFL",
+            "Conversational English",
+        ],
+        "physics": ["Classical mechanics", "Electromagnetism", "Modern physics", "AP Physics"],
         "chemistry": ["General chemistry", "Organic chemistry", "Biochemistry", "AP Chemistry"],
-        "biology":   ["Cell biology", "Genetics", "Anatomy", "AP Biology"],
-        "history":   ["World history", "US history", "European history", "Ancient civilizations"],
-        "python":    ["Python basics", "Python for data science", "Web with Django/Flask", "Python automation"],
+        "biology": ["Cell biology", "Genetics", "Anatomy", "AP Biology"],
+        "history": ["World history", "US history", "European history", "Ancient civilizations"],
+        "python": [
+            "Python basics", "Python for data science", "Web with Django/Flask",
+            "Python automation",
+        ],
         "javascript": ["JS fundamentals", "React", "Node.js", "TypeScript"],
-        "guitar":    ["Acoustic basics", "Electric / rock", "Classical", "Jazz / theory"],
-        "drawing":   ["Pencil sketching", "Digital art", "Anatomy & figure", "Comic / manga"],
-        "cooking":   ["Quick weeknight meals", "Baking", "World cuisines", "Knife skills & technique"],
-        "investing": ["Investing 101", "Stocks & ETFs", "Real estate", "Crypto"]
+        "guitar": ["Acoustic basics", "Electric / rock", "Classical", "Jazz / theory"],
+        "drawing": ["Pencil sketching", "Digital art", "Anatomy & figure", "Comic / manga"],
+        "cooking": [
+            "Quick weeknight meals", "Baking", "World cuisines", "Knife skills & technique",
+        ],
+        "investing": ["Investing 101", "Stocks & ETFs", "Real estate", "Crypto"],
     ]
 
     // MARK: - Telemetry (Sprint 4)
@@ -364,24 +405,28 @@ public final class IntentRefinementEngine: ObservableObject {
             // know the engine made a real decision.
             return
         case .needsClarification(let prompt):
-            LyoAnalyticsManager.shared.trackEvent("intent_refinement_clarification", parameters: [
-                "dimension": prompt.dimension.rawValue,
-                "round": roundsAsked,
-                "topic": pendingTopic ?? "",
-                "chip_count": prompt.chips.count,
-                "message_preview": preview
-            ])
+            LyoAnalyticsManager.shared.trackEvent(
+                "intent_refinement_clarification",
+                parameters: [
+                    "dimension": prompt.dimension.rawValue,
+                    "round": roundsAsked,
+                    "topic": pendingTopic ?? "",
+                    "chip_count": prompt.chips.count,
+                    "message_preview": preview,
+                ])
         case .ready(let refined):
-            LyoAnalyticsManager.shared.trackEvent("intent_refinement_ready", parameters: [
-                "topic": refined.topic,
-                "normalized_topic": refined.normalizedTopic,
-                "level": refined.level.backendLevel,
-                "scope": refined.scope ?? "",
-                "goal": refined.goal.rawValue,
-                "format": refined.format.rawValue,
-                "rounds_asked": roundsAsked,
-                "confidence": refined.confidence
-            ])
+            LyoAnalyticsManager.shared.trackEvent(
+                "intent_refinement_ready",
+                parameters: [
+                    "topic": refined.topic,
+                    "normalized_topic": refined.normalizedTopic,
+                    "level": refined.level.backendLevel,
+                    "scope": refined.scope ?? "",
+                    "goal": refined.goal.rawValue,
+                    "format": refined.format.rawValue,
+                    "rounds_asked": roundsAsked,
+                    "confidence": refined.confidence,
+                ])
         }
     }
 }

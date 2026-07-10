@@ -111,7 +111,7 @@ struct CourseModuleRow: View {
             }
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(module.title)
+                InlineMathText(text: module.title, isSelectable: false)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundStyle(module.isLocked ? .secondary : .primary)

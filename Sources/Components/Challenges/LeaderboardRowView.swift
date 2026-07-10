@@ -27,7 +27,7 @@ struct LeaderboardRowView: View {
                     .frame(width: 44, height: 44)
                 
                 if let avatarURLString = entry.avatarURL, let avatarURL = URL(string: avatarURLString) {
-                    AsyncImage(url: avatarURL) { image in
+                    LyoImage(url: avatarURL) { image in
                         image
                             .resizable()
                             .scaledToFill()

@@ -170,6 +170,78 @@ struct Discovery: Identifiable, Codable {
         case isSaved = "isSaved"
         case createdAt = "createdAt"
     }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // 1. Decode ID robustly (String vs Int)
+        if let idInt = try? container.decode(Int.self, forKey: .id) {
+            self.id = idInt
+        } else if let idString = try? container.decode(String.self, forKey: .id), let idInt = Int(idString) {
+            self.id = idInt
+        } else {
+            self.id = try container.decode(Int.self, forKey: .id)
+        }
+        
+        // 2. Decode userId robustly (String vs Int)
+        if let userIdInt = try? container.decode(Int.self, forKey: .userId) {
+            self.userId = userIdInt
+        } else if let userIdString = try? container.decode(String.self, forKey: .userId), let userIdInt = Int(userIdString) {
+            self.userId = userIdInt
+        } else {
+            self.userId = try container.decode(Int.self, forKey: .userId)
+        }
+        
+        // 3. Standard decoding for text/optional fields
+        self.userName = try container.decodeIfPresent(String.self, forKey: .userName)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
+        self.thumbnailURL = try container.decodeIfPresent(String.self, forKey: .thumbnailURL)
+        self.videoURL = try container.decodeIfPresent(String.self, forKey: .videoURL)
+        
+        // 4. Metrics & Flags (safely fallback to defaults if null/missing)
+        self.likes = try container.decodeIfPresent(Int.self, forKey: .likes) ?? 0
+        self.views = try container.decodeIfPresent(Int.self, forKey: .views) ?? 0
+        self.isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
+        self.isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
+        
+        // 5. Date Decoding Resiliency
+        if let dateString = try? container.decode(String.self, forKey: .createdAt) {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: dateString) {
+                self.createdAt = date
+            } else {
+                let stdFormatter = ISO8601DateFormatter()
+                stdFormatter.formatOptions = [.withInternetDateTime]
+                if let date = stdFormatter.date(from: dateString) {
+                    self.createdAt = date
+                } else {
+                    let dateForm = DateFormatter()
+                    dateForm.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                    self.createdAt = dateForm.date(from: dateString) ?? Date()
+                }
+            }
+        } else {
+            self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        }
+    }
+    
+    // Memberwise initializer for preview/mocks
+    init(id: Int, userId: Int, userName: String?, title: String, description: String?, thumbnailURL: String?, videoURL: String?, likes: Int, views: Int, isLiked: Bool, isSaved: Bool, createdAt: Date) {
+        self.id = id
+        self.userId = userId
+        self.userName = userName
+        self.title = title
+        self.description = description
+        self.thumbnailURL = thumbnailURL
+        self.videoURL = videoURL
+        self.likes = likes
+        self.views = views
+        self.isLiked = isLiked
+        self.isSaved = isSaved
+        self.createdAt = createdAt
+    }
 }
 
 struct CreateDiscoveryRequest: Codable {
@@ -177,12 +249,40 @@ struct CreateDiscoveryRequest: Codable {
     let description: String?
     let videoURL: String
     let thumbnailURL: String?
+    let durationSeconds: Double
+    let subject: String?
+    let topic: String?
+    let level: String
+    let tags: [String]
+    let isPublic: Bool
+    let enableCourseGeneration: Bool
+    
+    init(title: String, description: String? = nil, videoURL: String, thumbnailURL: String? = nil, durationSeconds: Double = 0.0, subject: String? = nil, topic: String? = nil, level: String = "beginner", tags: [String] = [], isPublic: Bool = true, enableCourseGeneration: Bool = true) {
+        self.title = title
+        self.description = description
+        self.videoURL = videoURL
+        self.thumbnailURL = thumbnailURL
+        self.durationSeconds = durationSeconds
+        self.subject = subject
+        self.topic = topic
+        self.level = level
+        self.tags = tags
+        self.isPublic = isPublic
+        self.enableCourseGeneration = enableCourseGeneration
+    }
     
     enum CodingKeys: String, CodingKey {
         case title
         case description
-        case videoURL = "video_url"
-        case thumbnailURL = "thumbnail_url"
+        case videoURL = "videoUrl"
+        case thumbnailURL = "thumbnailUrl"
+        case durationSeconds = "durationSeconds"
+        case subject
+        case topic
+        case level
+        case tags
+        case isPublic = "isPublic"
+        case enableCourseGeneration = "enableCourseGeneration"
     }
 }
 
@@ -192,6 +292,13 @@ struct SaveDiscoveryRequest: Codable {
     enum CodingKeys: String, CodingKey {
         case discoveryId = "discovery_id"
     }
+}
+
+struct DiscoveryResponse: Codable {
+    let success: Bool
+    let clip: Discovery?
+    let message: String?
+    let error: String?
 }
 
 // MARK: - Post Models
@@ -307,6 +414,12 @@ struct PostsResponse: Codable {
         case hasMore = "has_more"
     }
 
+    init(posts: [Post], total: Int, hasMore: Bool) {
+        self.posts = posts
+        self.total = total
+        self.hasMore = hasMore
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.posts = try container.decodeIfPresent([Post].self, forKey: .posts) ?? []
@@ -314,4 +427,3 @@ struct PostsResponse: Codable {
         self.hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
     }
 }
-

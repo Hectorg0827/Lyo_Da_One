@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 // MARK: - Interactive Cinema Service
 // This service interfaces with the backend's graph-based course system
@@ -22,36 +21,35 @@ public final class InteractiveCinemaService: ObservableObject {
     }
     
     public func generateGraphCourse(topic: String, level: String = "beginner") async throws -> GraphCourseItem {
-        Log.ai.info("Generating graph course: \(topic) at \(level) level")
+        print("📡 Generating graph course via chat: \(topic) at \(level) level")
         
-        // Start course generation immediately (blocks until complete or fallback)
-        let generatedCourse = try await CourseGenerationService.shared.generateCourse(
-            topic: topic,
-            level: level,
-            outcomes: [
-                "Understand core concepts of \(topic)",
-                "Apply knowledge through practice",
-                "Build confidence in \(topic)"
-            ],
-            teachingStyle: "interactive"
-        )
+        let message = "Create a complete interactive course on '\(topic)' suitable for \(level) learners. Include multiple lessons with explanations, examples, and practice questions."
         
-        Log.ai.info("Course generation completed: \(generatedCourse.title) with \(generatedCourse.modules.count) modules")
-        
-        // Return course item using the SAME ID from generated course
-        let courseItem = GraphCourseItem(
-            id: generatedCourse.courseId,
-            title: generatedCourse.title,
-            description: generatedCourse.description,
-            subject: topic,
-            gradeBand: level,
-            entryNodeId: generatedCourse.modules.first?.lessons.first?.id,
-            estimatedMinutes: generatedCourse.estimatedDuration,
-            totalNodes: generatedCourse.modules.flatMap { $0.lessons }.count,
-            createdAt: Date()
-        )
-        
-        return courseItem
+        do {
+            // The chat endpoint returns a raw JSON response which might contain the course ID
+            // We need to handle this carefully. NetworkClient expects a Codable response.
+            // We use [String: AnyCodable] to capture the dynamic response.
+            
+            let response: [String: AnyCodable] = try await NetworkClient.shared.request(Endpoints.Classroom.generateCourse(message: message))
+            
+            print("✅ Chat response received")
+            
+            if let courseId = extractCourseId(from: response) {
+                print("✅ Course generated with ID: \(courseId)")
+                return try await fetchCourseDetails(courseId: courseId)
+            }
+            
+            throw CinemaError.decodingFailed("No course ID in response")
+            
+        } catch {
+            print("⚠️ Course generation failed: \(error.localizedDescription)")
+            
+            if AuthService.shared.isDemoMode {
+                print("🔄 Falling back to Mock Graph Course (demo mode)")
+                return generateMockGraphCourse(topic: topic, level: level)
+            }
+            throw error
+        }
     }
     
     private func extractCourseId(from payload: [String: AnyCodable]) -> String? {
@@ -75,201 +73,26 @@ public final class InteractiveCinemaService: ObservableObject {
     
     private func fetchCourseDetails(courseId: String) async throws -> GraphCourseItem {
         let course: GraphCourseItem = try await NetworkClient.shared.request(Endpoints.Classroom.getCourse(id: courseId))
-        Log.ai.info("Successfully fetched course details: \(course.id)")
+        print("✅ Successfully fetched course details: \(course.id)")
         return course
     }
     
     // MARK: - Playback
     
     public func startCourse(courseId: String) async throws -> PlaybackState {
-        Log.ai.info("▶️ starting course with ID: \(courseId)")
         isLoading = true
         defer { isLoading = false }
         
-        // FIRST: Check if course was just generated - it's in the cache
-        if let generatedCourse = CourseGenerationService.shared.generatedCourse {
-            Log.ai.info("Checking cache - Cached ID: \(generatedCourse.courseId) vs Requested ID: \(courseId)")
-            
-            if generatedCourse.courseId == courseId {
-                Log.ai.info("Found generated course in cache: \(generatedCourse.title)")
-                Log.ai.info("   Modules: \(generatedCourse.modules.count)")
-                if let first = generatedCourse.modules.first?.lessons?.first {
-                     Log.ai.info("   First Lesson Content Length: \(first.content?.count ?? 0)")
-                }
-                return convertGeneratedCourseToPlayback(course: generatedCourse, courseId: courseId)
-            } else {
-                Log.ai.warning("Cached course ID mismatch.")
-            }
-        } else {
-            Log.ai.warning("No generated course in cache.")
-        }
-        
-        // SECOND: Check for mock course (testing only)
+        // Check for mock course
         if courseId.starts(with: "mock_") {
-            Log.ai.info("🎬 Starting Mock Course (no generated course found - fallback to generic): \(courseId)")
+            print("🎬 Starting Mock Course: \(courseId)")
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay
             return getMockPlaybackState(courseId: courseId)
         }
         
-        // THIRD: Check for Shell Course (Optimistic UI)
-        if courseId.starts(with: "temp_") {
-            Log.ai.info("🎬 Starting Shell Course (Optimistic UI): \(courseId)")
-            // Return a loading/intro state
-            return createWelcomePlaybackState(courseId: courseId)
-        }
-        
-        // LAST: Fetch from backend
-        Log.ai.info("Fetching course from backend: \(courseId)")
         let playbackState: PlaybackState = try await NetworkClient.shared.request(Endpoints.Classroom.startCourse(id: courseId))
         currentPlaybackState = playbackState
         return playbackState
-    }
-    
-    // Generate playback state from CourseGenerationService
-    private func generatePlaybackState(courseId: String) async throws -> PlaybackState {
-        // Poll for course generation completion (max 10 seconds)
-        var attempts = 0
-        let maxAttempts = 10
-        
-        while attempts < maxAttempts {
-            // Check if course is ready
-            if let generatedCourse = CourseGenerationService.shared.generatedCourse,
-               !generatedCourse.modules.isEmpty {
-                Log.ai.info("Course ready after \(attempts) attempts, converting to playback...")
-                return convertGeneratedCourseToPlayback(course: generatedCourse, courseId: courseId)
-            }
-            
-            // Wait 1 second before next check
-            try await Task.sleep(nanoseconds: 1_000_000_000)
-            attempts += 1
-            Log.ai.info("⏳ Waiting for course generation... attempt \(attempts)/\(maxAttempts)")
-        }
-        
-        // Fallback: create a welcome node if generation took too long
-        Log.ai.warning("Course generation timed out, showing welcome screen...")
-        return createWelcomePlaybackState(courseId: courseId)
-    }
-    
-    private func convertGeneratedCourseToPlayback(course: GeneratedCourse, courseId: String) -> PlaybackState {
-        Log.ai.info("Converting course '\(course.title)' to playback - Modules: \(course.modules.count)")
-        
-        guard !course.modules.isEmpty else {
-            Log.ai.warning("No modules in generated course!")
-            return createWelcomePlaybackState(courseId: courseId)
-        }
-        
-        let firstModule = course.modules[0]
-        let moduleLessons = firstModule.lessons ?? []
-        Log.ai.info("📚 First module: '\(firstModule.title)' - Lessons: \(moduleLessons.count)")
-        
-        guard !moduleLessons.isEmpty else {
-            Log.ai.warning("No lessons in first module!")
-            return createWelcomePlaybackState(courseId: courseId)
-        }
-        
-        let firstLesson = moduleLessons[0]
-        Log.ai.info("Starting with lesson: '\(firstLesson.title ?? "Untitled")'")
-        
-        // Create main content node
-        var contentDict: [String: AnyCodable] = [:]
-        contentDict["text"] = AnyCodable(firstLesson.content ?? "")
-        contentDict["title"] = AnyCodable(firstLesson.title ?? "")
-        
-        let currentNode = LearningNodeWithAssets(
-            id: firstLesson.id,
-            nodeType: "explain",
-            title: firstLesson.title ?? "Lesson",
-            content: contentDict,
-            orderIndex: 1,
-            conceptId: nil,
-            skillType: nil,
-            assets: nil  // Fixed: was [:] which is wrong type
-        )
-        
-        // Create next nodes from remaining lessons
-        let nextNodes: [LearningNode] = moduleLessons.dropFirst().prefix(3).enumerated().map { index, lesson in
-            var lessonContent: [String: AnyCodable] = [:]
-            lessonContent["text"] = AnyCodable(lesson.content ?? "")
-            lessonContent["title"] = AnyCodable(lesson.title ?? "")
-            
-            return LearningNode(
-                id: lesson.id,
-                nodeType: "explain",
-                title: lesson.title ?? "Lesson",
-                content: lessonContent,
-                orderIndex: index + 2
-            )
-        }
-        
-        return PlaybackState(
-            courseId: courseId,
-            currentNodeId: firstLesson.id,
-            currentNode: currentNode,
-            nextNodes: nextNodes,
-            completedNodes: [],
-            progressPercent: 0.0,
-            totalTimeSeconds: 0,
-            canGoBack: false,
-            isAtInteraction: false
-        )
-    }
-    
-    private func createWelcomePlaybackState(courseId: String) -> PlaybackState {
-        var contentDict: [String: AnyCodable] = [:]
-        contentDict["text"] = AnyCodable("Welcome! Your course is being prepared. This will just take a moment...")
-        contentDict["title"] = AnyCodable("Getting Ready")
-        
-        let welcomeNode = LearningNodeWithAssets(
-            id: "welcome_1",
-            nodeType: "explain",
-            title: "Welcome",
-            content: contentDict,
-            orderIndex: 1,
-            conceptId: nil,
-            skillType: nil,
-            assets: nil  // Fixed: was [:] which is wrong type
-        )
-        
-        return PlaybackState(
-            courseId: courseId,
-            currentNodeId: "welcome_1",
-            currentNode: welcomeNode,
-            nextNodes: [],
-            completedNodes: [],
-            progressPercent: 0.0,
-            totalTimeSeconds: 0,
-            canGoBack: false,
-            isAtInteraction: false
-        )
-    }
-    
-    private func createCompletionPlaybackState(courseId: String) -> PlaybackState {
-        var contentDict: [String: AnyCodable] = [:]
-        contentDict["text"] = AnyCodable("🎉 Congratulations! You've completed this course. Great work!")
-        contentDict["title"] = AnyCodable("Course Complete")
-        
-        let completionNode = LearningNodeWithAssets(
-            id: "completion_1",
-            nodeType: "summary",
-            title: "Course Complete!",
-            content: contentDict,
-            orderIndex: 999,
-            conceptId: nil,
-            skillType: nil,
-            assets: nil
-        )
-        
-        return PlaybackState(
-            courseId: courseId,
-            currentNodeId: "completion_1",
-            currentNode: completionNode,
-            nextNodes: [],
-            completedNodes: [],
-            progressPercent: 1.0,
-            totalTimeSeconds: 0,
-            canGoBack: true,
-            isAtInteraction: false
-        )
     }
     
     public func advanceToNextNode(
@@ -282,86 +105,11 @@ public final class InteractiveCinemaService: ObservableObject {
         
         // Check for mock course
         if courseId.starts(with: "mock_") {
-            Log.ai.info("⏩ Advancing Mock Course: \(courseId) -> Next Node")
+            print("⏩ Advancing Mock Course: \(courseId) -> Next Node")
             try await Task.sleep(nanoseconds: 300_000_000) // 0.3s delay
             let currentNum = Int(String(currentNodeId.last ?? "1")) ?? 1
             let nextNodeId = "node_\(currentNum + 1)"
             return getMockPlaybackState(courseId: courseId, nodeId: nextNodeId)
-        }
-        
-        // Check for generated course
-        if courseId.starts(with: "gen_") {
-            Log.ai.info("⏩ Advancing Generated Course: \(courseId) -> Next Node")
-            guard let generatedCourse = CourseGenerationService.shared.generatedCourse else {
-                throw CourseGenerationError.noContent
-            }
-            
-            // Find current node index
-            var currentIndex = -1
-            var allNodes: [ProgressiveLesson] = []
-            
-            for module in generatedCourse.modules {
-                for lesson in module.lessons ?? [] {
-                    allNodes.append(lesson)
-                    if lesson.id == currentNodeId {
-                        currentIndex = allNodes.count - 1
-                    }
-                }
-            }
-            
-            // Get next node
-            guard currentIndex >= 0 && currentIndex < allNodes.count - 1 else {
-                // At the end, return completion state
-                return createCompletionPlaybackState(courseId: courseId)
-            }
-            
-            let nextLesson = allNodes[currentIndex + 1]
-            
-            // Create playback state for next node
-            var contentDict: [String: AnyCodable] = [:]
-            contentDict["text"] = AnyCodable(nextLesson.content ?? "")
-            contentDict["title"] = AnyCodable(nextLesson.title ?? "")
-            
-            let currentNode = LearningNodeWithAssets(
-                id: nextLesson.id,
-                nodeType: "explain",
-                title: nextLesson.title ?? "Lesson",
-                content: contentDict,
-                orderIndex: currentIndex + 2,
-                conceptId: nil,
-                skillType: nil,
-                assets: nil
-            )
-            
-            // Create next nodes list (up to 3 upcoming lessons)
-            let nextNodes: [LearningNode] = allNodes.dropFirst(currentIndex + 2).prefix(3).enumerated().map { index, lesson in
-                var lessonContent: [String: AnyCodable] = [:]
-                lessonContent["text"] = AnyCodable(lesson.content ?? "")
-                lessonContent["title"] = AnyCodable(lesson.title ?? "")
-                
-                return LearningNode(
-                    id: lesson.id,
-                    nodeType: "explain",
-                    title: lesson.title ?? "Lesson",
-                    content: lessonContent,
-                    orderIndex: currentIndex + 3 + index
-                )
-            }
-            
-            let completedNodes = Array(allNodes.prefix(currentIndex + 1).map { $0.id })
-            let progressPercent = Double(currentIndex + 1) / Double(allNodes.count)
-            
-            return PlaybackState(
-                courseId: courseId,
-                currentNodeId: nextLesson.id,
-                currentNode: currentNode,
-                nextNodes: nextNodes,
-                completedNodes: completedNodes,
-                progressPercent: progressPercent,
-                totalTimeSeconds: timeSpentSeconds,
-                canGoBack: true,
-                isAtInteraction: false
-            )
         }
         
         let playbackState: PlaybackState = try await NetworkClient.shared.request(
@@ -399,9 +147,9 @@ public final class InteractiveCinemaService: ObservableObject {
             Task {
                 do {
                     try await PersonalizationService.shared.traceKnowledge(trace: trace)
-                    Log.ai.info("Knowledge traced for skill: \(skillId)")
+                    print("✅ Knowledge traced for skill: \(skillId)")
                 } catch {
-                    Log.ai.warning("Failed to trace knowledge: \(error)")
+                    print("⚠️ Failed to trace knowledge: \(error)")
                 }
             }
         }
@@ -455,7 +203,7 @@ public final class InteractiveCinemaService: ObservableObject {
             title: isFirstNode ? "Introduction" : "Concept \(nodeId.last ?? "1")",
             content: ["text": AnyCodable("This is a mock lesson content for \(nodeId).")],
             orderIndex: isFirstNode ? 1 : 2,
-            assets: NodeAssets(audioUrl: nil, imageUrl: nil, duration: 10.0)
+            assets: NodeAssets(audioUrl: nil, imageUrl: "LyoThinking", duration: 10.0)
         )
         
         let nextNodes = isLastNode ? [] : [
@@ -709,4 +457,51 @@ public enum CinemaError: LocalizedError {
 
 // MARK: - Helper: AnyCodable for dynamic JSON
 
-
+public struct CinemaAnyCodable: Codable {
+    public let value: Any
+    
+    public init(_ value: Any) {
+        self.value = value
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        
+        if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([CinemaAnyCodable].self) {
+            value = array.map { $0.value }
+        } else if let dict = try? container.decode([String: CinemaAnyCodable].self) {
+            value = dict.mapValues { $0.value }
+        } else {
+            value = NSNull()
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        
+        switch value {
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case let string as String:
+            try container.encode(string)
+        case let array as [Any]:
+            try container.encode(array.map { CinemaAnyCodable($0) })
+        case let dict as [String: Any]:
+            try container.encode(dict.mapValues { CinemaAnyCodable($0) })
+        default:
+            try container.encodeNil()
+        }
+    }
+}

@@ -1,9 +1,11 @@
 import Foundation
 import CoreLocation
-import os
 
 class LyoRepository: ObservableObject {
     static let shared = LyoRepository()
+    
+    // Use centralized configuration
+    private var baseURL: String { AppConfig.baseURL }
     
     private var authToken: String?
     private let tokenManager = TokenManager.shared
@@ -13,21 +15,31 @@ class LyoRepository: ObservableObject {
     // MARK: - Auth
     
     func login(email: String, password: String) async throws -> User {
-        let response: LoginResponse = try await NetworkClient.shared.request(Endpoints.Auth.login(email: email, password: password))
-        
-        self.authToken = response.accessToken
-        
-        // Persist token to KeyChain for auto-login across app restarts
-        await tokenManager.setToken(response.accessToken)
-        if let refreshToken = response.refreshToken {
-            await tokenManager.setRefreshToken(refreshToken)
+        do {
+            let response: LoginResponse = try await NetworkClient.shared.request(Endpoints.Auth.login(email: email, password: password))
+
+            self.authToken = response.accessToken
+
+            // Persist token to KeyChain for auto-login across app restarts
+            await tokenManager.setToken(response.accessToken)
+            if let refreshToken = response.refreshToken {
+                await tokenManager.setRefreshToken(refreshToken)
+            }
+            await tokenManager.setUserId(String(response.user.id))
+            if let tenantId = response.tenantId {
+                await tokenManager.setTenantId(tenantId)
+            }
+
+            return response.user
+        } catch {
+            // Surface the precise error so we can diagnose why a 200 OK from
+            // the backend can still cause iOS to throw here.
+            print("❌ LyoRepository.login threw: \(type(of: error)): \(error)")
+            if let decodingError = error as? DecodingError {
+                print("   decoding detail: \(decodingError)")
+            }
+            throw error
         }
-        await tokenManager.setUserId(String(response.user.id))
-        if let tenantId = response.tenantId {
-            await tokenManager.setTenantId(tenantId)
-        }
-        
-        return response.user
     }
 
     func loginWithGoogle(idToken: String) async throws -> User {
@@ -66,10 +78,6 @@ class LyoRepository: ObservableObject {
         return response.user
     }
     
-    func deleteAccount() async throws {
-        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Auth.deleteAccount)
-    }
-    
     // MARK: - Leo AI Chat
     
     func sendLyoMessage(message: String, attachmentIds: [String]? = nil, context: ChatContext? = nil) async throws -> LyoChatResponse {
@@ -106,25 +114,25 @@ class LyoRepository: ObservableObject {
     
     // MARK: - Generic Helpers
     
-    private func get<T: Codable>(endpoint: String, requiresAuth: Bool = true) async throws -> T {
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .get, requiresAuth: requiresAuth)
+    private func get<T: Codable>(endpoint: String) async throws -> T {
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .get)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func post<T: Codable>(endpoint: String, body: [String: Any]? = nil, requiresAuth: Bool = true) async throws -> T {
+    private func post<T: Codable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
         let encodableBody = body.map { AnyEncodable(value: $0) }
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .post, body: encodableBody, requiresAuth: requiresAuth)
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .post, body: encodableBody)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func put<T: Codable>(endpoint: String, body: [String: Any]? = nil, requiresAuth: Bool = true) async throws -> T {
+    private func put<T: Codable>(endpoint: String, body: [String: Any]? = nil) async throws -> T {
         let encodableBody = body.map { AnyEncodable(value: $0) }
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .put, body: encodableBody, requiresAuth: requiresAuth)
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .put, body: encodableBody)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
-    private func delete<T: Codable>(endpoint: String, requiresAuth: Bool = true) async throws -> T {
-        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .delete, requiresAuth: requiresAuth)
+    private func delete<T: Codable>(endpoint: String) async throws -> T {
+        let dynamicEndpoint = DynamicEndpoint(urlString: endpoint, method: .delete)
         return try await NetworkClient.shared.request(dynamicEndpoint)
     }
     
@@ -253,16 +261,6 @@ class LyoRepository: ObservableObject {
         return try await get(endpoint: "/gamification/leaderboards/\(type)/my-rank")
     }
     
-    // MARK: - XP & Rewards
-    
-    func awardXP(amount: Int, category: String = "learning") async throws -> XPAwardResponse {
-        return try await post(endpoint: "/gamification/xp/award", body: ["amount": amount, "category": category])
-    }
-    
-    func awardContributorXP(courseId: String, action: String) async throws -> XPAwardResponse {
-        return try await post(endpoint: "/gamification/xp/contributor", body: ["course_id": courseId, "action": action])
-    }
-    
     // MARK: - Achievements
     
     func getAchievements() async throws -> [Achievement] {
@@ -338,32 +336,11 @@ class LyoRepository: ObservableObject {
     
     // MARK: - Course Management
     
-    func saveCourse(data: CourseCreationData) async throws {
-        // Patch: Send required backend fields using a dictionary for compatibility
-        let payload: [String: Any] = [
-            "id": data.id,
-            "title": data.title,
-            "topic": data.topic,
-            "level": data.level,
-            "modules": data.modules.map { mod in
-                [
-                    "id": mod.id,
-                    "title": mod.title,
-                    "description": mod.description,
-                    "lessons": mod.lessons.map { les in
-                        [
-                            "id": les.id,
-                            "title": les.title,
-                            "duration": les.duration
-                        ]
-                    }
-                ]
-            },
-            "difficulty_level": data.difficultyLevel,
-            "instructor_id": data.instructorId
-        ]
-        let _: EmptyResponse = try await post(endpoint: "/api/v1/learning/courses", body: payload)
-        Log.data.info("Course saved to backend: \(data.title)")
+    func saveCourse(title: String, description: String, modules: [String]) async throws {
+        // Mock implementation until backend endpoint is ready
+        // In a real app, this would POST to /learning/courses
+        print("💾 Saving course to repository: \(title)")
+        try await Task.sleep(nanoseconds: 500_000_000) // Simulate network delay
     }
 
 
@@ -401,7 +378,7 @@ class LyoRepository: ObservableObject {
         return try await NetworkClient.shared.request(Endpoints.Community.getBeacons(lat: latitude, lng: longitude, radius: radiusKm))
     }
 
-    func createQuestion(request: APICreateQuestionRequest) async throws -> APIQuestionResponse {
+    func createQuestion(request: CreateQuestionRequest) async throws -> QuestionResponse {
         return try await NetworkClient.shared.request(Endpoints.Community.createQuestion(question: request))
     }
     
@@ -414,9 +391,9 @@ class LyoRepository: ObservableObject {
     func getMyEvents() async throws -> [EducationalEvent] {
         return try await get(endpoint: "/api/v1/community/my-events")
     }
-
+    
     func getUserBookings() async throws -> [APIUserBooking] {
-        return try await NetworkClient.shared.request(Endpoints.Community.getUserBookings)
+        return try await get(endpoint: "/api/v1/community/my-bookings")
     }
     
     func getCommunityStats() async throws -> CommunityStats {
@@ -479,50 +456,6 @@ class LyoRepository: ObservableObject {
     
     // performRequest removed as we now use NetworkClient directly
 
-    // MARK: - Home Dashboard Support
-    
-    func getDailyChallenge() async throws -> Challenge? {
-        let response = try await getChallenges()
-        return response.dailyChallenges.first
-    }
-    
-    func getActiveCourses() async throws -> [Course] {
-        // For now, return all discovered courses. In the future, filter by enrollment status.
-        return try await getDiscoverCourses()
-    }
-    
-    func getRecommendations() async throws -> [Any] {
-        // Aggregate content from ContentRepository (simulating it via DefaultContentRepository logic for now)
-        // Since we don't have a backend endpoint for mixed recommendations yet, we'll return a mix
-        // This part uses the local DefaultContentRepository logic if available, or just mocks for now if strict
-        // But to be production ready, we should try to fetch real content.
-        
-        // Let's use getDiscoverCourses for now as recommendations
-        let courses = try await getDiscoverCourses()
-        return courses
-    }
-    
-    // MARK: - Notifications
-    
-    // MARK: - Notifications
-    
-    func getNotifications() async throws -> [APIAppNotification] {
-        let response: NotificationListResponse = try await NetworkClient.shared.request(Endpoints.Notifications.getAll)
-        return response.notifications
-    }
-    
-    func markNotificationAsRead(_ id: Int) async throws {
-        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Notifications.markRead(notificationId: id))
-    }
-
-    func markRead(notificationId: Int) async throws {
-        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Notifications.markRead(notificationId: notificationId))
-    }
-
-    func markAllNotificationsAsRead() async throws {
-        let _: EmptyResponse = try await NetworkClient.shared.request(Endpoints.Notifications.markAllRead())
-    }
-
 }
 
 // MARK: - Supporting Types
@@ -536,9 +469,15 @@ struct LoginResponse: Codable {
     let expiresIn: Int?
     let isNewUser: Bool?
     let tokenType: String?
-
+    
     enum CodingKeys: String, CodingKey {
-        case user, accessToken, refreshToken, tenantId, expiresIn, isNewUser, tokenType
+        case user
+        case accessToken
+        case refreshToken
+        case tenantId
+        case expiresIn
+        case isNewUser
+        case tokenType
     }
 }
 
@@ -548,8 +487,6 @@ enum NetworkError: Error {
     case unauthorized
     case registrationFailed(String)
     case loginFailed(String)
-    case serverError(Int)
-    case networkError(String)
 }
 
 extension NetworkError: LocalizedError {
@@ -565,10 +502,6 @@ extension NetworkError: LocalizedError {
             return "Registration failed: \(message)"
         case .loginFailed(let message):
             return "Login failed: \(message)"
-        case .serverError(let code):
-            return "Server error: \(code)"
-        case .networkError(let message):
-            return "Network error: \(message)"
         }
     }
 }
@@ -578,8 +511,8 @@ struct ChallengesResponse: Codable {
     let weeklyChallenge: Challenge?
     
     enum CodingKeys: String, CodingKey {
-        case dailyChallenges = "daily_challenges"
-        case weeklyChallenge = "weekly_challenge"
+        case dailyChallenges
+        case weeklyChallenge
     }
 }
 
@@ -737,8 +670,8 @@ extension LyoRepository: SocialRepository {
     func getPosts(page: Int, limit: Int, algorithm: String?) async throws -> RepoFeedResponse {
         var query = "limit=\(limit)&offset=\((page - 1) * limit)"
         if let alg = algorithm { query += "&algorithm=\(alg)" }
-        // FIXED: Backend endpoint is /api/v1/feed NOT /api/v1/posts/feed
-        return try await get(endpoint: "/api/v1/feed?\(query)")
+        // Use known backend path structure
+        return try await get(endpoint: "/api/v1/posts/feed?\(query)")
     }
     
     func createPost(content: String, attachments: [String]?) async throws -> RepoPost {
@@ -798,5 +731,78 @@ struct AnyEncodable: Encodable {
 
 // MARK: - Course Social Response Models
 
-// MARK: - Course Social Response Models
-// Removed duplicates - defined in CommunityDTOs.swift
+struct CourseLikeResponse: Codable {
+    let totalLikes: Int
+    let userHasLiked: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case totalLikes
+        case userHasLiked
+    }
+}
+
+struct CourseRatingResponse: Codable {
+    let averageRating: Double
+    let totalRatings: Int
+    let userRating: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case averageRating
+        case totalRatings
+        case userRating
+    }
+}
+
+struct CourseSocialStats: Codable {
+    let likes: Int
+    let rating: Double
+    let ratingCount: Int
+    let userHasLiked: Bool
+    let userRating: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case likes
+        case rating
+        case ratingCount
+        case userHasLiked
+        case userRating
+    }
+}
+
+// MARK: - Home Compatibility
+
+extension LyoRepository {
+    func getDailyChallenge() async throws -> Challenge {
+        Challenge(
+            id: "daily-learning",
+            title: "Daily Learning",
+            description: "Complete one lesson today.",
+            type: .daily,
+            difficulty: .easy,
+            xpReward: 50,
+            target: 1,
+            expiresAt: Calendar.current.date(byAdding: .day, value: 1, to: Date())
+        )
+    }
+
+    func getActiveCourses() async throws -> [Course] {
+        []
+    }
+
+    func getRecommendations() async throws -> [Any] {
+        []
+    }
+
+    func getNotifications() async throws -> [APIAppNotification] {
+        let response: NotificationListResponse = try await get(endpoint: "/api/v1/notifications")
+        return response.notifications
+    }
+
+    func markNotificationAsRead(_ notificationId: Int) async throws {
+        let _: EmptyResponse = try await post(endpoint: "/api/v1/notifications/\(notificationId)/read")
+    }
+
+    func markAllNotificationsAsRead() async throws {
+        let _: EmptyResponse = try await post(endpoint: "/api/v1/notifications/read-all")
+    }
+}

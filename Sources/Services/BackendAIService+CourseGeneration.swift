@@ -12,7 +12,7 @@ extension BackendAIService {
     func postJSONDict<R: Codable>(endpoint: String, body: [String: Any]) async throws -> R {
         // Validate dictionary before serialization
         guard JSONSerialization.isValidJSONObject(body) else {
-            throw BackendAIError.invalidPayload("Invalid JSON payload: \(body)")
+            throw BackendAIError.serverError("Invalid JSON payload: \(body)")
         }
 
         do {

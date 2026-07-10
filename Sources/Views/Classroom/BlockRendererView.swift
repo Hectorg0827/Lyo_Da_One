@@ -194,14 +194,13 @@ struct LyoBadgeView: View {
 
 struct TextBlockView: View {
     let content: String
-    
+
     var body: some View {
-        Text(content)
-            .font(.system(.body, design: .rounded))
-            .lineSpacing(6)
-            .foregroundColor(.primary.opacity(0.8))
+        // Route through MarkdownTextView so AI-generated content with **bold**,
+        // headings, lists, fenced code blocks, and ```mermaid``` diagrams all
+        // render as intended instead of as plain text.
+        LessonMarkdownView(markdown: content)
             .padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -282,102 +281,187 @@ struct CalloutBlockView: View {
 struct ImageBlockView: View {
     let url: URL?
     let caption: String?
-    
+
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
             if let url = url {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.1))
-                            .aspectRatio(16/9, contentMode: .fit)
-                            .overlay(ProgressView())
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .cornerRadius(12)
-                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                    case .failure:
-                        mediaUnavailable(icon: "photo.badge.exclamationmark", label: "Image unavailable")
-                    @unknown default:
-                        EmptyView()
-                    }
+                // LyoImage is Nuke-backed: real disk/memory caching + off-main
+                // decoding, unlike AsyncImage which refetches on every appearance.
+                LyoImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .shadow(color: .black.opacity(0.15), radius: 12, y: 6)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .overlay(ProgressView().tint(.white.opacity(0.6)))
+                } failure: {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                                .foregroundColor(.white.opacity(0.45))
+                        )
                 }
-            } else {
-                mediaUnavailable(icon: "photo", label: "Image unavailable")
             }
-            
+
             if let caption = caption {
                 Text(caption)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(ClassroomTokens.captionMeta)
+                    .foregroundStyle(ClassroomTokens.textTertiary)
                     .italic()
+                    .multilineTextAlignment(.center)
             }
         }
         .padding(.vertical, 12)
-    }
-
-    private func mediaUnavailable(icon: String, label: String) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.gray.opacity(0.12))
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 32, weight: .regular))
-                    .foregroundColor(.gray)
-                Text(label)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-        }
-        .aspectRatio(16/9, contentMode: .fit)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(label)
     }
 }
 
 struct CodeBlockView: View {
     let code: String
     let language: String?
-    
+
+    @State private var didCopy = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let language = language {
-                HStack {
+            HStack(spacing: 8) {
+                if let language, !language.isEmpty {
                     Text(language.uppercased())
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Button(action: {
-                        UIPasteboard.general.string = code
-                    }) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.caption)
-                    }
+                        .font(ClassroomTokens.captionMeta)
+                        .foregroundStyle(ClassroomTokens.textTertiary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.06)))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.secondary.opacity(0.1))
+                Spacer()
+                Button(action: copy) {
+                    HStack(spacing: 4) {
+                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                        Text(didCopy ? "Copied" : "Copy")
+                    }
+                    .font(ClassroomTokens.captionMeta)
+                    .foregroundStyle(didCopy ? Color.green : ClassroomTokens.textSecondary)
+                }
+                .buttonStyle(.plain)
             }
-            
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.04))
+
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .padding(12)
-                    .foregroundColor(.primary)
+                Text(SyntaxHighlighter.attribute(code: code, language: language))
+                    .font(ClassroomTokens.codeBody)
+                    .textSelection(.enabled)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Color.black.opacity(0.02))
+            .background(Color.black.opacity(0.22))
         }
-        .cornerRadius(12)
+        .clipShape(RoundedRectangle(cornerRadius: ClassroomTokens.stripRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: ClassroomTokens.stripRadius, style: .continuous)
+                .stroke(ClassroomTokens.glassBorder, lineWidth: 1)
         )
         .padding(.vertical, 8)
+    }
+
+    private func copy() {
+        UIPasteboard.general.string = code
+        withAnimation(.easeInOut(duration: 0.2)) { didCopy = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeInOut(duration: 0.2)) { didCopy = false }
+        }
+    }
+}
+
+/// Light token-based syntax coloring. Works on any language well enough to add
+/// visual rhythm — keywords, strings, comments, numbers. Not a real parser,
+/// and intentionally so: the cost of a real one (SwiftSyntax / Splash) isn't
+/// justified for in-app lesson snippets.
+enum SyntaxHighlighter {
+    private static let keywordPalette: [String: [String]] = [
+        "swift": ["func", "var", "let", "if", "else", "guard", "return", "for", "while",
+                  "in", "struct", "class", "enum", "case", "switch", "import", "extension",
+                  "private", "public", "internal", "static", "self", "init", "throws", "try",
+                  "do", "catch", "as", "is", "nil", "true", "false", "where", "async", "await"],
+        "python": ["def", "return", "if", "elif", "else", "for", "while", "in", "import",
+                   "from", "as", "class", "self", "True", "False", "None", "try", "except",
+                   "finally", "with", "lambda", "yield", "pass", "break", "continue", "and",
+                   "or", "not", "is", "global", "nonlocal", "raise", "async", "await"],
+        "javascript": ["function", "const", "let", "var", "if", "else", "for", "while",
+                       "return", "class", "extends", "new", "this", "import", "export",
+                       "from", "as", "default", "async", "await", "try", "catch", "finally",
+                       "true", "false", "null", "undefined", "typeof", "instanceof"],
+        "typescript": ["function", "const", "let", "var", "if", "else", "for", "while",
+                       "return", "class", "extends", "new", "this", "import", "export",
+                       "from", "as", "default", "async", "await", "try", "catch", "finally",
+                       "true", "false", "null", "undefined", "type", "interface", "enum",
+                       "public", "private", "readonly", "implements"],
+    ]
+
+    private static let keywordColor   = Color(hex: "C792EA")  // purple
+    private static let stringColor    = Color(hex: "C3E88D")  // soft green
+    private static let commentColor   = Color(hex: "5C6370")  // grey
+    private static let numberColor    = Color(hex: "F78C6C")  // orange
+    private static let defaultColor   = Color.white.opacity(0.92)
+
+    static func attribute(code: String, language: String?) -> AttributedString {
+        var out = AttributedString(code)
+        out.foregroundColor = defaultColor
+
+        let lang = (language ?? "").lowercased()
+        let keywords = keywordPalette[lang] ?? []
+        let commentPrefix: String? = {
+            switch lang {
+            case "python", "ruby", "sh", "bash", "yaml", "toml": return "#"
+            case "swift", "javascript", "js", "typescript", "ts",
+                 "kotlin", "java", "c", "cpp", "c++", "rust", "go": return "//"
+            default: return nil
+            }
+        }()
+
+        // Order matters: keyword/string/number colors are applied first, then
+        // comments paint over the line so anything inside a comment ends up
+        // grey, not colored-as-keyword.
+        Self.colorRegex(in: &out, source: code, pattern: "\"[^\"\\n]*\"", color: stringColor)
+        Self.colorRegex(in: &out, source: code, pattern: "\\b\\d+(?:\\.\\d+)?\\b", color: numberColor)
+        for keyword in keywords {
+            Self.colorRegex(in: &out, source: code, pattern: "\\b\(keyword)\\b", color: keywordColor)
+        }
+        if let prefix = commentPrefix {
+            for line in code.split(separator: "\n", omittingEmptySubsequences: false) {
+                if let commentStart = line.range(of: prefix),
+                   let attrLow = AttributedString.Index(commentStart.lowerBound, within: out),
+                   let attrHigh = AttributedString.Index(line.endIndex, within: out) {
+                    out[attrLow..<attrHigh].foregroundColor = commentColor
+                }
+            }
+        }
+        return out
+    }
+
+    private static func colorRegex(
+        in attributed: inout AttributedString,
+        source: String,
+        pattern: String,
+        color: Color
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        let nsrange = NSRange(source.startIndex..<source.endIndex, in: source)
+        regex.enumerateMatches(in: source, range: nsrange) { match, _, _ in
+            guard let match,
+                  let swiftRange = Range(match.range, in: source),
+                  let attrLow = AttributedString.Index(swiftRange.lowerBound, within: attributed),
+                  let attrHigh = AttributedString.Index(swiftRange.upperBound, within: attributed)
+            else { return }
+            attributed[attrLow..<attrHigh].foregroundColor = color
+        }
     }
 }
 
@@ -549,13 +633,19 @@ struct AnimationBlockView: View {
                             .aspectRatio(contentMode: .fit)
                             .cornerRadius(12)
                     case .failure:
-                        animationUnavailable
+                        Image(systemName: "film")
+                            .font(.largeTitle)
+                            .foregroundColor(.gray)
+                            .frame(height: 150)
                     @unknown default:
                         EmptyView()
                     }
                 }
             } else {
-                animationUnavailable
+                Image(systemName: "film")
+                    .font(.system(size: 50))
+                    .foregroundColor(.gray)
+                    .frame(height: 150)
             }
             
             if let caption = caption {
@@ -566,25 +656,6 @@ struct AnimationBlockView: View {
             }
         }
         .padding(.vertical, 12)
-    }
-
-    private var animationUnavailable: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.gray.opacity(0.12))
-            VStack(spacing: 8) {
-                Image(systemName: "film.stack")
-                    .font(.system(size: 32, weight: .regular))
-                    .foregroundColor(.gray)
-                Text("Animation unavailable")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-        }
-        .aspectRatio(16/9, contentMode: .fit)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Animation unavailable")
     }
 }
 
@@ -1034,14 +1105,11 @@ struct DiagramBlockView: View {
             }
             
             if let mermaid = block.mermaid {
-                // Mermaid diagram - show code for now (could use WebView to render)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    Text(mermaid)
-                        .font(.system(.caption, design: .monospaced))
-                        .padding()
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(8)
-                }
+                PremiumMermaidWebView(mermaidCode: mermaid)
+                    .frame(height: 250)
+                    .frame(maxWidth: CGFloat.infinity)
+                    .background(Color(hexString: "1A1A24").opacity(0.5))
+                    .cornerRadius(12)
             } else {
                 // Placeholder
                 VStack {
@@ -1683,3 +1751,8 @@ private struct FlashcardFaceView: View {
         }
     }
 }
+// PremiumMermaidWebView lives in MermaidWebView.swift (real WKWebView-based
+// renderer). The placeholder previously declared here has been removed —
+// it shadowed the canonical type and broke compilation after a fresh
+// XcodeGen regen reshuffled file ordering.
+

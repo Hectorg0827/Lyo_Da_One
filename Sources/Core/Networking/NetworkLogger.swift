@@ -45,12 +45,7 @@ struct NetworkLogger {
         if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
             message += "\nHeaders:\n"
             for (key, value) in headers {
-                // Redact sensitive headers
-                if key.lowercased().contains("authorization") {
-                    message += "  \(key): Bearer ***\n"
-                } else {
-                    message += "  \(key): \(value)\n"
-                }
+                message += "  \(key): \(redactedHeaderValue(value, for: key))\n"
             }
         }
 
@@ -58,6 +53,11 @@ struct NetworkLogger {
         if let body = request.httpBody {
             message += "\nBody:\n"
             if let jsonObject = try? JSONSerialization.jsonObject(with: body),
+               let redactedObject = redactedJSONObject(jsonObject),
+               let prettyData = try? JSONSerialization.data(withJSONObject: redactedObject, options: .prettyPrinted),
+               let prettyString = String(data: prettyData, encoding: .utf8) {
+                message += prettyString
+            } else if let jsonObject = try? JSONSerialization.jsonObject(with: body),
                let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: .prettyPrinted),
                let prettyString = String(data: prettyData, encoding: .utf8) {
                 message += prettyString
@@ -100,6 +100,11 @@ struct NetworkLogger {
         // Body
         message += "\nBody:\n"
         if let jsonObject = try? JSONSerialization.jsonObject(with: response.data),
+           let redactedObject = redactedJSONObject(jsonObject),
+           let prettyData = try? JSONSerialization.data(withJSONObject: redactedObject, options: .prettyPrinted),
+           let prettyString = String(data: prettyData, encoding: .utf8) {
+            message += prettyString
+        } else if let jsonObject = try? JSONSerialization.jsonObject(with: response.data),
            let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: .prettyPrinted),
            let prettyString = String(data: prettyData, encoding: .utf8) {
             message += prettyString
@@ -135,6 +140,45 @@ struct NetworkLogger {
     }
 
     // MARK: - Helper Methods
+
+    private func redactedHeaderValue(_ value: String, for key: String) -> String {
+        let normalized = key.lowercased()
+        if normalized == "authorization" { return "Bearer ***" }
+        if normalized == "x-api-key" { return "***" }
+        if normalized.contains("token") || normalized.contains("secret") || normalized.contains("key") {
+            return "***"
+        }
+        return value
+    }
+
+    private func redactedJSONObject(_ object: Any) -> Any? {
+        if let dict = object as? [String: Any] {
+            return dict.reduce(into: [String: Any]()) { result, pair in
+                if isSensitiveJSONKey(pair.key) {
+                    result[pair.key] = "***"
+                } else {
+                    result[pair.key] = redactedJSONObject(pair.value) ?? pair.value
+                }
+            }
+        }
+
+        if let array = object as? [Any] {
+            return array.map { redactedJSONObject($0) ?? $0 }
+        }
+
+        return object
+    }
+
+    private func isSensitiveJSONKey(_ key: String) -> Bool {
+        let normalized = key
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+        return normalized.contains("token")
+            || normalized.contains("password")
+            || normalized.contains("secret")
+            || normalized == "apikey"
+    }
 
     private func statusEmoji(for statusCode: Int) -> String {
         switch statusCode {

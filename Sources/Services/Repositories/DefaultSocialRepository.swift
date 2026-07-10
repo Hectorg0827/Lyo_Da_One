@@ -67,8 +67,7 @@ class MockSocialRepository: SocialRepository {
                 likes: 42,
                 comments: 5,
                 isLiked: false,
-                createdAt: Date(),
-                postType: "text"
+                createdAt: Date()
             ),
             RepoPost(
                 id: "2",
@@ -78,8 +77,7 @@ class MockSocialRepository: SocialRepository {
                 likes: 18,
                 comments: 12,
                 isLiked: true,
-                createdAt: Date().addingTimeInterval(-3600),
-                postType: "text"
+                createdAt: Date().addingTimeInterval(-3600)
             )
         ]
     }
@@ -113,8 +111,7 @@ class MockSocialRepository: SocialRepository {
             likes: 0,
             comments: 0,
             isLiked: false,
-            createdAt: Date(),
-            postType: "text"
+            createdAt: Date()
         )
 
         posts.insert(post, at: 0)

@@ -767,9 +767,6 @@ extension A2AEventType {
         case .progress: return "📊"
         case .completed: return "🎉"
         case .costUpdate: return "💰"
-        case .sceneStart: return "🎬"
-        case .sceneUpdate: return "🎥"
-        case .sceneComplete: return "🎞️"
         case .unknown: return "❓"
         }
     }

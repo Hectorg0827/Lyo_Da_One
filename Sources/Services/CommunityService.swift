@@ -8,6 +8,12 @@
 import Foundation
 import os
 
+struct FeedFilters {
+    let postType: String?
+    let tags: [String]?
+    let sortBy: String
+}
+
 /// Service for Community Feed API operations
 @MainActor
 final class CommunityService {
@@ -294,4 +300,3 @@ extension NetworkClient {
         let _: EmptyResponse = try await self.request(endpoint)
     }
 }
-

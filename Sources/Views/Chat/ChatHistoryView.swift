@@ -7,8 +7,9 @@
 
 import SwiftUI
 
+@MainActor
 struct ChatHistoryView: View {
-    @ObservedObject var conversationManager = ConversationManager.shared
+    @ObservedObject private var conversationManager: ConversationManager
     @Environment(\.dismiss) private var dismiss
     @State private var showingDeleteAlert = false
     @State private var conversationToDelete: SavedConversation?
@@ -17,6 +18,15 @@ struct ChatHistoryView: View {
     
     var onSelectConversation: (SavedConversation) -> Void
     var onNewChat: () -> Void
+
+    init(
+        onSelectConversation: @escaping (SavedConversation) -> Void = { _ in },
+        onNewChat: @escaping () -> Void = {}
+    ) {
+        self.conversationManager = ConversationManager.shared
+        self.onSelectConversation = onSelectConversation
+        self.onNewChat = onNewChat
+    }
     
     var body: some View {
         NavigationStack {

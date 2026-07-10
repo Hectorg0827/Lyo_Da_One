@@ -1,64 +1,75 @@
 # Copilot instructions (Lyo iOS)
 
-## Project Overview
-Lyo is an AI-powered learning iOS app built with **SwiftUI**. It uses a SaaS multi-tenant backend and features advanced AI capabilities like real-time course generation, Socratic tutoring, and a custom Server-Driven UI engine called **A2UI**.
+## Big picture
+- SwiftUI app entry point is [Sources/LyoApp.swift](../Sources/LyoApp.swift) (AppDelegate config + `LyoApp` root; injects `RootViewModel`, `AppUIState`, `UIStackStore`).
+- Most app logic lives under [Sources/](../Sources) split into `Views/`, `ViewModels/`, `Services/`, `Models/`, `Core/`.
 
-## Critical Architectural Rules
+## Backend + configuration
+- Base URL comes from [Sources/Core/Configuration/AppConfig.swift](../Sources/Core/Configuration/AppConfig.swift) (`AppConfig.baseURL`).
+  - Local backend: set env `LYO_USE_LOCALHOST=1` (uses `http://localhost:8000`).
+  - Mock fallbacks are OFF by default; enable only when needed with `LYO_ALLOW_MOCKS=1`.
+- Do not add client-side API secrets. AI keys live server-side; see [Sources/Core/Configuration/Secrets.swift](../Sources/Core/Configuration/Secrets.swift).
+- Auth tokens/tenant/user IDs are stored in Keychain via actor [Sources/Core/Security/TokenManager.swift](../Sources/Core/Security/TokenManager.swift).
+- Many requests also include an API key header (`X-API-Key`) sourced from `AppConfig.apiKey` (stored in Keychain). This is wired in [Sources/Core/Networking/NetworkClient.swift](../Sources/Core/Networking/NetworkClient.swift).
 
-### 1. Networking & SaaS Multi-Tenancy
-**Strict Rule**: Do NOT use `URLSession.shared.data(for:)` directly.
-- **Always** use `NetworkClient.shared.request(Endpoints.Scope.method)` for API calls.
-- This ensures critical SaaS headers are injected automatically:
-  - `X-API-Key` (from `AppConfig`)
-  - `X-Tenant-Id` (from `TokenManager`)
-  - `Authorization: Bearer <token>`
-- **Endpoints**: Defined in `Sources/Core/Networking/Endpoint.swift`. Add new endpoints there, do not hardcode URL strings in views/services.
+## SaaS Multi-Tenant Architecture (IMPORTANT)
 
-### 2. AI Service Architecture
-The app has distinct specialized AI services. Use the correct one:
-- **`BackendAIService`** (`Sources/Services/BackendAIService.swift`):
-  - **Primary Engine**: Uses hybrid AI (Gemini + OpenAI) via backend.
-  - **Use for**: Socratic tutoring, complex reasoning, and **A2UI** generation (structured UI responses).
-  - **Streaming**: Supports SSE (Server-Sent Events) for real-time text using `NetworkClient.stream()`.
-- **`CourseGenerationService`** (`Sources/Services/CourseGenerationService.swift`):
-  - **Use for**: Creating full courses. Handles the long-running multi-agent pipeline and streaming progress updates.
-- **`OpenAIService`** (`Sources/Services/OpenAIService.swift`):
-  - **Use for**: Simple chat interactions or legacy features.
-  - **Note**: Never use client-side API keys.
+This app uses a SaaS multi-tenant backend. **Every API request** must include:
 
-### 3. A2UI (AI-to-UI) Rendering Engine
-**A2UI** is the custom Server-Driven UI framework located in `Sources/Core/A2UI`.
-- **Logic**: The backend sends structured JSON (`OpenClassroomPayload`) describing UI components.
-- **Rendering**: `A2UIRenderer` recursively maps these components to SwiftUI views.
-- **Usage**: When adding AI features that need rich UI (charts, quizzes, roadmaps), utilize the A2UI component system.
+| Header | Source | Required |
+|--------|--------|----------|
+| `X-API-Key` | `AppConfig.apiKey` | Always |
+| `X-Tenant-Id` | `TokenManager.shared.getTenantId()` | When available |
+| `Authorization` | `Bearer <token>` | For authenticated endpoints |
 
-### 4. Configuration & Environment
-- **Source of Truth**: `AppConfig` (`Sources/Core/Configuration/AppConfig.swift`).
-- **Secrets**: `Secrets.swift`. Never commit real keys.
-- **Feature Flags**: Check `AppConfig` before enabling beta features (e.g. `isVisionEnabled`).
-- **Environment**: Use `AppConfig.Environment` to switch between Dev/Staging/Prod.
+### For New Network Code
 
-## Common Patterns
+**Preferred**: Use `NetworkClient.shared.request(Endpoints.*)` — headers are automatic via interceptors.
 
-### Repository Pattern
-- Data access logic lives in `LyoRepository` (`Sources/Services/LyoRepository.swift`).
-- ViewModels should call `LyoRepository` or specific Services, not `NetworkClient` directly if possible.
+**If using URLSession directly**: Use the centralized helper:
+```swift
+await SaaSHeaders.apply(to: &request)
+```
 
-### ViewModels & Concurrency
-- **Specific Rule**: Use `@MainActor` for all ViewModels publishing UI state.
-- Prefer `Task` + `await` over completion handlers.
+Or manually add headers:
+```swift
+request.setValue(AppConfig.apiKey, forHTTPHeaderField: "X-API-Key")
+if let tenantId = await tokenManager.getTenantId() {
+    request.setValue(tenantId, forHTTPHeaderField: "X-Tenant-Id")
+}
+```
 
-## File Structure Guide
-- `Sources/LyoApp.swift`: Entry point, DI container.
-- `Sources/Core/`: Foundation (Networking, Security, A2UI, Config).
-- `Sources/Services/`: Business logic & API repositories.
-- `Sources/Views/`: SwiftUI Views.
-- `Sources/ViewModels/`: Logic for Views.
-- `Sources/Models/`: Codable structs.
+### Authentication Flow
 
-## Testing & Mocks
-- **Mock Mode**: Set `LYO_ALLOW_MOCKS=1` in the scheme to enable local mock data (useful for offline dev).
-- **Unit Tests**: Locate in `Tests/`.
+Login responses include `tenant_id`. This is persisted via `TokenManager.shared.setTenantId()` and sent on all subsequent requests.
+
+### Services Updated for SaaS
+- ✅ `NetworkClient` - Automatic headers via interceptors
+- ✅ `StreamingResponseManager` - Headers in `stream()` method
+- ✅ `BackendAIService` - Headers in `post()`, `postPublic()`, streaming
+- ✅ `OpenAIService` - Headers in `sendBackendMessage()`
+- ✅ `CourseGenerationService` - Headers in backend generation methods
+- ✅ `LyoRepository` - Captures `tenant_id` from login responses
+
+## Networking conventions (important)
+- Prefer the typed endpoint layer when adding/changing API calls:
+  - Endpoint definitions live in [Sources/Core/Networking/Endpoint.swift](../Sources/Core/Networking/Endpoint.swift) (`Endpoints.*`).
+  - Execution + retries/token refresh live in actor [Sources/Core/Networking/NetworkClient.swift](../Sources/Core/Networking/NetworkClient.swift).
+- There is also legacy/direct URLSession code (e.g. [Sources/Services/LyoRepository.swift](../Sources/Services/LyoRepository.swift), [Sources/Services/OpenAIService.swift](../Sources/Services/OpenAIService.swift)). When touching these, keep the existing style, but for new work prefer `Endpoints` + `NetworkClient` unless the surrounding module already standardizes on URLSession.
+- Paths are not uniformly prefixed with `/api`; follow existing endpoint constants (e.g. `Endpoints.Auth.*` uses `/auth/...` while many feature APIs use `/api/v1/...`). Avoid inventing new baseURL + "/api" concatenations.
+
+## AI + streaming patterns
+- Backend AI is the source of truth; route AI through backend endpoints (no client OpenAI key).
+- Streaming/SSE patterns exist:
+  - [Sources/Services/BackendAIService.swift](../Sources/Services/BackendAIService.swift) streams `/api/v1/ai/chat/stream` and parses `data:` SSE lines.
+  - [Sources/Services/CourseGenerationService.swift](../Sources/Services/CourseGenerationService.swift) streams bytes from `/api/content/generate-course/stream` and updates `@Published` progress on `MainActor`.
+- Service singletons are common (`static let shared`) and many are `@MainActor` when they own `@Published` UI state.
+
+## Build / run / test workflows
+- Primary workflow is Xcode + iOS simulator (`Lyo.xcodeproj`, scheme `Lyo`). VS Code tasks are defined in [/.vscode/tasks.json](../.vscode/tasks.json):
+  - `Xcodebuild iOS Simulator`
+  - `Build+Install Lyo (Simulator)` (boots a fixed simulator UDID, builds to DerivedData, installs + launches `com.lyo.app`).
+- Tests exist as XCTest files in [/Tests](../Tests) and as an SPM test target at [Sources/Tests](../Sources/Tests). Prefer adding tests alongside existing ones.
 
 ## Logging + UX expectations
 - Console logs commonly use emoji prefixes for key events/errors (e.g. streaming start/stop, failures). Preserve that style when editing adjacent code.

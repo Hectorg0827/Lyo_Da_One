@@ -77,6 +77,7 @@ struct DiscoverItem: Identifiable, Codable {
     
     let thumbnailURL: URL?
     let videoURL: URL?
+    let previewURL: URL?  // NEW: Lightweight 480p preview for feed
     let aiInsight: String? // Dynamic context
     
     // Auto-Generated Lyo Content
@@ -110,6 +111,7 @@ struct DiscoverItem: Identifiable, Codable {
         lessonId: String? = nil,
         thumbnailURL: URL? = nil,
         videoURL: URL? = nil,
+        previewURL: URL? = nil,
         aiInsight: String? = nil,
         
         // Learning Context
@@ -142,6 +144,7 @@ struct DiscoverItem: Identifiable, Codable {
         self.lessonId = lessonId
         self.thumbnailURL = thumbnailURL
         self.videoURL = videoURL
+        self.previewURL = previewURL
         self.aiInsight = aiInsight
         
         self.subject = subject

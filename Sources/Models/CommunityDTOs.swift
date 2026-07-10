@@ -351,7 +351,7 @@ struct APIReviewStats: Codable {
 
 // MARK: - Course Social DTOs
 
-struct CourseLikeResponse: Codable {
+struct APICourseLikeResponse: Codable {
     let totalLikes: Int
     
     enum CodingKeys: String, CodingKey {
@@ -359,7 +359,7 @@ struct CourseLikeResponse: Codable {
     }
 }
 
-struct CourseRatingResponse: Codable {
+struct APICourseRatingResponse: Codable {
     let averageRating: Double
     let totalRatings: Int
     
@@ -369,7 +369,7 @@ struct CourseRatingResponse: Codable {
     }
 }
 
-struct CourseSocialStats: Codable {
+struct APICourseSocialStats: Codable {
     let likes: Int
     let rating: Double
     let ratingCount: Int

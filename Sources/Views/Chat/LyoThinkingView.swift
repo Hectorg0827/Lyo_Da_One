@@ -1,17 +1,20 @@
 import SwiftUI
 
 struct LyoThinkingView: View {
+    @State private var currentFrame: Int = 1
     @State private var dotOffset1: CGFloat = 0
     @State private var dotOffset2: CGFloat = 0
     @State private var dotOffset3: CGFloat = 0
     
+    let timer = Timer.publish(every: 0.3, on: .main, in: .common).autoconnect()
+    
     var body: some View {
-        HStack(spacing: 6) {
-            Image("lyo_avatar_small") // Assuming this exists based on previous codebase traces
+        HStack(spacing: 8) {
+            Image("lyo_thinking_\(currentFrame)")
                 .resizable()
-                .frame(width: 24, height: 24)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .animation(nil, value: currentFrame) // Don't crossfade the frames to keep it snappy
             
             HStack(spacing: 4) {
                 ThinkingDot(offset: dotOffset1)
@@ -19,12 +22,15 @@ struct LyoThinkingView: View {
                 ThinkingDot(offset: dotOffset3)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
             .background(Color.white.opacity(0.1))
             .cornerRadius(16)
         }
         .onAppear {
             animateDots()
+        }
+        .onReceive(timer) { _ in
+            currentFrame = (currentFrame % 4) + 1
         }
     }
     
@@ -32,18 +38,18 @@ struct LyoThinkingView: View {
         let animation = Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true)
         
         withAnimation(animation) {
-            dotOffset1 = -5
+            dotOffset1 = -4
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             withAnimation(animation) {
-                dotOffset2 = -5
+                dotOffset2 = -4
             }
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             withAnimation(animation) {
-                dotOffset3 = -5
+                dotOffset3 = -4
             }
         }
     }

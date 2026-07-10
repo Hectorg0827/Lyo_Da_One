@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 // MARK: - Push Notifications Service
 @MainActor
@@ -83,7 +82,7 @@ class AnalyticsService: ObservableObject {
             )
         } catch {
             // Analytics failures should not disrupt UX
-            Log.net.error("Analytics track event failed: \(error)")
+            print("Analytics track event failed: \(error)")
         }
     }
     
@@ -97,7 +96,7 @@ class AnalyticsService: ObservableObject {
                 )
             )
         } catch {
-            Log.net.error("Analytics track screen failed: \(error)")
+            print("Analytics track screen failed: \(error)")
         }
     }
     
@@ -112,7 +111,7 @@ class AnalyticsService: ObservableObject {
                 )
             )
         } catch {
-            Log.net.error("Analytics track learning progress failed: \(error)")
+            print("Analytics track learning progress failed: \(error)")
         }
     }
     
@@ -125,7 +124,7 @@ class AnalyticsService: ObservableObject {
                 )
             )
         } catch {
-            Log.net.error("Analytics track AI interaction failed: \(error)")
+            print("Analytics track AI interaction failed: \(error)")
         }
     }
     
@@ -230,7 +229,7 @@ class StorageService: ObservableObject {
 class NotificationsService: ObservableObject {
     private let client: NetworkClient
     
-    @Published var notifications: [APIAppNotification] = []
+    @Published var notifications: [AppNotification] = []
     @Published var unreadCount: Int = 0
     @Published var isLoading = false
     
@@ -243,7 +242,7 @@ class NotificationsService: ObservableObject {
         category: String? = nil,
         limit: Int = 20,
         offset: Int = 0
-    ) async throws -> [APIAppNotification] {
+    ) async throws -> [AppNotification] {
         isLoading = true
         defer { isLoading = false }
         
@@ -256,14 +255,16 @@ class NotificationsService: ObservableObject {
             )
         )
         
+        let appNotifications = response.notifications.map { $0.appNotification }
+        
         if offset == 0 {
-            notifications = response.notifications
+            notifications = appNotifications
         } else {
-            notifications.append(contentsOf: response.notifications)
+            notifications.append(contentsOf: appNotifications)
         }
         unreadCount = response.unreadCount
         
-        return response.notifications
+        return appNotifications
     }
     
     func getUnreadCount() async throws -> Int {
@@ -279,7 +280,7 @@ class NotificationsService: ObservableObject {
             Endpoints.Notifications.markRead(notificationId: notificationId)
         )
         
-        if notifications.contains(where: { $0.id == notificationId }) {
+        if notifications.contains(where: { $0.id == String(notificationId) }) {
             // Create updated notification with isRead = true
             // Note: AppNotification is immutable, so we'd need to reload
             await MainActor.run {
@@ -302,7 +303,21 @@ class NotificationsService: ObservableObject {
                 archive: archive
             )
         )
-        notifications.removeAll { $0.id == notificationId }
+        notifications.removeAll { $0.id == String(notificationId) }
+    }
+}
+
+private extension APIAppNotification {
+    var appNotification: AppNotification {
+        AppNotification(
+            id: String(id),
+            type: AppNotification.NotificationType(rawValue: category) ?? .system,
+            title: title,
+            message: body,
+            isRead: isRead,
+            createdAt: createdAt,
+            data: actionData
+        )
     }
 }
 
@@ -378,8 +393,6 @@ class SearchService: ObservableObject {
 // MARK: - Messaging Service
 @MainActor
 class MessagingService: ObservableObject {
-    static let shared = MessagingService()
-    
     private let client: NetworkClient
     
     @Published var conversations: [Conversation] = []

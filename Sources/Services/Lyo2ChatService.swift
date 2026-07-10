@@ -47,7 +47,7 @@ class Lyo2ChatService: ObservableObject {
             conversationHistory: conversationHistory
         )
         
-        let baseURL = NetworkClient.baseURL
+        let baseURL = AppConfig.baseURL
         Log.ai.info("Lyo2ChatService: using baseURL = \(baseURL)")
         
         guard let url = URL(string: "\(baseURL)/api/v1/lyo2/chat/stream") else {

@@ -24,13 +24,21 @@ public class PersonalizationService {
         // Use AnyEncodable wrapper for the body
         let encodableBody = cleanBody.mapValues { AnyEncodable(value: $0) }
         
-        let endpoint = Endpoints.Personalization.nextAction(body: encodableBody)
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/next-action",
+            method: .post,
+            body: encodableBody
+        )
         
         return try await NetworkClient.shared.request(endpoint)
     }
     
     public func updateState(update: PersonalizationStateUpdate) async throws {
-        let endpoint = Endpoints.Personalization.updateState(body: update)
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/state",
+            method: .patch,
+            body: update
+        )
         
         do {
             let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
@@ -40,13 +48,20 @@ public class PersonalizationService {
     }
     
     public func traceKnowledge(trace: KnowledgeTraceRequest) async throws {
-        let endpoint = Endpoints.Personalization.traceKnowledge(body: trace)
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/knowledge-trace",
+            method: .post,
+            body: trace
+        )
         
         let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
     }
     
     public func getMasteryProfile() async throws -> MasteryProfile {
-        let endpoint = Endpoints.Personalization.masteryProfile
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/mastery-profile",
+            method: .get
+        )
         
         return try await NetworkClient.shared.request(endpoint)
     }

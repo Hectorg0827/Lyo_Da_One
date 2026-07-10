@@ -3,6 +3,31 @@ import os
 
 // Redundant models moved to LessonBlock.swift for unified rich-content rendering.
 
+typealias LessonBlock = LiveLessonBlock
+
+extension LiveLessonBlock {
+    init(
+        id: String = UUID().uuidString,
+        type: LessonBlockType,
+        title: String? = nil,
+        body: String? = nil,
+        assetURL: URL? = nil,
+        options: [String]? = nil,
+        correctIndex: Int? = nil,
+        explanation: String? = nil
+    ) {
+        self.init(
+            id: id,
+            type: type,
+            title: title,
+            content: body,
+            imageURL: assetURL,
+            options: options,
+            correctIndex: correctIndex,
+            explanation: explanation
+        )
+    }
+}
 
 // MARK: - Live Lesson
 

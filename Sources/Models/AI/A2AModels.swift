@@ -169,11 +169,6 @@ enum A2AEventType: String, Codable {
     case completed = "completed"
     case costUpdate = "cost_update"
 
-    // Scene-based classroom events
-    case sceneStart = "scene_start"
-    case sceneUpdate = "scene_update"
-    case sceneComplete = "scene_complete"
-
     // Catch-all for any unrecognized backend events
     case unknown = "__unknown__"
 
@@ -201,11 +196,6 @@ struct A2AStreamingEvent: Codable {
     let thinkingContent: String?
     let artifact: A2AArtifact?
     let payload: [String: A2AAnyCodableValue]?
-
-    // Scene-based classroom events
-    let scene: ClassroomScenePayload?
-    let sessionId: String?
-    let isFinal: Bool?
 
     // MARK: - Custom Decoder
     // Backend may send the event type key as either "type" or "event_type"
@@ -261,11 +251,6 @@ struct A2AStreamingEvent: Codable {
         self.artifact = try? container.decode(A2AArtifact.self, forKey: .init("artifact"))
         self.payload = try? container.decode(
             [String: A2AAnyCodableValue].self, forKey: .init("payload"))
-        self.scene = (try? container.decode(ClassroomScenePayload.self, forKey: .init("scene")))
-        self.sessionId = (try? container.decode(String.self, forKey: .init("sessionId")))
-            ?? (try? container.decode(String.self, forKey: .init("session_id")))
-        self.isFinal = (try? container.decode(Bool.self, forKey: .init("isFinal")))
-            ?? (try? container.decode(Bool.self, forKey: .init("is_final")))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -281,9 +266,6 @@ struct A2AStreamingEvent: Codable {
         try container.encodeIfPresent(thinkingContent, forKey: .init("thinking_content"))
         try container.encodeIfPresent(artifact, forKey: .init("artifact"))
         try container.encodeIfPresent(payload, forKey: .init("payload"))
-        try container.encodeIfPresent(scene, forKey: .init("scene"))
-        try container.encodeIfPresent(sessionId, forKey: .init("session_id"))
-        try container.encodeIfPresent(isFinal, forKey: .init("is_final"))
     }
 
     /// Manual init for testing/internal use
@@ -292,9 +274,7 @@ struct A2AStreamingEvent: Codable {
         phase: A2APipelinePhase? = nil, progress: Int = 0, message: String? = nil,
         data: A2AEventData? = nil, chunkContent: String? = nil,
         thinkingContent: String? = nil, artifact: A2AArtifact? = nil,
-        payload: [String: A2AAnyCodableValue]? = nil,
-        scene: ClassroomScenePayload? = nil, sessionId: String? = nil,
-        isFinal: Bool? = nil
+        payload: [String: A2AAnyCodableValue]? = nil
     ) {
         self.type = type
         self.timestamp = timestamp
@@ -307,9 +287,6 @@ struct A2AStreamingEvent: Codable {
         self.thinkingContent = thinkingContent
         self.artifact = artifact
         self.payload = payload
-        self.scene = scene
-        self.sessionId = sessionId
-        self.isFinal = isFinal
     }
 }
 
@@ -760,160 +737,5 @@ struct APICourseLesson: Codable {
     enum CodingKeys: String, CodingKey {
         case id, title, content
         case durationMinutes = "duration_minutes"
-    }
-}
-
-// MARK: - Classroom Scene Payload
-
-struct ClassroomScenePayload: Codable {
-    let sceneId: String
-    let sceneType: String
-    let components: [SceneComponent]
-    let metadata: [String: AnyCodable]?
-
-    enum CodingKeys: String, CodingKey {
-        case sceneId = "scene_id"
-        case sceneType = "scene_type"
-        case components, metadata
-    }
-}
-
-/// A single UI component inside a classroom scene.
-struct SceneComponent: Codable, Identifiable {
-    let componentId: String
-    let type: String
-
-    // TeacherMessage fields
-    let text: String?
-    let emotion: String?
-    let backgroundColor: String?
-    let difficultyLevel: String?
-    let conceptTags: [String]?
-
-    // CTAButton fields
-    let label: String?
-    let actionIntent: String?
-    let buttonStyle: String?
-
-    // Code fields
-    let code: String?
-    let language: String?
-
-    // Media fields
-    let imageURL: String?
-    let videoURL: String?
-    let caption: String?
-
-    // Quiz fields
-    let question: String?
-    let options: [String]?
-    let correctIndex: Int?
-    let explanation: String?
-
-    // Animation / layout
-    let animation: String?
-    let delayMs: Int?
-
-    var id: String { componentId }
-
-    enum CodingKeys: String, CodingKey {
-        case componentId = "component_id"
-        case type, text, emotion
-        case backgroundColor = "background_color"
-        case difficultyLevel = "difficulty_level"
-        case conceptTags = "concept_tags"
-        case label
-        case actionIntent = "action_intent"
-        case buttonStyle = "button_style"
-        case code, language
-        case imageURL = "image_url"
-        case videoURL = "video_url"
-        case caption, question, options
-        case correctIndex = "correct_index"
-        case explanation, animation
-        case delayMs = "delay_ms"
-    }
-}
-
-// MARK: - SceneComponent → LiveLessonBlock Conversion
-
-extension SceneComponent {
-    func toLessonBlock() -> LiveLessonBlock {
-        switch type {
-        case "TeacherMessage":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .callout,
-                title: emotion?.capitalized ?? "Lio says",
-                content: text ?? "",
-                mood: emotion,
-                difficulty: difficultyLevel,
-                tags: conceptTags
-            )
-        case "CTAButton":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .checkpoint,
-                title: label ?? "Continue",
-                content: actionIntent ?? "continue"
-            )
-        case "CodeSnippet", "code":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .code,
-                content: text,
-                code: code ?? text ?? "",
-                language: language
-            )
-        case "QuizMCQ", "quiz":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .quizMcq,
-                content: question ?? text ?? "",
-                question: question ?? text,
-                options: options,
-                correctIndex: correctIndex,
-                explanation: explanation
-            )
-        case "Image", "image":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .image,
-                imageURL: imageURL.flatMap { URL(string: $0) },
-                caption: caption ?? text
-            )
-        case "Video", "video":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .video,
-                videoURL: videoURL.flatMap { URL(string: $0) },
-                caption: caption ?? text
-            )
-        case "Heading", "heading":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .heading,
-                title: text ?? "",
-                subtitle: "h2"
-            )
-        case "Divider", "divider":
-            return LiveLessonBlock(
-                id: componentId,
-                type: .divider
-            )
-        default:
-            return LiveLessonBlock(
-                id: componentId,
-                type: .paragraph,
-                title: type,
-                content: text ?? label ?? ""
-            )
-        }
-    }
-}
-
-extension ClassroomScenePayload {
-    func toLessonBlocks() -> [LiveLessonBlock] {
-        components.map { $0.toLessonBlock() }
     }
 }
