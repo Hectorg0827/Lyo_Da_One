@@ -103,6 +103,23 @@ class LivingClassroomService: ObservableObject {
         logger.info("Disconnected from WebSocket")
     }
 
+    /// Re-establishes the WebSocket using the previously stored sessionId. Used by the UI's reconnect banner.
+    func reconnect() {
+        guard !sessionId.isEmpty else {
+            logger.warning("Cannot reconnect — no sessionId stored")
+            return
+        }
+        logger.info("\u{1F501} Reconnecting WebSocket for session \(self.sessionId)")
+        // Clear any half-open task before reconnecting.
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
+        isConnecting = false
+        error = nil
+        connect(sessionId: sessionId)
+    }
+
     /// Sends a user action (e.g. button tap) back to the backend
     func sendUserAction(actionIntent: String, componentId: String, actionData: [String: Any]? = nil)
     {
