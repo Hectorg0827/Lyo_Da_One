@@ -156,14 +156,16 @@ final class SyncService {
 
     private func startHeartbeat() {
         heartbeatTimer?.invalidate()
-        heartbeatTimer = Timer.scheduledTimer(
-            withTimeInterval: heartbeatInterval,
-            repeats: true
-        ) { [weak self] _ in
+        let timer = Timer(timeInterval: heartbeatInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.send(["type": "heartbeat"])
             }
         }
+        // .common mode so heartbeats keep firing during scroll tracking —
+        // the default mode pauses then, and the server would drop the socket
+        // right while the user is interacting with the app.
+        RunLoop.main.add(timer, forMode: .common)
+        heartbeatTimer = timer
     }
 
     private func onSocketClosed(_ wsTask: URLSessionWebSocketTask) {
