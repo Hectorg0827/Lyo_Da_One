@@ -55,12 +55,16 @@ class ChallengesViewModel: ObservableObject {
             Log.social.info("Challenge data loaded successfully")
         } catch {
             Log.social.error("Failed to load challenge data: \(error.localizedDescription)")
-            errorMessage = "Failed to load challenges. Using offline data."
-            
-            // Load mock data as fallback
-            loadMockData()
+            // Only fall back to mock data when explicitly allowed (debug/dev).
+            // In production, surface the error instead of showing fake users.
+            if AppConfig.allowMockFallbacks {
+                errorMessage = "Failed to load challenges. Using offline data."
+                loadMockData()
+            } else {
+                errorMessage = "Couldn't load challenges. Please check your connection and try again."
+            }
         }
-        
+
         isLoading = false
     }
     

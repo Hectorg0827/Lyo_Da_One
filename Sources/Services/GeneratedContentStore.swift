@@ -82,7 +82,8 @@ final class GeneratedContentStore: ObservableObject {
     // MARK: - Init
     
     private init() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         storageDirectory = caches.appendingPathComponent("GeneratedContent", isDirectory: true)
         
         // Ensure directory exists

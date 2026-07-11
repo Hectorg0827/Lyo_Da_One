@@ -1,44 +1,48 @@
 import Foundation
 
 // MARK: - Default Social Repository
+/// Thin façade over `LyoRepository`, which carries the live `SocialRepository`
+/// implementation backed by the real `/api/v1/feed` and `/api/v1/posts` endpoints.
+/// Previously these methods threw `.notImplemented`, which crashed the live feed
+/// (FocusView / FeedView) on any create/like/comment action.
 class DefaultSocialRepository: SocialRepository {
 
-    private let networkClient = NetworkClient.shared
-    private let logger = NetworkLogger()
+    private let backend: SocialRepository
 
-    init() {}
+    init(backend: SocialRepository = LyoRepository.shared) {
+        self.backend = backend
+    }
 
     // MARK: - Posts
 
     func getPosts(page: Int = 1, limit: Int = 20, algorithm: String? = nil) async throws -> RepoFeedResponse {
-        // Endpoints.Feed is deprecated/removed. Returning empty response.
-        return RepoFeedResponse(posts: [], nextPage: nil, hasMore: false)
+        try await backend.getPosts(page: page, limit: limit, algorithm: algorithm)
     }
 
     func createPost(content: String, attachments: [String]? = nil) async throws -> RepoPost {
-        throw LyoError.network(.notImplemented)
+        try await backend.createPost(content: content, attachments: attachments)
     }
 
     func getPost(postId: String) async throws -> RepoPost {
-        throw LyoError.network(.notImplemented)
+        try await backend.getPost(postId: postId)
     }
 
     func deletePost(postId: String) async throws {
-        throw LyoError.network(.notImplemented)
+        try await backend.deletePost(postId: postId)
     }
 
     // MARK: - Interactions
 
     func likePost(postId: String) async throws {
-        throw LyoError.network(.notImplemented)
+        try await backend.likePost(postId: postId)
     }
 
     func commentOnPost(postId: String, content: String) async throws -> Comment {
-        throw LyoError.network(.notImplemented)
+        try await backend.commentOnPost(postId: postId, content: content)
     }
 
     func getComments(postId: String) async throws -> [Comment] {
-        return []
+        try await backend.getComments(postId: postId)
     }
 }
 

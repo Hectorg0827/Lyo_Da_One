@@ -161,8 +161,14 @@ struct GlobalLeaderboardView: View {
                 self.isLoading = false
             } catch {
                 Log.social.error("Leaderboard fetch error: \(error)")
-                // Mock data fallback for preview/demo
-                generateMockData()
+                // Mock data fallback only when explicitly allowed (debug/dev);
+                // production shows a real empty state instead of fake users.
+                if AppConfig.allowMockFallbacks {
+                    generateMockData()
+                } else {
+                    self.entries = []
+                    self.myRank = nil
+                }
                 self.isLoading = false
             }
         }

@@ -449,6 +449,29 @@ extension MainTabView {
                     sessionId: resolvedCourseId
                 )
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LyoNavigation"))) { notification in
+                guard let destination = notification.userInfo?["destination"] as? String else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    switch destination {
+                    case "discover", "clips": selectedTab = .clips
+                    case "community": selectedTab = .community
+                    case "profile": selectedTab = .profile
+                    case "messages": selectedTab = .messages
+                    case "focus": selectedTab = .focus
+                    default: break
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TriggerCourseCreation"))) { notification in
+                let topic = notification.userInfo?["topic"] as? String
+                uiState.isLioChatPresented = true
+                if let topic {
+                    // Drive the view-owned view model (the one bound to the visible chat),
+                    // not the .shared singleton, so loading/input state stays consistent.
+                    aiViewModel.inputText = "Create a course about \(topic)"
+                    Task { await aiViewModel.sendMessage() }
+                }
+            }
     }
 }
 

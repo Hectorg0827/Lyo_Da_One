@@ -79,7 +79,14 @@ struct ReelInfoOverlay: View {
             
             // Community Link
             if let groupId = item.relatedGroupId {
-                Button(action: { /* Open Group */ }) {
+                Button(action: {
+                    HapticManager.shared.light()
+                    NotificationCenter.default.post(
+                        name: Notification.Name("LyoNavigation"),
+                        object: nil,
+                        userInfo: ["destination": "community"]
+                    )
+                }) {
                     HStack {
                         Image(systemName: "person.3.fill")
                             .font(.caption2)

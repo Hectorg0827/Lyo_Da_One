@@ -1,6 +1,7 @@
 import Foundation
 import AuthenticationServices
 import Combine
+import CryptoKit
 #if canImport(GoogleSignIn)
 import GoogleSignIn
 #endif
@@ -53,8 +54,11 @@ class AuthService: NSObject, ObservableObject {
     
     // MARK: - Demo Mode
     
-    /// Enter demo mode - allows using app with mock data
+    /// Enter demo mode - allows using app with mock data.
+    /// DEBUG-only: in release builds this is a no-op so the app can never be
+    /// "authenticated" without a real backend token.
     func enterDemoMode() {
+        #if DEBUG
         Task { @MainActor in
             self.currentUserName = "Demo User"
             self.currentUserEmail = "demo@lyo.app"
@@ -64,8 +68,11 @@ class AuthService: NSObject, ObservableObject {
             UserDefaults.standard.set(true, forKey: demoModeKey)
             self.isAuthenticated = true
             self.isLoading = false
-            print("📱 Entered Demo Mode - using mock data")
+            Log.auth.info("Entered Demo Mode - using mock data (DEBUG only)")
         }
+        #else
+        Log.auth.warning("enterDemoMode() called in a release build — ignored")
+        #endif
     }
     
     // MARK: - Email / Password
@@ -157,6 +164,34 @@ class AuthService: NSObject, ObservableObject {
     
     // MARK: - Apple Sign In
 
+    /// Stored nonce for Apple+Firebase credential exchange
+    private var currentNonce: String?
+
+    /// Generate a cryptographically-secure random nonce string
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            // Fall back to UUID-derived randomness instead of crashing the app.
+            Log.auth.error("SecRandomCopyBytes failed (OSStatus \(errorCode)) — using UUID nonce fallback")
+            return (UUID().uuidString + UUID().uuidString)
+                .replacingOccurrences(of: "-", with: "")
+                .prefix(length)
+                .description
+        }
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(randomBytes.map { charset[Int($0) % charset.count] })
+    }
+
+    /// SHA-256 hash of the input string
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        return hashedData.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Call this from the SignInWithAppleButton onRequest closure
     func prepareAppleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
         request.requestedScopes = [.fullName, .email]
     }

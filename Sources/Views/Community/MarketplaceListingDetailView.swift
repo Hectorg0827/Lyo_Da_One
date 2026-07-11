@@ -186,9 +186,8 @@ struct MarketplaceListingDetailView: View {
             Spacer()
             
             Button("View Profile") {
-                // Navigate to seller's profile via deep link
-                Log.social.info("Navigating to seller profile: \(listing.seller.name)")
                 HapticManager.shared.light()
+                Log.social.info("View seller profile: \(listing.seller.name) id:\(listing.seller.id)")
             }
             .font(.caption.bold())
             .foregroundColor(.green)
