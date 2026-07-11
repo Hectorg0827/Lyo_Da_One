@@ -320,7 +320,7 @@
 		BC2530ED8DC94413756E0E1F /* AccessibilityEnhancedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA234A36D751B1E512B5D004 /* AccessibilityEnhancedComponents.swift */; };
 		BC850AF0FB4AF29D6F103242 /* IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9233AEE641B86878B0A75829 /* IntegrationTests.swift */; };
 		BD0B6437FDD2D035C5010CA9 /* CampusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087DADD1BE224DE276C1CAE2 /* CampusModels.swift */; };
-		BD8549C14C7ED92E02B1100D /* ModuleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E10D4E02151B921DBFD613 /* ModuleCardView.swift */; };
+		BD8549C14C7ED92E02B1100D /* ModuleCardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E10D4E02151B921DBFD613 /* ModuleCardComponents.swift */; };
 		BE17E238584BD179AEFCDBFD /* ImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8594F42AF0B6B73E6E4F450A /* ImagePicker.swift */; };
 		BEDC67585A1E5250E0D050C9 /* NetworkRequestable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 075F7D4648CC5E75553F8450 /* NetworkRequestable.swift */; };
 		BEF47BF11C0A7645024AD3AE /* DemoCourseLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD8DC4890AEEAA2EDA55E5A1 /* DemoCourseLoader.swift */; };
@@ -663,7 +663,7 @@
 		6745B24B297D44FCE9686076 /* CreateEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEventView.swift; sourceTree = "<group>"; };
 		67E72FA212DD70BC1E2669D3 /* ClientCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientCapabilities.swift; sourceTree = "<group>"; };
 		68590845C88D49904BE28E81 /* CommunityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityView.swift; sourceTree = "<group>"; };
-		68E10D4E02151B921DBFD613 /* ModuleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleCardView.swift; sourceTree = "<group>"; };
+		68E10D4E02151B921DBFD613 /* ModuleCardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleCardComponents.swift; sourceTree = "<group>"; };
 		6A11F76E9EF5A37A16DB7624 /* LyoParallaxManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoParallaxManager.swift; sourceTree = "<group>"; };
 		6A7D94D2885CAB9768DC0D58 /* LyoHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoHomeView.swift; sourceTree = "<group>"; };
 		6CCBE002F2CD3D286056A1A9 /* SuggestionChipsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionChipsBar.swift; sourceTree = "<group>"; };
@@ -1841,7 +1841,7 @@
 			isa = PBXGroup;
 			children = (
 				8D3A2B6FCDBD3943C228BEC6 /* ControlsOverlay.swift */,
-				68E10D4E02151B921DBFD613 /* ModuleCardView.swift */,
+				68E10D4E02151B921DBFD613 /* ModuleCardComponents.swift */,
 				DCC51D88385B991B206FBFA1 /* ModuleGridView.swift */,
 				DD11EE22FF33AA44BB55CC67 /* ClassroomModuleCardView.swift */,
 				0371FBF158043B45B24C0231 /* OrientationHintOverlay.swift */,
@@ -2274,7 +2274,7 @@
 				9C21587EE06487C437328FC5 /* MessageAudioButton.swift in Sources */,
 				52D1518DCF59729DD64422DE /* MessageBubbleView.swift in Sources */,
 				0326527606BCE9EF5BF1E7BA /* MessageIntentClassifier.swift in Sources */,
-				BD8549C14C7ED92E02B1100D /* ModuleCardView.swift in Sources */,
+				BD8549C14C7ED92E02B1100D /* ModuleCardComponents.swift in Sources */,
 				5A9AF9CFD9B0E7E0DFF7E762 /* ModuleGridView.swift in Sources */,
 				A1B806E5F2940A5D751C9648 /* MonetizationService.swift in Sources */,
 				D0DB1A5765A0C9302EC62782 /* MultiAgentCourseModels.swift in Sources */,

@@ -61,6 +61,10 @@ class RootViewModel: ObservableObject {
                     // Try to fetch current user
                     currentUser = try await authRepository.getCurrentUser()
                     isAuthenticated = true
+
+                    // ✅ Session restored from stored token — start services
+                    // (push, subscription sync, cross-device sync), same as login
+                    await onUserAuthenticated()
                 } catch {
                     // Token expired or invalid
                     handleError(error)
@@ -129,6 +133,9 @@ class RootViewModel: ObservableObject {
         do {
             currentUser = try await authRepository.register(email: email, password: password, name: name)
             isAuthenticated = true
+
+            // ✅ Trigger post-registration services, same as login
+            await onUserAuthenticated()
         } catch {
             // Check for specific backend errors that should be shown to the user
             if let lyoError = error as? LyoError {
