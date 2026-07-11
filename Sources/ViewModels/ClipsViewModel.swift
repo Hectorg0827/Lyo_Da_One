@@ -338,7 +338,7 @@ final class ClipsViewModel: ObservableObject {
                       Bundle.main.url(forResource: fileName, withExtension: "wav") {
             do {
                 // Configure audio session for playback + recording simultaneously
-                try AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers])
+                try AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
                 try AVAudioSession.sharedInstance().setActive(true)
                 
                 musicPlayer = try AVAudioPlayer(contentsOf: url)
