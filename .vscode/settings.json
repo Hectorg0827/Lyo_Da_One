@@ -1,5 +1,4 @@
 {
-    "cmake.sourceDirectory": "/Users/hectorgarcia/LYO_Da_ONE/.build/checkouts/firebase-ios-sdk",
     "swift.buildPath": "${workspaceFolder}/.build",
     "swift.diagnostics": false,
     
