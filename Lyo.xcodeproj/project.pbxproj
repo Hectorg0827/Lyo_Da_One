@@ -483,7 +483,6 @@
 		ABEDEF9F76FD2CBA53BB5DFA /* NotebookOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookOverlayView.swift; sourceTree = "<group>"; };
 		44BFAE2341C82D42965A29D5 /* LyoThinkingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoThinkingView.swift; sourceTree = "<group>"; };
 		E7BF4F9A005ED7B4C1C57E4E /* NotebookStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookStore.swift; sourceTree = "<group>"; };
-		DF7BCEB23146EDB5024B399C /* LegacyCourseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyCourseModels.swift; sourceTree = "<group>"; };
 		01848796781FD0D91FDF1ABD /* EnergyPaymentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyPaymentSheet.swift; sourceTree = "<group>"; };
 		01FB17BF582A15FDCA2B35F2 /* ReflectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReflectCardView.swift; sourceTree = "<group>"; };
 		0207E2855711409218635E9E /* MessageIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageIntentClassifier.swift; sourceTree = "<group>"; };
@@ -1758,7 +1757,6 @@
 				7DC7802AD4F2D27D6C70E13E /* Community */,
 				030D8EBE95A5C2D3678D2FFA /* Sprint1 */,
 			
-				DF7BCEB23146EDB5024B399C /* LegacyCourseModels.swift */,
 				E7BF4F9A005ED7B4C1C57E4E /* NotebookStore.swift */,
 				BB22CC33DD44EE55FF66AA11 /* LyoResponse.swift */,);
 			path = Models;
