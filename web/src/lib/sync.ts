@@ -171,6 +171,11 @@ class SyncClient {
       this.socket = null;
     }
     this.deviceId = null;
+    if (clearReconnect) {
+      // Fresh session, fresh backoff — a flaky previous session must not
+      // delay the first reconnect after the next sign-in.
+      this.reconnectAttempt = 0;
+    }
   }
 }
 

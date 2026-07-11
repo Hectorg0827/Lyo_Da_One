@@ -200,5 +200,8 @@ final class SyncService {
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         deviceId = nil
+        // Fresh session, fresh backoff — a flaky previous session must not
+        // delay the first reconnect after the next sign-in by up to 60s.
+        reconnectAttempt = 0
     }
 }

@@ -162,5 +162,8 @@ object SyncClient {
         socket?.close(1000, "client disconnect")
         socket = null
         deviceId = null
+        // Fresh session, fresh backoff — a flaky previous session must not
+        // delay the first reconnect after the next sign-in.
+        reconnectAttempt = 0
     }
 }
