@@ -77,3 +77,4 @@ __pycache__/
 *.dSYM
 Pods/
 build_temp*/
+nohup.out
