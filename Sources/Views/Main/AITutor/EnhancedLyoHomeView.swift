@@ -140,6 +140,12 @@ struct EnhancedLyoHomeView: View {
                         handleAction(action)
                     },
                     onCourseStart: { course in
+                        // Proposal tapped — ask the AI to actually build/start the course.
+                        viewModel.inputText = "Start course: \(course.title)"
+                        Task { await viewModel.sendMessage() }
+                    },
+                    onCourseStart_A2A: { course in
+                        // Fully-built course ready to open in the classroom.
                         viewModel.onCourseStart(course: course)
                     }
                 )

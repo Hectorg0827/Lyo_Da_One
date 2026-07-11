@@ -456,7 +456,6 @@ extension MainTabView {
                     case "discover", "clips": selectedTab = .clips
                     case "community": selectedTab = .community
                     case "profile": selectedTab = .profile
-                    case "messages": selectedTab = .messages
                     case "focus": selectedTab = .focus
                     default: break
                     }

@@ -290,7 +290,7 @@ final class TestPrepOrchestrator: ObservableObject {
 
         // Fallback: build a minimal local plan if the AI didn't return structured data.
         // Logged (not silent) so we can diagnose backend schema drift.
-        Log.ai.warning("⚠️ Test prep: AI response had no usable TEST_PREP command (wasCommand=\(aiResult.wasCommand), len=\(aiResult.response.count)) — using local fallback plan")
+        Log.ai.warning("⚠️ Test prep: AI response had no usable TEST_PREP command (source=\(aiResult.source), len=\(aiResult.response.count)) — using local fallback plan")
         return buildFallbackContent(from: info, daysUntil: daysUntil)
     }
 

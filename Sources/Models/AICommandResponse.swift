@@ -29,6 +29,12 @@ struct AICommandPayload: Codable {
     let course: CoursePayload?
     let testPrep: TestPrepPayload?
 
+    init(stackItem: StackItemPayload? = nil, course: CoursePayload? = nil, testPrep: TestPrepPayload? = nil) {
+        self.stackItem = stackItem
+        self.course = course
+        self.testPrep = testPrep
+    }
+
     enum CodingKeys: String, CodingKey {
         case stackItem = "stack_item"
         case course

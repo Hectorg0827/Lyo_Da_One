@@ -261,6 +261,16 @@ final class BackendAIService {
         return encoder
     }
 
+    // MARK: - Context-Aware Suggestion Chips
+
+    /// Fetch context-aware suggestion chips from the backend for a given trigger message.
+    /// Returns an empty array if the backend supplies none; callers show local fallbacks.
+    func fetchSuggestions(trigger message: String) async throws -> [SuggestionChip] {
+        let endpoint = Endpoints.AI.chat(message: message, provider: nil, context: nil)
+        let response: BackendAIChatResponse = try await NetworkClient.shared.request(endpoint)
+        return response.suggestions ?? []
+    }
+
     // MARK: - Streaming Study Session
 
     /// Stream AI response in real-time using Server-Sent Events

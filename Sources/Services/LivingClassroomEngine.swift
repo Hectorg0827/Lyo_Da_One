@@ -1,50 +1,6 @@
 import Foundation
 import os
 
-// MARK: - SDUI Convenience Initializers
-//
-// `SDUIComponent` and `SDUIScene` define custom `init(from:)` decoders, which
-// suppresses the automatic memberwise initializer. These extensions add
-// ergonomic initializers so the on-device classroom engine can construct
-// scenes that flow through the *exact same* rendering pipeline used for the
-// server-driven (WebSocket) scenes.
-
-extension SDUIComponent {
-    init(
-        id: String,
-        type: ComponentType,
-        content: String,
-        delayMs: Int = 0,
-        animation: String = "fade_in",
-        emotion: String? = nil,
-        studentName: String? = nil,
-        question: String? = nil,
-        options: [SDUIQuizOption]? = nil,
-        actionIntent: String? = nil,
-        actionPayload: [String: String]? = nil
-    ) {
-        self.id = id
-        self.type = type
-        self.content = content
-        self.delayMs = delayMs
-        self.animation = animation
-        self.emotion = emotion
-        self.studentName = studentName
-        self.question = question
-        self.options = options
-        self.actionIntent = actionIntent
-        self.actionPayload = actionPayload
-    }
-}
-
-extension SDUIScene {
-    init(id: String, sceneType: String, components: [SDUIComponent]) {
-        self.id = id
-        self.sceneType = sceneType
-        self.components = components
-    }
-}
-
 // MARK: - Living Classroom Engine
 //
 // A self-contained, on-device pedagogical engine that generates a *continuous*,

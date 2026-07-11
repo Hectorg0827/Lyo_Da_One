@@ -13,15 +13,6 @@ import os
 import LaTeXSwiftUI
 #endif
 
-struct AnimatedReadingMascotView: View {
-    let size: CGFloat
-
-    var body: some View {
-        ProgressView()
-            .frame(width: size, height: size)
-    }
-}
-
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
     let onTTSToggle: (() -> Void)?
