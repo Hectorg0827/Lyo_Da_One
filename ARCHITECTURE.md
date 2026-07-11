@@ -123,15 +123,35 @@ feature count, the realistic sequence is:
 5. Once at parity, no feature ships to one platform without a tracked plan
    (even if staged) for the other two.
 
-## 5. Verification
+## 5. Verification status
 
-- `design-tokens.json` values are cross-checked against
-  `Sources/Core/DesignTokens.swift` and the `.colorset/Contents.json` assets
-  — grep for a hex value in one place, it should match here.
-- Android: build `android/` and visually diff `Theme.kt`-driven screens
-  against the iOS equivalents.
-- Web: `npm run dev` in `web/` and check `globals.css` renders match the
-  iOS palette (background should read as dark navy, not neutral black).
-- Sync: once wired, the manual test is the one that matters most — log in
-  as the same user on two of the three clients, send a message on one,
-  confirm it appears on the other without a manual refresh.
+Verified in a Linux CI-like environment (no Xcode / no Android SDK):
+
+- **Web: fully verified.** `npm ci`, `tsc --noEmit`, and `next build` all
+  green — 17 routes compile, including the sync client.
+- **Backend sync: verified live.** A two-device simulation (mobile_ios +
+  web_desktop, same user, real JWT minted by the repo's
+  `create_access_token`) against the real sync router over
+  `/api/v1/sync/ws`: both devices authenticate, receive the `connected`
+  welcome with a device id, and cross-device events (`device_connected`,
+  `typing_started`) propagate in real time. Two backend bugs were found
+  and fixed in the process: the router was never registered in the app,
+  and its websocket auth imported a nonexistent `decode_token` (now
+  `verify_token_async`).
+- **Android: code-reviewed, not compiled** — requires the Android SDK.
+  Run `./gradlew assembleDebug` in `android/` on a machine with the SDK.
+- **iOS: code-reviewed, not compiled** — requires Xcode on macOS.
+  `SyncService.swift` is registered in `project.pbxproj`; build the Lyo
+  scheme normally.
+
+The manual test that matters most, once deployed: log in as the same user
+on two of the three clients, send a message on one, confirm it appears on
+the other without a manual refresh.
+
+## 6. Pending backend patches — landed
+
+The four patches in `backend-patches/` have been applied to
+`LyoBackendJune` and pushed to its
+`claude/cross-platform-consistency-sync-axdu93` branch, together with the
+sync-router registration/auth fixes. The patch files remain here as an
+audit record; the branch on the backend repo is now the source of truth.
