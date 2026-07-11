@@ -1,0 +1,77 @@
+{
+  "$schema": "Canonical cross-platform design tokens for LYO. iOS (Sources/Core/DesignTokens.swift) is the source of truth — this file is a platform-neutral mirror of it. Android (android/.../ui/theme/Theme.kt) and Web (web/tailwind.config.ts, web/src/app/globals.css) must be generated from or kept in sync with these values. Do not let any platform define its own hex values independently.",
+  "color": {
+    "brand": {
+      "primary": "#6366F1",
+      "secondary": "#8B5CF6",
+      "secondaryLight": "#A78BFA",
+      "accentMagenta": "#D946EF",
+      "accentGold": "#D9B24C"
+    },
+    "semantic": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444",
+      "info": "#3B82F6"
+    },
+    "surface": {
+      "background": "#0B1230",
+      "surface": "#0E173D",
+      "surfaceElevated": "#2A2D3A",
+      "surfaceHighlight": "#343847"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#C9D1F2",
+      "tertiary": "#FFFFFF80"
+    },
+    "overlay": {
+      "overlay": "#00000080",
+      "overlayLight": "#0000004D"
+    },
+    "gradients": {
+      "accent": ["#8B5CF6", "#D946EF"],
+      "card": ["#4A59A4", "#632E53"],
+      "userMessage": ["#8B5CF6", "#6366F1"],
+      "mesh": ["#1A1D2EF2", "#16213EF2"]
+    }
+  },
+  "typography": {
+    "_note": "sizes in px/sp/pt as appropriate per platform; weights map to platform-native equivalents (SwiftUI Font.Weight / Compose FontWeight / CSS font-weight)",
+    "displayLarge": { "size": 34, "weight": "bold", "tracking": "rounded" },
+    "displayMedium": { "size": 28, "weight": "semibold", "tracking": "rounded" },
+    "displaySmall": { "size": 24, "weight": "semibold", "tracking": "rounded" },
+    "titleLarge": { "size": 22, "weight": "semibold" },
+    "titleMedium": { "size": 20, "weight": "semibold" },
+    "titleSmall": { "size": 18, "weight": "semibold" },
+    "bodyLarge": { "size": 17, "weight": "regular" },
+    "bodyMedium": { "size": 15, "weight": "regular" },
+    "bodySmall": { "size": 13, "weight": "regular" },
+    "labelLarge": { "size": 15, "weight": "medium" },
+    "labelMedium": { "size": 13, "weight": "medium" },
+    "labelSmall": { "size": 11, "weight": "medium" },
+    "caption": { "size": 11, "weight": "regular" }
+  },
+  "spacing": {
+    "xxxs": 2, "xxs": 4, "xs": 8, "sm": 12, "md": 16,
+    "lg": 24, "xl": 32, "xxl": 48, "xxxl": 64
+  },
+  "radius": {
+    "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 20, "xxl": 24, "full": 9999
+  },
+  "shadow": {
+    "sm": { "color": "#00000019", "radius": 2, "y": 1 },
+    "md": { "color": "#00000026", "radius": 4, "y": 2 },
+    "lg": { "color": "#00000033", "radius": 8, "y": 4 },
+    "xl": { "color": "#00000040", "radius": 16, "y": 8 },
+    "glow": { "color": "#D9B24C66", "radius": 12, "y": 0 },
+    "accentGlow": { "color": "#8B5CF680", "radius": 20, "y": 0 }
+  },
+  "motion": {
+    "quick": { "durationMs": 200, "curve": "easeOut" },
+    "standard": { "durationMs": 300, "curve": "easeInOut" },
+    "slow": { "durationMs": 500, "curve": "easeInOut" },
+    "spring": { "response": 0.3, "damping": 0.7 },
+    "springBouncy": { "response": 0.4, "damping": 0.6 }
+  }
+}

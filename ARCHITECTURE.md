@@ -1,0 +1,121 @@
+# LYO Cross-Platform Architecture
+
+This document is the answer to a recurring question: web, iOS, and Android must
+look, feel, and behave as **one product**, not three. This is the concrete plan,
+grounded in what actually exists in this codebase and in `LyoBackendJune`.
+
+## 1. Current state (as of this consolidation)
+
+Until this branch, the three clients had never shared git history:
+
+- **iOS** (`Sources/`, `Lyo.xcodeproj`) — the most mature client. SwiftUI,
+  ~428 files, its own design-token system, full feature set (chat, courses,
+  community, reels, creation studio, monetization).
+- **Android** (`android/`) — an early skeleton. Jetpack Compose, Retrofit
+  (`ApiClient.kt`), one screen per feature area, a `Theme.kt` that was
+  *hand-approximated* to look like iOS/web but used different hex values.
+- **Web** (`web/`) — a fairly built-out Next.js/TypeScript app (App Router,
+  Zustand stores, a `components/ui` kit) with its own third, slightly
+  different color palette (in both `tailwind.config.ts` and `globals.css`).
+- **Backend** (`LyoBackendJune`, separate repo) — a real FastAPI modular
+  monolith (`auth`, `learning`, `feeds`, `community`, `gamification`, `core`
+  modules), async SQLAlchemy + PostgreSQL, Redis, Celery. It already has:
+  - JWT auth (`lyo_app/auth/jwt_auth.py`) with Firebase auth support
+  - A **purpose-built multi-device sync service**
+    (`lyo_app/services/conversation_sync.py`, `lyo_app/routers/sync.py`,
+    `lyo_app/api/v1/websocket.py`) — device registration, session transfer,
+    live conversation state over websockets, explicitly designed so "Lyo
+    should feel like ONE continuous companion, not separate instances on
+    different devices."
+  - This sync layer is **not yet called by any client**. That's the biggest
+    unfinished piece of "requirement 3/4" (same content everywhere, live
+    handoff) — the backend capability exists, the wiring doesn't.
+
+This branch (`claude/cross-platform-consistency-sync-axdu93`) merges the iOS
+branch (`claude/ai-test-prep-feature-r4MYH`, chosen as canonical — most
+recent, includes the classroom-engine + social/analytics lineage) with the
+web/Android branch (`claude/analyze-production-readiness-1pGKe`) into one
+tree for the first time.
+
+## 2. One backend, one identity (requirements 3 & 4)
+
+All three clients already point at the same backend and use the same
+bearer-token + refresh-token auth flow (`web/src/lib/api.ts`,
+`android/.../data/api/ApiClient.kt`, iOS `NetworkClient.swift` +
+`TokenManager.swift`). That part is sound: one account, one username,
+same backend database, regardless of platform.
+
+What's missing is **live propagation**. Today each client independently
+polls/fetches; nothing tells web "your phone just posted a message" in
+real time. The fix is to wire all three clients into the sync service that
+already exists in `LyoBackendJune`:
+
+1. On login/launch, each client calls `POST /sync/devices` to register
+   itself (`device_type`: `mobile_ios` / `mobile_android` / `web_desktop`).
+2. Each client opens the websocket in `lyo_app/api/v1/websocket.py` and
+   subscribes to sync events (`DEVICE_CONNECTED`, conversation/message
+   deltas, session-transfer events).
+3. Local storage on every platform (Core Data/SwiftData on iOS, Room on
+   Android, the Zustand stores + IndexedDB on web) is treated strictly as a
+   **cache of server state**, never as the origin. A write always goes to
+   the backend first; the local store updates from the server response /
+   socket event, not the other way around.
+4. Four backend patches already sit in `backend-patches/` (messaging,
+   notifications, discover endpoints, and bug fixes found in full-stack
+   testing) — land these on `LyoBackendJune` next; the notifications feed
+   and messages endpoints they add are part of this same sync story.
+
+## 3. One design language, iOS as source of truth (requirement 1)
+
+`design-tokens.json` (repo root) is now the single source of truth for
+color, typography scale, spacing, radius, shadow, and motion — extracted
+directly from iOS's existing `Sources/Core/DesignTokens.swift` and its
+named color assets (`Sources/Resources/Assets.xcassets`). iOS itself
+doesn't need to change; it already *is* the tokens.
+
+Android's `ui/theme/Theme.kt` and web's `tailwind.config.ts` /
+`globals.css` have been updated in this branch to match those hex values
+exactly (previously all three platforms used three different, independently
+invented purple palettes — e.g. web/Android both used `#6c63ff`, iOS used
+`#6366F1`; backgrounds ranged from neutral near-black to iOS's navy-tinted
+dark). Every color in `Theme.kt` and `globals.css` is now commented with
+the token it maps to, so drift is visible in review.
+
+Going forward: **any new color, spacing, or radius value gets added to
+`design-tokens.json` first**, then mirrored into the three native theme
+files. Typefaces stay platform-native (SF on iOS, Roboto/system on Android,
+Inter on web) — the type *scale* (sizes/weights) is what has to match, not
+the literal font file.
+
+Next step beyond tokens: a shared component-behavior spec (button states,
+card elevation, list-item layout, empty states) so the three platforms
+don't just share colors but share interaction feel — iOS's existing
+component set (`Sources/Components/`) is the reference for this.
+
+## 4. One product, one roadmap (requirement 2)
+
+Structurally: a "feature" is one backend contract implemented on all three
+clients, not three separate backlogs. Given iOS is currently far ahead in
+feature count, the realistic sequence is:
+
+1. ✅ Consolidate all platform code into one branch/history (this change).
+2. ✅ Unify the design tokens (this change).
+3. Land the four pending backend patches; wire all three clients to
+   `/sync` + the websocket channel.
+4. Bring Android and web up to iOS feature parity, screen by screen, each
+   new screen built against the shared tokens from day one.
+5. Once at parity, no feature ships to one platform without a tracked plan
+   (even if staged) for the other two.
+
+## 5. Verification
+
+- `design-tokens.json` values are cross-checked against
+  `Sources/Core/DesignTokens.swift` and the `.colorset/Contents.json` assets
+  — grep for a hex value in one place, it should match here.
+- Android: build `android/` and visually diff `Theme.kt`-driven screens
+  against the iOS equivalents.
+- Web: `npm run dev` in `web/` and check `globals.css` renders match the
+  iOS palette (background should read as dark navy, not neutral black).
+- Sync: once wired, the manual test is the one that matters most — log in
+  as the same user on two of the three clients, send a message on one,
+  confirm it appears on the other without a manual refresh.

@@ -5,17 +5,19 @@
 /* ============================================================
    CSS Custom Properties — Dark Theme
    ============================================================ */
+/* Generated from /design-tokens.json (source of truth: iOS Sources/Core/DesignTokens.swift).
+   Do not hand-edit hex values here; update design-tokens.json and mirror the change. */
 :root {
-  --background: #0a0a0f;
-  --surface: #111118;
-  --surface-2: #1a1a24;
-  --border: #2a2a3a;
-  --text-primary: #f0f0ff;
-  --text-secondary: #8888aa;
-  --lyo-500: #6c63ff;
-  --lyo-600: #5a52e8;
-  --lyo-400: #8b83ff;
-  --success: #22c55e;
+  --background: #0b1230;
+  --surface: #0e173d;
+  --surface-2: #2a2d3a;
+  --border: #2a2d3a;
+  --text-primary: #ffffff;
+  --text-secondary: #c9d1f2;
+  --lyo-500: #6366f1;
+  --lyo-600: #4f46e5;
+  --lyo-400: #a78bfa;
+  --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
   --info: #3b82f6;
@@ -54,8 +56,8 @@
 
   /* Selection */
   ::selection {
-    background-color: rgba(108, 99, 255, 0.3);
-    color: #f0f0ff;
+    background-color: rgba(99, 102, 241, 0.3);
+    color: #ffffff;
   }
 }
 
@@ -143,15 +145,15 @@
 @keyframes orb-pulse {
   0%, 100% {
     box-shadow:
-      0 0 20px rgba(108, 99, 255, 0.5),
+      0 0 20px rgba(99, 102, 241, 0.5),
       0 0 40px rgba(139, 92, 246, 0.3),
-      0 0 60px rgba(108, 99, 255, 0.1);
+      0 0 60px rgba(99, 102, 241, 0.1);
   }
   50% {
     box-shadow:
-      0 0 30px rgba(108, 99, 255, 0.8),
+      0 0 30px rgba(99, 102, 241, 0.8),
       0 0 60px rgba(139, 92, 246, 0.5),
-      0 0 90px rgba(108, 99, 255, 0.2);
+      0 0 90px rgba(99, 102, 241, 0.2);
   }
 }
 
@@ -187,7 +189,7 @@
 
   /* Gradient Text */
   .gradient-text {
-    background: linear-gradient(135deg, #6c63ff 0%, #8b5cf6 50%, #a78bfa 100%);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -204,11 +206,11 @@
   .orb-gradient {
     background: linear-gradient(
       135deg,
-      #6c63ff 0%,
+      #6366f1 0%,
       #8b5cf6 25%,
       #a78bfa 50%,
       #ec4899 75%,
-      #6c63ff 100%
+      #6366f1 100%
     );
     background-size: 300% 300%;
     animation:
@@ -220,11 +222,11 @@
   .orb-gradient-slow {
     background: linear-gradient(
       135deg,
-      #6c63ff 0%,
+      #6366f1 0%,
       #8b5cf6 30%,
       #ec4899 60%,
       #3b82f6 80%,
-      #6c63ff 100%
+      #6366f1 100%
     );
     background-size: 400% 400%;
     animation: orb-gradient 10s ease infinite;
@@ -233,7 +235,7 @@
 
   /* Shimmer loading */
   .shimmer {
-    background: linear-gradient(90deg, #1a1a24 25%, #2a2a3a 50%, #1a1a24 75%);
+    background: linear-gradient(90deg, #0e173d 25%, #2a2d3a 50%, #0e173d 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite linear;
   }
@@ -270,11 +272,11 @@
 
   /* Gradient backgrounds */
   .bg-lyo-gradient {
-    background: linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   }
 
   .bg-lyo-gradient-subtle {
-    background: linear-gradient(135deg, rgba(108, 99, 255, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
   }
 
   /* Float animation */

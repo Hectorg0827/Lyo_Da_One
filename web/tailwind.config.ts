@@ -5,25 +5,29 @@ const config: Config = {
   darkMode: 'class',
   theme: {
     extend: {
+      // Generated from /design-tokens.json (source of truth: iOS Sources/Core/DesignTokens.swift).
+      // Do not hand-edit hex values here; update design-tokens.json and mirror the change.
       colors: {
         lyo: {
           50: '#f0f4ff',
           100: '#dbe4ff',
           200: '#bac8ff',
-          300: '#91a7ff',
-          400: '#748ffc',
-          500: '#5c7cfa',
-          600: '#4c6ef5',
-          700: '#4263eb',
-          800: '#3b5bdb',
-          900: '#364fc7',
+          300: '#a78bfa', // brand.secondaryLight
+          400: '#8b5cf6', // brand.secondary
+          500: '#6366f1', // brand.primary
+          600: '#4f46e5',
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
         },
         accent: {
-          purple: '#7c3aed',
+          purple: '#8b5cf6', // brand.secondary
+          magenta: '#d946ef', // brand.accentMagenta
+          gold: '#d9b24c', // brand.accentGold
           pink: '#ec4899',
           orange: '#f97316',
           teal: '#14b8a6',
-          green: '#22c55e',
+          green: '#10b981', // semantic.success
         },
       },
       fontFamily: {
