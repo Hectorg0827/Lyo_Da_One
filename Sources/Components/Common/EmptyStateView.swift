@@ -92,3 +92,14 @@ struct EmptyStateView: View {
         .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
+
+#Preview {
+    EmptyStateView(
+        iconName: "book.closed",
+        title: "No Courses Yet",
+        message: "You haven't generated or saved any learning paths. Ask Lyo AI to create your first course!",
+        actionTitle: "Generate Course"
+    ) {
+        print("Action tapped")
+    }
+}

@@ -10,89 +10,11 @@ import { useSyncEvents } from '@/hooks/use-sync';
 import { api } from '@/lib/api';
 import type { Conversation, DirectMessage, User } from '@/types';
 
-// ── Mock data (local-only until backend DM endpoints are added) ─────────────
-
-const CURRENT_USER_ID = 'user_1';
-
 const AVATAR_COLORS = ['#6c63ff', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
 
 function avatarColor(id: string) {
   return AVATAR_COLORS[id.charCodeAt(id.length - 1) % AVATAR_COLORS.length];
 }
-
-const mockParticipants = {
-  u2: { id: 'u2', displayName: 'Maya Chen', username: 'mayalearns', avatar: '', email: '', bio: '', role: 'student' as const, interests: [], learningGoals: [], streak: 5, xp: 1200, level: 8, coursesCompleted: 7, followersCount: 210, followingCount: 90, createdAt: '', isPremium: false },
-  u3: { id: 'u3', displayName: 'Jordan Park', username: 'jparkdev', avatar: '', email: '', bio: '', role: 'student' as const, interests: [], learningGoals: [], streak: 30, xp: 5400, level: 18, coursesCompleted: 15, followersCount: 890, followingCount: 200, createdAt: '', isPremium: true },
-  u7: { id: 'u7', displayName: 'Priya Sharma', username: 'priyalearns', avatar: '', email: '', bio: '', role: 'mentor' as const, interests: [], learningGoals: [], streak: 45, xp: 12000, level: 32, coursesCompleted: 60, followersCount: 4200, followingCount: 180, createdAt: '', isPremium: true },
-  u8: { id: 'u8', displayName: 'Marcus Lee', username: 'marcusbuilds', avatar: '', email: '', bio: '', role: 'creator' as const, interests: [], learningGoals: [], streak: 20, xp: 7800, level: 22, coursesCompleted: 31, followersCount: 2100, followingCount: 400, createdAt: '', isPremium: true },
-};
-
-type MockMessages = Record<string, DirectMessage[]>;
-
-const mockMessages: MockMessages = {
-  conv_1: [
-    { id: 'm1', senderId: 'u2', content: 'Hey! Did you check out the new ML course that was added?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString() },
-    { id: 'm2', senderId: CURRENT_USER_ID, content: 'Yeah! The one on transformers? It looks really good. I started the first module.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2.9 * 3600 * 1000).toISOString() },
-    { id: 'm3', senderId: 'u2', content: 'Exactly that one. The explanations are so clear. Way better than the Stanford lecture imo 😅', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2.8 * 3600 * 1000).toISOString() },
-    { id: 'm4', senderId: CURRENT_USER_ID, content: 'I know right. The animations really help with the attention mechanism. How far are you?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2.5 * 3600 * 1000).toISOString() },
-    { id: 'm5', senderId: 'u2', content: 'About 35% in. Let\'s study together sometime?', type: 'text', isRead: false, createdAt: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-    { id: 'm6', senderId: 'u2', content: 'We could do a shared notes session on LYO!', type: 'text', isRead: false, createdAt: new Date(Date.now() - 18 * 60 * 1000).toISOString() },
-  ],
-  conv_2: [
-    { id: 'm7', senderId: 'u3', content: 'Congrats on the 30-day streak! That\'s huge 🔥', type: 'text', isRead: true, createdAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString() },
-    { id: 'm8', senderId: CURRENT_USER_ID, content: 'Thanks Jordan! Saw your post about it. You\'re an inspiration honestly', type: 'text', isRead: true, createdAt: new Date(Date.now() - 4.8 * 3600 * 1000).toISOString() },
-    { id: 'm9', senderId: 'u3', content: 'Keep going! The key is making it a daily ritual. 15 min minimum every day.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 4.6 * 3600 * 1000).toISOString() },
-    { id: 'm10', senderId: CURRENT_USER_ID, content: 'That\'s great advice. I\'ve been doing that with the daily challenges.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 4.4 * 3600 * 1000).toISOString() },
-    { id: 'm11', senderId: 'u3', content: 'Perfect strategy. DM me when you hit 30 days — we should celebrate 🎉', type: 'text', isRead: true, createdAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString() },
-  ],
-  conv_3: [
-    { id: 'm12', senderId: 'u7', content: 'Hi! I saw your note on gradient descent. Very well explained for a beginner\'s perspective.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString() },
-    { id: 'm13', senderId: CURRENT_USER_ID, content: 'Thank you so much Priya! That really means a lot coming from you.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 23.5 * 3600 * 1000).toISOString() },
-    { id: 'm14', senderId: 'u7', content: 'Would you be interested in contributing to my upcoming course on ML foundations?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 23 * 3600 * 1000).toISOString() },
-    { id: 'm15', senderId: CURRENT_USER_ID, content: 'Absolutely! I\'d be honored. What would you need from me?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 22.5 * 3600 * 1000).toISOString() },
-    { id: 'm16', senderId: 'u7', content: 'Some example walkthroughs from a learner\'s POV. Let\'s schedule a call this week?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 22 * 3600 * 1000).toISOString() },
-    { id: 'm17', senderId: CURRENT_USER_ID, content: 'Definitely! How about Thursday at 3pm?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 21 * 3600 * 1000).toISOString() },
-    { id: 'm18', senderId: 'u7', content: 'Perfect. I\'ll send a calendar invite. Looking forward to it!', type: 'text', isRead: true, createdAt: new Date(Date.now() - 20 * 3600 * 1000).toISOString() },
-  ],
-  conv_4: [
-    { id: 'm19', senderId: 'u8', content: 'Hey, loving your posts on LYO! Really solid content.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString() },
-    { id: 'm20', senderId: CURRENT_USER_ID, content: 'Thanks Marcus! I\'ve been following your clips — the React hooks one was fire 🔥', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2.9 * 24 * 3600 * 1000).toISOString() },
-    { id: 'm21', senderId: 'u8', content: 'Thanks! Working on a Next.js series now. Want to collab on a clip?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2.8 * 24 * 3600 * 1000).toISOString() },
-    { id: 'm22', senderId: CURRENT_USER_ID, content: 'That sounds awesome! What topic are you thinking?', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString() },
-    { id: 'm23', senderId: 'u8', content: 'Server components explained in under 60 seconds. You explain the "why", I\'ll do the code demo.', type: 'text', isRead: true, createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000 + 3600 * 1000).toISOString() },
-  ],
-};
-
-const mockConversations: Conversation[] = [
-  {
-    id: 'conv_1',
-    participants: [mockParticipants.u2 as Conversation['participants'][0]],
-    lastMessage: mockMessages.conv_1[mockMessages.conv_1.length - 1],
-    unreadCount: 2,
-    updatedAt: mockMessages.conv_1[mockMessages.conv_1.length - 1].createdAt,
-  },
-  {
-    id: 'conv_2',
-    participants: [mockParticipants.u3 as Conversation['participants'][0]],
-    lastMessage: mockMessages.conv_2[mockMessages.conv_2.length - 1],
-    unreadCount: 0,
-    updatedAt: mockMessages.conv_2[mockMessages.conv_2.length - 1].createdAt,
-  },
-  {
-    id: 'conv_3',
-    participants: [mockParticipants.u7 as Conversation['participants'][0]],
-    lastMessage: mockMessages.conv_3[mockMessages.conv_3.length - 1],
-    unreadCount: 0,
-    updatedAt: mockMessages.conv_3[mockMessages.conv_3.length - 1].createdAt,
-  },
-  {
-    id: 'conv_4',
-    participants: [mockParticipants.u8 as Conversation['participants'][0]],
-    lastMessage: mockMessages.conv_4[mockMessages.conv_4.length - 1],
-    unreadCount: 0,
-    updatedAt: mockMessages.conv_4[mockMessages.conv_4.length - 1].createdAt,
-  },
-];
 
 // ── Conversation list item ─────────────────────────────────────────────────────
 
@@ -179,7 +101,6 @@ export default function MessagesPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [search, setSearch] = useState('');
-  const [localMessages, setLocalMessages] = useState<MockMessages>(mockMessages);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // ── API data fetching ──────────────────────────────────────────────────
@@ -257,13 +178,10 @@ export default function MessagesPage() {
       )
     : null;
 
-  // Use API data when available, fall back to mock data
-  const conversations = apiConversations ?? mockConversations;
+  const conversations = apiConversations ?? [];
   const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
   const activeOther = activeConv?.participants[0] ?? null;
-  const activeMessages = activeConvId
-    ? apiMessages ?? localMessages[activeConvId] ?? []
-    : [];
+  const activeMessages = activeConvId ? apiMessages ?? [] : [];
 
   const filteredConvs = conversations.filter((c) =>
     c.participants[0]?.displayName.toLowerCase().includes(search.toLowerCase())
@@ -275,40 +193,24 @@ export default function MessagesPage() {
 
   // Mark conversation as read when opened
   useEffect(() => {
-    if (activeConvId && apiConversations) {
+    if (activeConvId) {
       api.messages.markRead(activeConvId).catch(() => {});
     }
-  }, [activeConvId, apiConversations]);
+  }, [activeConvId]);
 
   const sendMessage = useCallback(async () => {
     if (!inputText.trim() || !activeConvId) return;
     const text = inputText.trim();
     setInputText('');
 
-    if (apiConversations) {
-      // Use real API
-      try {
-        await api.messages.sendMessage(activeConvId, text);
-        refetchConvs();
-      } catch {
-        // Silently fail — user sees the input cleared
-      }
-    } else {
-      // Local mock fallback
-      const newMsg: DirectMessage = {
-        id: `msg_${Date.now()}`,
-        senderId: CURRENT_USER_ID,
-        content: text,
-        type: 'text',
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      };
-      setLocalMessages((prev) => ({
-        ...prev,
-        [activeConvId]: [...(prev[activeConvId] ?? []), newMsg],
-      }));
+    try {
+      await api.messages.sendMessage(activeConvId, text);
+      refetchConvs();
+      refetchMsgs();
+    } catch {
+      // Silently fail — user sees the input cleared
     }
-  }, [inputText, activeConvId, apiConversations, refetchConvs]);
+  }, [inputText, activeConvId, refetchConvs, refetchMsgs]);
 
   return (
     <div className="h-[calc(100vh-120px)] max-w-5xl mx-auto flex rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -407,7 +309,7 @@ export default function MessagesPage() {
                   <MsgBubble
                     key={msg.id}
                     msg={msg}
-                    isOwn={msg.senderId === CURRENT_USER_ID || msg.senderId === (user?.id ?? '')}
+                    isOwn={msg.senderId === (user?.id ?? '')}
                   />
                 ))}
                 <div ref={bottomRef} />

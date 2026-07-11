@@ -91,34 +91,34 @@ interface LyoApiService {
     @POST("api/v1/learning/courses/generate")
     suspend fun generateCourse(@Body body: GenerateCourseRequest): JsonObject
 
-    // ── Clips ──
-    @GET("clips")
+    // ── Clips ── (same /api/v1 paths as web api.ts and iOS Endpoints)
+    @GET("api/v1/clips")
     suspend fun clips(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
     ): ClipsResponse
 
-    @GET("clips/discover")
+    @GET("api/v1/clips/discover")
     suspend fun discoverClips(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
         @Query("subject") subject: String? = null,
     ): ClipsResponse
 
-    @POST("clips/{clipId}/like")
+    @POST("api/v1/clips/{clipId}/like")
     suspend fun likeClip(@Path("clipId") clipId: String): JsonObject
 
-    @POST("clips/{clipId}/save")
+    @POST("api/v1/clips/{clipId}/save")
     suspend fun saveClip(@Path("clipId") clipId: String): JsonObject
 
-    @POST("clips/{clipId}/view")
+    @POST("api/v1/clips/{clipId}/view")
     suspend fun viewClip(@Path("clipId") clipId: String): JsonObject
 
-    // ── Stories ──
-    @GET("stories")
+    // ── Stories ── (same /api/v1 paths as web api.ts)
+    @GET("api/v1/stories")
     suspend fun stories(): StoriesResponse
 
-    @POST("stories/{storyId}/seen")
+    @POST("api/v1/stories/{storyId}/seen")
     suspend fun markStorySeen(@Path("storyId") storyId: String): JsonObject
 
     // ── Gamification ──
@@ -137,14 +137,14 @@ interface LyoApiService {
         @Query("limit") limit: Int = 20,
     ): JsonObject
 
-    // ── Community ──
-    @GET("community/groups")
+    // ── Community ── (study-groups routes, matching web api.ts and iOS)
+    @GET("community/study-groups")
     suspend fun groups(): List<GroupDto>
 
-    @POST("community/groups/{groupId}/join")
+    @POST("community/study-groups/{groupId}/join")
     suspend fun joinGroup(@Path("groupId") groupId: String): JsonObject
 
-    @POST("community/groups/{groupId}/leave")
+    @DELETE("community/study-groups/{groupId}/leave")
     suspend fun leaveGroup(@Path("groupId") groupId: String): JsonObject
 
     @GET("community/events")

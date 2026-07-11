@@ -23,13 +23,17 @@ struct SyncEvent {
 /// real-time events when the same account acts on another platform
 /// (web, Android, or another iOS device). Connect on login, disconnect
 /// on logout; consume `events` to refresh screens live.
-final class SyncService: NSObject {
+///
+/// All connection state is MainActor-isolated so connect/reconnect/teardown
+/// can never race each other and leak a second websocket.
+@MainActor
+final class SyncService {
 
     static let shared = SyncService()
 
     // MARK: - Public surface
 
-    /// Fires for every event received from the sync channel.
+    /// Fires on the main actor for every event received from the sync channel.
     let events = PassthroughSubject<SyncEvent, Never>()
 
     /// This device's id, assigned by the server on connect.
@@ -38,7 +42,7 @@ final class SyncService: NSObject {
     /// Start (or restart) the sync connection. Safe to call repeatedly.
     func connect() {
         shouldRun = true
-        Task { await open() }
+        open()
     }
 
     /// Stop syncing (e.g. on logout).
@@ -55,8 +59,9 @@ final class SyncService: NSObject {
     // MARK: - Internals
 
     private var task: URLSessionWebSocketTask?
+    private var connectTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
     private var heartbeatTimer: Timer?
-    private var reconnectWorkItem: DispatchWorkItem?
     private var reconnectAttempt = 0
     private var shouldRun = false
 
@@ -64,54 +69,60 @@ final class SyncService: NSObject {
     private let reconnectBase: TimeInterval = 2
     private let reconnectMax: TimeInterval = 60
 
-    private lazy var session = URLSession(
-        configuration: .default,
-        delegate: nil,
-        delegateQueue: nil
-    )
+    private let session = URLSession(configuration: .default)
 
-    private func open() async {
-        guard shouldRun, task == nil else { return }
-        guard let token = await TokenManager.shared.getToken() else {
-            Log.net.info("Sync: no auth token, not connecting")
-            return
+    private func open() {
+        // A live socket or an in-flight connect attempt means nothing to do.
+        guard shouldRun, task == nil, connectTask == nil else { return }
+
+        connectTask = Task { [weak self] in
+            let token = await TokenManager.shared.getToken()
+            guard let self else { return }
+            self.connectTask = nil
+            guard self.shouldRun, self.task == nil else { return }
+            guard let token else {
+                Log.net.info("Sync: no auth token, not connecting")
+                return
+            }
+
+            let wsBase = AppConfig.baseURL
+                .replacingOccurrences(of: "https://", with: "wss://")
+                .replacingOccurrences(of: "http://", with: "ws://")
+            var components = URLComponents(string: "\(wsBase)/api/v1/sync/ws")
+            components?.queryItems = [
+                URLQueryItem(name: "token", value: token),
+                URLQueryItem(name: "device_type", value: "mobile_ios"),
+                URLQueryItem(name: "device_name", value: "LYO iOS"),
+            ]
+            guard let url = components?.url else { return }
+
+            let wsTask = self.session.webSocketTask(with: url)
+            self.task = wsTask
+            wsTask.resume()
+            Log.net.info("Sync: connecting websocket")
+
+            self.startHeartbeat()
+            self.receiveLoop(on: wsTask)
         }
-
-        let wsBase = AppConfig.baseURL
-            .replacingOccurrences(of: "https://", with: "wss://")
-            .replacingOccurrences(of: "http://", with: "ws://")
-        var components = URLComponents(string: "\(wsBase)/api/v1/sync/ws")
-        components?.queryItems = [
-            URLQueryItem(name: "token", value: token),
-            URLQueryItem(name: "device_type", value: "mobile_ios"),
-            URLQueryItem(name: "device_name", value: "LYO iOS"),
-        ]
-        guard let url = components?.url else { return }
-
-        let wsTask = session.webSocketTask(with: url)
-        task = wsTask
-        wsTask.resume()
-        Log.net.info("Sync: connecting websocket")
-
-        startHeartbeat()
-        receiveLoop(on: wsTask)
     }
 
     private func receiveLoop(on wsTask: URLSessionWebSocketTask) {
         wsTask.receive { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success(let message):
-                if case .string(let text) = message {
-                    self.handle(text: text)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch result {
+                case .success(let message):
+                    if case .string(let text) = message {
+                        self.handle(text: text)
+                    }
+                    // Keep listening as long as this task is still current.
+                    if self.task === wsTask {
+                        self.receiveLoop(on: wsTask)
+                    }
+                case .failure(let error):
+                    Log.net.info("Sync: socket closed (\(error.localizedDescription))")
+                    self.onSocketClosed(wsTask)
                 }
-                // Keep listening as long as this task is still current.
-                if self.task === wsTask {
-                    self.receiveLoop(on: wsTask)
-                }
-            case .failure(let error):
-                Log.net.info("Sync: socket closed (\(error.localizedDescription))")
-                self.onSocketClosed(wsTask)
             }
         }
     }
@@ -141,13 +152,12 @@ final class SyncService: NSObject {
     }
 
     private func startHeartbeat() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.heartbeatTimer?.invalidate()
-            self.heartbeatTimer = Timer.scheduledTimer(
-                withTimeInterval: self.heartbeatInterval,
-                repeats: true
-            ) { [weak self] _ in
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = Timer.scheduledTimer(
+            withTimeInterval: heartbeatInterval,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
                 self?.send(["type": "heartbeat"])
             }
         }
@@ -155,29 +165,29 @@ final class SyncService: NSObject {
 
     private func onSocketClosed(_ wsTask: URLSessionWebSocketTask) {
         guard task === wsTask else { return }
-        teardown(keepRunning: true)
-        guard shouldRun else { return }
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+        task = nil
+        deviceId = nil
+        guard shouldRun, reconnectTask == nil else { return }
 
         let delay = min(reconnectBase * pow(2, Double(reconnectAttempt)), reconnectMax)
         reconnectAttempt += 1
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.reconnectWorkItem = nil
-            Task { await self.open() }
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.reconnectTask = nil
+            self.open()
         }
-        reconnectWorkItem = work
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func teardown(keepRunning: Bool = false) {
-        DispatchQueue.main.async { [weak self] in
-            self?.heartbeatTimer?.invalidate()
-            self?.heartbeatTimer = nil
-        }
-        if !keepRunning {
-            reconnectWorkItem?.cancel()
-            reconnectWorkItem = nil
-        }
+    private func teardown() {
+        connectTask?.cancel()
+        connectTask = nil
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         deviceId = nil
