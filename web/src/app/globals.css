@@ -1,0 +1,307 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   CSS Custom Properties — Dark Theme
+   ============================================================ */
+:root {
+  --background: #0a0a0f;
+  --surface: #111118;
+  --surface-2: #1a1a24;
+  --border: #2a2a3a;
+  --text-primary: #f0f0ff;
+  --text-secondary: #8888aa;
+  --lyo-500: #6c63ff;
+  --lyo-600: #5a52e8;
+  --lyo-400: #8b83ff;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+}
+
+/* ============================================================
+   Base Resets
+   ============================================================ */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* Focus outline */
+  :focus-visible {
+    outline: 2px solid var(--lyo-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: rgba(108, 99, 255, 0.3);
+    color: #f0f0ff;
+  }
+}
+
+/* ============================================================
+   Custom Scrollbar
+   ============================================================ */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3a3a50;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/* ============================================================
+   Keyframe Animations
+   ============================================================ */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes orb-gradient {
+  0% {
+    background-position: 0% 50%;
+    transform: scale(1) rotate(0deg);
+  }
+  33% {
+    background-position: 100% 50%;
+    transform: scale(1.06) rotate(120deg);
+  }
+  66% {
+    background-position: 50% 0%;
+    transform: scale(0.96) rotate(240deg);
+  }
+  100% {
+    background-position: 0% 50%;
+    transform: scale(1) rotate(360deg);
+  }
+}
+
+@keyframes orb-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(108, 99, 255, 0.5),
+      0 0 40px rgba(139, 92, 246, 0.3),
+      0 0 60px rgba(108, 99, 255, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(108, 99, 255, 0.8),
+      0 0 60px rgba(139, 92, 246, 0.5),
+      0 0 90px rgba(108, 99, 255, 0.2);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* ============================================================
+   Component Utilities
+   ============================================================ */
+@layer components {
+  /* Glass Morphism */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+  }
+
+  .glass-card-strong {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    background: linear-gradient(135deg, #6c63ff 0%, #8b5cf6 50%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-warm {
+    background: linear-gradient(135deg, #f59e0b 0%, #ef4444 50%, #ec4899 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* LYO AI Orb Avatar */
+  .orb-gradient {
+    background: linear-gradient(
+      135deg,
+      #6c63ff 0%,
+      #8b5cf6 25%,
+      #a78bfa 50%,
+      #ec4899 75%,
+      #6c63ff 100%
+    );
+    background-size: 300% 300%;
+    animation:
+      orb-gradient 6s ease infinite,
+      orb-pulse 3s ease-in-out infinite;
+    border-radius: 50%;
+  }
+
+  .orb-gradient-slow {
+    background: linear-gradient(
+      135deg,
+      #6c63ff 0%,
+      #8b5cf6 30%,
+      #ec4899 60%,
+      #3b82f6 80%,
+      #6c63ff 100%
+    );
+    background-size: 400% 400%;
+    animation: orb-gradient 10s ease infinite;
+    border-radius: 50%;
+  }
+
+  /* Shimmer loading */
+  .shimmer {
+    background: linear-gradient(90deg, #1a1a24 25%, #2a2a3a 50%, #1a1a24 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+
+  /* Smooth transitions */
+  .transition-smooth {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-bounce {
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Surface colors */
+  .bg-surface {
+    background-color: var(--surface);
+  }
+
+  .bg-surface-2 {
+    background-color: var(--surface-2);
+  }
+
+  .border-subtle {
+    border-color: var(--border);
+  }
+
+  .text-primary {
+    color: var(--text-primary);
+  }
+
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  /* Gradient backgrounds */
+  .bg-lyo-gradient {
+    background: linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%);
+  }
+
+  .bg-lyo-gradient-subtle {
+    background: linear-gradient(135deg, rgba(108, 99, 255, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
+  }
+
+  /* Float animation */
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fade-in 0.4s ease-out forwards;
+  }
+}
+
+/* ============================================================
+   Utility overrides
+   ============================================================ */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}

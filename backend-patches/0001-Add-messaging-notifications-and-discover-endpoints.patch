@@ -1,0 +1,1451 @@
+From 5f8fbf58bdcd3d20407b8d1f3af38db503ef134f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 23 Jun 2026 18:20:48 +0000
+Subject: [PATCH 1/4] Add messaging, notifications, and discover endpoints
+
+Backend:
+- messaging.py: Full DM router with 6 endpoints using existing DB models
+- notifications.py: Expanded with Notification model and 4 new endpoints
+- discover.py: New router with 15 curated educational places
+
+Registration: All 3 routers registered in enhanced_main.py
+iOS: Endpoints.swift updated with 13 new endpoint definitions
+
+https://claude.ai/code/session_01Q1rk7BZrjN1to3WbJRAPyR
+---
+ Sources/Services/Endpoints.swift |  51 ++-
+ lyo_app/enhanced_main.py         |  22 ++
+ lyo_app/routers/discover.py      | 523 +++++++++++++++++++++++++++++++
+ lyo_app/routers/messaging.py     | 479 +++++++++++++++++++++++++++-
+ lyo_app/routers/notifications.py | 223 ++++++++++++-
+ 5 files changed, 1283 insertions(+), 15 deletions(-)
+ create mode 100644 lyo_app/routers/discover.py
+
+diff --git a/Sources/Services/Endpoints.swift b/Sources/Services/Endpoints.swift
+index 5ead7a5..c903b4b 100644
+--- a/Sources/Services/Endpoints.swift
++++ b/Sources/Services/Endpoints.swift
+@@ -87,10 +87,29 @@ enum Endpoints {
+         case studyPlanDetail(planId: String)
+         case studySessions
+         
++        // MARK: - Messaging
++        case conversations
++        case conversationMessages(conversationId: String)
++        case createConversation
++        case sendMessage(conversationId: String)
++        case markConversationRead(conversationId: String)
++
++        // MARK: - Discover
++        case discoverPlaces
++        case discoverPlaceDetail(placeId: String)
++        case discoverTrending
++
++        // MARK: - Notifications
++        case notificationsList
++        case notificationRead(notificationId: String)
++        case notificationsReadAll
++        case notificationsUnreadCount
++        case notificationPreferences
++
+         // MARK: - Health
+         case health
+         case healthDetailed
+-        
++
+         /// Returns the path for this endpoint
+         var path: String {
+             switch self {
+@@ -135,24 +154,48 @@ enum Endpoints {
+             case .studyPlanDetail(let planId): return "study/plans/\(planId)"
+             case .studySessions: return "study/sessions"
+                 
++            // Messaging
++            case .conversations: return "messages/conversations"
++            case .conversationMessages(let conversationId): return "messages/conversations/\(conversationId)"
++            case .createConversation: return "messages/conversations"
++            case .sendMessage(let conversationId): return "messages/conversations/\(conversationId)/messages"
++            case .markConversationRead(let conversationId): return "messages/conversations/\(conversationId)/read"
++
++            // Discover
++            case .discoverPlaces: return "discover/places"
++            case .discoverPlaceDetail(let placeId): return "discover/places/\(placeId)"
++            case .discoverTrending: return "discover/trending"
++
++            // Notifications
++            case .notificationsList: return "notifications"
++            case .notificationRead(let notificationId): return "notifications/\(notificationId)/read"
++            case .notificationsReadAll: return "notifications/read-all"
++            case .notificationsUnreadCount: return "notifications/unread-count"
++            case .notificationPreferences: return "notifications/preferences"
++
+             // Health
+             case .health: return "health"
+             case .healthDetailed: return "health/detailed"
+             }
+         }
+-        
++
+         /// Returns the HTTP method for this endpoint
+         var method: HTTPMethod {
+             switch self {
+             case .login, .register, .refreshToken, .logout,
+                  .chat, .chatStream, .courseGenerate, .courseComplete,
+-                 .selectionExplain, .selectionNote, .selectionHighlight:
++                 .selectionExplain, .selectionNote, .selectionHighlight,
++                 .createConversation, .sendMessage, .markConversationRead,
++                 .notificationRead, .notificationsReadAll:
+                 return .post
+             case .verifyToken, .chatHistory, .a2uiNegotiate, .a2uiComponents,
+                  .courseStatus, .courseFetch, .userProfile, .userPreferences,
+                  .userProgress, .studyPlans, .studyPlanDetail, .studySessions,
+                  .health, .healthDetailed, .a2uiWebSocket,
+-                 .selectionHighlights:
++                 .selectionHighlights,
++                 .conversations, .conversationMessages,
++                 .discoverPlaces, .discoverPlaceDetail, .discoverTrending,
++                 .notificationsList, .notificationsUnreadCount, .notificationPreferences:
+                 return .get
+             case .selectionHighlightDelete:
+                 return .delete
+diff --git a/lyo_app/enhanced_main.py b/lyo_app/enhanced_main.py
+index 61b5c3b..def46ff 100755
+--- a/lyo_app/enhanced_main.py
++++ b/lyo_app/enhanced_main.py
+@@ -488,6 +488,14 @@ def create_app() -> FastAPI:
+     except ImportError as e:
+         logger.warning(f"Clips routes not available: {e}")
+     
++    # Messaging Router - Direct messages between users
++    try:
++        from lyo_app.routers.messaging import router as messaging_router
++        app.include_router(messaging_router)
++        logger.info("✅ Messaging routes integrated - Direct messages active!")
++    except ImportError as e:
++        logger.warning(f"Messaging routes not available: {e}")
++
+     # Optional legacy/feature routers (only include if present)
+     try:
+         from lyo_app.community.routes import router as community_router
+@@ -666,7 +674,21 @@ def create_app() -> FastAPI:
+     except ImportError as e:
+         logger.warning(f"⚠️ Relationship routes not available: {e}")
+ 
++    # Notifications Router - User notification management
++    try:
++        from lyo_app.routers.notifications import router as notifications_router
++        app.include_router(notifications_router)
++        logger.info("✅ Notification routes integrated - User notifications active!")
++    except ImportError as e:
++        logger.warning(f"Notification routes not available: {e}")
+ 
++    # Discover Router - Educational places and trending content
++    try:
++        from lyo_app.routers.discover import router as discover_router
++        app.include_router(discover_router)
++        logger.info("✅ Discover routes integrated - Places & trending content active!")
++    except ImportError as e:
++        logger.warning(f"Discover routes not available: {e}")
+ 
+     @app.get("/health")
+     async def enhanced_health_check():  # noqa: D401
+diff --git a/lyo_app/routers/discover.py b/lyo_app/routers/discover.py
+new file mode 100644
+index 0000000..b13b87c
+--- /dev/null
++++ b/lyo_app/routers/discover.py
+@@ -0,0 +1,523 @@
++"""
++Discover Router - Educational places, trending topics, and curated content.
++Serves reference data for the Discover tab (places, trending resources).
++"""
++
++import math
++from fastapi import APIRouter, Depends, Query, HTTPException
++from pydantic import BaseModel, Field
++from typing import Optional, List
++
++from lyo_app.auth.jwt_auth import get_current_user
++from lyo_app.auth.models import User
++
++import logging
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter(prefix="/discover", tags=["Discover"])
++
++
++# ============================================================================
++# Pydantic Models
++# ============================================================================
++
++class Place(BaseModel):
++    id: str
++    name: str
++    description: str
++    category: str
++    lat: float
++    lng: float
++    rating: float
++    review_count: int
++    image_url: str
++    address: str
++    website: str = ""
++    tags: list[str] = []
++    is_featured: bool = False
++
++
++class PlaceDetail(Place):
++    hours: str = ""
++    phone: str = ""
++    reviews: list[dict] = []
++
++
++class PlacesResponse(BaseModel):
++    places: list[Place]
++    total: int
++
++
++class TrendingTopic(BaseModel):
++    name: str
++    count: int
++    icon: str
++
++
++class TrendingResource(BaseModel):
++    title: str
++    type: str
++    url: str
++
++
++class TrendingResponse(BaseModel):
++    topics: list[TrendingTopic]
++    resources: list[TrendingResource]
++
++
++# ============================================================================
++# Seed Data — 15 Real Famous Educational Places
++# ============================================================================
++
++SEED_PLACES: list[PlaceDetail] = [
++    PlaceDetail(
++        id="place-001",
++        name="Smithsonian Institution",
++        description="The world's largest museum, education, and research complex with 21 museums and galleries along the National Mall.",
++        category="museum",
++        lat=38.8881,
++        lng=-77.0120,
++        rating=4.8,
++        review_count=12540,
++        image_url="https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800",
++        address="1000 Jefferson Dr SW, Washington, DC 20560, USA",
++        website="https://www.si.edu",
++        tags=["history", "science", "art", "free-admission"],
++        is_featured=True,
++        hours="10:00 AM - 5:30 PM daily",
++        phone="+1-202-633-1000",
++        reviews=[
++            {"user": "Emily R.", "rating": 5, "text": "Absolutely incredible collection. Could spend weeks here."},
++            {"user": "Marcus J.", "rating": 5, "text": "The Air and Space Museum alone is worth the trip."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-002",
++        name="Massachusetts Institute of Technology",
++        description="A world-renowned research university pushing the boundaries of science, engineering, and technology innovation.",
++        category="university",
++        lat=42.3601,
++        lng=-71.0942,
++        rating=4.9,
++        review_count=8720,
++        image_url="https://images.unsplash.com/photo-1564981797816-1043664bf78d?w=800",
++        address="77 Massachusetts Ave, Cambridge, MA 02139, USA",
++        website="https://www.mit.edu",
++        tags=["engineering", "technology", "research", "innovation"],
++        is_featured=True,
++        hours="Campus open 24/7; visitor center 9 AM - 5 PM",
++        phone="+1-617-253-1000",
++        reviews=[
++            {"user": "Sarah L.", "rating": 5, "text": "The campus tour is fascinating. World-class facilities."},
++            {"user": "David K.", "rating": 5, "text": "MIT OpenCourseWare changed my life."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-003",
++        name="British Museum",
++        description="A public museum dedicated to human history, art, and culture, housing a permanent collection of over 8 million works.",
++        category="museum",
++        lat=51.5194,
++        lng=-0.1270,
++        rating=4.7,
++        review_count=15230,
++        image_url="https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=800",
++        address="Great Russell St, London WC1B 3DG, United Kingdom",
++        website="https://www.britishmuseum.org",
++        tags=["history", "archaeology", "art", "free-admission"],
++        is_featured=True,
++        hours="10:00 AM - 5:00 PM (Fri until 8:30 PM)",
++        phone="+44-20-7323-8299",
++        reviews=[
++            {"user": "Oliver P.", "rating": 5, "text": "The Rosetta Stone and Egyptian galleries are extraordinary."},
++            {"user": "Aisha M.", "rating": 4, "text": "Vast collection. Plan to come multiple times."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-004",
++        name="Library of Congress",
++        description="The largest library in the world, with millions of books, recordings, photographs, newspapers, maps, and manuscripts.",
++        category="library",
++        lat=38.8887,
++        lng=-77.0047,
++        rating=4.8,
++        review_count=6840,
++        image_url="https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=800",
++        address="101 Independence Ave SE, Washington, DC 20540, USA",
++        website="https://www.loc.gov",
++        tags=["books", "research", "history", "archives"],
++        is_featured=True,
++        hours="8:30 AM - 4:30 PM Mon-Sat",
++        phone="+1-202-707-5000",
++        reviews=[
++            {"user": "Thomas W.", "rating": 5, "text": "The architecture alone is worth a visit. The reading rooms are stunning."},
++            {"user": "Grace H.", "rating": 5, "text": "An unparalleled research resource for any scholar."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-005",
++        name="CERN",
++        description="The European Organization for Nuclear Research, home to the Large Hadron Collider and groundbreaking particle physics research.",
++        category="lab",
++        lat=46.2330,
++        lng=6.0557,
++        rating=4.9,
++        review_count=4520,
++        image_url="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800",
++        address="Esplanade des Particules 1, 1211 Meyrin, Geneva, Switzerland",
++        website="https://home.cern",
++        tags=["physics", "science", "research", "technology"],
++        is_featured=True,
++        hours="Tours by reservation; exhibitions 9 AM - 5 PM",
++        phone="+41-22-767-8484",
++        reviews=[
++            {"user": "Pierre D.", "rating": 5, "text": "Mind-blowing experience seeing where the Higgs boson was discovered."},
++            {"user": "Yuki T.", "rating": 5, "text": "The interactive exhibits make complex physics accessible."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-006",
++        name="Stanford University",
++        description="A leading research university known for its entrepreneurial spirit, academic excellence, and proximity to Silicon Valley.",
++        category="university",
++        lat=37.4275,
++        lng=-122.1697,
++        rating=4.8,
++        review_count=7630,
++        image_url="https://images.unsplash.com/photo-1585060544812-6b45742d762f?w=800",
++        address="450 Serra Mall, Stanford, CA 94305, USA",
++        website="https://www.stanford.edu",
++        tags=["technology", "entrepreneurship", "research", "innovation"],
++        is_featured=False,
++        hours="Campus open daily; visitor center 10 AM - 4 PM",
++        phone="+1-650-723-2300",
++        reviews=[
++            {"user": "Jennifer C.", "rating": 5, "text": "Beautiful campus with incredible academic resources."},
++            {"user": "Raj P.", "rating": 5, "text": "The engineering and CS programs are world-class."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-007",
++        name="Louvre Museum",
++        description="The world's most-visited art museum and a historic monument in Paris, home to the Mona Lisa and Venus de Milo.",
++        category="museum",
++        lat=48.8606,
++        lng=2.3376,
++        rating=4.7,
++        review_count=21450,
++        image_url="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800",
++        address="Rue de Rivoli, 75001 Paris, France",
++        website="https://www.louvre.fr",
++        tags=["art", "history", "culture", "architecture"],
++        is_featured=True,
++        hours="9:00 AM - 6:00 PM (Wed & Fri until 9:45 PM), Closed Tuesdays",
++        phone="+33-1-40-20-53-17",
++        reviews=[
++            {"user": "Claire B.", "rating": 5, "text": "An art lover's paradise. The building itself is a masterpiece."},
++            {"user": "Antonio G.", "rating": 4, "text": "Go early to beat the crowds. Absolutely worth it."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-008",
++        name="National Museum of Nature and Science",
++        description="Japan's premier science museum featuring extensive collections on natural history, science, and technology.",
++        category="museum",
++        lat=35.7164,
++        lng=139.7764,
++        rating=4.6,
++        review_count=5890,
++        image_url="https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800",
++        address="7-20 Ueno Park, Taito City, Tokyo 110-8718, Japan",
++        website="https://www.kahaku.go.jp",
++        tags=["science", "natural-history", "technology", "dinosaurs"],
++        is_featured=False,
++        hours="9:00 AM - 5:00 PM (Fri & Sat until 8:00 PM), Closed Mondays",
++        phone="+81-3-5777-8600",
++        reviews=[
++            {"user": "Kenji S.", "rating": 5, "text": "Incredible dinosaur exhibits and hands-on science areas."},
++            {"user": "Lisa M.", "rating": 4, "text": "Great for families. The planetarium is spectacular."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-009",
++        name="Harvard University",
++        description="The oldest institution of higher education in the US, renowned for academic excellence across all disciplines.",
++        category="university",
++        lat=42.3770,
++        lng=-71.1167,
++        rating=4.8,
++        review_count=9130,
++        image_url="https://images.unsplash.com/photo-1559135197-8a45ea74d367?w=800",
++        address="Massachusetts Hall, Cambridge, MA 02138, USA",
++        website="https://www.harvard.edu",
++        tags=["liberal-arts", "research", "law", "medicine"],
++        is_featured=False,
++        hours="Campus open daily; tours available",
++        phone="+1-617-495-1000",
++        reviews=[
++            {"user": "Michael T.", "rating": 5, "text": "Walking through Harvard Yard is inspiring."},
++            {"user": "Priya N.", "rating": 5, "text": "The libraries alone make this a scholarly paradise."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-010",
++        name="Bodleian Library",
++        description="One of the oldest libraries in Europe, serving as the main research library of the University of Oxford since 1602.",
++        category="library",
++        lat=51.7548,
++        lng=-1.2544,
++        rating=4.8,
++        review_count=3920,
++        image_url="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800",
++        address="Broad St, Oxford OX1 3BG, United Kingdom",
++        website="https://www.bodleian.ox.ac.uk",
++        tags=["books", "history", "architecture", "research"],
++        is_featured=False,
++        hours="9:00 AM - 5:00 PM Mon-Sat",
++        phone="+44-1865-277162",
++        reviews=[
++            {"user": "James F.", "rating": 5, "text": "The Radcliffe Camera is breathtaking. A must-see in Oxford."},
++            {"user": "Sophie R.", "rating": 5, "text": "The guided tour reveals centuries of hidden history."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-011",
++        name="Exploratorium",
++        description="A hands-on science museum in San Francisco dedicated to making science accessible through interactive exhibits and experiences.",
++        category="museum",
++        lat=37.8017,
++        lng=-122.3975,
++        rating=4.7,
++        review_count=6340,
++        image_url="https://images.unsplash.com/photo-1526587367011-2898b2a6de42?w=800",
++        address="Pier 15, San Francisco, CA 94111, USA",
++        website="https://www.exploratorium.edu",
++        tags=["science", "interactive", "hands-on", "family-friendly"],
++        is_featured=False,
++        hours="10:00 AM - 5:00 PM Tue-Sun",
++        phone="+1-415-528-4444",
++        reviews=[
++            {"user": "Chris D.", "rating": 5, "text": "Best interactive science museum I've ever visited."},
++            {"user": "Amanda K.", "rating": 4, "text": "Kids and adults both love this place."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-012",
++        name="Natural History Museum",
++        description="A world-leading museum of natural history specimens and research, featuring the famous Diplodocus skeleton and Darwin Centre.",
++        category="museum",
++        lat=51.4967,
++        lng=-0.1764,
++        rating=4.7,
++        review_count=11870,
++        image_url="https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=800",
++        address="Cromwell Rd, South Kensington, London SW7 5BD, United Kingdom",
++        website="https://www.nhm.ac.uk",
++        tags=["natural-history", "science", "dinosaurs", "free-admission"],
++        is_featured=False,
++        hours="10:00 AM - 5:50 PM daily",
++        phone="+44-20-7942-5000",
++        reviews=[
++            {"user": "Edward B.", "rating": 5, "text": "The Hintze Hall with the blue whale is spectacular."},
++            {"user": "Mei L.", "rating": 5, "text": "Free entry and world-class exhibits. London at its best."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-013",
++        name="Max Planck Institute",
++        description="One of Germany's premier research organizations, advancing fundamental science across physics, biology, and more.",
++        category="lab",
++        lat=48.2480,
++        lng=11.6076,
++        rating=4.7,
++        review_count=2150,
++        image_url="https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=800",
++        address="Boltzmannstrasse 2, 85748 Garching, Munich, Germany",
++        website="https://www.mpg.de",
++        tags=["physics", "biology", "research", "science"],
++        is_featured=False,
++        hours="By appointment; public lectures periodically",
++        phone="+49-89-2108-0",
++        reviews=[
++            {"user": "Hans M.", "rating": 5, "text": "Cutting-edge research facilities. Public lectures are very informative."},
++            {"user": "Anna W.", "rating": 4, "text": "Fascinating insight into German scientific research."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-014",
++        name="National Library of China",
++        description="The largest library in Asia and one of the largest in the world, with over 37 million items in its collections.",
++        category="library",
++        lat=39.9427,
++        lng=116.3186,
++        rating=4.5,
++        review_count=3480,
++        image_url="https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=800",
++        address="33 Zhongguancun S St, Haidian District, Beijing 100081, China",
++        website="https://www.nlc.cn",
++        tags=["books", "archives", "research", "culture"],
++        is_featured=False,
++        hours="9:00 AM - 5:00 PM Mon-Fri",
++        phone="+86-10-8854-5426",
++        reviews=[
++            {"user": "Wei Z.", "rating": 5, "text": "An extraordinary collection of Chinese and international literature."},
++            {"user": "Lin C.", "rating": 4, "text": "The digital resources are impressive and constantly growing."},
++        ],
++    ),
++    PlaceDetail(
++        id="place-015",
++        name="Bibliotheca Alexandrina",
++        description="A major library and cultural center on the shore of the Mediterranean, a modern tribute to the ancient Library of Alexandria.",
++        category="library",
++        lat=31.2089,
++        lng=29.9092,
++        rating=4.6,
++        review_count=4190,
++        image_url="https://images.unsplash.com/photo-1568667256549-094345857637?w=800",
++        address="Al Azaritah WA Ash Shatebi, Alexandria, Egypt",
++        website="https://www.bibalex.org",
++        tags=["books", "culture", "history", "architecture"],
++        is_featured=True,
++        hours="10:00 AM - 7:00 PM Sun-Thu",
++        phone="+20-3-483-9999",
++        reviews=[
++            {"user": "Omar A.", "rating": 5, "text": "A stunning modern building with an incredible mission. The architecture is breathtaking."},
++            {"user": "Maria S.", "rating": 5, "text": "A must-visit in Alexandria. The exhibitions are world-class."},
++        ],
++    ),
++]
++
++VALID_CATEGORIES = {"museum", "library", "university", "lab", "coworking", "landmark"}
++
++
++# ============================================================================
++# Helper: Haversine distance (km)
++# ============================================================================
++
++def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
++    R = 6371.0  # Earth radius in km
++    dlat = math.radians(lat2 - lat1)
++    dlng = math.radians(lng2 - lng1)
++    a = (
++        math.sin(dlat / 2) ** 2
++        + math.cos(math.radians(lat1))
++        * math.cos(math.radians(lat2))
++        * math.sin(dlng / 2) ** 2
++    )
++    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
++
++
++# ============================================================================
++# Endpoints
++# ============================================================================
++
++@router.get("/places", response_model=PlacesResponse)
++async def list_places(
++    lat: Optional[float] = Query(None, description="Latitude for proximity search"),
++    lng: Optional[float] = Query(None, description="Longitude for proximity search"),
++    radius_km: float = Query(50.0, ge=1, le=20000, description="Search radius in km"),
++    category: Optional[str] = Query(None, description="Filter by category"),
++    page: int = Query(1, ge=1),
++    per_page: int = Query(20, ge=1, le=100),
++    current_user: User = Depends(get_current_user),
++):
++    """List educational places, optionally filtered by location and category."""
++    results = list(SEED_PLACES)
++
++    # Category filter
++    if category:
++        cat = category.lower()
++        if cat not in VALID_CATEGORIES:
++            raise HTTPException(
++                status_code=400,
++                detail=f"Invalid category '{category}'. Valid: {', '.join(sorted(VALID_CATEGORIES))}",
++            )
++        results = [p for p in results if p.category == cat]
++
++    # Proximity filter
++    if lat is not None and lng is not None:
++        results = [
++            p for p in results if _haversine_km(lat, lng, p.lat, p.lng) <= radius_km
++        ]
++        # Sort by distance
++        results.sort(key=lambda p: _haversine_km(lat, lng, p.lat, p.lng))
++    else:
++        # Default sort: featured first, then by rating
++        results.sort(key=lambda p: (-int(p.is_featured), -p.rating))
++
++    total = len(results)
++
++    # Pagination
++    start = (page - 1) * per_page
++    end = start + per_page
++    page_results = results[start:end]
++
++    # Return as Place (not PlaceDetail) to hide hours/phone/reviews in list view
++    places_out = [Place(**p.model_dump(exclude={"hours", "phone", "reviews"})) for p in page_results]
++
++    return PlacesResponse(places=places_out, total=total)
++
++
++@router.get("/places/{place_id}", response_model=PlaceDetail)
++async def get_place(
++    place_id: str,
++    current_user: User = Depends(get_current_user),
++):
++    """Get detailed information about a single educational place."""
++    for place in SEED_PLACES:
++        if place.id == place_id:
++            return place
++    raise HTTPException(status_code=404, detail=f"Place '{place_id}' not found")
++
++
++@router.get("/trending", response_model=TrendingResponse)
++async def get_trending(
++    current_user: User = Depends(get_current_user),
++):
++    """Get trending topics and resources for the discover page."""
++    topics = [
++        TrendingTopic(name="Artificial Intelligence", count=12840, icon="brain"),
++        TrendingTopic(name="Quantum Computing", count=8920, icon="atom"),
++        TrendingTopic(name="Climate Science", count=7650, icon="leaf"),
++        TrendingTopic(name="Neuroscience", count=6430, icon="activity"),
++        TrendingTopic(name="Space Exploration", count=5870, icon="rocket"),
++        TrendingTopic(name="Biotechnology", count=4920, icon="dna"),
++        TrendingTopic(name="Machine Learning", count=11200, icon="cpu"),
++        TrendingTopic(name="Renewable Energy", count=3810, icon="zap"),
++    ]
++
++    resources = [
++        TrendingResource(
++            title="MIT OpenCourseWare: Introduction to Deep Learning",
++            type="course",
++            url="https://ocw.mit.edu/courses/6-s191-introduction-to-deep-learning",
++        ),
++        TrendingResource(
++            title="Khan Academy: AP Physics 1",
++            type="course",
++            url="https://www.khanacademy.org/science/ap-physics-1",
++        ),
++        TrendingResource(
++            title="Nature: Recent Advances in CRISPR",
++            type="article",
++            url="https://www.nature.com/subjects/crispr-cas9",
++        ),
++        TrendingResource(
++            title="Stanford CS229: Machine Learning",
++            type="lecture",
++            url="https://cs229.stanford.edu",
++        ),
++        TrendingResource(
++            title="3Blue1Brown: Essence of Linear Algebra",
++            type="video",
++            url="https://www.3blue1brown.com/topics/linear-algebra",
++        ),
++        TrendingResource(
++            title="Coursera: The Science of Well-Being",
++            type="course",
++            url="https://www.coursera.org/learn/the-science-of-well-being",
++        ),
++    ]
++
++    return TrendingResponse(topics=topics, resources=resources)
+diff --git a/lyo_app/routers/messaging.py b/lyo_app/routers/messaging.py
+index f285b28..3793b1a 100644
+--- a/lyo_app/routers/messaging.py
++++ b/lyo_app/routers/messaging.py
+@@ -1,6 +1,479 @@
+ """
+-Messaging Router - Re-exports from lyo_app.chat.routes
++Messaging Router — Direct messages between users.
++
++Uses ORM models from lyo_app.models.social (Conversation, ConversationParticipant,
++Message, MessageReadReceipt) which map to tables created by migration
++20250728_add_social_and_messenger_models.
+ """
+-from lyo_app.chat.routes import router
+ 
+-__all__ = ["router"]
++from __future__ import annotations
++
++import logging
++from datetime import datetime
++from typing import List, Optional
++
++from fastapi import APIRouter, Depends, HTTPException, Query
++from pydantic import BaseModel, Field
++from sqlalchemy import func, select, and_, desc, case
++from sqlalchemy.ext.asyncio import AsyncSession
++from sqlalchemy.orm import selectinload
++
++from lyo_app.auth.jwt_auth import get_current_user
++from lyo_app.auth.models import User
++from lyo_app.core.database import get_db
++from lyo_app.models.social import (
++    Conversation,
++    ConversationParticipant,
++    Message,
++    MessageReadReceipt,
++)
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter(prefix="/messages", tags=["Messages"])
++
++# ── Pydantic schemas ────────────────────────────────────────────────────────
++
++
++class ParticipantOut(BaseModel):
++    id: int
++    username: str
++    display_name: str
++    avatar_url: Optional[str] = None
++
++
++class MessageOut(BaseModel):
++    id: int
++    conversation_id: int
++    sender_id: int
++    content: Optional[str] = None
++    message_type: Optional[str] = "text"
++    media_url: Optional[str] = None
++    is_edited: bool = False
++    is_deleted: bool = False
++    created_at: str
++    updated_at: Optional[str] = None
++
++
++class ConversationOut(BaseModel):
++    id: int
++    type: Optional[str] = "direct"
++    name: Optional[str] = None
++    participants: List[ParticipantOut]
++    last_message: Optional[MessageOut] = None
++    unread_count: int = 0
++    updated_at: str
++
++
++class ConversationsListResponse(BaseModel):
++    conversations: List[ConversationOut]
++
++
++class MessagesListResponse(BaseModel):
++    messages: List[MessageOut]
++    total: int
++    page: int
++    per_page: int
++
++
++class CreateConversationRequest(BaseModel):
++    participant_ids: List[int] = Field(..., min_length=1)
++
++
++class SendMessageRequest(BaseModel):
++    content: str = Field(..., min_length=1)
++    message_type: str = "text"
++
++
++# ── Helpers ─────────────────────────────────────────────────────────────────
++
++
++def _user_to_participant(u: User) -> ParticipantOut:
++    first = u.first_name or ""
++    last = u.last_name or ""
++    display = f"{first} {last}".strip() or u.username
++    return ParticipantOut(
++        id=u.id,
++        username=u.username,
++        display_name=display,
++        avatar_url=u.avatar_url,
++    )
++
++
++def _message_to_out(m: Message) -> MessageOut:
++    return MessageOut(
++        id=m.id,
++        conversation_id=m.conversation_id,
++        sender_id=m.sender_id,
++        content=m.content if not m.is_deleted else None,
++        message_type=m.message_type or "text",
++        media_url=m.media_url if not m.is_deleted else None,
++        is_edited=m.is_edited or False,
++        is_deleted=m.is_deleted or False,
++        created_at=m.created_at.isoformat() if m.created_at else "",
++        updated_at=m.updated_at.isoformat() if m.updated_at else None,
++    )
++
++
++# ── Endpoints ───────────────────────────────────────────────────────────────
++
++
++@router.get("/conversations", response_model=ConversationsListResponse)
++async def list_conversations(
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """List all conversations for the current user with last message, unread count, and other participants."""
++
++    # Step 1: Get conversation IDs where user is a participant
++    my_parts_q = (
++        select(ConversationParticipant)
++        .where(ConversationParticipant.user_id == current_user.id)
++    )
++    my_parts_result = await db.execute(my_parts_q)
++    my_parts = my_parts_result.scalars().all()
++
++    if not my_parts:
++        return ConversationsListResponse(conversations=[])
++
++    conv_id_to_last_read: dict[int, Optional[datetime]] = {
++        p.conversation_id: p.last_read_at for p in my_parts
++    }
++    conv_ids = list(conv_id_to_last_read.keys())
++
++    # Step 2: Load conversations with participants -> users
++    convs_q = (
++        select(Conversation)
++        .where(Conversation.id.in_(conv_ids))
++        .options(
++            selectinload(Conversation.participants).selectinload(ConversationParticipant.user)
++        )
++        .order_by(desc(Conversation.updated_at))
++    )
++    convs_result = await db.execute(convs_q)
++    convs = convs_result.scalars().unique().all()
++
++    # Step 3: For each conversation get last message and unread count
++    out: list[ConversationOut] = []
++    for conv in convs:
++        # Last message
++        last_msg_q = (
++            select(Message)
++            .where(Message.conversation_id == conv.id)
++            .order_by(desc(Message.created_at))
++            .limit(1)
++        )
++        last_msg_result = await db.execute(last_msg_q)
++        last_msg = last_msg_result.scalar_one_or_none()
++
++        # Unread count: messages after user's last_read_at that aren't from user
++        last_read = conv_id_to_last_read.get(conv.id)
++        unread_count = 0
++        if last_read is not None:
++            unread_q = (
++                select(func.count(Message.id))
++                .where(
++                    and_(
++                        Message.conversation_id == conv.id,
++                        Message.sender_id != current_user.id,
++                        Message.created_at > last_read,
++                        Message.is_deleted == False,  # noqa: E712
++                    )
++                )
++            )
++        else:
++            # Never read — all messages from others are unread
++            unread_q = (
++                select(func.count(Message.id))
++                .where(
++                    and_(
++                        Message.conversation_id == conv.id,
++                        Message.sender_id != current_user.id,
++                        Message.is_deleted == False,  # noqa: E712
++                    )
++                )
++            )
++        unread_result = await db.execute(unread_q)
++        unread_count = unread_result.scalar() or 0
++
++        # Other participants (everyone except current user)
++        participants = [
++            _user_to_participant(p.user)
++            for p in conv.participants
++            if p.user_id != current_user.id and p.user is not None
++        ]
++
++        out.append(
++            ConversationOut(
++                id=conv.id,
++                type=conv.type or "direct",
++                name=conv.name,
++                participants=participants,
++                last_message=_message_to_out(last_msg) if last_msg else None,
++                unread_count=unread_count,
++                updated_at=conv.updated_at.isoformat() if conv.updated_at else "",
++            )
++        )
++
++    return ConversationsListResponse(conversations=out)
++
++
++@router.get("/conversations/{conversation_id}", response_model=MessagesListResponse)
++async def get_conversation_messages(
++    conversation_id: int,
++    page: int = Query(1, ge=1),
++    per_page: int = Query(50, ge=1, le=100),
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Get paginated messages in a conversation."""
++
++    # Verify membership
++    membership_q = select(ConversationParticipant).where(
++        and_(
++            ConversationParticipant.conversation_id == conversation_id,
++            ConversationParticipant.user_id == current_user.id,
++        )
++    )
++    membership_result = await db.execute(membership_q)
++    if not membership_result.scalar_one_or_none():
++        raise HTTPException(status_code=403, detail="Not a member of this conversation")
++
++    # Total count
++    total_q = select(func.count(Message.id)).where(
++        Message.conversation_id == conversation_id
++    )
++    total_result = await db.execute(total_q)
++    total = total_result.scalar() or 0
++
++    # Paginated messages (newest last)
++    offset = (page - 1) * per_page
++    msgs_q = (
++        select(Message)
++        .where(Message.conversation_id == conversation_id)
++        .order_by(Message.created_at.asc())
++        .offset(offset)
++        .limit(per_page)
++    )
++    msgs_result = await db.execute(msgs_q)
++    msgs = msgs_result.scalars().all()
++
++    return MessagesListResponse(
++        messages=[_message_to_out(m) for m in msgs],
++        total=total,
++        page=page,
++        per_page=per_page,
++    )
++
++
++@router.post("/conversations", response_model=ConversationOut, status_code=201)
++async def create_conversation(
++    body: CreateConversationRequest,
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Create a new conversation. For 1-on-1 DMs, reuse existing conversation if one exists."""
++
++    participant_ids = list(set(body.participant_ids))
++    # Remove current user if included (they're added automatically)
++    if current_user.id in participant_ids:
++        participant_ids.remove(current_user.id)
++
++    if not participant_ids:
++        raise HTTPException(status_code=400, detail="Must include at least one other participant")
++
++    # Validate that all participant users exist
++    users_q = select(User).where(User.id.in_(participant_ids))
++    users_result = await db.execute(users_q)
++    found_users = users_result.scalars().all()
++    found_ids = {u.id for u in found_users}
++    missing = set(participant_ids) - found_ids
++    if missing:
++        raise HTTPException(status_code=404, detail=f"Users not found: {list(missing)}")
++
++    all_ids = sorted([current_user.id] + participant_ids)
++    conv_type = "direct" if len(all_ids) == 2 else "group"
++
++    # For direct messages, check if conversation already exists between these two users
++    if conv_type == "direct":
++        existing_q = (
++            select(ConversationParticipant.conversation_id)
++            .where(ConversationParticipant.user_id.in_(all_ids))
++            .group_by(ConversationParticipant.conversation_id)
++            .having(func.count(ConversationParticipant.user_id) == len(all_ids))
++        )
++        existing_result = await db.execute(existing_q)
++        candidate_conv_ids = [row[0] for row in existing_result.all()]
++
++        # Verify exact match (no extra participants)
++        for cid in candidate_conv_ids:
++            count_q = select(func.count(ConversationParticipant.id)).where(
++                ConversationParticipant.conversation_id == cid
++            )
++            count_result = await db.execute(count_q)
++            if count_result.scalar() == len(all_ids):
++                # Reuse existing conversation — load and return it
++                conv_q = (
++                    select(Conversation)
++                    .where(Conversation.id == cid)
++                    .options(
++                        selectinload(Conversation.participants).selectinload(
++                            ConversationParticipant.user
++                        )
++                    )
++                )
++                conv_result = await db.execute(conv_q)
++                existing_conv = conv_result.scalar_one()
++                participants_out = [
++                    _user_to_participant(p.user)
++                    for p in existing_conv.participants
++                    if p.user_id != current_user.id and p.user is not None
++                ]
++                return ConversationOut(
++                    id=existing_conv.id,
++                    type=existing_conv.type or "direct",
++                    name=existing_conv.name,
++                    participants=participants_out,
++                    last_message=None,
++                    unread_count=0,
++                    updated_at=existing_conv.updated_at.isoformat() if existing_conv.updated_at else "",
++                )
++
++    # Create new conversation
++    conv = Conversation(type=conv_type, name=None)
++    db.add(conv)
++    await db.flush()
++
++    # Add participants
++    for uid in all_ids:
++        cp = ConversationParticipant(
++            conversation_id=conv.id,
++            user_id=uid,
++            is_admin=(uid == current_user.id),
++        )
++        db.add(cp)
++
++    await db.commit()
++
++    # Re-load with participants
++    conv_q = (
++        select(Conversation)
++        .where(Conversation.id == conv.id)
++        .options(
++            selectinload(Conversation.participants).selectinload(
++                ConversationParticipant.user
++            )
++        )
++    )
++    conv_result = await db.execute(conv_q)
++    conv = conv_result.scalar_one()
++
++    participants_out = [
++        _user_to_participant(p.user)
++        for p in conv.participants
++        if p.user_id != current_user.id and p.user is not None
++    ]
++
++    return ConversationOut(
++        id=conv.id,
++        type=conv.type or "direct",
++        name=conv.name,
++        participants=participants_out,
++        last_message=None,
++        unread_count=0,
++        updated_at=conv.updated_at.isoformat() if conv.updated_at else "",
++    )
++
++
++@router.post("/conversations/{conversation_id}/messages", response_model=MessageOut, status_code=201)
++async def send_message(
++    conversation_id: int,
++    body: SendMessageRequest,
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Send a message in a conversation."""
++
++    # Verify membership
++    membership_q = select(ConversationParticipant).where(
++        and_(
++            ConversationParticipant.conversation_id == conversation_id,
++            ConversationParticipant.user_id == current_user.id,
++        )
++    )
++    membership_result = await db.execute(membership_q)
++    if not membership_result.scalar_one_or_none():
++        raise HTTPException(status_code=403, detail="Not a member of this conversation")
++
++    msg = Message(
++        conversation_id=conversation_id,
++        sender_id=current_user.id,
++        content=body.content,
++        message_type=body.message_type,
++    )
++    db.add(msg)
++
++    # Update conversation updated_at
++    conv_q = select(Conversation).where(Conversation.id == conversation_id)
++    conv_result = await db.execute(conv_q)
++    conv = conv_result.scalar_one_or_none()
++    if conv:
++        conv.updated_at = datetime.utcnow()
++
++    await db.commit()
++    await db.refresh(msg)
++
++    return _message_to_out(msg)
++
++
++@router.post("/conversations/{conversation_id}/read")
++async def mark_conversation_read(
++    conversation_id: int,
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Mark a conversation as read (update last_read_at for the current user)."""
++
++    membership_q = select(ConversationParticipant).where(
++        and_(
++            ConversationParticipant.conversation_id == conversation_id,
++            ConversationParticipant.user_id == current_user.id,
++        )
++    )
++    membership_result = await db.execute(membership_q)
++    participant = membership_result.scalar_one_or_none()
++    if not participant:
++        raise HTTPException(status_code=403, detail="Not a member of this conversation")
++
++    participant.last_read_at = datetime.utcnow()
++    await db.commit()
++
++    return {"status": "ok"}
++
++
++@router.delete("/{message_id}")
++async def delete_message(
++    message_id: int,
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Soft-delete a message (only the sender can delete their own messages)."""
++
++    msg_q = select(Message).where(Message.id == message_id)
++    msg_result = await db.execute(msg_q)
++    msg = msg_result.scalar_one_or_none()
++
++    if not msg:
++        raise HTTPException(status_code=404, detail="Message not found")
++
++    if msg.sender_id != current_user.id:
++        raise HTTPException(status_code=403, detail="Can only delete your own messages")
++
++    if msg.is_deleted:
++        raise HTTPException(status_code=400, detail="Message already deleted")
++
++    msg.is_deleted = True
++    msg.updated_at = datetime.utcnow()
++    await db.commit()
++
++    return {"status": "deleted", "message_id": message_id}
+diff --git a/lyo_app/routers/notifications.py b/lyo_app/routers/notifications.py
+index 00df6a4..30507bc 100644
+--- a/lyo_app/routers/notifications.py
++++ b/lyo_app/routers/notifications.py
+@@ -1,16 +1,41 @@
+ """
+ Notifications Router - Push notification management endpoints
+ """
+-from fastapi import APIRouter, Depends, HTTPException, status
++from datetime import datetime
++
++from fastapi import APIRouter, Depends, HTTPException, Query, status
+ from pydantic import BaseModel
+ from typing import Optional, List
+ 
++from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, select, func, desc
++from sqlalchemy.ext.asyncio import AsyncSession
++
+ from lyo_app.auth.jwt_auth import get_current_user
+ from lyo_app.auth.models import User
++from lyo_app.core.database import get_db, Base
+ 
+ router = APIRouter(prefix="/notifications", tags=["Notifications"])
+ 
+ 
++# ── SQLAlchemy Model ──────────────────────────────────────────────────────────
++
++class Notification(Base):
++    __tablename__ = "notifications"
++
++    id = Column(Integer, primary_key=True, index=True)
++    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
++    type = Column(String(50), nullable=False)  # like, comment, follow, achievement, mention, system, course_complete, event_reminder, group_invite
++    title = Column(String(200), nullable=False)
++    body = Column(Text, nullable=False)
++    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
++    target_id = Column(String(100), nullable=True)
++    target_type = Column(String(50), nullable=True)
++    is_read = Column(Boolean, default=False, nullable=False)
++    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
++
++
++# ── Pydantic Schemas ──────────────────────────────────────────────────────────
++
+ class NotificationPreferences(BaseModel):
+     """User notification preferences."""
+     push_enabled: bool = True
+@@ -21,9 +46,166 @@ class NotificationPreferences(BaseModel):
+     quiet_hours_end: Optional[int] = 8     # 8 AM
+ 
+ 
++class NotificationOut(BaseModel):
++    id: int
++    type: str
++    title: str
++    body: str
++    actor_id: Optional[int] = None
++    actor_display_name: Optional[str] = None
++    actor_username: Optional[str] = None
++    actor_avatar_url: Optional[str] = None
++    target_id: Optional[str] = None
++    target_type: Optional[str] = None
++    is_read: bool
++    created_at: str
++
++
++# ── Notification List Endpoint ────────────────────────────────────────────────
++
++@router.get("")
++async def list_notifications(
++    page: int = Query(1, ge=1),
++    per_page: int = Query(20, ge=1, le=100),
++    type: Optional[str] = Query(None, description="Filter by notification type"),
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """List user's notifications with optional type filter, paginated."""
++    # Alias for actor user join
++    from sqlalchemy.orm import aliased
++    ActorUser = aliased(User)
++
++    # Build base query with actor join
++    base_q = (
++        select(
++            Notification,
++            ActorUser.first_name.label("actor_first_name"),
++            ActorUser.last_name.label("actor_last_name"),
++            ActorUser.username.label("actor_username"),
++            ActorUser.avatar_url.label("actor_avatar_url"),
++        )
++        .outerjoin(ActorUser, Notification.actor_id == ActorUser.id)
++        .where(Notification.user_id == current_user.id)
++    )
++
++    if type:
++        base_q = base_q.where(Notification.type == type)
++
++    # Total count
++    count_q = select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id)
++    if type:
++        count_q = count_q.where(Notification.type == type)
++    total_result = await db.execute(count_q)
++    total = total_result.scalar() or 0
++
++    # Unread count (always unfiltered)
++    unread_q = (
++        select(func.count())
++        .select_from(Notification)
++        .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
++    )
++    unread_result = await db.execute(unread_q)
++    unread_count = unread_result.scalar() or 0
++
++    # Paginated results
++    offset = (page - 1) * per_page
++    data_q = base_q.order_by(desc(Notification.created_at)).offset(offset).limit(per_page)
++    result = await db.execute(data_q)
++    rows = result.all()
++
++    notifications = []
++    for row in rows:
++        notif = row[0]  # Notification object
++        actor_first = row[1] or ""
++        actor_last = row[2] or ""
++        actor_uname = row[3]
++        actor_avatar = row[4]
++        actor_display = " ".join(filter(None, [actor_first, actor_last])) or actor_uname or None
++
++        notifications.append(NotificationOut(
++            id=notif.id,
++            type=notif.type,
++            title=notif.title,
++            body=notif.body,
++            actor_id=notif.actor_id,
++            actor_display_name=actor_display,
++            actor_username=actor_uname,
++            actor_avatar_url=actor_avatar,
++            target_id=notif.target_id,
++            target_type=notif.target_type,
++            is_read=notif.is_read,
++            created_at=notif.created_at.isoformat() if notif.created_at else "",
++        ).model_dump())
++
++    return {"notifications": notifications, "total": total, "unread_count": unread_count}
++
++
++# ── Mark Single Notification Read ─────────────────────────────────────────────
++
++@router.post("/{notification_id}/read")
++async def mark_notification_read(
++    notification_id: int,
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Mark a single notification as read."""
++    result = await db.execute(
++        select(Notification).where(
++            Notification.id == notification_id,
++            Notification.user_id == current_user.id,
++        )
++    )
++    notif = result.scalar_one_or_none()
++    if not notif:
++        raise HTTPException(status_code=404, detail="Notification not found")
++
++    notif.is_read = True
++    await db.commit()
++    return {"status": "ok", "notification_id": notification_id}
++
++
++# ── Mark All Notifications Read ───────────────────────────────────────────────
++
++@router.post("/read-all")
++async def mark_all_notifications_read(
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Mark all of the user's notifications as read."""
++    from sqlalchemy import update
++
++    await db.execute(
++        update(Notification)
++        .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
++        .values(is_read=True)
++    )
++    await db.commit()
++    return {"status": "ok"}
++
++
++# ── Unread Count ──────────────────────────────────────────────────────────────
++
++@router.get("/unread-count")
++async def get_unread_count(
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
++):
++    """Return the number of unread notifications."""
++    result = await db.execute(
++        select(func.count())
++        .select_from(Notification)
++        .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
++    )
++    count = result.scalar() or 0
++    return {"count": count}
++
++
++# ── Preferences ───────────────────────────────────────────────────────────────
++
+ @router.get("/preferences")
+ async def get_notification_preferences(
+-    current_user: User = Depends(get_current_user)
++    current_user: User = Depends(get_current_user),
+ ):
+     """Get user's notification preferences."""
+     return NotificationPreferences()
+@@ -32,26 +214,51 @@ async def get_notification_preferences(
+ @router.put("/preferences")
+ async def update_notification_preferences(
+     preferences: NotificationPreferences,
+-    current_user: User = Depends(get_current_user)
++    current_user: User = Depends(get_current_user),
+ ):
+     """Update user's notification preferences."""
+     return {"status": "updated", "preferences": preferences}
+ 
+ 
++# ── Legacy History Endpoint ───────────────────────────────────────────────────
++
+ @router.get("/history")
+ async def get_notification_history(
+     limit: int = 20,
+-    current_user: User = Depends(get_current_user)
++    current_user: User = Depends(get_current_user),
++    db: AsyncSession = Depends(get_db),
+ ):
+-    """Get user's notification history."""
+-    return {"notifications": [], "total": 0}
++    """Get user's notification history (legacy endpoint, prefer GET /notifications)."""
++    result = await db.execute(
++        select(Notification)
++        .where(Notification.user_id == current_user.id)
++        .order_by(desc(Notification.created_at))
++        .limit(limit)
++    )
++    rows = result.scalars().all()
++    return {
++        "notifications": [
++            {
++                "id": n.id,
++                "type": n.type,
++                "title": n.title,
++                "body": n.body,
++                "is_read": n.is_read,
++                "created_at": n.created_at.isoformat() if n.created_at else "",
++            }
++            for n in rows
++        ],
++        "total": len(rows),
++    }
++
+ 
++# ── Device Registration ──────────────────────────────────────────────────────
+ 
+ @router.post("/register-device")
+ async def register_device(
+     device_token: str,
+     platform: str,
+-    current_user: User = Depends(get_current_user)
++    current_user: User = Depends(get_current_user),
+ ):
+     """Register a device for push notifications."""
+     return {"status": "registered", "device_token": device_token[:10] + "..."}
+@@ -60,7 +267,7 @@ async def register_device(
+ @router.delete("/unregister-device")
+ async def unregister_device(
+     device_token: str,
+-    current_user: User = Depends(get_current_user)
++    current_user: User = Depends(get_current_user),
+ ):
+     """Unregister a device from push notifications."""
+     return {"status": "unregistered"}
+-- 
+2.43.0
+

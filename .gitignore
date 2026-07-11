@@ -6,9 +6,13 @@
 # === Xcode ===
 xcuserdata/
 DerivedData/
+.derived-data-sim/
 *.xcuserstate
 *.xcscmblueprint
 *.xccheckout
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/
 
 # === Build artifacts ===
 build/
@@ -16,6 +20,13 @@ build/
 /SourcePackages
 /Packages
 SourcePackages/
+build/EagerLinkingTBDs/
+build/Lyo.build/
+build/XCBuildData/
+build/lyo_dd/
+build/lyo_sim_dd/
+build/*.txt
+build/*.log
 
 # === Swift Package Manager ===
 .swiftpm/configuration/registries.json
@@ -24,18 +35,41 @@ SourcePackages/
 # === Secrets & credentials ===
 .netrc
 .fake
+.env
+.env.local
 
-# === Prevent one-off helper scripts from being committed ===
+# === Logs and temporary files ===
+*.log
+build-log-sim-*.txt
+build-log-sim.txt
+build-verify-*.txt
+build-verify.log
+build_*.txt
+pkg_resolve*.log
+settings_check.log
+
+# === Prevent one-off helper scripts from being committed at root ===
 # Use Sources/ for real app code; keep root clean.
 /*.rb
 /*.py
 /*.sh
-/*.log
 /*.txt
 
 # === Prevent stale docs/reports from accumulating in root ===
 # Put real docs in a docs/ folder instead.
 # (README.md and CHANGELOG.md are allowed)
+
+# === Node/Web development ===
+node_modules/
+.next/
+dist/
+
+# === Python ===
+__pycache__/
+*.pyc
+
+# === Claude / Agent folders ===
+.claude/
 
 # === Misc ===
 *.ipa
