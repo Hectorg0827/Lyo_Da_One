@@ -42,12 +42,26 @@ jobs:
       - name: Build & test
         run: |
           set -o pipefail
-          DEST=$(xcrun simctl list devices available | grep -m1 -oE "iPhone [0-9]+[^(]*" | head -1 | xargs)
-          echo "Simulator: ${DEST:-iPhone 15}"
+          DEST=$(xcrun simctl list devices available --json | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          names = sorted(
+              d['name']
+              for runtime in devices.values()
+              for d in runtime
+              if d.get('isAvailable') and d['name'].startswith('iPhone')
+          )
+          print(names[-1] if names else '')")
+          if [ -z "$DEST" ]; then
+            echo "::error::No available iPhone simulator on this runner"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Simulator: $DEST"
           xcodebuild test \
             -project Lyo.xcodeproj \
             -scheme Lyo \
-            -destination "platform=iOS Simulator,name=${DEST:-iPhone 15},OS=latest" \
+            -destination "platform=iOS Simulator,name=$DEST" \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
 
