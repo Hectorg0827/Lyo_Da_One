@@ -83,8 +83,14 @@ class SyncClient {
 
   private open() {
     if (typeof window === 'undefined') return;
+    if (!this.shouldRun) return;
     const token = getAccessToken();
-    if (!token || !this.shouldRun) return;
+    if (!token) {
+      // Auth state can flip before the token is persisted; retry with
+      // backoff instead of staying offline until the next login.
+      this.scheduleReconnect();
+      return;
+    }
     if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
 
     try {

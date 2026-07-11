@@ -29,6 +29,15 @@ struct AICommandPayload: Codable {
     let course: CoursePayload?
     let testPrep: TestPrepPayload?
 
+    // Explicit init so testPrep defaults to nil: the synthesized memberwise
+    // init broke the pre-existing two-argument call sites when the test-prep
+    // feature added this field.
+    init(stackItem: StackItemPayload?, course: CoursePayload?, testPrep: TestPrepPayload? = nil) {
+        self.stackItem = stackItem
+        self.course = course
+        self.testPrep = testPrep
+    }
+
     enum CodingKeys: String, CodingKey {
         case stackItem = "stack_item"
         case course

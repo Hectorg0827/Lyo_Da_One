@@ -81,7 +81,10 @@ final class SyncService {
             self.connectTask = nil
             guard self.shouldRun, self.task == nil else { return }
             guard let token else {
-                Log.net.info("Sync: no auth token, not connecting")
+                // Auth state can flip before the keychain token is readable;
+                // retry with backoff instead of staying offline until re-login.
+                Log.net.info("Sync: no auth token yet, will retry")
+                self.scheduleReconnect()
                 return
             }
 
@@ -169,6 +172,10 @@ final class SyncService {
         heartbeatTimer = nil
         task = nil
         deviceId = nil
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
         guard shouldRun, reconnectTask == nil else { return }
 
         let delay = min(reconnectBase * pow(2, Double(reconnectAttempt)), reconnectMax)

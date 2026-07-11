@@ -83,7 +83,13 @@ object SyncClient {
     @Synchronized
     private fun open() {
         if (!shouldRun || socket != null) return
-        val token = TokenManager.accessToken ?: return
+        val token = TokenManager.accessToken
+        if (token == null) {
+            // Auth state can flip before the token is persisted; retry with
+            // backoff instead of staying offline until the next login.
+            onSocketClosed()
+            return
+        }
 
         val wsBase = BuildConfig.API_BASE_URL
             .replaceFirst("https://", "wss://")
