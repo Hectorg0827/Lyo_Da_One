@@ -53,6 +53,7 @@ import com.lyo.app.data.api.ConversationDto
 import com.lyo.app.data.api.MessageDto
 import com.lyo.app.data.api.ParticipantDto
 import com.lyo.app.data.api.SendMessageRequest
+import com.lyo.app.data.sync.SyncClient
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.LoadingBox
 import com.lyo.app.ui.components.LyoAvatar
@@ -95,6 +96,21 @@ fun MessagesScreen(nav: NavHostController) {
         runCatching { ApiClient.api.conversations() }
             .onSuccess { conversations = it.conversations.orEmpty() }
         loading = false
+    }
+
+    // Live cross-device sync: when this account sends/receives a message on
+    // another platform (iOS/web), refresh without leaving the screen.
+    LaunchedEffect(Unit) {
+        SyncClient.events.collect { event ->
+            if (event.eventType in setOf("message_sent", "message_received", "context_updated")) {
+                runCatching { ApiClient.api.conversations() }
+                    .onSuccess { conversations = it.conversations.orEmpty() }
+                activeConv?.let { conv ->
+                    runCatching { ApiClient.api.messages(conv.idStr) }
+                        .onSuccess { messages = it.messages.orEmpty() }
+                }
+            }
+        }
     }
 
     LaunchedEffect(activeConv) {

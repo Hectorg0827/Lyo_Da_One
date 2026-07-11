@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import os
 
 struct NotificationCenterView: View {
@@ -182,6 +183,18 @@ class NotificationCenterViewModel: ObservableObject {
     }
 
     private let repository = LyoRepository.shared
+    private var syncCancellable: AnyCancellable?
+
+    init() {
+        // Live cross-device sync: actions on other platforms (likes, follows,
+        // achievements) populate this feed without a manual refresh.
+        syncCancellable = SyncService.shared.events
+            .filter { ["context_updated", "message_received"].contains($0.eventType) }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { await self?.loadNotifications() }
+            }
+    }
 
     func loadNotifications() async {
         isLoading = true

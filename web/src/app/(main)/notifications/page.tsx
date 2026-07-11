@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn, formatTimeAgo, getInitials } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
+import { useSyncEvents } from '@/hooks/use-sync';
 import { api } from '@/lib/api';
 import type { AppNotification, User } from '@/types';
 
@@ -452,6 +453,10 @@ function mapApiNotification(raw: Record<string, unknown>): AppNotification {
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const { data: notifData, refetch } = useApi(() => api.notifications.list(1, 50), []);
+
+  // Live cross-device sync: actions on other devices (likes, follows,
+  // achievements) populate this feed without a manual reload.
+  useSyncEvents(() => refetch(), ['context_updated', 'message_received']);
 
   // Map API data when available, fall back to mock data
   const notifications: AppNotification[] = notifData?.notifications

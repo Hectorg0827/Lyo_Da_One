@@ -6,6 +6,7 @@ import { Search, Send, MessageSquare, Phone, Video, MoreHorizontal, ArrowLeft } 
 import { cn, getInitials, formatTimeAgo } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
 import { useApi } from '@/hooks/use-api';
+import { useSyncEvents } from '@/hooks/use-sync';
 import { api } from '@/lib/api';
 import type { Conversation, DirectMessage, User } from '@/types';
 
@@ -183,10 +184,17 @@ export default function MessagesPage() {
 
   // ── API data fetching ──────────────────────────────────────────────────
   const { data: convData, refetch: refetchConvs } = useApi(() => api.messages.conversations(), []);
-  const { data: msgData } = useApi(
+  const { data: msgData, refetch: refetchMsgs } = useApi(
     activeConvId ? () => api.messages.getMessages(activeConvId) : null,
     [activeConvId]
   );
+
+  // Live cross-device sync: when this account sends/receives a message on
+  // another device (iOS/Android/another tab), refresh without a manual reload.
+  useSyncEvents(() => {
+    refetchConvs();
+    refetchMsgs();
+  }, ['message_sent', 'message_received', 'context_updated']);
 
   // Map API conversations to the frontend Conversation type
   const apiConversations: Conversation[] | null = convData?.conversations

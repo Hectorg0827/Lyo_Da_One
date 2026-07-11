@@ -170,8 +170,11 @@ class RootViewModel: ObservableObject {
         
         // 2. Sync subscription/monetization status
         await MonetizationService.shared.syncSubscriptionWithBackend()
-        
-        // 3. Request push notification permission if not already granted
+
+        // 3. Connect cross-device sync (same account on web/Android stays live)
+        SyncService.shared.connect()
+
+        // 4. Request push notification permission if not already granted
         PushNotificationService.shared.checkPermissionStatus { status in
             if status == .notDetermined {
                 PushNotificationService.shared.requestPermission { granted, _ in
@@ -209,6 +212,7 @@ class RootViewModel: ObservableObject {
     func logout() async {
         // Notify services before logout
         PushNotificationService.shared.onUserLogout()
+        SyncService.shared.disconnect()
         
         do {
             try await authRepository.logout()

@@ -45,25 +45,41 @@ bearer-token + refresh-token auth flow (`web/src/lib/api.ts`,
 `TokenManager.swift`). That part is sound: one account, one username,
 same backend database, regardless of platform.
 
-What's missing is **live propagation**. Today each client independently
-polls/fetches; nothing tells web "your phone just posted a message" in
-real time. The fix is to wire all three clients into the sync service that
-already exists in `LyoBackendJune`:
+**Live propagation is now wired on all three clients.** Each one connects
+a websocket to the backend's Multi-Device Sync service on login and tears
+it down on logout, so an action on one platform reaches the others in
+real time:
 
-1. On login/launch, each client calls `POST /sync/devices` to register
-   itself (`device_type`: `mobile_ios` / `mobile_android` / `web_desktop`).
-2. Each client opens the websocket in `lyo_app/api/v1/websocket.py` and
-   subscribes to sync events (`DEVICE_CONNECTED`, conversation/message
-   deltas, session-transfer events).
-3. Local storage on every platform (Core Data/SwiftData on iOS, Room on
-   Android, the Zustand stores + IndexedDB on web) is treated strictly as a
-   **cache of server state**, never as the origin. A write always goes to
-   the backend first; the local store updates from the server response /
-   socket event, not the other way around.
-4. Four backend patches already sit in `backend-patches/` (messaging,
-   notifications, discover endpoints, and bug fixes found in full-stack
-   testing) — land these on `LyoBackendJune` next; the notifications feed
-   and messages endpoints they add are part of this same sync story.
+| Platform | Sync client | Lifecycle hook | Live-refresh consumers |
+|---|---|---|---|
+| Web | `web/src/lib/sync.ts` (+ `hooks/use-sync.ts`) | `AuthProvider.tsx` | messages page, notifications page |
+| Android | `android/.../data/sync/SyncClient.kt` | `Session.kt` (login/signup/hydrate/logout) | `MessagesScreen`, `NotificationsScreen` |
+| iOS | `Sources/Services/SyncService.swift` | `RootViewModel.onUserAuthenticated()` / `logout()` | `NotificationCenterViewModel` |
+
+All three speak the same contract (from `lyo_app/routers/sync.py`):
+connect to `wss://<host>/api/v1/sync/ws?token=<JWT>&device_type=…`,
+receive JSON events (`connected`, `message_sent`, `message_received`,
+`typing_started/stopped`, `session_transferred`, `context_updated`,
+`device_connected/disconnected`), send `{"type":"heartbeat"}` every 30s
+and `{"type":"typing"}` on input, with exponential-backoff reconnect
+(2s → 60s cap).
+
+Note: the sync router existed in the backend but **was never registered**
+in the FastAPI app — no client could have reached it. This branch's
+backend change registers it in `enhanced_main.py` (under both `/sync` and
+`/api/v1/sync`, matching the community/gamification pattern).
+
+Remaining principle: local storage on every platform (Core Data/SwiftData
+on iOS, Room on Android, Zustand stores on web) is treated strictly as a
+**cache of server state**, never as the origin. A write goes to the
+backend first; the local store updates from the server response / socket
+event, not the other way around.
+
+Known gap: web/Android default to `https://api.lyoapp.com` while iOS
+defaults to the Cloud Run URL in `Sources/Core/Configuration/AppConfig.swift`.
+These must be unified to whichever host is the real production backend —
+a deliberate decision for the product owner, since it redirects auth
+traffic.
 
 ## 3. One design language, iOS as source of truth (requirement 1)
 

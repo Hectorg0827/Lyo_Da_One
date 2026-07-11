@@ -287,6 +287,7 @@
 		A43814C61E13B77FC2D2E818 /* LyoAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9561F9EA5F1B44D3BC985BD3 /* LyoAITests.swift */; };
 		A6714352298155179D6FF85F /* VoiceOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66F9C64F6DBD555523C6A7E2 /* VoiceOrbView.swift */; };
 		A68BBCFD62AAA1DACFA49F30 /* CommunityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A42915D17EED7A76699638E /* CommunityService.swift */; };
+		9F3B47EE7FE491DB0C177545 /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0344AF23F5285844DF6876C /* SyncService.swift */; };
 		A7B472ED97DCF14FAE6F22E0 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AAAA5D3CC713536C4278B1F /* CameraManager.swift */; };
 		A7DDD69CCFC28D06051C0845 /* TransitionCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481F075AD5BCBF46E2137EDB /* TransitionCardView.swift */; };
 		A84AD804CB15D52308DE0242 /* ReteachOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D366A70E5B000502F2371D /* ReteachOverlay.swift */; };
@@ -502,6 +503,7 @@
 		08CA9F7D9E8563D4FBF6FE78 /* ExerciseValidationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseValidationService.swift; sourceTree = "<group>"; };
 		0A0B633F7F1A8807D36894F0 /* NewFeatureServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFeatureServices.swift; sourceTree = "<group>"; };
 		0A42915D17EED7A76699638E /* CommunityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityService.swift; sourceTree = "<group>"; };
+		B0344AF23F5285844DF6876C /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
 		0AF87D127ED13977BA4D5D9E /* ChatOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatOverlayView.swift; sourceTree = "<group>"; };
 		0B018ECCB943A9CE5F65A38B /* ShimmerEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerEffect.swift; sourceTree = "<group>"; };
 		0BA11AC72B0C74C325ADB163 /* MultimodalMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultimodalMessage.swift; sourceTree = "<group>"; };
@@ -1468,6 +1470,7 @@
 				25808DDC1D79FBB409AC6B60 /* ClipService.swift */,
 				C066BE6CEB061F37F7756553 /* CloudStorageService.swift */,
 				0A42915D17EED7A76699638E /* CommunityService.swift */,
+				B0344AF23F5285844DF6876C /* SyncService.swift */,
 				23821B56B350C3049BDD0D79 /* ContentStorageService.swift */,
                                 291844D99FF94C16B999E6DF /* DraftStorageService.swift */,
 				3AD414370672980C2843599A /* ConversationManager.swift */,
@@ -2031,6 +2034,7 @@
 				3733FD28C8D1814ED15103E2 /* CommunityFeedViewModel.swift in Sources */,
 				04A29BC0A8537978862A9DA4 /* CommunityPostModels.swift in Sources */,
 				F83D6DCFF29CC4C3AAAB9358 /* CommunityService.swift in Sources */,
+				9F3B47EE7FE491DB0C177545 /* SyncService.swift in Sources */,
 				63F44DC77F53425E3382683B /* CourseRuntimeView.swift in Sources */,
 				A0F36D89F528C0EFFF9C446A /* DemoCourseLoader.swift in Sources */,
 				FBF71C21DE57C15533499177 /* LessonBlockParser.swift in Sources */,
