@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, "claude/**", "cursor/**", "feature/**", "perf/**"]
+    # Branch pushes with an open PR already build via pull_request;
+    # listing them here too ran every job twice per push.
+    branches: [main]
   pull_request:
     branches: [main]
 
