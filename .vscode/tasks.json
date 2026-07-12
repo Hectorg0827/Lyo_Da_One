@@ -189,17 +189,6 @@
 			"group": "build"
 		},
 		{
-			"label": "Decode xcactivitylog (absolute)",
-			"type": "shell",
-			"command": "bash",
-			"args": [
-				"-lc",
-				"set -euo pipefail\ncd ${workspaceFolder}\nTOOL=/Users/hectorgarcia/Downloads/Xcode.app/Contents/Developer/usr/bin/xcactivitylog\nfor f in build/sim_dd/Logs/Build/*.xcactivitylog; do\n  echo \"--- $f ---\"\n  \"$TOOL\" \"$f\" | tail -200\n  echo\n done"
-			],
-			"isBackground": false,
-			"problemMatcher": []
-		},
-		{
 			"label": "Xcodebuild iOS Simulator (log file clean)",
 			"type": "shell",
 			"command": "bash",
