@@ -104,7 +104,9 @@ final class SyncService {
             wsTask.resume()
             Log.net.info("Sync: connecting websocket")
 
-            self.startHeartbeat()
+            // Heartbeat starts on the server's "connected" welcome (see
+            // handle(text:)) — sending on a still-connecting socket errors,
+            // and web/Android also wait for open before heartbeating.
             self.receiveLoop(on: wsTask)
         }
     }
@@ -141,6 +143,7 @@ final class SyncService {
         if eventType == "connected" {
             deviceId = json["device_id"] as? String
             Log.net.info("Sync: connected as device \(self.deviceId ?? "?")")
+            startHeartbeat()
         }
         events.send(SyncEvent(eventType: eventType, payload: json))
     }
