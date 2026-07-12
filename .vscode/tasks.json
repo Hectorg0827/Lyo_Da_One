@@ -200,17 +200,6 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Check xcactivitylog path",
-			"type": "shell",
-			"command": "bash",
-			"args": [
-				"-lc",
-				"set -euo pipefail\nls -la /Users/hectorgarcia/Downloads/Xcode.app/Contents/Developer/usr/bin/xcactivitylog"
-			],
-			"isBackground": false,
-			"problemMatcher": []
-		},
-		{
 			"label": "Xcodebuild iOS Simulator (log file clean)",
 			"type": "shell",
 			"command": "bash",
