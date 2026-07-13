@@ -107,17 +107,41 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   
   const { isGenerating, generationProgress, getActiveConversation } = useChatStore();
 
-  // Helper to extract OPEN_CLASSROOM JSON block from assistant messages
+  // Helper to extract OPEN_CLASSROOM JSON block from assistant messages.
+  // Uses string-aware brace counting — a lazy regex stops at the FIRST '}',
+  // which breaks on the (always-nested) payload and left raw JSON on screen.
   const getOpenClassroomData = (content: string) => {
     if (isUser) return null;
-    
-    // Pattern to look for JSON block that has "type": "OPEN_CLASSROOM"
-    const jsonRegex = /(?:```json\s*)?(\{\s*"type"\s*:\s*"OPEN_CLASSROOM"[\s\S]*?\})(?:\s*```)?/i;
-    const match = content.match(jsonRegex);
-    if (match) {
+
+    const marker = content.search(/\{\s*"type"\s*:\s*"OPEN_CLASSROOM"/i);
+    if (marker === -1) return null;
+
+    let depth = 0;
+    let end = -1;
+    let inString = false;
+    let escaped = false;
+    for (let i = marker; i < content.length; i++) {
+      const ch = content[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    // Unbalanced braces = the command is still streaming in; wait for more.
+    if (end === -1) return null;
+
+    {
       try {
-        const parsed = JSON.parse(match[1]);
-        const cleanText = content.replace(match[0], '').trim();
+        const parsed = JSON.parse(content.slice(marker, end + 1));
+        const cleanText = (content.slice(0, marker) + content.slice(end + 1))
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim();
         const courseData = parsed.payload?.course || parsed.course;
         
         if (courseData) {
