@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 
 // ─── Wire types (match backend lyo_app/ai_classroom exactly) ─────────────────
 
@@ -14,7 +15,7 @@ export interface QuizOption {
 
 export interface ClassroomComponent {
   component_id: string;
-  type: string; // "TeacherMessage" | "StudentPrompt" | "QuizCard" | "CTAButton" | ...
+  type: string;
   text?: string;
   label?: string;
   student_name?: string;
@@ -34,26 +35,57 @@ export interface DirectorTurn {
   options?: string[];
   beat_seconds?: number;
   state?: string;
-  action?: 'write' | 'draw' | 'highlight';
+  action?: 'write' | 'draw' | 'highlight' | 'image' | 'bullets' | 'chart' | 'explorable';
   content?: string;
   seconds?: number;
+  sound?: string;
   homework?: string;
   next_hook?: string;
   lyo_state?: string;
+  // Phase 2 vocabulary
+  query?: string;                       // image search query
+  caption?: string;                     // image caption
+  items?: string[];                     // bullets
+  chart_type?: 'bar' | 'line';
+  labels?: string[];
+  values?: number[];
+  expression?: string;                  // explorable
+  params?: { name: string; min: number; max: number; initial: number; step?: number }[];
+  x_min?: number;
+  x_max?: number;
+  prompt?: string;
 }
 
-/** An item in the visible classroom feed. */
-export interface FeedItem {
+// ─── Board model — the main attraction ───────────────────────────────────────
+
+export type BoardElement =
+  | { id: string; kind: 'chalk'; text: string }
+  | { id: string; kind: 'latex'; latex: string }
+  | { id: string; kind: 'mermaid'; source: string }
+  | { id: string; kind: 'code'; code: string }
+  | { id: string; kind: 'image'; url: string | null; caption?: string; query: string }
+  | { id: string; kind: 'bullets'; items: string[] }
+  | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
+  | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean }
+  | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string };
+
+export interface TranscriptItem {
   id: string;
-  kind: 'speech' | 'prompt' | 'board' | 'quiz' | 'session_end' | 'info';
-  speaker?: string;
-  text?: string;
-  options?: string[];        // prompt options
-  quiz?: ClassroomComponent; // quiz card
-  answered?: string;         // chosen option / answer label
-  wasCorrect?: boolean;
-  homework?: string;
-  nextHook?: string;
+  speaker: string;
+  text: string;
+}
+
+export interface ActivePrompt {
+  id: string;
+  speaker: string;
+  text: string;
+  options: string[];
+}
+
+export interface Caption {
+  speaker: string;
+  text: string;
 }
 
 type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
@@ -61,23 +93,37 @@ type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 interface ClassroomStore {
   status: Status;
   topic: string;
-  feed: FeedItem[];
-  lyoState: string;           // reading | thinking | celebrating | ...
-  boardLines: string[];       // whiteboard content (latest at end)
-  waitingForScene: boolean;   // between scenes / generation in flight
+
+  board: BoardElement[];        // the live board
+  boardHistory: BoardElement[][]; // erased boards (flip back through)
+  viewingBoard: number;         // -1 = live, else history index
+
+  caption: Caption | null;      // the line being spoken right now
+  activeSpeaker: string | null; // who is talking (lights up in the cast row)
+  prompt: ActivePrompt | null;  // cold-call awaiting the learner
+  transcript: TranscriptItem[]; // full log — the drawer, the byproduct
+
+  lyoState: string;
+  waitingForScene: boolean;
   canContinue: boolean;
   error: string | null;
 
+  soundOn: boolean;
+  voiceOn: boolean;
+
   connect: (topic: string) => void;
   disconnect: () => void;
-  answerPrompt: (itemId: string, option: string) => void;
-  answerQuiz: (itemId: string, option: QuizOption) => void;
+  answerPrompt: (option: string) => void;
+  answerQuiz: (elementId: string, option: QuizOption) => void;
   askQuestion: (text: string) => void;
   signal: (kind: 'confused' | 'too_easy') => void;
   continueLesson: () => void;
+  toggleSound: () => void;
+  toggleVoice: () => void;
+  viewBoard: (index: number) => void; // -1 = live
 }
 
-// ─── Internals (module-level, not in state) ──────────────────────────────────
+// ─── Internals ───────────────────────────────────────────────────────────────
 
 let ws: WebSocket | null = null;
 let turnQueue: DirectorTurn[] = [];
@@ -91,94 +137,254 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
 function wsUrl(topic: string, token: string | null): string {
   const base = API_URL.replace(/^http/, 'ws').replace(/\/$/, '');
   const params = new URLSearchParams({ session_id: topic, topic });
-  // Logged-in learners get the full mastery loop; guests still get the class.
   if (token) params.set('token', token);
   else params.set('api_key', 'web_guest');
   return `${base}/api/v1/classroom/ws/connect?${params}`;
 }
 
-/** Reading-time pacing for a speech turn. */
 function speechDelay(text: string): number {
-  return Math.min(Math.max(text.length * 32, 1200), 6500);
+  return Math.min(Math.max(text.length * 34, 1400), 7000);
+}
+
+// Distinct voices for the cast (browser SpeechSynthesis).
+const VOICE_PROFILE: Record<string, { pitch: number; rate: number }> = {
+  Teacher: { pitch: 0.92, rate: 1.0 },
+  Maya: { pitch: 1.2, rate: 1.05 },
+  Sam: { pitch: 1.0, rate: 1.12 },
+  Rio: { pitch: 1.15, rate: 1.1 },
+  Zack: { pitch: 0.85, rate: 0.95 },
+  Lyo: { pitch: 1.35, rate: 1.05 },
+};
+
+function stopSpeech() {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+/** Classify a board "write"/"draw" payload into the right visual. */
+function classifyBoardContent(content: string): BoardElement {
+  const id = nextId();
+  const trimmed = content.trim();
+  const firstLine = trimmed.split('\n')[0].trim().toLowerCase();
+
+  if (/^(graph|flowchart|sequencediagram|classdiagram|statediagram|erdiagram|pie|mindmap|timeline|journey)\b/.test(firstLine)) {
+    return { id, kind: 'mermaid', source: trimmed };
+  }
+  if (/\\(frac|sum|int|theta|alpha|beta|sqrt|cdot|times|pi|infty|approx|le|ge|neq)|\^\{|_\{/.test(trimmed)) {
+    return { id, kind: 'latex', latex: trimmed };
+  }
+  const codeSignals = /(def |function |=> |const |let |var |class |import |return |print\(|console\.|#include|public |;\s*$)/m;
+  if (trimmed.includes('\n') && codeSignals.test(trimmed)) {
+    return { id, kind: 'code', code: trimmed };
+  }
+  return { id, kind: 'chalk', text: trimmed };
+}
+
+/** Resolve an image query via Wikimedia Commons (free, keyless, CORS-open). */
+async function resolveImage(query: string): Promise<{ url: string; caption?: string } | null> {
+  try {
+    const params = new URLSearchParams({
+      action: 'query',
+      generator: 'search',
+      gsrsearch: `filetype:bitmap ${query}`,
+      gsrlimit: '1',
+      gsrnamespace: '6',
+      prop: 'imageinfo',
+      iiprop: 'url|extmetadata',
+      iiurlwidth: '760',
+      format: 'json',
+      origin: '*',
+    });
+    const res = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
+    const data = await res.json();
+    const pages = data?.query?.pages;
+    if (!pages) return null;
+    const first = Object.values(pages)[0] as { imageinfo?: { thumburl?: string; url?: string }[] };
+    const info = first?.imageinfo?.[0];
+    const url = info?.thumburl || info?.url;
+    return url ? { url } : null;
+  } catch {
+    return null;
+  }
 }
 
 export const useClassroomStore = create<ClassroomStore>((set, get) => {
-  // ── Turn player: reveals director turns one by one with natural pacing ──
+  // ── helpers ──
+
+  const sfx = (sound: AmbientSound) => { if (get().soundOn) playSound(sound); };
+
+  function speakLine(speaker: string, text: string, onDone: () => void) {
+    if (!get().voiceOn || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      playTimer = setTimeout(onDone, speechDelay(text));
+      return;
+    }
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const profile = VOICE_PROFILE[speaker] ?? VOICE_PROFILE.Teacher;
+      utterance.pitch = profile.pitch;
+      utterance.rate = profile.rate;
+      let finished = false;
+      const done = () => { if (!finished) { finished = true; onDone(); } };
+      utterance.onend = done;
+      utterance.onerror = done;
+      window.speechSynthesis.speak(utterance);
+      // Safety net: some browsers drop onend.
+      playTimer = setTimeout(done, Math.max(speechDelay(text) * 1.8, 9000));
+    } catch {
+      playTimer = setTimeout(onDone, speechDelay(text));
+    }
+  }
+
+  function pushTranscript(speaker: string, text: string) {
+    set((s) => ({ transcript: [...s.transcript, { id: nextId(), speaker, text }] }));
+  }
+
+  function addBoardElement(el: BoardElement) {
+    sfx('chalk');
+    set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
+  }
+
+  function eraseBoard() {
+    const { board } = get();
+    if (board.length === 0) return;
+    set((s) => ({
+      boardHistory: [...s.boardHistory, s.board],
+      board: [],
+      viewingBoard: -1,
+    }));
+  }
+
+  // ── turn player ──
 
   function stopPlayer() {
     playing = false;
     if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+    stopSpeech();
   }
 
   function playNext() {
     if (!playing) return;
     const turn = turnQueue.shift();
-    if (!turn) { playing = false; return; }
+    if (!turn) {
+      playing = false;
+      set({ activeSpeaker: null });
+      return;
+    }
 
     switch (turn.type) {
       case 'speech': {
         const text = (turn.text ?? '').trim();
         if (text) {
-          set((s) => ({
-            feed: [...s.feed, { id: nextId(), kind: 'speech', speaker: turn.speaker || 'Teacher', text }],
-          }));
-          playTimer = setTimeout(playNext, speechDelay(text));
+          const speaker = turn.speaker || 'Teacher';
+          set({ caption: { speaker, text }, activeSpeaker: speaker });
+          pushTranscript(speaker, text);
+          speakLine(speaker, text, playNext);
           return;
         }
         break;
       }
+
       case 'user_prompt': {
         const text = (turn.text ?? '').trim();
-        set((s) => ({
-          feed: [...s.feed, {
-            id: nextId(), kind: 'prompt', speaker: turn.speaker || 'Teacher',
-            text, options: turn.options?.length ? turn.options : ['Yes', 'No'],
-          }],
-        }));
-        // Pause the player — resumes when the learner answers (or the
-        // classmate-jumps-in timeout below fires).
+        const speaker = turn.speaker || 'Teacher';
+        const promptId = nextId();
+        set({
+          caption: { speaker, text },
+          activeSpeaker: speaker,
+          prompt: { id: promptId, speaker, text, options: turn.options?.length ? turn.options : ['Yes', 'No'] },
+        });
+        pushTranscript(speaker, `${text} (asks you)`);
+        if (get().voiceOn) speakLine(speaker, text, () => undefined);
         playing = false;
-        const beat = (turn.beat_seconds ?? 5) + 6;
+        const beat = (turn.beat_seconds ?? 5) + 8;
         playTimer = setTimeout(() => {
-          const st = get();
-          const last = st.feed[st.feed.length - 1];
-          if (last?.kind === 'prompt' && !last.answered) resumePlayer();
+          if (get().prompt?.id === promptId) {
+            set({ prompt: null });
+            resumePlayer(); // a classmate jumps in, per the director's script
+          }
         }, beat * 1000);
         return;
       }
+
       case 'lyo_state':
         if (turn.state) set({ lyoState: turn.state });
         break;
+
       case 'board': {
+        const action = turn.action ?? 'write';
+        if (action === 'image' && (turn.query || turn.content)) {
+          const query = (turn.query || turn.content || '').trim();
+          const el: BoardElement = { id: nextId(), kind: 'image', url: null, caption: turn.caption, query };
+          addBoardElement(el);
+          void resolveImage(query).then((img) => {
+            set((s) => ({
+              board: img
+                ? s.board.map((b) => (b.id === el.id ? { ...b, url: img.url } : b))
+                : s.board.filter((b) => b.id !== el.id), // nothing found — erase quietly
+            }));
+          });
+          playTimer = setTimeout(playNext, 1800);
+          return;
+        }
+        if (action === 'bullets' && turn.items?.length) {
+          addBoardElement({ id: nextId(), kind: 'bullets', items: turn.items });
+          playTimer = setTimeout(playNext, Math.min(turn.items.length * 700 + 800, 4200));
+          return;
+        }
+        if (action === 'chart' && turn.labels?.length && turn.values?.length) {
+          addBoardElement({
+            id: nextId(), kind: 'chart',
+            chartType: turn.chart_type === 'line' ? 'line' : 'bar',
+            labels: turn.labels, values: turn.values,
+          });
+          playTimer = setTimeout(playNext, 2400);
+          return;
+        }
+        if (action === 'explorable' && turn.expression && turn.params?.length) {
+          addBoardElement({
+            id: nextId(), kind: 'explorable',
+            expression: turn.expression, params: turn.params,
+            xMin: turn.x_min, xMax: turn.x_max, prompt: turn.prompt,
+          });
+          playTimer = setTimeout(playNext, 2000);
+          return;
+        }
         const content = (turn.content ?? '').trim();
         if (content) {
-          set((s) => ({
-            boardLines: [...s.boardLines.slice(-4), content],
-            feed: [...s.feed, { id: nextId(), kind: 'board', text: content }],
-          }));
-          playTimer = setTimeout(playNext, 2200);
+          addBoardElement(classifyBoardContent(content));
+          playTimer = setTimeout(playNext, 2400);
           return;
         }
         break;
       }
+
+      case 'ambient': {
+        const sound = (turn.sound || turn.content || '') as AmbientSound;
+        if (['bell', 'page_turn', 'chair_scrape', 'soft_laugh'].includes(sound)) sfx(sound);
+        break;
+      }
+
       case 'pause':
-        playTimer = setTimeout(playNext, Math.min((turn.seconds ?? 1), 5) * 1000);
+        playTimer = setTimeout(playNext, Math.min(turn.seconds ?? 1, 5) * 1000);
         return;
+
       case 'session_end':
-        set((s) => ({
-          feed: [...s.feed, {
-            id: nextId(), kind: 'session_end',
-            homework: turn.homework, nextHook: turn.next_hook,
-          }],
+        sfx('bell');
+        addBoardElement({ id: nextId(), kind: 'dismissal', homework: turn.homework, nextHook: turn.next_hook });
+        pushTranscript('Teacher', `🔔 Class dismissed. ${turn.homework ? `Homework: ${turn.homework}` : ''}`);
+        set({
           lyoState: turn.lyo_state || 'celebrating',
           canContinue: true,
-        }));
+          caption: null,
+          activeSpeaker: null,
+        });
         break;
+
       default:
-        break; // ambient etc. — no visual
+        break;
     }
-    // Zero-cost turns fall through to the next immediately.
-    playTimer = setTimeout(playNext, 60);
+    playTimer = setTimeout(playNext, 80);
   }
 
   function resumePlayer() {
@@ -193,7 +399,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     resumePlayer();
   }
 
-  // ── Incoming component handling ──
+  // ── incoming protocol ──
 
   function handleComponent(comp: ClassroomComponent) {
     switch (comp.type) {
@@ -204,19 +410,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           try {
             const turns = JSON.parse(text) as DirectorTurn[];
             if (Array.isArray(turns)) { enqueueTurns(turns); return; }
-          } catch { /* fall through to plain text */ }
+          } catch { /* plain text below */ }
         }
         enqueueTurns([{ type: 'speech', speaker: 'Teacher', text }]);
         break;
       }
       case 'StudentPrompt':
-        enqueueTurns([{ type: 'speech', speaker: comp.student_name || 'Classmate', text: comp.text ?? '' }]);
+        enqueueTurns([{ type: 'speech', speaker: comp.student_name || 'Maya', text: comp.text ?? '' }]);
         break;
       case 'QuizCard':
-        set((s) => ({
-          feed: [...s.feed, { id: nextId(), kind: 'quiz', quiz: comp }],
-          waitingForScene: false,
-        }));
+        // The teacher writes the checkpoint on the board.
+        addBoardElement({ id: nextId(), kind: 'quiz', quiz: comp });
+        pushTranscript('Teacher', `📝 Checkpoint: ${comp.question ?? ''}`);
         break;
       case 'CTAButton':
         if ((comp.action_intent ?? 'continue') === 'continue') {
@@ -240,18 +445,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       }
       case 'scene_start':
+        // A new scene = the teacher erases the board.
+        eraseBoard();
         set({ waitingForScene: true, canContinue: false });
         break;
       case 'scene_complete':
         set({ waitingForScene: false });
         break;
-      case 'error': {
-        const detail = (msg.message as string) || 'The classroom hit a snag.';
-        set((s) => ({ feed: [...s.feed, { id: nextId(), kind: 'info', text: detail }] }));
+      case 'error':
+        pushTranscript('System', (msg.message as string) || 'The classroom hit a snag.');
         break;
-      }
       default:
-        break; // system_state, scene_stream envelope, typing indicators…
+        break;
     }
   }
 
@@ -268,7 +473,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     ws.send(JSON.stringify(payload));
   }
 
-  /** Persist quiz outcomes to the shared mastery profile (same loop as iOS). */
   async function traceQuiz(skill: string, itemId: string, correct: boolean) {
     try {
       const token = localStorage.getItem('lyo_token');
@@ -280,25 +484,29 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          learner_id: learnerId,
-          skill_id: skill,
-          item_id: itemId,
-          correct,
-          time_taken_seconds: 15,
+          learner_id: learnerId, skill_id: skill, item_id: itemId,
+          correct, time_taken_seconds: 15,
         }),
       });
-    } catch { /* mastery tracing must never disturb the lesson */ }
+    } catch { /* never disturb the lesson */ }
   }
 
   return {
     status: 'idle',
     topic: '',
-    feed: [],
+    board: [],
+    boardHistory: [],
+    viewingBoard: -1,
+    caption: null,
+    activeSpeaker: null,
+    prompt: null,
+    transcript: [],
     lyoState: 'reading',
-    boardLines: [],
     waitingForScene: false,
     canContinue: false,
     error: null,
+    soundOn: false,
+    voiceOn: false,
 
     connect: (topic: string) => {
       get().disconnect();
@@ -306,7 +514,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       idCounter = 0;
       turnQueue = [];
       set({
-        status: 'connecting', topic, feed: [], boardLines: [],
+        status: 'connecting', topic,
+        board: [], boardHistory: [], viewingBoard: -1,
+        caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, canContinue: false, error: null,
       });
 
@@ -319,8 +529,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       };
       socket.onclose = () => {
         if (ws === socket) {
-          const st = get();
-          set({ status: st.feed.length > 0 ? 'ended' : st.status === 'error' ? 'error' : 'ended' });
+          set((s) => ({ status: s.transcript.length > 0 ? 'ended' : s.status === 'error' ? 'error' : 'ended' }));
           ws = null;
         }
       };
@@ -333,46 +542,47 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       set({ status: 'idle' });
     },
 
-    answerPrompt: (itemId, option) => {
-      set((s) => ({
-        feed: s.feed.map((f) => (f.id === itemId ? { ...f, answered: option } : f)),
-        lyoState: 'listening',
-      }));
-      sendAction('user_message', itemId, { message: option });
+    answerPrompt: (option: string) => {
+      const prompt = get().prompt;
+      if (!prompt) return;
+      pushTranscript('You', option);
+      set({ prompt: null, lyoState: 'listening' });
+      sendAction('user_message', prompt.id, { message: option });
       resumePlayer();
     },
 
-    answerQuiz: (itemId, option) => {
-      const item = get().feed.find((f) => f.id === itemId);
-      const quiz = item?.quiz;
-      if (!quiz || item?.answered) return;
+    answerQuiz: (elementId, option) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || el.kind !== 'quiz' || el.answered) return;
       const correct = option.is_correct === true;
+      sfx(correct ? 'correct' : 'incorrect');
       set((s) => ({
-        feed: s.feed.map((f) =>
-          f.id === itemId ? { ...f, answered: option.label, wasCorrect: correct } : f),
+        board: s.board.map((b) =>
+          b.id === elementId && b.kind === 'quiz'
+            ? { ...b, answered: option.label, wasCorrect: correct }
+            : b),
         lyoState: correct ? 'celebrating' : 'thinking',
       }));
-      sendAction('quiz_answer', quiz.component_id, {
+      pushTranscript('You', `${option.label} ${correct ? '✓' : '✗'}`);
+      sendAction('quiz_answer', el.quiz.component_id, {
         selected_option_id: option.id,
         selected_option_label: option.label,
       });
-      void traceQuiz(quiz.concept_id || get().topic, quiz.component_id, correct);
-      resumePlayer();
+      void traceQuiz(el.quiz.concept_id || get().topic, el.quiz.component_id, correct);
     },
 
     askQuestion: (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      set((s) => ({
-        feed: [...s.feed, { id: nextId(), kind: 'speech', speaker: 'You', text: trimmed }],
-        waitingForScene: true,
-        lyoState: 'curious',
-      }));
+      stopSpeech(); // barge-in: you raised your hand, the room listens
+      pushTranscript('You', `✋ ${trimmed}`);
+      set({ waitingForScene: true, lyoState: 'curious', caption: { speaker: 'You', text: trimmed } });
       sendAction('user_message', 'web_ask', { message: trimmed });
     },
 
     signal: (kind) => {
       set({ waitingForScene: true, lyoState: kind === 'confused' ? 'thinking' : 'curious' });
+      pushTranscript('You', kind === 'confused' ? '😕 (confused)' : '⚡ (too easy)');
       sendAction(kind === 'confused' ? 'confused' : 'too_easy', 'web_signal');
     },
 
@@ -380,5 +590,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       set({ canContinue: false, waitingForScene: true });
       sendAction('continue', 'web_continue');
     },
+
+    toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
+    toggleVoice: () => {
+      const next = !get().voiceOn;
+      if (!next) stopSpeech();
+      set({ voiceOn: next });
+    },
+
+    viewBoard: (index: number) => set({ viewingBoard: index }),
   };
 });
