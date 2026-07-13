@@ -39,6 +39,9 @@ class LivingClassroomService: ObservableObject {
 
     private let engine = LivingClassroomEngine()
     private var topic: String = ""
+    /// When the current scene began rendering — used to estimate time-on-task
+    /// for knowledge tracing.
+    private var sceneStartedAt = Date()
     /// Whether the backend has ever delivered a scene on this connection.
     private var didReceiveBackendScene: Bool = false
     /// Watchdog that switches to the on-device engine if the backend stalls.
@@ -293,6 +296,8 @@ class LivingClassroomService: ObservableObject {
             recordLearnerSignal(
                 .init(kind: .answeredQuiz(correct: correct, choice: selectedLabel),
                       detail: selectedLabel))
+            // Persist to the backend mastery profile (Deep Knowledge Tracing).
+            traceQuizOutcome(componentId: componentId, correct: correct)
 
         case "user_message", "ask_question":
             let message = (actionData?["message"] as? String) ?? ""
@@ -308,10 +313,53 @@ class LivingClassroomService: ObservableObject {
 
         case "confused":
             recordLearnerSignal(.init(kind: .confused, detail: ""))
+            reportAffect(valence: -0.5, arousal: 0.6, source: "classroom_confused")
         case "too_easy":
             recordLearnerSignal(.init(kind: .tooEasy, detail: ""))
+            reportAffect(valence: 0.2, arousal: -0.3, source: "classroom_too_easy")
         default:
             break
+        }
+    }
+
+    // MARK: - Learner model persistence
+
+    /// Sends a quiz outcome to the backend knowledge tracer so mastery survives
+    /// the session. Fire-and-forget: a failure must never disturb the lesson.
+    private func traceQuizOutcome(componentId: String, correct: Bool) {
+        let skill = topic.isEmpty ? "general" : topic
+        let timeTaken = min(max(Date().timeIntervalSince(sceneStartedAt), 0), 600)
+        Task { [weak self] in
+            guard let learnerId = await TokenManager.shared.getUserId() else { return }
+            do {
+                try await PersonalizationService.shared.traceKnowledge(
+                    trace: KnowledgeTraceRequest(
+                        learnerId: learnerId,
+                        skillId: skill,
+                        itemId: componentId,
+                        correct: correct,
+                        timeTakenSeconds: timeTaken
+                    ))
+                self?.logger.info("🧠 Traced quiz outcome (\(correct ? "correct" : "incorrect")) for skill \(skill)")
+            } catch {
+                self?.logger.warning("Knowledge trace failed (lesson unaffected): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Reports an affect signal (confusion / boredom) to the learner state so
+    /// future sessions can adjust pacing. Fire-and-forget.
+    private func reportAffect(valence: Double, arousal: Double, source: String) {
+        Task {
+            guard let learnerId = await TokenManager.shared.getUserId() else { return }
+            try? await PersonalizationService.shared.updateState(
+                update: PersonalizationStateUpdate(
+                    learnerId: learnerId,
+                    affect: AffectSignals(
+                        valence: valence, arousal: arousal, confidence: 0.7,
+                        source: [source]
+                    )
+                ))
         }
     }
 
@@ -443,6 +491,7 @@ class LivingClassroomService: ObservableObject {
         didReceiveBackendScene = didReceiveBackendScene || !usingLocalEngine
 
         self.sceneRevision += 1
+        self.sceneStartedAt = Date()
         self.currentScene = scene
         self.renderedComponents = []
         self.componentQueue = scene.components
