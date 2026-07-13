@@ -111,6 +111,7 @@
 		3B54DB93193D6D8790AE681E /* AgentCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF2AE83CC7A0A5F16CCD728 /* AgentCardView.swift */; };
 		3C2949641FCF1473BBF519C2 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6297CA1DC713DB88D501FFC /* HomeView.swift */; };
 		3C3247C44F956869E3AB24CB /* CampusItemDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC511E206CE6BC76BAE1EADE /* CampusItemDetailSheet.swift */; };
+		3D7BA15826D7E2310BB4E011 /* ChallengeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56600EC111997D2B01211216 /* ChallengeService.swift */; };
 		3D8ED0FFA34E62355EA6D309 /* LyoImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C860DF68AE7A98A4D061AF /* LyoImage.swift */; };
 		3DD1531458DA140A3DB36179 /* A2UIHomeworkRenderers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293E6CB659E1F9AEE8A1F3F5 /* A2UIHomeworkRenderers.swift */; };
 		3E80D96B253F0E3C749E548F /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = D56581B2C4D4A62219B57E53 /* Nuke */; };
@@ -119,6 +120,7 @@
 		3F60B55798B6ED41F7A009CD /* BookingCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7AC0746094A529BA516EB89 /* BookingCalendarView.swift */; };
 		3F8449EA02B52B664C6481FF /* ClassroomTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 986B407E8778AAC304679BF3 /* ClassroomTokens.swift */; };
 		3F933BC2A52F965C25222E66 /* CommunityCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769A4B6901B72EE186252479 /* CommunityCardView.swift */; };
+		3FF759BC782FA20229AD755E /* ChallengeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4CB36EE9370DB07B3DA539F /* ChallengeModels.swift */; };
 		400EAE8AD014DDD98B8EA1FA /* AICommandResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA872ED82681634487C685F /* AICommandResponse.swift */; };
 		40E9772AB19DAFE11BF09D7A /* MagicEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17515C74FB6B5C9E10EDCB95 /* MagicEffectView.swift */; };
 		4136639C26A85D95515DB60E /* ClassroomViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3ABC070DDBFEB27A7EF4B1 /* ClassroomViewModel.swift */; };
@@ -193,6 +195,7 @@
 		611446F7E0FEB3E2DD77B4B7 /* StudyPlanBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D2B02CBFD7C0EA9CE94EFE /* StudyPlanBubbleView.swift */; };
 		6190A3D0E52057EFC86CB455 /* CommunityFeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A3E96E0AAF8078D50F9D2C2 /* CommunityFeedViewModel.swift */; };
 		61CC305799D8E4FDB8FB6BF4 /* PostEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF6D9451EEA788672DB8D7A /* PostEditorView.swift */; };
+		61E92970DD3142AFFA7F7C2D /* ChallengeTakeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0183887862127A040C459049 /* ChallengeTakeView.swift */; };
 		621AE0F3572DF2BEF0A97441 /* FeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25DA099EBCF9DB2BB2D902EE /* FeedModels.swift */; };
 		62465924E084C31D710A6FEC /* CourseGenerationStreamingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4626783221A90C29A79B49 /* CourseGenerationStreamingClient.swift */; };
 		6281093A17F709F43C47DD08 /* CourseShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5215209E95C644E2A1982F1E /* CourseShareService.swift */; };
@@ -492,6 +495,7 @@
 
 /* Begin PBXFileReference section */
 		00CD02ECDB51FEA37CB253FC /* SmartBlockSummaryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartBlockSummaryCard.swift; sourceTree = "<group>"; };
+		0183887862127A040C459049 /* ChallengeTakeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeTakeView.swift; sourceTree = "<group>"; };
 		01848796781FD0D91FDF1ABD /* EnergyPaymentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyPaymentSheet.swift; sourceTree = "<group>"; };
 		01FB17BF582A15FDCA2B35F2 /* ReflectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReflectCardView.swift; sourceTree = "<group>"; };
 		0207E2855711409218635E9E /* MessageIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageIntentClassifier.swift; sourceTree = "<group>"; };
@@ -669,6 +673,7 @@
 		5291E6397AF59E9E39828CC8 /* DefaultAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultAuthRepository.swift; sourceTree = "<group>"; };
 		532AD8931650A03C81E366F7 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		53385204FBD32F17238B87A6 /* PersonalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationService.swift; sourceTree = "<group>"; };
+		56600EC111997D2B01211216 /* ChallengeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeService.swift; sourceTree = "<group>"; };
 		56D2B02CBFD7C0EA9CE94EFE /* StudyPlanBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlanBubbleView.swift; sourceTree = "<group>"; };
 		5710A1EF9E03043C25462222 /* KeyTermStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTermStrip.swift; sourceTree = "<group>"; };
 		576187781DD9B1E403DEC6F7 /* AppNotification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotification.swift; sourceTree = "<group>"; };
@@ -953,6 +958,7 @@
 		F419BC81E37B01B22210A943 /* LegacyBlockMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyBlockMigrator.swift; sourceTree = "<group>"; };
 		F45C09683B075A73F99B62A3 /* CourseOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseOrchestrator.swift; sourceTree = "<group>"; };
 		F476EA06E209E75812B6DCBA /* LeaderboardRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardRowView.swift; sourceTree = "<group>"; };
+		F4CB36EE9370DB07B3DA539F /* ChallengeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeModels.swift; sourceTree = "<group>"; };
 		F6294CB537351AB8E0B41B9E /* StudyPlanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlanService.swift; sourceTree = "<group>"; };
 		F67500EDB27324B6EB120734 /* DefaultTTSRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultTTSRepository.swift; sourceTree = "<group>"; };
 		F7B0B0F6417620C1C0D74271 /* ReelHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelHeaderView.swift; sourceTree = "<group>"; };
@@ -1595,6 +1601,7 @@
 				F08756E3E7819C0E73E63769 /* CalendarService.swift */,
 				3AAAA5D3CC713536C4278B1F /* CameraManager.swift */,
 				9537903A24046C191BE2EC25 /* CapabilityManager.swift */,
+				56600EC111997D2B01211216 /* ChallengeService.swift */,
 				CABCA9FC343CD576DC0883DF /* ChatIntentClassifier.swift */,
 				AC4C7D1EEAC041193B78143E /* ChatPersistenceService.swift */,
 				822C7200F1994D60A8CAB190 /* ChatRouter.swift */,
@@ -1861,6 +1868,7 @@
 				576187781DD9B1E403DEC6F7 /* AppNotification.swift */,
 				087DADD1BE224DE276C1CAE2 /* CampusModels.swift */,
 				AC14D897015706EE4D5DA4A2 /* Challenge.swift */,
+				F4CB36EE9370DB07B3DA539F /* ChallengeModels.swift */,
 				B328C7B505A68011D586035E /* Chat.swift */,
 				388C7FF016DFB5BE334E52EB /* ChatCourseRead.swift */,
 				A45FCDAAD32F6A25585C4454 /* ChatHistoryModels.swift */,
@@ -2071,6 +2079,7 @@
 				12A308775844BF6BF3399386 /* ActiveLessonAdapter.swift */,
 				E75ECF06EDDB171E68051C88 /* ActiveLessonView.swift */,
 				1364193CC9DC2051E2BC391A /* BlockRendererView.swift */,
+				0183887862127A040C459049 /* ChallengeTakeView.swift */,
 				62C9FEBFC40271DADF58EC00 /* CurveExplorerView.swift */,
 				5BC9C2CCBED55EA20C8ADB43 /* LessonRecapCard.swift */,
 				1D16773D87F313141A8C2175 /* MermaidWebView.swift */,
@@ -2243,6 +2252,9 @@
 				1CAE58E88C6162207EA2969F /* CapabilityManager.swift in Sources */,
 				7321BCD6A8D5E23039F8A8B0 /* Challenge.swift in Sources */,
 				157804452A1276E0CD5D444A /* ChallengeCardView.swift in Sources */,
+				3FF759BC782FA20229AD755E /* ChallengeModels.swift in Sources */,
+				3D7BA15826D7E2310BB4E011 /* ChallengeService.swift in Sources */,
+				61E92970DD3142AFFA7F7C2D /* ChallengeTakeView.swift in Sources */,
 				7C8B67DAECD8AB0BEF4D082E /* ChallengesHomeView.swift in Sources */,
 				D8467585FF4000F7E0B6780A /* ChallengesViewModel.swift in Sources */,
 				B515A86735FD3EB11F7BE047 /* ChapterProgressBar.swift in Sources */,

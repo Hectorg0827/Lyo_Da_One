@@ -162,6 +162,7 @@ class DeepLinkHandler: ObservableObject {
         case openLesson(courseId: String, lessonId: String)
         case openProfile(userId: String)
         case openChat
+        case openChallenge(code: String)
     }
     
     private init() {}
@@ -207,6 +208,13 @@ class DeepLinkHandler: ObservableObject {
             // lyoapp://chat
             print("💬 Opening chat")
             pendingAction = .openChat
+
+        case "challenge":
+            // lyoapp://challenge/{code}
+            if let code = pathComponents.first, !code.isEmpty {
+                print("🏆 Opening challenge: \(code)")
+                pendingAction = .openChallenge(code: code)
+            }
             
         default:
             print("⚠️ Unknown deep link host: \(host)")

@@ -277,6 +277,7 @@ struct LivingClassroomView: View {
                 LessonCompletionOverlay(
                     topic: recap.topic.isEmpty ? courseTitle : recap.topic,
                     points: recap.points,
+                    quizQuestions: service.challengeQuestions(),
                     onKeepGoing: {
                         recapDismissed = true
                         // Victory lap: one challenge question over everything covered.

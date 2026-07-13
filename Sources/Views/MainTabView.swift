@@ -23,6 +23,8 @@ struct MainTabView: View {
     @State private var navigateToTutor: (courseId: String, lessonId: String)? = nil
     @State private var isTutorModePresented = false
     @State private var isLiveClassroomPresented = false
+    @State private var activeChallengeCode: ChallengeCodeItem?
+    @ObservedObject private var deepLinkHandler = DeepLinkHandler.shared
     @State private var liveClassroomData: (courseId: String, lessonId: String, courseTitle: String, lessonTitle: String)? = nil
     @State private var isLivingClassroomPresented = false
     @State private var livingClassroomData: (courseId: String, courseTitle: String)? = nil
@@ -318,6 +320,23 @@ struct MainTabView: View {
 extension MainTabView {
     var notificationListeners: some View {
         EmptyView()
+            .onReceive(deepLinkHandler.$pendingAction) { action in
+                // Deep links were parsed but never consumed before this.
+                guard let action else { return }
+                switch action {
+                case .openChallenge(let code):
+                    activeChallengeCode = ChallengeCodeItem(code: code)
+                    deepLinkHandler.clearPendingAction()
+                case .openCourse(let courseId):
+                    navigateToCourse(courseId)
+                    deepLinkHandler.clearPendingAction()
+                default:
+                    break
+                }
+            }
+            .sheet(item: $activeChallengeCode) { item in
+                ChallengeTakeView(code: item.code)
+            }
             .onReceive(tutorModePublisher) { notification in
                 if let userInfo = notification.userInfo,
                    let _ = userInfo["topic"] as? String {
@@ -1569,3 +1588,10 @@ struct DrawerStatChip: View {
 
 // End of file
 
+
+
+/// Identifiable wrapper so a challenge code can drive .sheet(item:).
+private struct ChallengeCodeItem: Identifiable {
+    let code: String
+    var id: String { code }
+}

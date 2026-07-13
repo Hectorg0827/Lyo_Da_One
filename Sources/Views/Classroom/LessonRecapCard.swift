@@ -9,10 +9,14 @@ import SwiftUI
 struct LessonCompletionOverlay: View {
     let topic: String
     let points: [String]
+    /// The session's checkpoint questions — powers "Challenge a friend".
+    var quizQuestions: [ChallengeQuestion] = []
     let onKeepGoing: () -> Void
     let onDone: () -> Void
 
     @State private var appeared = false
+    @State private var challenge: FriendChallenge?
+    @State private var creatingChallenge = false
 
     var body: some View {
         ZStack {
@@ -53,6 +57,43 @@ struct LessonCompletionOverlay: View {
                                     ))
                             )
                             .foregroundColor(.white)
+                    }
+                }
+
+                // Duel a friend on this lesson's checkpoints.
+                if !quizQuestions.isEmpty {
+                    if let challenge {
+                        ShareLink(item: ChallengeService.shareMessage(for: challenge)) {
+                            Label("Send challenge · code \(challenge.code)", systemImage: "person.2.fill")
+                                .font(.subheadline.bold())
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 12)
+                                .background(Capsule().fill(Color(hexString: "D9B24C").opacity(0.25)))
+                                .overlay(Capsule().stroke(Color(hexString: "D9B24C").opacity(0.5), lineWidth: 1))
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        Button {
+                            guard !creatingChallenge else { return }
+                            creatingChallenge = true
+                            Task {
+                                challenge = try? await ChallengeService.shared.create(
+                                    topic: topic, questions: quizQuestions)
+                                creatingChallenge = false
+                            }
+                        } label: {
+                            Label(
+                                creatingChallenge ? "Creating…" : "Challenge a friend",
+                                systemImage: "person.2"
+                            )
+                            .font(.subheadline.bold())
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 12)
+                            .background(Capsule().fill(Color.white.opacity(0.1)))
+                            .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                            .foregroundColor(.white)
+                        }
+                        .disabled(creatingChallenge)
                     }
                 }
 

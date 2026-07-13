@@ -1020,6 +1020,27 @@ class LivingClassroomService: ObservableObject {
         engine.record(signal)
     }
 
+    /// The session's checkpoint questions, packaged for a friend challenge.
+    /// Intervention cards are excluded; the correct answer is recovered from
+    /// the component's action payload.
+    func challengeQuestions() -> [ChallengeQuestion] {
+        renderedComponents.compactMap { component in
+            guard component.type == .quizCard,
+                component.actionIntent != "intervention_choice",
+                let options = component.options, options.count >= 2
+            else { return nil }
+            let questionText = component.question ?? component.content
+            guard !questionText.isEmpty else { return nil }
+            let answerId = component.actionPayload?["answer_option_id"]
+            let answerIndex = options.firstIndex(where: { $0.id == answerId }) ?? 0
+            return ChallengeQuestion(
+                question: questionText,
+                options: options.map(\.label),
+                answerIndex: answerIndex
+            )
+        }
+    }
+
     /// Data for the shareable end-of-lesson recap card. Falls back to the
     /// rendered teacher messages when the engine has no summaries (e.g. a
     /// fully backend-driven lesson).
