@@ -53,19 +53,11 @@ export default function CourseGenerationCard({
   const router = useRouter();
   const { sendMessage } = useChatStore();
 
-  // Start: open the persisted course when we have an id; otherwise ask the
-  // AI to start it (mirrors the iOS proposal-card behavior).
+  // Start: enter the live adaptive classroom on this topic (mirrors iOS,
+  // which opens the Living Classroom for course cards).
   const handleStart = () => {
-    if (course?.id) {
-      router.push(`/courses/${course.id}`);
-    } else if (course?.title) {
-      // No persisted course id on web — start the lesson right here in chat.
-      // Phrased to elicit actual teaching rather than another course card.
-      void sendMessage(
-        `Begin lesson 1 of "${course.title}" right now, here in this chat. ` +
-        `Teach the first concept with a clear explanation and one practice question — don't send the course overview again.`
-      );
-    }
+    const topic = course?.title || 'General Learning';
+    router.push(`/classroom?topic=${encodeURIComponent(topic)}`);
   };
 
   // Customize: continue the conversation as a refine request.

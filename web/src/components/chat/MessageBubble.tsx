@@ -183,8 +183,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           course: courseData,
           cleanText
         };
-      } catch (e) {
-        console.error("Failed to parse OPEN_CLASSROOM JSON:", e);
+      } catch {
+        // Mid-stream the braces can balance before the JSON is complete —
+        // expected transient state; the card renders once the stream finishes.
       }
     }
     return null;
