@@ -42,6 +42,9 @@ class LivingClassroomService: ObservableObject {
     /// When the current scene began rendering — used to estimate time-on-task
     /// for knowledge tracing.
     private var sceneStartedAt = Date()
+    /// One-shot memory greeting composed from the mastery profile; prepended
+    /// to the first scene so the mascot visibly remembers the learner.
+    private var pendingMemoryGreeting: String?
     /// Whether the backend has ever delivered a scene on this connection.
     private var didReceiveBackendScene: Bool = false
     /// Watchdog that switches to the on-device engine if the backend stalls.
@@ -92,6 +95,8 @@ class LivingClassroomService: ObservableObject {
         Task { [weak self] in
             if let profile = try? await PersonalizationService.shared.getMasteryProfile() {
                 self?.engine.setMasteryContext(profile)
+                self?.pendingMemoryGreeting = Self.composeMemoryGreeting(
+                    from: profile, topic: self?.topic ?? "")
             }
         }
 
@@ -331,6 +336,27 @@ class LivingClassroomService: ObservableObject {
         }
     }
 
+    /// Composes a short spoken-style welcome that references the learner's
+    /// persisted mastery, so returning learners are greeted by name-of-skill
+    /// rather than a cold start. Returns nil for brand-new learners.
+    static func composeMemoryGreeting(from profile: MasteryProfile, topic: String) -> String? {
+        guard !profile.skills.isEmpty else { return nil }
+        let strength = profile.strengths.first
+        let weakness = (profile.recommendedFocus.first ?? profile.weaknesses.first)
+        let topicLine = topic.isEmpty ? "" : " Today we're on \(topic) — let's make it count."
+
+        switch (strength, weakness) {
+        case let (s?, w?) where s.caseInsensitiveCompare(w) != .orderedSame:
+            return "Welcome back! Last time you showed real strength in \(s), and \(w) put up a fight — if it comes up today, we'll hit it from a new angle.\(topicLine)"
+        case let (_, w?):
+            return "Welcome back! I remember \(w) gave us a good challenge last time — watch how today's ideas connect back to it.\(topicLine)"
+        case let (s?, _):
+            return "Welcome back! You've been on a roll with \(s).\(topicLine)"
+        default:
+            return "Welcome back!\(topicLine)"
+        }
+    }
+
     // MARK: - Learner model persistence
 
     /// Sends a quiz outcome to the backend knowledge tracer so mastery survives
@@ -502,8 +528,25 @@ class LivingClassroomService: ObservableObject {
         self.sceneRevision += 1
         self.sceneStartedAt = Date()
         self.currentScene = scene
+
+        // First scene of the session: lead with the memory greeting so the
+        // mascot visibly remembers the learner. Flows through the normal
+        // component-reveal pipeline; consumed exactly once.
+        var components = scene.components
+        if self.sceneRevision == 1, let greeting = pendingMemoryGreeting {
+            pendingMemoryGreeting = nil
+            components.insert(
+                SDUIComponent(
+                    id: "memory-greeting",
+                    type: .teacherMessage,
+                    content: greeting,
+                    animation: "fade_in",
+                    emotion: "warm"
+                ), at: 0)
+        }
+
         self.renderedComponents = []
-        self.componentQueue = scene.components
+        self.componentQueue = components
         self.hasQueuedComponents = !self.componentQueue.isEmpty
         self.isGenerating = false
         self.canContinue = false
