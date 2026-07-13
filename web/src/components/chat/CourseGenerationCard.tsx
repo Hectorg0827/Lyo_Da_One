@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import type { Course } from '@/types';
+import { useChatStore } from '@/stores/chat-store';
 
 interface CourseGenerationCardProps {
   course?: Partial<Course>;
@@ -48,6 +50,32 @@ export default function CourseGenerationCard({
   isGenerating = false,
   generationProgress = 0,
 }: CourseGenerationCardProps) {
+  const router = useRouter();
+  const { sendMessage } = useChatStore();
+
+  // Start: open the persisted course when we have an id; otherwise ask the
+  // AI to start it (mirrors the iOS proposal-card behavior).
+  const handleStart = () => {
+    if (course?.id) {
+      router.push(`/courses/${course.id}`);
+    } else if (course?.title) {
+      // No persisted course id on web — start the lesson right here in chat.
+      // Phrased to elicit actual teaching rather than another course card.
+      void sendMessage(
+        `Begin lesson 1 of "${course.title}" right now, here in this chat. ` +
+        `Teach the first concept with a clear explanation and one practice question — don't send the course overview again.`
+      );
+    }
+  };
+
+  // Customize: continue the conversation as a refine request.
+  const handleCustomize = () => {
+    const title = course?.title ?? 'this course';
+    void sendMessage(
+      `I'd like to customize "${title}" — can we adjust the difficulty, length, or focus areas?`
+    );
+  };
+
   const [modulesExpanded, setModulesExpanded] = useState(false);
   const currentStep = getStepIndex(generationProgress);
 
@@ -186,11 +214,15 @@ export default function CourseGenerationCard({
         {/* Actions */}
         {!isGenerating && (
           <div className="flex gap-2 pt-1">
-            <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.98] transition-all duration-200">
+            <button
+              onClick={handleStart}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.98] transition-all duration-200">
               <Play className="w-4 h-4" />
               Start Learning
             </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white active:scale-[0.98] transition-all duration-200">
+            <button
+              onClick={handleCustomize}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white active:scale-[0.98] transition-all duration-200">
               <Settings2 className="w-4 h-4" />
               Customize
             </button>
