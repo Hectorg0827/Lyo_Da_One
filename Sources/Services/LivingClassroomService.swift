@@ -45,6 +45,16 @@ class LivingClassroomService: ObservableObject {
     /// One-shot memory greeting composed from the mastery profile; prepended
     /// to the first scene so the mascot visibly remembers the learner.
     private var pendingMemoryGreeting: String?
+
+    // MARK: Struggle detection state
+    /// Wrong answers in a row — 2 triggers a live intervention.
+    private var consecutiveWrongAnswers = 0
+    /// Watches a revealed checkpoint for hesitation (unanswered too long).
+    private var hesitationTask: Task<Void, Never>?
+    /// Cooldown so interventions support rather than nag.
+    private var lastInterventionAt: Date?
+    private let interventionCooldown: TimeInterval = 90
+    private let hesitationThreshold: TimeInterval = 20
     /// Whether the backend has ever delivered a scene on this connection.
     private var didReceiveBackendScene: Bool = false
     /// Watchdog that switches to the on-device engine if the backend stalls.
@@ -195,6 +205,9 @@ class LivingClassroomService: ObservableObject {
         stallTask = nil
         revealTask?.cancel()
         revealTask = nil
+        cancelHesitationWatch()
+        consecutiveWrongAnswers = 0
+        lastInterventionAt = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
@@ -298,7 +311,10 @@ class LivingClassroomService: ObservableObject {
         actionIntent: String, componentId: String, actionData: [String: Any]?
     ) {
         switch actionIntent {
-        case "quiz_answer":
+        case "quiz_answer", "submit_answer":
+            // ("submit_answer" is what local quick-check scenes fire — handling
+            // both closes a gap where those answers never recorded signals.)
+            cancelHesitationWatch()
             let selectedId = actionData?["selected_option_id"] as? String
             let selectedLabel = (actionData?["selected_option_label"] as? String) ?? selectedId ?? ""
             // Determine correctness from the component's known answer, if present.
@@ -312,6 +328,29 @@ class LivingClassroomService: ObservableObject {
                       detail: selectedLabel))
             // Persist to the backend mastery profile (Deep Knowledge Tracing).
             traceQuizOutcome(componentId: componentId, correct: correct)
+            // Struggle detection: two misses in a row → step in and help.
+            if correct {
+                consecutiveWrongAnswers = 0
+            } else {
+                consecutiveWrongAnswers += 1
+                if consecutiveWrongAnswers >= 2 {
+                    triggerIntervention(reason: .repeatedMisses)
+                }
+            }
+
+        case "intervention_choice":
+            let selectedId = actionData?["selected_option_id"] as? String
+            switch selectedId {
+            case "intervene_analogy":
+                requestReteach(
+                    "Please re-explain the last idea in a completely different way — use a simple, vivid analogy from everyday life.")
+            case "intervene_steps":
+                requestReteach(
+                    "Break the last concept down into very small steps, one at a time, with a concrete worked example.")
+            default:
+                // "I've got this" — respect it and get out of the way.
+                statusText = ""
+            }
 
         case "user_message", "ask_question":
             let message = (actionData?["message"] as? String) ?? ""
@@ -355,6 +394,94 @@ class LivingClassroomService: ObservableObject {
         default:
             return "Welcome back!\(topicLine)"
         }
+    }
+
+    // MARK: - Struggle-aware interventions
+
+    enum InterventionReason { case repeatedMisses, hesitation }
+
+    /// The mascot steps in when the learner is struggling — two misses in a
+    /// row or long hesitation on a checkpoint — and offers concrete help.
+    /// The offer is rendered as normal SDUI components (message + choice card),
+    /// so it works identically in backend and on-device modes.
+    private func triggerIntervention(reason: InterventionReason) {
+        if let last = lastInterventionAt,
+            Date().timeIntervalSince(last) < interventionCooldown { return }
+        lastInterventionAt = Date()
+        consecutiveWrongAnswers = 0
+        cancelHesitationWatch()
+
+        let message: String
+        switch reason {
+        case .repeatedMisses:
+            message = "Hey — this one's putting up a fight, and that's completely normal. It usually means we're right at the edge of something new. Want me to come at it from a different angle?"
+        case .hesitation:
+            message = "No rush — take your time. And if it would help, I can explain this one differently before you answer."
+        }
+
+        let msgComponent = SDUIComponent(
+            id: "intervention-msg-\(sceneRevision)-\(Int(Date().timeIntervalSince1970))",
+            type: .teacherMessage,
+            content: message,
+            animation: "fade_in",
+            emotion: "supportive"
+        )
+        let choiceComponent = SDUIComponent(
+            id: "intervention-choice-\(sceneRevision)-\(Int(Date().timeIntervalSince1970))",
+            type: .quizCard,
+            content: "How can I help?",
+            question: "How can I help?",
+            options: [
+                SDUIQuizOption(id: "intervene_analogy", label: "Explain it a different way"),
+                SDUIQuizOption(id: "intervene_steps", label: "Break it into small steps"),
+                SDUIQuizOption(id: "intervene_continue", label: "I've got this — keep going"),
+            ],
+            actionIntent: "intervention_choice"
+        )
+
+        // Front of the queue so the help appears NOW, not after remaining content.
+        componentQueue.insert(contentsOf: [msgComponent, choiceComponent], at: 0)
+        hasQueuedComponents = true
+        revealNextComponent()
+        revealNextComponent()
+        logger.info("🫱 Intervention offered (\(String(describing: reason)))")
+
+        // Also inform a connected backend so server-side pacing can adapt.
+        recordLearnerSignal(.init(kind: .confused, detail: "intervention:\(reason)"))
+    }
+
+    /// Routes an intervention choice through the established ask/user-message
+    /// flow — the backend answers it when connected; the on-device engine
+    /// answers it otherwise.
+    private func requestReteach(_ prompt: String) {
+        statusText = "Coming at it from a new angle…"
+        sendUserAction(
+            actionIntent: "user_message",
+            componentId: "intervention_reteach",
+            actionData: ["message": prompt]
+        )
+    }
+
+    /// Starts (or restarts) the hesitation watchdog for a just-revealed
+    /// checkpoint. If the learner neither answers nor advances within the
+    /// threshold, offer help once.
+    private func startHesitationWatch(for component: SDUIComponent) {
+        cancelHesitationWatch()
+        let watchedRevision = sceneRevision
+        hesitationTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((self?.hesitationThreshold ?? 20) * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            // Still on the same scene and the checkpoint is still the latest
+            // rendered component (i.e. genuinely unanswered)?
+            guard self.sceneRevision == watchedRevision,
+                self.renderedComponents.last?.id == component.id else { return }
+            self.triggerIntervention(reason: .hesitation)
+        }
+    }
+
+    private func cancelHesitationWatch() {
+        hesitationTask?.cancel()
+        hesitationTask = nil
     }
 
     // MARK: - Learner model persistence
@@ -527,6 +654,7 @@ class LivingClassroomService: ObservableObject {
 
         self.sceneRevision += 1
         self.sceneStartedAt = Date()
+        cancelHesitationWatch()  // a new scene invalidates any pending watch
         self.currentScene = scene
 
         // First scene of the session: lead with the memory greeting so the
@@ -612,6 +740,13 @@ class LivingClassroomService: ObservableObject {
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
             self.renderedComponents.append(component)
+        }
+
+        // A checkpoint just appeared — watch for hesitation (long silence
+        // usually means the learner is stuck, not thinking). Our own
+        // intervention cards are exempt.
+        if component.type == .quizCard, component.actionIntent != "intervention_choice" {
+            startHesitationWatch(for: component)
         }
 
         // Simulate teacher pacing: Auto-reveal the next component after a reading delay,
