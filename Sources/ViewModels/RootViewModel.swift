@@ -53,6 +53,10 @@ class RootViewModel: ObservableObject {
                     // Try to fetch current user
                     currentUser = try await authRepository.getCurrentUser()
                     isAuthenticated = true
+
+                    // ✅ Session restored from stored token — start services
+                    // (push, subscription sync, cross-device sync), same as login
+                    await onUserAuthenticated()
                 } catch {
                     // Token expired or invalid
                     handleError(error)
@@ -121,6 +125,9 @@ class RootViewModel: ObservableObject {
         do {
             currentUser = try await authRepository.register(email: email, password: password, name: name)
             isAuthenticated = true
+
+            // ✅ Trigger post-registration services, same as login
+            await onUserAuthenticated()
         } catch {
             // Check for specific backend errors that should be shown to the user
             if let lyoError = error as? LyoError {
@@ -162,8 +169,15 @@ class RootViewModel: ObservableObject {
         
         // 2. Sync subscription/monetization status
         await MonetizationService.shared.syncSubscriptionWithBackend()
-        
-        // 3. Request push notification permission if not already granted
+
+        // 3. Connect cross-device sync (same account on web/Android stays
+        // live). Fallback/offline sessions have no JWT — the socket could
+        // never authenticate, so don't start (and endlessly retry) it.
+        if await TokenManager.shared.getToken() != nil {
+            SyncService.shared.connect()
+        }
+
+        // 4. Request push notification permission if not already granted
         PushNotificationService.shared.checkPermissionStatus { status in
             if status == .notDetermined {
                 PushNotificationService.shared.requestPermission { granted, _ in
@@ -197,6 +211,7 @@ class RootViewModel: ObservableObject {
     func logout() async {
         // Notify services before logout
         PushNotificationService.shared.onUserLogout()
+        SyncService.shared.disconnect()
         
         do {
             try await authRepository.logout()

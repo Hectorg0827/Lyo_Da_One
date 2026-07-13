@@ -267,7 +267,7 @@ class AudioStreamManager: NSObject, ObservableObject, URLSessionWebSocketDelegat
     private func setupAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         // .playAndRecord with .voiceChat provides best echo cancellation and ducking logic
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setActive(true)
     }
     

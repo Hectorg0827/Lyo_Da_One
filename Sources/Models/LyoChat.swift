@@ -374,3 +374,34 @@ struct TestPrepIntentInfo {
     var uploadedMaterialIds: [String] = []
 }
 
+// MARK: - Inline component leaf types
+// Restored here after the cross-platform branch removed OpenClassroomModels.swift;
+// these back the InlineMediaComponent / QuizComponent / LyoChatQuestion structs above.
+
+enum MediaType: String, Codable { case video, gif }
+
+enum QuestionType: String, Codable { case mcq, tf, fib, code, match, short }
+
+struct Choice: Codable {
+    let id: String
+    let text: String
+    let metadata: [String: AnyCodable]?
+}
+
+struct AnswerRepresentation: Codable {
+    let correctChoiceIds: [String]?
+    let textAnswer: String?
+    let regex: String?
+    let rubric: [RubricItem]?
+}
+
+struct RubricItem: Codable {
+    let criterion: String
+    let points: Double?
+}
+
+struct Scoring: Codable {
+    let pointsPerQuestion: Double?
+    let partialCredit: Bool?
+}
+

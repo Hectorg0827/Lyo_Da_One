@@ -1985,3 +1985,128 @@ private class SpeechCompletionDelegate: NSObject, AVSpeechSynthesizerDelegate {
         resumeOnce()
     }
 }
+
+// MARK: - Markdown → Lesson Blocks (pure, testable)
+
+extension LiveClassroomViewModel {
+    /// Parse raw lesson markdown into renderable blocks.
+    ///
+    /// Richer than `LiveLessonBlockParser.parseFromMarkdown`: blockquotes
+    /// become callouts, numbered lists become step-by-step blocks, horizontal
+    /// rules are dropped (visual noise in the lesson flow), and every block id
+    /// is prefixed with the lesson id so ids stay unique across a course.
+    static func parseMarkdownIntoBlocks(
+        lessonId: String, title: String?, content: String
+    ) -> [LiveLessonBlock] {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return [] }
+
+        var blocks: [LiveLessonBlock] = []
+        func nextId() -> String { "\(lessonId)_\(blocks.count)" }
+
+        if let title, !title.isEmpty {
+            blocks.append(
+                LiveLessonBlock(id: nextId(), type: .heading, title: title, subtitle: "h2"))
+        }
+
+        var paragraph: [String] = []
+        var quote: [String] = []
+        var steps: [String] = []
+        var inCode = false
+        var codeLanguage: String?
+        var codeLines: [String] = []
+
+        func flushParagraph() {
+            let text = paragraph.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            paragraph = []
+            guard !text.isEmpty else { return }
+            blocks.append(LiveLessonBlock(id: nextId(), type: .paragraph, content: text))
+        }
+        func flushQuote() {
+            guard !quote.isEmpty else { return }
+            blocks.append(
+                LiveLessonBlock(
+                    id: nextId(), type: .callout, content: quote.joined(separator: "\n")))
+            quote = []
+        }
+        func flushSteps() {
+            guard !steps.isEmpty else { return }
+            blocks.append(
+                LiveLessonBlock(
+                    id: nextId(), type: .stepByStep, content: steps.joined(separator: "\n")))
+            steps = []
+        }
+        func flushCode() {
+            blocks.append(
+                LiveLessonBlock(
+                    id: nextId(), type: .code,
+                    code: codeLines.joined(separator: "\n"), language: codeLanguage))
+            codeLines = []
+            codeLanguage = nil
+        }
+        func flushText() {
+            flushParagraph()
+            flushQuote()
+            flushSteps()
+        }
+
+        for line in content.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if inCode {
+                if trimmed.hasPrefix("```") {
+                    inCode = false
+                    flushCode()
+                } else {
+                    codeLines.append(line)
+                }
+                continue
+            }
+            if trimmed.hasPrefix("```") {
+                flushText()
+                inCode = true
+                let lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                codeLanguage = lang.isEmpty ? nil : lang
+                continue
+            }
+            if trimmed.hasPrefix("#") {
+                flushText()
+                let level = trimmed.prefix(while: { $0 == "#" }).count
+                let text = trimmed.drop(while: { $0 == "#" })
+                    .trimmingCharacters(in: .whitespaces)
+                blocks.append(
+                    LiveLessonBlock(
+                        id: nextId(), type: .heading, title: text,
+                        subtitle: "h\(min(level, 6))"))
+                continue
+            }
+            if trimmed.hasPrefix(">") {
+                flushParagraph()
+                flushSteps()
+                quote.append(String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces))
+                continue
+            }
+            if trimmed.range(of: #"^\d+[.)]\s+"#, options: .regularExpression) != nil {
+                flushParagraph()
+                flushQuote()
+                steps.append(trimmed)
+                continue
+            }
+            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+                flushText()
+                continue
+            }
+            if trimmed.isEmpty {
+                flushText()
+                continue
+            }
+            paragraph.append(line)
+        }
+
+        // Unclosed fence: keep whatever was collected rather than dropping it
+        if inCode { flushCode() }
+        flushText()
+        return blocks
+    }
+}

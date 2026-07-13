@@ -7,6 +7,7 @@ import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.LoginRequest
 import com.lyo.app.data.api.RegisterRequest
 import com.lyo.app.data.api.UserDto
+import com.lyo.app.data.sync.SyncClient
 import kotlin.random.Random
 
 /**
@@ -31,6 +32,7 @@ object Session {
         try {
             user = ApiClient.api.me()
             isAuthenticated = true
+            SyncClient.connect()
         } catch (e: Exception) {
             TokenManager.clear()
             user = null
@@ -47,6 +49,7 @@ object Session {
         user = resp.user ?: ApiClient.api.me()
         isAuthenticated = true
         isLoading = false
+        SyncClient.connect()
     }
 
     suspend fun signup(email: String, password: String, displayName: String) {
@@ -68,9 +71,11 @@ object Session {
         user = resp.user ?: ApiClient.api.me()
         isAuthenticated = true
         isLoading = false
+        SyncClient.connect()
     }
 
     suspend fun logout() {
+        SyncClient.disconnect()
         try {
             ApiClient.api.logout()
         } catch (e: Exception) {

@@ -1,13 +1,9 @@
 import Foundation
 
-// MARK: - Legacy Course Generation Models (Backward Compatibility)
+// MARK: - Legacy Course Types (Compatibility Shim)
 //
-// These types were previously defined in CourseGenerationService.swift.
-// They are still referenced by A2ACourseService, InteractiveCinemaService,
-// CourseOrchestrator, CourseGenerationIntermediateView, and LiveClassroomViewModel.
-//
-// The new progressive system uses GeneratedCourse / CourseModule / CourseLesson
-// from ProgressiveCourseModels.swift. These legacy types bridge the old consumers.
+// This file is included in the Xcode target and must preserve the older
+// generated-course DTOs still referenced across the app.
 
 struct GeneratedCourseResponse: Codable {
     let courseId: String
@@ -60,10 +56,6 @@ struct CourseGenerationRequest: Codable {
         case teachingStyle = "teaching_style"
     }
 }
-
-// MARK: - Legacy Course Types (Compatibility Shim)
-//
-// Consolidated from LegacyCourseTypes.swift to resolve type ambiguity errors.
 
 // MARK: - BackendCourseResult (nested inside CourseGenerationService for backward compatibility)
 

@@ -10,20 +10,25 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// LYO palette — matches the web app (globals.css) and iOS look
-val LyoPurple = Color(0xFF6C63FF)
-val LyoViolet = Color(0xFF8B5CF6)
+// LYO palette — generated from /design-tokens.json (source of truth: iOS Sources/Core/DesignTokens.swift).
+// Do not hand-edit hex values here; update design-tokens.json and mirror the change.
+val LyoPurple = Color(0xFF6366F1) // brand.primary
+val LyoViolet = Color(0xFF8B5CF6) // brand.secondary
+val LyoVioletLight = Color(0xFFA78BFA) // brand.secondaryLight
+val LyoMagenta = Color(0xFFD946EF) // brand.accentMagenta
+val LyoGold = Color(0xFFD9B24C) // brand.accentGold
 val LyoPink = Color(0xFFEC4899)
-val LyoAmber = Color(0xFFF59E0B)
-val LyoGreen = Color(0xFF22C55E)
-val LyoBlue = Color(0xFF3B82F6)
-val LyoRed = Color(0xFFEF4444)
+val LyoAmber = Color(0xFFF59E0B) // semantic.warning
+val LyoGreen = Color(0xFF10B981) // semantic.success
+val LyoBlue = Color(0xFF3B82F6) // semantic.info
+val LyoRed = Color(0xFFEF4444) // semantic.danger
 
-val Background = Color(0xFF0A0A0F)
-val Surface = Color(0xFF111118)
-val SurfaceElevated = Color(0xFF16161F)
-val TextPrimary = Color(0xFFF5F5F7)
-val TextSecondary = Color(0xFF8888AA)
+val Background = Color(0xFF0B1230) // surface.background
+val Surface = Color(0xFF0E173D) // surface.surface
+val SurfaceElevated = Color(0xFF2A2D3A) // surface.surfaceElevated
+val SurfaceHighlight = Color(0xFF343847) // surface.surfaceHighlight
+val TextPrimary = Color(0xFFFFFFFF) // text.primary
+val TextSecondary = Color(0xFFC9D1F2) // text.secondary
 val BorderColor = Color(0x14FFFFFF) // white @ 8%
 
 private val LyoColorScheme = darkColorScheme(

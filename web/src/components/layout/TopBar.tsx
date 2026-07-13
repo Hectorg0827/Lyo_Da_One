@@ -32,7 +32,7 @@ export function TopBar() {
   function handleLogout() {
     setDropdownOpen(false);
     logout();
-    router.push('/login');
+    router.push('/auth/login');
   }
 
   return (

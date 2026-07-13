@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.NotificationDto
+import com.lyo.app.data.sync.SyncClient
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.LoadingBox
 import com.lyo.app.ui.components.LyoAvatar
@@ -107,6 +108,14 @@ fun NotificationsScreen(nav: NavHostController) {
     }
 
     LaunchedEffect(Unit) { refetch() }
+
+    // Live cross-device sync: actions on other platforms (likes, follows,
+    // achievements) populate this feed without leaving the screen.
+    LaunchedEffect(Unit) {
+        SyncClient.events.collect { event ->
+            if (event.eventType in setOf("context_updated", "message_received")) refetch()
+        }
+    }
 
     Column(
         modifier = Modifier

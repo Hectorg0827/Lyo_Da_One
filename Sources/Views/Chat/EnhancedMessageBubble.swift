@@ -131,147 +131,7 @@ struct EnhancedMessageBubble: View {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(0..<message.contentTypes.count, id: \.self) { index in
-                        let contentType = message.contentTypes[index]
-                        
-                        switch contentType {
-                        case .text:
-                            // Suppress raw text when rich content (courseProposal, quiz, etc.) is present
-                            if !hasRichContent && !message.content.isEmpty {
-                                LyoRichContentRenderer(
-                                    text: message.content,
-                                    highlights: highlights,
-                                    onAction: { action in
-                                        onTextSelectionAction?(action)
-                                    }
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-
-                            
-                        case .processing(let step, let progress):
-                            ProcessingBubbleView(step: step, progress: progress)
-                            
-                        case .topicSelection(let title, let topics):
-                            TopicSelectionBubbleView(
-                                title: title,
-                                topics: topics,
-                                onSelect: { topic in
-                                    onTopicSelect?(topic)
-                                }
-                            )
-                            .padding(.horizontal, -8)
-                            
-                        case .courseRoadmap(let title, let modules, let total, let completed):
-                            CourseRoadmapBubbleView(
-                                title: title,
-                                modules: modules,
-                                totalModules: total,
-                                completedModules: completed,
-                                onModuleSelect: { module in
-                                    onModuleSelect?(module)
-                                }
-                            )
-                            
-                        case .flashcards(let title, let cards):
-                            FlashcardCarouselBubbleView(
-                                title: title,
-                                cards: cards
-                            )
-                            .padding(.horizontal, -8)
-                            
-                        case .quiz(let question, let options, let correctIndex, let explanation):
-                            PremiumQuizView(
-                                question: question,
-                                options: options,
-                                correctIndex: correctIndex,
-                                explanation: explanation,
-                                onAnswerSubmitted: { index, _ in
-                                    onQuizAnswer?(index)
-                                }
-                            )
-                            .padding(.horizontal, -8)
-                            
-                        case .quizDeck(let deck):
-                            ChatQuizDeckView(deck: deck) { action in
-                                onSuggestionSelect?(action)
-                            }
-                            .padding(.horizontal, -8)
-                            
-                        case .courseCard(let courseId, let title, let subtitle, _):
-                             Button {
-                                 onCourseOpen?(courseId)
-                             } label: {
-                                 VStack(alignment: .leading) {
-                                     Text(title).font(.headline)
-                                     if let subtitle { Text(subtitle).font(.caption) }
-                                 }
-                                 .padding()
-                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                 .background(Color(.secondarySystemBackground))
-                                 .cornerRadius(12)
-                             }
-                        
-                        case .suggestions(let title, let options):
-                            InlineSuggestionsView(title: title, options: options) { selected in
-                                onSuggestionSelect?(selected)
-                            }
-
-                        case .courseProposal(let payload):
-                            ChatInteractiveCardView(
-                                type: .course(
-                                    title: payload.title,
-                                    topic: payload.topic,
-                                    level: payload.level,
-                                    duration: payload.duration,
-                                    imageURL: nil
-                                ),
-                                onStart: {
-                                    // Save to Focus stack then open classroom
-                                    _ = AICommandHandler.shared.handleOpenClassroom(
-                                        AICommandPayload(stackItem: nil, course: payload)
-                                    )
-                                    UIStackStore.shared.upsertCourse(
-                                        courseId: payload.id ?? UUID().uuidString,
-                                        title: payload.title,
-                                        subtitle: payload.topic
-                                    )
-                                    AICommandHandler.shared.executeOpenClassroom(for: payload)
-                                },
-                                onRefine: {
-                                    onSuggestionSelect?("I want to refine the course '\(payload.title)' on \(payload.topic). Please offer options to adjust the difficulty, duration, or focus areas.")
-                                },
-                                onSave: {
-                                    UIStackStore.shared.upsertCourse(
-                                        courseId: payload.id ?? UUID().uuidString,
-                                        title: payload.title,
-                                        subtitle: payload.topic
-                                    )
-                                    HapticManager.shared.playSuccess()
-                                }
-                            )
-                            .padding(.horizontal, -8)
-
-                        case .studyPlan(let plan):
-                            StudyPlanView(plan: plan)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .padding(.horizontal, -8)
-
-                        case .suggestedActionCard(let card):
-                            SuggestedActionCardView(
-                                card: card,
-                                onPrimary: { c in onSuggestedAction?(c) },
-                                onChip: { label, _ in onSuggestionSelect?(label) }
-                            )
-                            .padding(.horizontal, -8)
-
-                        case .notes(let title, let sections):
-                            NotesView(notes: NotesPayload(title: title, sections: sections))
-                                .padding(.horizontal, -8)
-
-                        default:
-                            EmptyView()
-                        }
+                        contentView(for: message.contentTypes[index])
                     }
                     
                     // Attachments
@@ -404,6 +264,153 @@ struct EnhancedMessageBubble: View {
         }
     }
     
+    /// One rendered chunk of a multimodal message. Extracted from the
+    /// body's ForEach so the large switch type-checks as its own function
+    /// (inlined, it failed generic inference on CI's Xcode).
+    @ViewBuilder
+    private func contentView(for contentType: MessageContentType) -> some View {
+        switch contentType {
+                        case .text:
+                            // Suppress raw text when rich content (courseProposal, quiz, etc.) is present
+                            if !hasRichContent && !message.content.isEmpty {
+                                SelectableTextView(
+                                    content: stripEmojis(message.content),
+                                    messageId: message.id,
+                                    highlights: highlights,
+                                    onAction: { action in
+                                        onTextSelectionAction?(action)
+                                    }
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            }
+                            
+                        case .processing(let step, let progress):
+                            ProcessingBubbleView(step: step, progress: progress)
+                            
+                        case .topicSelection(let title, let topics):
+                            TopicSelectionBubbleView(
+                                title: title,
+                                topics: topics,
+                                onSelect: { topic in
+                                    onTopicSelect?(topic)
+                                }
+                            )
+                            .padding(.horizontal, -8)
+                            
+                        case .courseRoadmap(let title, let modules, let total, let completed):
+                            CourseRoadmapBubbleView(
+                                title: title,
+                                modules: modules,
+                                totalModules: total,
+                                completedModules: completed,
+                                onModuleSelect: { module in
+                                    onModuleSelect?(module)
+                                }
+                            )
+                            
+                        case .flashcards(let title, let cards):
+                            FlashcardCarouselBubbleView(
+                                title: title,
+                                cards: cards
+                            )
+                            .padding(.horizontal, -8)
+                            
+                        case .quiz(let question, let options, let correctIndex, let explanation):
+                            PremiumQuizView(
+                                question: question,
+                                options: options,
+                                correctIndex: correctIndex,
+                                explanation: explanation,
+                                onAnswerSubmitted: { index, _ in
+                                    onQuizAnswer?(index)
+                                }
+                            )
+                            .padding(.horizontal, -8)
+                            
+                        case .courseCard(let courseId, let title, let subtitle, _):
+                             Button {
+                                 onCourseOpen?(courseId)
+                             } label: {
+                                 VStack(alignment: .leading) {
+                                     Text(title).font(.headline)
+                                     if let subtitle { Text(subtitle).font(.caption) }
+                                 }
+                                 .padding()
+                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                 .background(Color(.secondarySystemBackground))
+                                 .cornerRadius(12)
+                             }
+                        
+                        case .suggestions(let title, let options):
+                            InlineSuggestionsView(title: title, options: options) { selected in
+                                onSuggestionSelect?(selected)
+                            }
+
+                        case .courseProposal(let payload):
+                            ChatInteractiveCardView(
+                                type: .course(
+                                    title: payload.title,
+                                    topic: payload.topic,
+                                    level: payload.level,
+                                    duration: payload.duration,
+                                    imageURL: nil
+                                ),
+                                onStart: {
+                                    // Save to Focus stack then open classroom
+                                    _ = AICommandHandler.shared.handleOpenClassroom(
+                                        AICommandPayload(stackItem: nil, course: payload)
+                                    )
+                                    UIStackStore.shared.upsertCourse(
+                                        courseId: payload.id ?? UUID().uuidString,
+                                        title: payload.title,
+                                        subtitle: payload.topic
+                                    )
+                                    AICommandHandler.shared.executeOpenClassroom(for: payload)
+                                },
+                                onRefine: {
+                                    onSuggestionSelect?("I want to refine the course '\(payload.title)' on \(payload.topic). Please offer options to adjust the difficulty, duration, or focus areas.")
+                                },
+                                onSave: {
+                                    UIStackStore.shared.upsertCourse(
+                                        courseId: payload.id ?? UUID().uuidString,
+                                        title: payload.title,
+                                        subtitle: payload.topic
+                                    )
+                                    HapticManager.shared.playSuccess()
+                                }
+                            )
+                            .padding(.horizontal, -8)
+
+                        case .studyPlan(let plan):
+                            StudyPlanView(plan: plan)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .padding(.horizontal, -8)
+
+                        case .notes(let title, let sections):
+                            NotesView(notes: NotesPayload(title: title, sections: sections))
+                                .padding(.horizontal, -8)
+
+                        case .quizDeck(let deck):
+                            ChatQuizDeckView(deck: deck) { action in
+                                onSuggestionSelect?(action)
+                            }
+                            .padding(.horizontal, -8)
+
+                        case .suggestedActionCard(let card):
+                            SuggestedActionCardView(
+                                card: card,
+                                onPrimary: { c in onSuggestedAction?(c) },
+                                onChip: { label, _ in onSuggestionSelect?(label) }
+                            )
+                            .padding(.horizontal, -8)
+
+                        default:
+                            EmptyView()
+        }
+    }
+
     // MARK: - Attachments Grid
     
     private func attachmentsGrid(_ attachments: [ChatAttachment]) -> some View {

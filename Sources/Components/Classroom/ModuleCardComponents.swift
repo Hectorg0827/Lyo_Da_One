@@ -1,5 +1,8 @@
 import SwiftUI
 
+// Shared building blocks for module cards (used by ClassroomModuleCardView,
+// QuickCheckOverlay, and MessageBubbleView).
+//
 // NOTE: The original `ModuleCardView` here was renamed to `ClassroomModuleCardView`
 // (see Sources/Components/Classroom/ClassroomModuleCardView.swift) to avoid a
 // symbol clash with the course-list `ModuleCardView` in
