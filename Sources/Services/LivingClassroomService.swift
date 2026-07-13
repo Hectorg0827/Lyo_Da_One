@@ -46,6 +46,34 @@ class LivingClassroomService: ObservableObject {
     /// to the first scene so the mascot visibly remembers the learner.
     private var pendingMemoryGreeting: String?
 
+    // MARK: Voice tutoring
+    /// When on, teacher messages are spoken aloud as they reveal, making the
+    /// lesson a listen-along. Persisted across sessions.
+    @Published var voiceModeEnabled: Bool = UserDefaults.standard.bool(forKey: "classroom_voice_mode") {
+        didSet {
+            UserDefaults.standard.set(voiceModeEnabled, forKey: "classroom_voice_mode")
+            if !voiceModeEnabled { TextToSpeechService.shared.stop() }
+        }
+    }
+
+    /// Speaks a component if voice mode is on and the content is spoken-style
+    /// prose (backend teacher messages can carry JSON director turns — those
+    /// are skipped rather than read aloud).
+    private func narrateIfEnabled(_ component: SDUIComponent) {
+        guard voiceModeEnabled,
+            component.type == .teacherMessage,
+            !component.content.isEmpty
+        else { return }
+        let trimmed = component.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.hasPrefix("["), !trimmed.hasPrefix("{") else { return }
+        TextToSpeechService.shared.enqueue(trimmed)
+    }
+
+    /// Barge-in: the learner started talking — stop talking over them.
+    func bargeIn() {
+        TextToSpeechService.shared.stop()
+    }
+
     // MARK: Struggle detection state
     /// Wrong answers in a row — 2 triggers a live intervention.
     private var consecutiveWrongAnswers = 0
@@ -208,6 +236,7 @@ class LivingClassroomService: ObservableObject {
         cancelHesitationWatch()
         consecutiveWrongAnswers = 0
         lastInterventionAt = nil
+        TextToSpeechService.shared.stop()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
@@ -749,6 +778,9 @@ class LivingClassroomService: ObservableObject {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
             self.renderedComponents.append(component)
         }
+
+        // Voice tutoring: read teacher messages aloud as they reveal.
+        narrateIfEnabled(component)
 
         // A checkpoint just appeared — watch for hesitation (long silence
         // usually means the learner is stuck, not thinking). Our own

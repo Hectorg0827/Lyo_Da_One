@@ -88,6 +88,8 @@
 	<string>Lyo needs camera access to scan QR codes and take photos for your profile.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Lyo needs microphone access for voice interactions with Leo AI.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Lyo uses speech recognition so you can ask questions by voice during lessons.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lyo needs photo library access to let you choose profile pictures.</string>
 	<key>UIApplicationSceneManifest</key>

@@ -186,6 +186,8 @@ struct LivingClassroomView: View {
     @State private var quizSelections: [String: String] = [:]
     @State private var userInput: String = ""
     @State private var recapDismissed = false
+    @StateObject private var tts = TextToSpeechService.shared
+    @StateObject private var voiceInput = VoiceInputService.shared
     @State private var isBottomExpanded: Bool = false
     @State private var lyoSpeaking: Bool = false
     @State private var showAskSheet: Bool = false
@@ -236,6 +238,19 @@ struct LivingClassroomView: View {
             } else {
                 expertLayout
             }
+
+            // Voice tutoring chip — toggle listen-along narration; pulses
+            // while Lyo is speaking.
+            VStack {
+                HStack {
+                    Spacer()
+                    voiceModeChip
+                        .padding(.trailing, 16)
+                        .padding(.top, 54)
+                }
+                Spacer()
+            }
+            .zIndex(99)
 
             // Narration overlay
             if let text = narrationText, let agent = narrationAgent {
@@ -306,6 +321,7 @@ struct LivingClassroomView: View {
         .onDisappear {
             narrationWork?.cancel()
             continueFallbackTask?.cancel()
+            if voiceInput.isRecording { voiceInput.stopRecording() }
             service.disconnect()
             sessionTimer.stop()
         }
@@ -1928,6 +1944,34 @@ struct LivingClassroomView: View {
         .buttonStyle(.plain)
     }
 
+    /// Floating toggle for listen-along narration. Pulses while speaking.
+    private var voiceModeChip: some View {
+        Button {
+            HapticManager.shared.light()
+            service.voiceModeEnabled.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: service.voiceModeEnabled
+                    ? (tts.isSpeaking ? "waveform" : "speaker.wave.2.fill")
+                    : "speaker.slash")
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolEffect(.variableColor.iterative, isActive: tts.isSpeaking)
+                Text(service.voiceModeEnabled ? "Voice on" : "Voice off")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(service.voiceModeEnabled ? Color(hexString: "A78BFA") : .white.opacity(0.45))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Color.black.opacity(0.45)))
+            .overlay(
+                Capsule().stroke(
+                    service.voiceModeEnabled ? Color(hexString: "8B5CF6").opacity(0.5) : Color.white.opacity(0.15),
+                    lineWidth: 1
+                )
+            )
+        }
+    }
+
     private var askOverlay: some View {
         ZStack {
             Color.black.opacity(0.5)
@@ -1987,7 +2031,7 @@ struct LivingClassroomView: View {
                     }
                 }
 
-                // Text input
+                // Text input + voice dictation
                 HStack(spacing: 10) {
                     Image(systemName: "pencil.line")
                         .font(.system(size: 14))
@@ -1995,7 +2039,7 @@ struct LivingClassroomView: View {
 
                     TextField(
                         askContextStep == nil
-                            ? "Type your question…"
+                            ? "Type or speak your question…"
                             : "Ask Lyo about this moment…",
                         text: $userInput
                     )
@@ -2003,6 +2047,36 @@ struct LivingClassroomView: View {
                         .foregroundStyle(.white)
                         .focused($inputFieldFocused)
                         .onSubmit { sendMessage() }
+
+                    // Dictate: barge-in (Lyo stops talking), live transcript
+                    // streams into the field, tap again to finish.
+                    Button {
+                        if voiceInput.isRecording {
+                            voiceInput.stopRecording()
+                            if !voiceInput.transcript.isEmpty {
+                                userInput = voiceInput.transcript
+                                voiceInput.transcript = ""
+                            }
+                        } else {
+                            service.bargeIn()
+                            Task { try? await voiceInput.startRecording() }
+                        }
+                    } label: {
+                        Image(systemName: voiceInput.isRecording ? "mic.fill" : "mic")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(voiceInput.isRecording ? Color.red : .white.opacity(0.6))
+                            .frame(width: 30, height: 30)
+                            .background(
+                                Circle().fill(voiceInput.isRecording ? Color.red.opacity(0.18) : Color.white.opacity(0.08))
+                            )
+                            .scaleEffect(voiceInput.isRecording ? 1.0 + CGFloat(voiceInput.audioLevel) * 0.3 : 1.0)
+                            .animation(.easeOut(duration: 0.12), value: voiceInput.audioLevel)
+                    }
+                }
+                .onChange(of: voiceInput.transcript) { _, newValue in
+                    if voiceInput.isRecording, !newValue.isEmpty {
+                        userInput = newValue
+                    }
                 }
                 .padding(14)
                 .background(bgSurface)
