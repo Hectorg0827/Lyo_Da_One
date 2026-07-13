@@ -185,6 +185,7 @@ struct LivingClassroomView: View {
     @State private var narrationAgent: ClassroomAgent? = nil
     @State private var quizSelections: [String: String] = [:]
     @State private var userInput: String = ""
+    @State private var recapDismissed = false
     @State private var isBottomExpanded: Bool = false
     @State private var lyoSpeaking: Bool = false
     @State private var showAskSheet: Bool = false
@@ -267,6 +268,31 @@ struct LivingClassroomView: View {
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(102)
+            }
+
+            // Lesson complete — celebration + shareable recap card. Every
+            // finished lesson becomes a share moment (clips ↔ classroom flywheel).
+            if service.lessonComplete, !recapDismissed {
+                let recap = service.lessonRecap()
+                LessonCompletionOverlay(
+                    topic: recap.topic.isEmpty ? courseTitle : recap.topic,
+                    points: recap.points,
+                    onKeepGoing: {
+                        recapDismissed = true
+                        // Victory lap: one challenge question over everything covered.
+                        service.sendUserAction(
+                            actionIntent: "user_message",
+                            componentId: "recap_challenge",
+                            actionData: [
+                                "message":
+                                    "Give me one challenge question that ties together everything we covered today."
+                            ]
+                        )
+                    },
+                    onDone: { dismiss() }
+                )
+                .transition(.opacity)
+                .zIndex(104)
             }
         }
         .preferredColorScheme(.dark)

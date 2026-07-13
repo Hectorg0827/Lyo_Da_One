@@ -1019,4 +1019,17 @@ class LivingClassroomService: ObservableObject {
     func recordLearnerSignal(_ signal: LivingClassroomEngine.LearnerSignal) {
         engine.record(signal)
     }
+
+    /// Data for the shareable end-of-lesson recap card. Falls back to the
+    /// rendered teacher messages when the engine has no summaries (e.g. a
+    /// fully backend-driven lesson).
+    func lessonRecap() -> (topic: String, points: [String]) {
+        var points = engine.recapPoints
+        if points.isEmpty {
+            points = renderedComponents
+                .filter { $0.type == .teacherMessage || $0.type == .textBlock }
+                .map { String($0.content.prefix(120)) }
+        }
+        return (topic: topic, points: Array(points.suffix(4)))
+    }
 }

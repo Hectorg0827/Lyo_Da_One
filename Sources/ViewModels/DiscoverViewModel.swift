@@ -203,17 +203,33 @@ final class DiscoverViewModel: ObservableObject {
         return context
     }
     
-    /// Trigger generation of a mini-course from this reel
+    /// Clip → classroom: the clip is the hook, the classroom is the depth.
+    /// Opens the Living Classroom on this topic immediately and drops a card
+    /// in the Focus stack so the thread survives the session. (Previously this
+    /// fired an invisible background generation job — the button appeared to
+    /// do nothing.)
     func convertToCourse(item: DiscoverItem) {
         HapticManager.shared.success()
-        Log.ui.info("Generating mini-course for: \(item.title)")
-        
-        Task {
-            let topic = item.topic ?? item.title
-            let level = item.level.rawValue
-            _ = try? await CourseGenerationService.shared.generateCourse(topic: topic, level: level)
-            Log.ui.info("Mini-course generation started for: \(item.title)")
-        }
+        let topic = item.topic ?? item.title
+        Log.ui.info("Clip → classroom: \(topic)")
+
+        UIStackStore.shared.upsertCourse(
+            courseId: "GENERATE:\(topic)",
+            title: topic,
+            subtitle: "From a clip you watched"
+        )
+
+        NotificationCenter.default.post(
+            name: .openClassroom,
+            object: nil,
+            userInfo: [
+                "courseId": "gen_clip_\(item.id)",
+                "topic": topic,
+                "shouldGenerateCourse": true,
+                "courseTitle": topic,
+                "lessonTitle": "Deep dive",
+            ]
+        )
     }
     
     /// Load items from backend or demo data

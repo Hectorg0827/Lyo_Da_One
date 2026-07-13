@@ -159,6 +159,7 @@
 		4E6BBFB80FC5E6B5E1D06B6C /* AnalogyCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5E65B6C1E772147C231990 /* AnalogyCardView.swift */; };
 		4EF1D2DE40C994E70AE6030C /* ConversationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AD414370672980C2843599A /* ConversationManager.swift */; };
 		4F4F0554435F3843453A4C96 /* ReelInfoOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4D89BEFCC1EAE5167A86BF /* ReelInfoOverlay.swift */; };
+		4FCC05443C2A8DB91842DAB8 /* LessonRecapCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC9C2CCBED55EA20C8ADB43 /* LessonRecapCard.swift */; };
 		5046DD2BDE677E1B573DBE69 /* A2AProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAE6654D686119282CED048A /* A2AProgressView.swift */; };
 		50D56E7CA37728D4A97777A0 /* SuggestedActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F404A29F5179C931DADCE0DE /* SuggestedActionCard.swift */; };
 		527DABCFF2384C1DB55D45D0 /* CourseGenerationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302E4F85CF2DB1E02EB42C06 /* CourseGenerationSettingsView.swift */; };
@@ -682,6 +683,7 @@
 		59A0FCE208785B0264B164F2 /* LyoCourseRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoCourseRuntime.swift; sourceTree = "<group>"; };
 		5A4591D656604E631F42D285 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		5B7FE58F191D8D4D95236510 /* FlashcardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlashcardView.swift; sourceTree = "<group>"; };
+		5BC9C2CCBED55EA20C8ADB43 /* LessonRecapCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LessonRecapCard.swift; sourceTree = "<group>"; };
 		5C607707E9BA92F8A63DC137 /* MonetizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationService.swift; sourceTree = "<group>"; };
 		5CC8E7D4E0B5A1F0F81E5A67 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		5E5358D1FC02F51C1306217D /* ProgressBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBarView.swift; sourceTree = "<group>"; };
@@ -2070,6 +2072,7 @@
 				E75ECF06EDDB171E68051C88 /* ActiveLessonView.swift */,
 				1364193CC9DC2051E2BC391A /* BlockRendererView.swift */,
 				62C9FEBFC40271DADF58EC00 /* CurveExplorerView.swift */,
+				5BC9C2CCBED55EA20C8ADB43 /* LessonRecapCard.swift */,
 				1D16773D87F313141A8C2175 /* MermaidWebView.swift */,
 				197514ECAEC313F3FD941097 /* Components */,
 			);
@@ -2411,6 +2414,7 @@
 				E6EF543EF5445BA7A94FA1AF /* LessonHero.swift in Sources */,
 				BBA3AFC20968840DA3023C6E /* LessonImageView.swift in Sources */,
 				A9C296472C1A90C7EA139B8C /* LessonMarkdownView.swift in Sources */,
+				4FCC05443C2A8DB91842DAB8 /* LessonRecapCard.swift in Sources */,
 				97B10DCF894CD89D9F0B72D5 /* LioChatSheet.swift in Sources */,
 				7A82AF5BD6C0A8AC20610F4B /* LioOrbView.swift in Sources */,
 				1C560AB2CD9D55A8B3458E7C /* LiveLessonModels.swift in Sources */,

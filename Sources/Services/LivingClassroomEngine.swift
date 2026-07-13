@@ -145,6 +145,10 @@ final class LivingClassroomEngine {
     /// Whether the current section pointer is past the end of the outline.
     private var hasMoreSections: Bool { sectionIndex < outline.count }
 
+    /// One-line summaries of everything taught this session — powers the
+    /// shareable lesson recap.
+    var recapPoints: [String] { taughtSummary }
+
     // MARK: - Scene Generation
 
     /// Generate the next scene in the lesson. Returns `nil` only when the entire
