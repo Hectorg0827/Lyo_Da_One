@@ -59,6 +59,27 @@ final class LivingClassroomEngine {
     private let maxScenesPerSection = 4
     private let logger = Logger(subsystem: "com.lyo.app", category: "ClassroomEngine")
 
+    // MARK: - Persisted learner context
+
+    /// Compact summary of the learner's persisted mastery profile, injected
+    /// into generation prompts so lessons start where the learner actually is
+    /// (instead of where the syllabus assumes). Empty until a profile loads.
+    private(set) var masteryNote: String = ""
+
+    /// Feed the backend mastery profile into future prompt generations.
+    func setMasteryContext(_ profile: MasteryProfile) {
+        var parts: [String] = []
+        let strengths = profile.strengths.prefix(3).joined(separator: ", ")
+        let weaknesses = profile.weaknesses.prefix(3).joined(separator: ", ")
+        if !strengths.isEmpty { parts.append("strengths: \(strengths)") }
+        if !weaknesses.isEmpty { parts.append("weak areas: \(weaknesses)") }
+        parts.append(String(format: "target difficulty %.1f on a 0-1 scale", profile.optimalDifficulty))
+        masteryNote = "LEARNER MASTERY PROFILE (from prior sessions): "
+            + parts.joined(separator: "; ")
+            + ". Calibrate to this — reinforce weak areas when they touch this topic, and don't re-teach established strengths."
+        logger.info("Engine mastery context set (\(profile.skills.count) skills tracked)")
+    }
+
     // MARK: - Lifecycle
 
     /// Build the lesson skeleton for a topic. Resilient: if the network/LLM is
@@ -77,6 +98,7 @@ final class LivingClassroomEngine {
         let prompt = """
         You are designing a focused micro-course on: "\(topic)".
         Learner level: \(level).
+        \(masteryNote)
         Produce a tight learning outline of 5 to 7 section titles that take the
         learner from foundations to genuine competence. Each title must be
         concrete and specific to "\(topic)" (no generic filler like "Introduction").
@@ -150,6 +172,7 @@ final class LivingClassroomEngine {
         let prompt = """
         TOPIC: \(topic)
         LEARNER LEVEL: \(level)
+        \(masteryNote)
         FULL OUTLINE: \(outline.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: " | "))
         CURRENT SECTION (\(sectionIndex + 1)/\(outline.count)): \(sectionTitle)
         SCENE NUMBER IN THIS SECTION: \(scenesInCurrentSection + 1) of up to \(maxScenesPerSection)

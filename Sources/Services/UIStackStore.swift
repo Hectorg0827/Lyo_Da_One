@@ -46,7 +46,40 @@ final class UIStackStore: ObservableObject {
     func items(ofType type: UIStackItemType) -> [UIStackItem] {
         items.filter { $0.type == type }
     }
-    
+
+    // MARK: - Spaced-Repetition Reviews
+
+    /// Asks the personalization engine whether spaced-repetition reviews are due
+    /// and, if so, surfaces the learner's recommended-focus skills as review
+    /// cards in the stack. Tapping one opens the classroom on that topic
+    /// (GENERATE: session). Silent on failure — reviews are an enhancement,
+    /// never a blocker.
+    func refreshDueReviews() async {
+        guard let next = try? await PersonalizationService.shared.getNextAction(),
+              next.spacedRepetitionDue == true || next.action == .review
+        else { return }
+
+        guard let profile = try? await PersonalizationService.shared.getMasteryProfile()
+        else { return }
+
+        let focus = profile.recommendedFocus.isEmpty ? profile.weaknesses : profile.recommendedFocus
+        let skills = focus
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(2)
+        guard !skills.isEmpty else { return }
+
+        await MainActor.run {
+            for skill in skills {
+                upsertCourse(
+                    courseId: "GENERATE:\(skill)",
+                    title: "Review: \(skill.capitalized)",
+                    subtitle: "Due for a quick refresher"
+                )
+            }
+        }
+    }
+
     // MARK: - Convenience Methods
     
     /// Add or update a course card

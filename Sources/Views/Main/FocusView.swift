@@ -52,6 +52,8 @@ struct FocusView: View {
                 }
                 Task {
                     await stackService.fetchStackItems()
+                    // Surface any spaced-repetition reviews that are due.
+                    await UIStackStore.shared.refreshDueReviews()
                 }
             }
         }

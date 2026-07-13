@@ -86,6 +86,15 @@ class LivingClassroomService: ObservableObject {
         self.isGenerating = true
         self.statusText = "Connecting to your live classroom…"
 
+        // Load the persisted mastery profile so on-device generation starts
+        // where the learner actually is. Fire-and-forget: a miss just means
+        // prompts run without prior-session context.
+        Task { [weak self] in
+            if let profile = try? await PersonalizationService.shared.getMasteryProfile() {
+                self?.engine.setMasteryContext(profile)
+            }
+        }
+
         // Start a watchdog: if the backend doesn't deliver a first scene in time,
         // seamlessly switch to the on-device engine so the lesson never stalls.
         startStallWatchdog(timeout: firstSceneTimeout, reason: "first scene")
