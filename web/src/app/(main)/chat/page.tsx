@@ -95,11 +95,16 @@ export default function ChatPage() {
 
           {/* Title */}
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-lyo-500 to-accent-purple flex items-center justify-center">
-              <span className="text-[9px] font-bold text-white">LYO</span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/mascot/mascot_standing.png"
+              alt="Lyo"
+              width={24}
+              height={24}
+              className="shrink-0 object-contain"
+            />
             <span className="text-sm font-semibold text-white/80 tracking-tight">
-              LYO AI
+              Lyo
             </span>
             {/* Live indicator */}
             <span className="flex items-center gap-1 ml-1">

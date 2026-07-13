@@ -6,33 +6,26 @@ import { useChatStore } from '@/stores/chat-store';
 import MessageBubble from './MessageBubble';
 import ChatInputBar from './ChatInputBar';
 import SuggestionChips from './SuggestionChips';
+import MascotAvatar from './MascotAvatar';
 
-// ─── LYO Animated Orb ────────────────────────────────────────────────────────
+// ─── LYO Mascot hero (matches iOS welcome screen) ────────────────────────────
 function LYOOrb() {
   return (
     <div className="relative w-24 h-24 mx-auto">
-      {/* Outer glow rings */}
+      {/* Soft brand glow behind the mascot */}
       <div className="absolute inset-0 rounded-full bg-gradient-to-br from-lyo-400 via-accent-purple to-accent-pink opacity-20 animate-pulse-slow blur-xl scale-150" />
-      <div className="absolute inset-1 rounded-full bg-gradient-to-br from-lyo-400 via-accent-purple to-accent-pink opacity-30 animate-pulse blur-md scale-125" />
-      {/* Core orb */}
-      <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink shadow-2xl shadow-lyo-900/50 animate-float flex items-center justify-center">
-        <span className="text-2xl font-bold text-white tracking-tighter">LYO</span>
+      <div className="relative w-24 h-24 animate-float flex items-center justify-center">
+        <MascotAvatar size={96} />
       </div>
     </div>
   );
 }
 
-// ─── Thinking animation ───────────────────────────────────────────────────────
+// ─── Thinking animation (matches iOS reading mascot) ─────────────────────────
 function ThinkingIndicator() {
   return (
     <div className="flex items-end gap-3 w-full">
-      {/* Mini orb */}
-      <div className="relative shrink-0 w-8 h-8">
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink animate-pulse-slow blur-sm opacity-60" />
-        <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink flex items-center justify-center">
-          <span className="text-[11px] font-bold text-white">LYO</span>
-        </div>
-      </div>
+      <MascotAvatar thinking size={32} />
       <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white/5 border border-white/10 backdrop-blur-sm flex items-center gap-1.5">
         {[0, 1, 2].map((i) => (
           <motion.span
@@ -47,7 +40,7 @@ function ThinkingIndicator() {
             }}
           />
         ))}
-        <span className="ml-2 text-sm text-white/40">LYO is thinking…</span>
+        <span className="ml-2 text-sm text-white/40">Lyo is thinking…</span>
       </div>
     </div>
   );

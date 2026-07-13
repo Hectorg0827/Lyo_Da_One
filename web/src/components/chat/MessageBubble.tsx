@@ -7,21 +7,11 @@ import { Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
+import MascotAvatar from './MascotAvatar';
 import { useChatStore } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
   message: ChatMessage;
-}
-
-function LYOAvatar() {
-  return (
-    <div className="relative shrink-0 w-8 h-8">
-      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink animate-pulse-slow blur-sm opacity-60" />
-      <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink flex items-center justify-center shadow-lg">
-        <span className="text-[11px] font-bold text-white tracking-tight">LYO</span>
-      </div>
-    </div>
-  );
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -192,20 +182,28 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={cn(
-        'flex items-end gap-3 w-full group',
-        isUser ? 'flex-row-reverse' : 'flex-row'
+        'flex w-full group',
+        isUser ? 'flex-row-reverse items-end gap-3' : 'flex-col'
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Avatar – assistant only */}
-      {!isUser && <LYOAvatar />}
+      {/* Header – assistant only (mirrors iOS: mascot + "Lyo" name) */}
+      {!isUser && (
+        <div className="flex items-center gap-2 mb-1.5">
+          <MascotAvatar
+            thinking={isLatestMessage && isGenerating}
+            size={32}
+          />
+          <span className="text-xs font-bold text-white/90">Lyo</span>
+        </div>
+      )}
 
       {/* Bubble */}
       <div
         className={cn(
           'relative max-w-[78%] md:max-w-[68%]',
-          isUser ? 'items-end' : 'items-start',
+          isUser ? 'items-end' : 'items-start pl-10',
           'flex flex-col gap-1'
         )}
       >
@@ -224,7 +222,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             className={cn(
               'px-4 py-3 rounded-2xl text-sm leading-relaxed',
               isUser
-                ? 'bg-gradient-to-br from-lyo-600 to-accent-purple text-white rounded-br-sm shadow-lg shadow-lyo-900/30'
+                ? 'bg-gradient-to-br from-accent-purple to-lyo-500 text-white rounded-br-sm shadow-lg shadow-lyo-900/30'
                 : 'bg-white/5 border border-white/10 text-white/80 rounded-bl-sm backdrop-blur-sm'
             )}
           >
