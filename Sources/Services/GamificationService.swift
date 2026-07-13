@@ -75,6 +75,93 @@ final class GamificationService: ObservableObject {
             awardXP(amount: 100, reason: "Mastered Topic: \(topic)")
         }
     }
+
+    // MARK: - Mastery-honest XP
+
+    /// Awards XP proportional to the actual mastery gained on a skill
+    /// (backend Deep Knowledge Tracing delta), not time-on-screen.
+    /// Wrong answers earn a small effort award — attempts are how gaps close.
+    func awardMasteryXP(skill: String, oldMastery: Double, newMastery: Double, correct: Bool) {
+        let delta = newMastery - oldMastery
+        if delta > 0 {
+            let amount = min(max(Int((delta * 200).rounded()), 5), 50)
+            awardXP(amount: amount, reason: "Mastery gained: \(skill)")
+        } else if !correct {
+            awardXP(amount: 5, reason: "Effort: \(skill)")
+        }
+        recordQuestProgress(skill: skill, correct: correct)
+    }
+
+    // MARK: - Weekly Weakness Quest
+
+    /// A quest generated from the learner's own weaknesses: answer `goal`
+    /// checkpoints correctly in those skills this week.
+    struct WeeklyQuest: Codable, Equatable {
+        var skills: [String]
+        var goal: Int
+        var progress: Int
+        var weekStart: Date
+        var completed: Bool
+
+        var title: String { "Close your gaps" }
+        var subtitle: String {
+            "Answer \(goal) checkpoints on \(skills.prefix(2).joined(separator: " or ")) correctly"
+        }
+    }
+
+    @Published private(set) var weeklyQuest: WeeklyQuest? = GamificationService.loadQuest()
+
+    private static let questKey = "user_weekly_quest"
+    private static func loadQuest() -> WeeklyQuest? {
+        guard let data = UserDefaults.standard.data(forKey: questKey) else { return nil }
+        return try? JSONDecoder().decode(WeeklyQuest.self, from: data)
+    }
+
+    private func saveQuest() {
+        if let quest = weeklyQuest, let data = try? JSONEncoder().encode(quest) {
+            UserDefaults.standard.set(data, forKey: Self.questKey)
+        }
+    }
+
+    /// (Re)generates the quest from the mastery profile at the start of each
+    /// week. Keeps the current quest mid-week so progress is never wiped.
+    func refreshWeeklyQuest(weaknesses: [String]) {
+        let calendar = Calendar.current
+        let thisWeekStart = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+
+        if let quest = weeklyQuest,
+            calendar.isDate(quest.weekStart, inSameDayAs: thisWeekStart) {
+            return  // current week's quest is already running
+        }
+
+        let targets = weaknesses
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(3)
+        guard !targets.isEmpty else { return }
+
+        weeklyQuest = WeeklyQuest(
+            skills: Array(targets), goal: 5, progress: 0,
+            weekStart: thisWeekStart, completed: false
+        )
+        saveQuest()
+        Log.gamification.info("🎯 Weekly quest generated: \(Array(targets).joined(separator: ", "))")
+    }
+
+    /// Advances the quest when the learner answers correctly in a target skill.
+    private func recordQuestProgress(skill: String, correct: Bool) {
+        guard correct, var quest = weeklyQuest, !quest.completed,
+            quest.skills.contains(where: { skill.localizedCaseInsensitiveContains($0) || $0.localizedCaseInsensitiveContains(skill) })
+        else { return }
+
+        quest.progress += 1
+        if quest.progress >= quest.goal {
+            quest.completed = true
+            awardXP(amount: 150, reason: "Quest complete: \(quest.title)")
+        }
+        weeklyQuest = quest
+        saveQuest()
+    }
     
     // MARK: - Private Helpers
     

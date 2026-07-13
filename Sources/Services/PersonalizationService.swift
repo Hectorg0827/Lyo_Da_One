@@ -40,14 +40,15 @@ public class PersonalizationService {
         }
     }
     
-    public func traceKnowledge(trace: KnowledgeTraceRequest) async throws {
+    @discardableResult
+    public func traceKnowledge(trace: KnowledgeTraceRequest) async throws -> KnowledgeTraceResult {
         let endpoint = DynamicEndpoint(
             urlString: "/api/v1/personalization/trace",
             method: .post,
             body: trace
         )
 
-        let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
+        return try await NetworkClient.shared.request(endpoint)
     }
 
     public func getMasteryProfile() async throws -> MasteryProfile {

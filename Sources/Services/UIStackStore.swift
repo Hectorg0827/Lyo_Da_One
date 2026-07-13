@@ -55,11 +55,20 @@ final class UIStackStore: ObservableObject {
     /// (GENERATE: session). Silent on failure — reviews are an enhancement,
     /// never a blocker.
     func refreshDueReviews() async {
-        guard let next = try? await PersonalizationService.shared.getNextAction(),
-              next.spacedRepetitionDue == true || next.action == .review
+        // Fetch the profile first — it also powers the weekly weakness quest,
+        // which should refresh whether or not reviews are due.
+        guard let profile = try? await PersonalizationService.shared.getMasteryProfile()
         else { return }
 
-        guard let profile = try? await PersonalizationService.shared.getMasteryProfile()
+        await MainActor.run {
+            GamificationService.shared.refreshWeeklyQuest(
+                weaknesses: profile.recommendedFocus.isEmpty
+                    ? profile.weaknesses : profile.recommendedFocus
+            )
+        }
+
+        guard let next = try? await PersonalizationService.shared.getNextAction(),
+              next.spacedRepetitionDue == true || next.action == .review
         else { return }
 
         let focus = profile.recommendedFocus.isEmpty ? profile.weaknesses : profile.recommendedFocus

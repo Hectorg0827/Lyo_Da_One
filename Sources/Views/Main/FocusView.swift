@@ -24,7 +24,11 @@ struct FocusView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         greetingSection
                             .padding(.top, 20)
-                        
+
+                        // Weekly weakness quest — generated from the learner's
+                        // own mastery gaps, progressed by correct answers there.
+                        WeeklyQuestBanner()
+
                         courseStackSection
                             .padding(.top, 4)
                         

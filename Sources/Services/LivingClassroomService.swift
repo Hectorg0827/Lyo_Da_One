@@ -494,7 +494,7 @@ class LivingClassroomService: ObservableObject {
         Task { [weak self] in
             guard let learnerId = await TokenManager.shared.getUserId() else { return }
             do {
-                try await PersonalizationService.shared.traceKnowledge(
+                let result = try await PersonalizationService.shared.traceKnowledge(
                     trace: KnowledgeTraceRequest(
                         learnerId: learnerId,
                         skillId: skill,
@@ -503,6 +503,14 @@ class LivingClassroomService: ObservableObject {
                         timeTakenSeconds: timeTaken
                     ))
                 self?.logger.info("🧠 Traced quiz outcome (\(correct ? "correct" : "incorrect")) for skill \(skill)")
+                // Honest gamification: XP scales with the actual DKT mastery
+                // delta, and quest progress advances on weak-skill wins.
+                await GamificationService.shared.awardMasteryXP(
+                    skill: result.skillId,
+                    oldMastery: result.oldMastery ?? result.newMastery,
+                    newMastery: result.newMastery,
+                    correct: result.correct
+                )
             } catch {
                 self?.logger.warning("Knowledge trace failed (lesson unaffected): \(error.localizedDescription)")
             }
