@@ -293,6 +293,7 @@
 		90A49122922FA72E7F6A26A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 401DD669DA91A56503EB1CF1 /* Assets.xcassets */; };
 		90AE6478B4A0BD718EBA04D8 /* FlashcardSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80FE13DCE18E6F8A55B1B73 /* FlashcardSetView.swift */; };
 		90B982A3642FD866FA41FDBC /* LyoLessonContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BAC978CD3EAB390A114BD7B /* LyoLessonContainerView.swift */; };
+		92048BF130B347D98BF9E106 /* CurveExplorerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62C9FEBFC40271DADF58EC00 /* CurveExplorerView.swift */; };
 		9230237BC3FFBDCF55EDB545 /* DeveloperDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E48A681972CABB2A42C93CB /* DeveloperDashboardView.swift */; };
 		923A9684CF267206B8615E1B /* LyoAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5E51091A7374AED915F37D /* LyoAvatarView.swift */; };
 		92B412CB3556AEC1E96E2F39 /* TestPrepCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B57066B1108A9B4EB18CA05 /* TestPrepCardView.swift */; };
@@ -688,6 +689,7 @@
 		6093749A86AF324385D0BC3D /* SmartMemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMemoryService.swift; sourceTree = "<group>"; };
 		622D87B3B66CF304BDC30815 /* NotificationCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationCenterView.swift; sourceTree = "<group>"; };
 		62954DB1DAEE514B6D0DC80D /* ComposerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerBar.swift; sourceTree = "<group>"; };
+		62C9FEBFC40271DADF58EC00 /* CurveExplorerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurveExplorerView.swift; sourceTree = "<group>"; };
 		62D9531D110247DF7E7AC533 /* BottomDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomDock.swift; sourceTree = "<group>"; };
 		63466426A1DC32F93C3BF9E5 /* InsightsDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsDashboardView.swift; sourceTree = "<group>"; };
 		63E1CE2B327866D0A3D6517A /* PostService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostService.swift; sourceTree = "<group>"; };
@@ -2067,6 +2069,7 @@
 				12A308775844BF6BF3399386 /* ActiveLessonAdapter.swift */,
 				E75ECF06EDDB171E68051C88 /* ActiveLessonView.swift */,
 				1364193CC9DC2051E2BC391A /* BlockRendererView.swift */,
+				62C9FEBFC40271DADF58EC00 /* CurveExplorerView.swift */,
 				1D16773D87F313141A8C2175 /* MermaidWebView.swift */,
 				197514ECAEC313F3FD941097 /* Components */,
 			);
@@ -2321,6 +2324,7 @@
 				8876FFCC99A816C6001BD088 /* CreateStudioComponents.swift in Sources */,
 				874477B53F1F23822490AB5F /* CreateViewModel.swift in Sources */,
 				41EDD43F25BE43986059B129 /* CreationSheet.swift in Sources */,
+				92048BF130B347D98BF9E106 /* CurveExplorerView.swift in Sources */,
 				3102105FD61B7FA48D0AD660 /* DataService.swift in Sources */,
 				F9280AE70A4FBC18F24CE01E /* DefaultAIRepository.swift in Sources */,
 				45F95565EFE94850F75C26A4 /* DefaultAuthRepository.swift in Sources */,

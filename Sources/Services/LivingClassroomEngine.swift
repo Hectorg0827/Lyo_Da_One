@@ -194,13 +194,20 @@ final class LivingClassroomEngine {
           "blocks": [
             {"kind": "text", "content": "markdown explanation"},
             {"kind": "code", "language": "swift", "content": "optional code"},
-            {"kind": "quiz", "question": "...", "options": ["a","b","c","d"], "answer_index": 0, "explanation": "why"}
+            {"kind": "quiz", "question": "...", "options": ["a","b","c","d"], "answer_index": 0, "explanation": "why"},
+            {"kind": "explorable", "expression": "a * x^2 + b * x", "x_min": -5, "x_max": 5,
+             "prompt": "Increase a — what happens to the steepness?",
+             "params": [{"name": "a", "min": -3, "max": 3, "initial": 1, "step": 0.1}]}
           ],
           "summary": "one-line summary of what THIS scene taught",
           "advance_section": false,
           "lesson_complete": false
         }
         Only include a "code" block when code genuinely helps. Include at most one quiz block.
+        When the idea is quantitative (functions, growth, rates, curves, physics, economics),
+        prefer ONE "explorable" block over describing the relationship in prose — let the
+        learner move the sliders and feel it. Expressions may use x, the named params,
+        + - * / ^ ( ), and sin/cos/tan/exp/log/sqrt/abs. 1-2 params, sensible ranges.
         """
 
         guard let response = try? await OpenAIService.shared.sendMessage(
@@ -381,6 +388,23 @@ final class LivingClassroomEngine {
                         )
                     )
                 }
+            case "explorable":
+                if let config = Self.parseExplorable(block) {
+                    components.append(
+                        SDUIComponent(
+                            id: "\(sceneId)_explore_\(i)",
+                            type: .lessonBlock,
+                            content: config.prompt ?? "Try it yourself",
+                            delayMs: nextDelay(),
+                            lessonBlock: LiveLessonBlock(
+                                id: "\(sceneId)_explore_block_\(i)",
+                                type: .explorable,
+                                title: config.prompt,
+                                explorable: config
+                            )
+                        )
+                    )
+                }
             default:  // "text"
                 let text = (block["content"] as? String) ?? ""
                 if !text.isEmpty {
@@ -451,6 +475,56 @@ final class LivingClassroomEngine {
         case let .askedQuestion(q):
             return "ADAPTIVE NOTE: The learner asked: \"\(q)\". Address it as you continue."
         }
+    }
+
+    /// Parses an LLM "explorable" block into a validated ExplorableConfig.
+    /// Returns nil (block skipped) unless the expression compiles in the safe
+    /// evaluator and every param is well-formed — a malformed widget must
+    /// never reach the screen.
+    static func parseExplorable(_ block: [String: Any]) -> ExplorableConfig? {
+        guard let expression = block["expression"] as? String,
+            !expression.trimmingCharacters(in: .whitespaces).isEmpty,
+            ExpressionEvaluator.compile(expression) != nil
+        else { return nil }
+
+        func double(_ any: Any?) -> Double? {
+            if let d = any as? Double { return d }
+            if let i = any as? Int { return Double(i) }
+            return nil
+        }
+
+        let rawParams = (block["params"] as? [[String: Any]]) ?? []
+        var params: [ExplorableConfig.ExplorableParam] = []
+        for raw in rawParams.prefix(3) {
+            guard let name = raw["name"] as? String, !name.isEmpty, name != "x",
+                let lo = double(raw["min"]), let hi = double(raw["max"]), hi > lo
+            else { continue }
+            let initial = double(raw["initial"]) ?? (lo + hi) / 2
+            params.append(
+                .init(
+                    name: name, min: lo, max: hi,
+                    initial: Swift.min(Swift.max(initial, lo), hi),
+                    step: double(raw["step"])
+                ))
+        }
+        guard !params.isEmpty else { return nil }
+
+        // Sanity-check: the expression must actually evaluate with the given
+        // params at a probe point, so "k * x" with params ["a"] is rejected.
+        if let eval = ExpressionEvaluator.compile(expression) {
+            var probe: [String: Double] = ["x": 1.0]
+            for p in params { probe[p.name] = p.initial }
+            guard eval(probe) != nil else { return nil }
+        }
+
+        return ExplorableConfig(
+            kind: (block["kind_detail"] as? String) ?? "curve_explorer",
+            expression: expression,
+            xMin: double(block["x_min"]),
+            xMax: double(block["x_max"]),
+            prompt: block["prompt"] as? String,
+            params: params
+        )
     }
 
     // MARK: - Parsing helpers

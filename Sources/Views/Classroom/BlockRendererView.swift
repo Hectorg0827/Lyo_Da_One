@@ -92,7 +92,17 @@ struct BlockRendererView: View {
                 
             case .math:
                 MathBlockView(latex: block.latex ?? block.safeContent)
-                
+
+            case .explorable:
+                if let config = block.explorable {
+                    CurveExplorerView(
+                        config: config,
+                        onExplored: { onAction?("explored_widget") }
+                    )
+                } else {
+                    ChartBlockView(block: block)  // graceful degradation
+                }
+
             // MARK: - Learning Aid Blocks
             case .flashcard:
                 FlashcardBlockView(front: block.front ?? block.safeTitle, back: block.back ?? block.safeContent, hint: block.hint)

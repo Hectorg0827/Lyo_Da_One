@@ -198,6 +198,7 @@ fileprivate struct LiveLessonBlockPayload: Decodable {
     let mood: String?
     let chartType: String?
     let chartData: ChartDataPayload?
+    let explorable: ExplorableConfig?
 
     enum CodingKeys: String, CodingKey {
         case title, content, subtitle, caption
@@ -212,6 +213,7 @@ fileprivate struct LiveLessonBlockPayload: Decodable {
         case mood
         case chartType = "chart_type"
         case chartData = "chart_data"
+        case explorable
     }
 
     init(from decoder: Decoder) throws {
@@ -248,6 +250,7 @@ fileprivate struct LiveLessonBlockPayload: Decodable {
         self.mood = try? c.decodeIfPresent(String.self, forKey: .mood)
         self.chartType = try? c.decodeIfPresent(String.self, forKey: .chartType)
         self.chartData = try? c.decodeIfPresent(ChartDataPayload.self, forKey: .chartData)
+        self.explorable = try? c.decodeIfPresent(ExplorableConfig.self, forKey: .explorable)
     }
 
     func toLiveLessonBlock(typeRaw: String, fallbackId: String) -> LiveLessonBlock {
@@ -273,6 +276,7 @@ fileprivate struct LiveLessonBlockPayload: Decodable {
             chartData: chartData,
             latex: latex,
             mermaid: mermaid,
+            explorable: explorable,
             front: front,
             back: back,
             cards: cards,
