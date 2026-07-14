@@ -130,6 +130,7 @@ let turnQueue: DirectorTurn[] = [];
 let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
 let idCounter = 0;
+let pendingErase = false; // erase lazily when the NEW scene's content arrives
 const nextId = () => `cf_${++idCounter}`;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
@@ -240,7 +241,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     set((s) => ({ transcript: [...s.transcript, { id: nextId(), speaker, text }] }));
   }
 
+  /** The teacher erases the board only when the next scene's content is
+      actually ready — not the moment generation starts, which left learners
+      staring at an empty board for the whole LLM round-trip. */
+  function maybeEraseForNewScene() {
+    if (!pendingErase) return;
+    pendingErase = false;
+    eraseBoard();
+  }
+
   function addBoardElement(el: BoardElement) {
+    maybeEraseForNewScene();
     sfx('chalk');
     set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
   }
@@ -394,6 +405,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function enqueueTurns(turns: DirectorTurn[]) {
+    maybeEraseForNewScene();
     turnQueue.push(...turns);
     set({ waitingForScene: false });
     resumePlayer();
@@ -445,8 +457,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       }
       case 'scene_start':
-        // A new scene = the teacher erases the board.
-        eraseBoard();
+        // Mark for erase, but keep the current board up while the teacher
+        // "prepares" — it only wipes when the new content arrives.
+        pendingErase = true;
         set({ waitingForScene: true, canContinue: false });
         break;
       case 'scene_complete':
@@ -513,6 +526,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
       idCounter = 0;
       turnQueue = [];
+      pendingErase = false;
       set({
         status: 'connecting', topic,
         board: [], boardHistory: [], viewingBoard: -1,
