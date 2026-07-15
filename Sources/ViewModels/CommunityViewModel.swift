@@ -45,6 +45,13 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
     case placeOfWorship = "Places of Worship"
     
     var id: String { rawValue }
+
+    /// Categories every platform renders today. iOS-only surfaces
+    /// (marketplace, private lessons, centers, real-world places) are hidden
+    /// until web and Android ship them too — one product, three windows.
+    static var crossPlatformCases: [CommunityItemType] {
+        [.all, .event, .group, .course, .question, .spot]
+    }
     
     var icon: String {
         switch self {
@@ -358,7 +365,9 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
             })
             
             await MainActor.run {
-                self.items = newItems
+                // Only categories every platform renders (see crossPlatformCases)
+                let visible = Set(CommunityItemType.crossPlatformCases)
+                self.items = newItems.filter { visible.contains($0.type) }
                 // Update beacons derived from items for consistency if switching views
                 self.updateBeacons()
                 self.isLoading = false

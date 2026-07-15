@@ -199,10 +199,72 @@ data class EventDto(
     val description: String? = null,
     @SerializedName("start_time") val startTime: String? = null,
     val location: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean? = null,
+    @SerializedName("attendee_count") val attendeeCount: Int? = null,
+    @SerializedName("user_attendance_status") val userAttendanceStatus: String? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
     val displayTitle: String get() = title ?: name ?: "Event"
+    val isAttending: Boolean get() = userAttendanceStatus != null
 }
+
+// ── Community posts (community/posts — the same store iOS renders) ──────────
+
+data class CommunityPostDto(
+    val id: String? = null,
+    @SerializedName("author_id") val authorId: Any? = null,
+    @SerializedName("author_name") val authorName: String? = null,
+    @SerializedName("author_avatar") val authorAvatar: String? = null,
+    @SerializedName("author_level") val authorLevel: Int? = null,
+    val content: String? = null,
+    @SerializedName("media_urls") val mediaUrls: List<String>? = null,
+    val tags: List<String>? = null,
+    @SerializedName("like_count") val likeCount: Int? = null,
+    @SerializedName("comment_count") val commentCount: Int? = null,
+    @SerializedName("has_liked") val hasLiked: Boolean? = null,
+    @SerializedName("has_bookmarked") val hasBookmarked: Boolean? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+) {
+    val idStr: String get() = id.orEmpty()
+}
+
+data class CommunityPostsResponse(
+    val items: List<CommunityPostDto>? = null,
+    @SerializedName("total_count") val totalCount: Int? = null,
+)
+
+data class CommunityCreatePostRequest(
+    val content: String,
+    val tags: List<String>? = null,
+    @SerializedName("media_urls") val mediaUrls: List<String>? = null,
+    @SerializedName("post_type") val postType: String = "text",
+)
+
+data class CommunityCommentDto(
+    val id: String? = null,
+    @SerializedName("author_id") val authorId: Any? = null,
+    @SerializedName("author_name") val authorName: String? = null,
+    @SerializedName("author_avatar") val authorAvatar: String? = null,
+    val content: String? = null,
+    @SerializedName("like_count") val likeCount: Int? = null,
+    @SerializedName("has_liked") val hasLiked: Boolean? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+)
+
+data class CommunityCommentsResponse(
+    val items: List<CommunityCommentDto>? = null,
+    @SerializedName("total_count") val totalCount: Int? = null,
+)
+
+data class CommunityCommentRequest(
+    val content: String,
+    @SerializedName("parent_id") val parentId: String? = null,
+)
+
+data class LikeToggleResponse(
+    val liked: Boolean? = null,
+    @SerializedName("like_count") val likeCount: Int? = null,
+)
 
 // ── Messages ─────────────────────────────────────────────────────────────────
 

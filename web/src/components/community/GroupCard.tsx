@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Users, Check } from 'lucide-react'
 import { cn, formatNumber } from '@/lib/utils'
+import { api } from '@/lib/api'
 import type { Group } from '@/types'
 
 interface GroupCardProps {
@@ -38,14 +39,32 @@ const CATEGORY_BADGE_STYLES: Record<string, string> = {
 export default function GroupCard({ group, className }: GroupCardProps) {
   const [joined, setJoined] = useState(group.isJoined ?? false)
   const [memberCount, setMemberCount] = useState(group.memberCount)
+  const [busy, setBusy] = useState(false)
 
   const gradient = CATEGORY_GRADIENTS[group.category] ?? CATEGORY_GRADIENTS.General
   const badgeStyle = CATEGORY_BADGE_STYLES[group.category] ?? CATEGORY_BADGE_STYLES.General
 
-  const toggleJoin = (e: React.MouseEvent) => {
+  const toggleJoin = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    setJoined(p => !p)
-    setMemberCount(p => (joined ? p - 1 : p + 1))
+    if (busy) return
+    setBusy(true)
+    // Optimistic flip; revert if the server rejects it
+    const wasJoined = joined
+    setJoined(!wasJoined)
+    setMemberCount(p => (wasJoined ? p - 1 : p + 1))
+    try {
+      if (wasJoined) {
+        await api.community.leaveGroup(group.id)
+      } else {
+        await api.community.joinGroup(group.id)
+      }
+    } catch (err) {
+      console.error('Failed to update membership:', err)
+      setJoined(wasJoined)
+      setMemberCount(p => (wasJoined ? p + 1 : p - 1))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -94,6 +113,7 @@ export default function GroupCard({ group, className }: GroupCardProps) {
         {/* Join Button */}
         <button
           onClick={toggleJoin}
+          disabled={busy}
           className={cn(
             'w-full py-2 rounded-xl text-sm font-semibold transition-all duration-200',
             joined

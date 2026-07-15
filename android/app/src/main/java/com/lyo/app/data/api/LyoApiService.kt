@@ -2,6 +2,7 @@ package com.lyo.app.data.api
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -149,6 +150,45 @@ interface LyoApiService {
 
     @GET("community/events")
     suspend fun events(): List<EventDto>
+
+    @POST("community/events/{eventId}/attend")
+    suspend fun attendEvent(@Path("eventId") eventId: String): JsonObject
+
+    @DELETE("community/events/{eventId}/attend")
+    suspend fun unattendEvent(@Path("eventId") eventId: String): Response<Unit>
+
+    // Community posts — the same store iOS renders (community/posts),
+    // NOT the separate /feed store; one account, one feed everywhere.
+    @GET("community/posts")
+    suspend fun communityPosts(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20,
+    ): CommunityPostsResponse
+
+    @GET("community/posts/{postId}")
+    suspend fun communityPost(@Path("postId") postId: String): CommunityPostDto
+
+    @POST("community/posts")
+    suspend fun createCommunityPost(@Body body: CommunityCreatePostRequest): CommunityPostDto
+
+    @POST("community/posts/{postId}/like")
+    suspend fun toggleCommunityPostLike(@Path("postId") postId: String): LikeToggleResponse
+
+    @POST("community/posts/{postId}/bookmark")
+    suspend fun toggleCommunityPostBookmark(@Path("postId") postId: String): JsonObject
+
+    @GET("community/posts/{postId}/comments")
+    suspend fun communityComments(
+        @Path("postId") postId: String,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 50,
+    ): CommunityCommentsResponse
+
+    @POST("community/posts/{postId}/comments")
+    suspend fun createCommunityComment(
+        @Path("postId") postId: String,
+        @Body body: CommunityCommentRequest,
+    ): CommunityCommentDto
 
     // ── Messages ──
     @GET("messages/conversations")

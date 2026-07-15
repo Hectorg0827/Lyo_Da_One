@@ -55,16 +55,16 @@ struct CommunityView: View {
             .navigationTitle("Community")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                // Posts tab: CommunityFeedView shows its own create FAB, so a
+                // second (previously dead) + here only applies to Events.
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        if selectedTab == .posts {
-                            // Notify CommunityFeedView to open create post
-                        } else {
+                    if selectedTab == .events {
+                        Button {
                             showCreateSheet = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
                         }
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
                     }
                 }
             }
@@ -241,7 +241,7 @@ struct CommunityTopBar: View {
             // Row 2: Filter Pills
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(CommunityItemType.allCases) { type in
+                    ForEach(CommunityItemType.crossPlatformCases) { type in
                         FilterPill(
                             title: type.rawValue,
                             icon: type.icon,

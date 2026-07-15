@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -49,9 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
-import com.lyo.app.data.api.CreatePostRequest
-import com.lyo.app.data.api.PostDto
-import com.lyo.app.data.api.ReactionRequest
+import com.lyo.app.data.api.CommunityCreatePostRequest
+import com.lyo.app.data.api.CommunityPostDto
+import com.lyo.app.data.api.EventDto
 import com.lyo.app.data.api.StoryDto
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
@@ -71,23 +72,41 @@ import kotlinx.coroutines.launch
 @Composable
 fun CommunityScreen(nav: NavHostController) {
     var stories by remember { mutableStateOf<List<StoryDto>>(emptyList()) }
-    var posts by remember { mutableStateOf<List<PostDto>>(emptyList()) }
+    // Community posts — the same store iOS renders (community/posts)
+    var posts by remember { mutableStateOf<List<CommunityPostDto>>(emptyList()) }
     var likedPostIds by remember { mutableStateOf(setOf<String>()) }
     var extraLikes by remember { mutableStateOf(mapOf<String, Int>()) }
+    var events by remember { mutableStateOf<List<EventDto>>(emptyList()) }
+    var attendingIds by remember { mutableStateOf(setOf<String>()) }
+    var rsvpBusyIds by remember { mutableStateOf(setOf<String>()) }
+    var selectedTab by remember { mutableStateOf(0) } // 0 = Posts, 1 = Events (matches iOS)
     var loading by remember { mutableStateOf(true) }
     var composerText by remember { mutableStateOf("") }
     var posting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun refreshFeed() {
-        runCatching { ApiClient.api.publicFeed(1, 20) }
-            .onSuccess { posts = it.posts.orEmpty() }
+        runCatching { ApiClient.api.communityPosts(1, 20) }
+            .onSuccess {
+                posts = it.items.orEmpty()
+                likedPostIds = posts.filter { p -> p.hasLiked == true }.map { p -> p.idStr }.toSet()
+                extraLikes = emptyMap()
+            }
+    }
+
+    suspend fun refreshEvents() {
+        runCatching { ApiClient.api.events() }
+            .onSuccess {
+                events = it
+                attendingIds = it.filter { e -> e.isAttending }.map { e -> e.idStr }.toSet()
+            }
     }
 
     LaunchedEffect(Unit) {
         runCatching { ApiClient.api.stories() }
             .onSuccess { stories = it.stories.orEmpty() }
         refreshFeed()
+        refreshEvents()
         loading = false
     }
 
@@ -113,8 +132,64 @@ fun CommunityScreen(nav: NavHostController) {
             }
         }
 
+        // Posts | Events segmented tabs (same structure as iOS CommunityView)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        ) {
+            listOf("Posts", "Events").forEachIndexed { index, label ->
+                val selected = selectedTab == index
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (selected) TextPrimary else TextSecondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            if (selected) SurfaceElevated else Color.Transparent,
+                            MaterialTheme.shapes.medium,
+                        )
+                        .clickable { selectedTab = index }
+                        .padding(vertical = 10.dp)
+                        .wrapContentWidth(Alignment.CenterHorizontally),
+                )
+            }
+        }
+
         if (loading) {
             LoadingBox()
+            return@Column
+        }
+
+        if (selectedTab == 1) {
+            EventsList(
+                events = events,
+                attendingIds = attendingIds,
+                busyIds = rsvpBusyIds,
+                onRsvp = { event ->
+                    val id = event.idStr
+                    if (id in rsvpBusyIds) return@EventsList
+                    rsvpBusyIds = rsvpBusyIds + id
+                    val wasAttending = id in attendingIds
+                    attendingIds = if (wasAttending) attendingIds - id else attendingIds + id
+                    scope.launch {
+                        runCatching {
+                            if (wasAttending) {
+                                ApiClient.api.unattendEvent(id)
+                            } else {
+                                ApiClient.api.attendEvent(id)
+                            }
+                        }.onFailure {
+                            // revert optimistic flip
+                            attendingIds =
+                                if (wasAttending) attendingIds + id else attendingIds - id
+                        }
+                        rsvpBusyIds = rsvpBusyIds - id
+                    }
+                },
+            )
             return@Column
         }
 
@@ -172,7 +247,9 @@ fun CommunityScreen(nav: NavHostController) {
                                 posting = true
                                 scope.launch {
                                     runCatching {
-                                        ApiClient.api.createPost(CreatePostRequest(composerText.trim()))
+                                        ApiClient.api.createCommunityPost(
+                                            CommunityCreatePostRequest(composerText.trim())
+                                        )
                                     }.onSuccess {
                                         composerText = ""
                                         refreshFeed()
@@ -205,17 +282,16 @@ fun CommunityScreen(nav: NavHostController) {
                         liked = id in likedPostIds,
                         likeCount = (post.likeCount ?: 0) + (extraLikes[id] ?: 0),
                         onLike = {
-                            if (id !in likedPostIds) {
-                                likedPostIds = likedPostIds + id
-                                extraLikes = extraLikes + (id to (extraLikes[id] ?: 0) + 1)
-                                scope.launch {
-                                    runCatching {
-                                        ApiClient.api.reactToPost(
-                                            id,
-                                            ReactionRequest(id.toLongOrNull() ?: 0),
-                                        )
+                            val wasLiked = id in likedPostIds
+                            likedPostIds = if (wasLiked) likedPostIds - id else likedPostIds + id
+                            extraLikes = extraLikes + (id to (extraLikes[id] ?: 0) + if (wasLiked) -1 else 1)
+                            scope.launch {
+                                runCatching { ApiClient.api.toggleCommunityPostLike(id) }
+                                    .onFailure {
+                                        likedPostIds =
+                                            if (wasLiked) likedPostIds + id else likedPostIds - id
+                                        extraLikes = extraLikes + (id to (extraLikes[id] ?: 0) + if (wasLiked) 1 else -1)
                                     }
-                                }
                             }
                         },
                         onClick = { nav.navigate(Routes.postDetail(id)) },
@@ -283,13 +359,13 @@ private fun StoryCircle(
 
 @Composable
 private fun PostCard(
-    post: PostDto,
+    post: CommunityPostDto,
     liked: Boolean,
     likeCount: Int,
     onLike: () -> Unit,
     onClick: () -> Unit,
 ) {
-    val authorName = post.authorName ?: post.authorUsername ?: "User"
+    val authorName = post.authorName ?: "Member"
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -343,6 +419,73 @@ private fun PostCard(
                     style = MaterialTheme.typography.labelLarge,
                     color = TextSecondary,
                 )
+            }
+        }
+    }
+}
+
+
+// ── Events (list + RSVP — the same /community/events store iOS renders) ─────
+
+@Composable
+private fun EventsList(
+    events: List<EventDto>,
+    attendingIds: Set<String>,
+    busyIds: Set<String>,
+    onRsvp: (EventDto) -> Unit,
+) {
+    if (events.isEmpty()) {
+        EmptyState(
+            title = "No upcoming events",
+            subtitle = "Events created by the community will appear here",
+        )
+        return
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        itemsIndexed(events) { _, event ->
+            val id = event.idStr
+            val attending = id in attendingIds
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        event.displayTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        listOfNotNull(
+                            event.startTime?.let { formatTimeAgo(it) },
+                            event.location ?: if (event.isOnline == true) "Online" else null,
+                        ).joinToString(" • ").ifEmpty { "Details TBA" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${event.attendeeCount ?: 0} going",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Button(
+                            onClick = { onRsvp(event) },
+                            enabled = id !in busyIds,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (attending) SurfaceElevated else LyoPurple,
+                            ),
+                        ) {
+                            Text(if (attending) "Going ✓" else "RSVP")
+                        }
+                    }
+                }
             }
         }
     }

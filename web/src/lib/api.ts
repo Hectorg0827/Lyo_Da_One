@@ -462,6 +462,7 @@ export const api = {
       return request<Record<string, unknown>>('/gamification/overview');
     },
 
+
     async stats() {
       return request<Record<string, unknown>>('/gamification/stats');
     },
@@ -547,7 +548,88 @@ export const api = {
     async event(eventId: string) {
       return request<Record<string, unknown>>(`/community/events/${eventId}`);
     },
+
+    async attendEvent(eventId: string) {
+      return request(`/community/events/${eventId}/attend`, { method: 'POST' });
+    },
+
+    async unattendEvent(eventId: string) {
+      return request(`/community/events/${eventId}/attend`, { method: 'DELETE' });
+    },
+
+    async stats() {
+      return request<Record<string, number>>('/community/stats');
+    },
+
+    // ── Community posts — the same store iOS renders (community/posts),
+    //    NOT the separate /feed store; one account, one feed everywhere. ──
+    async posts(page = 1, limit = 20, sortBy: 'recent' | 'popular' | 'trending' = 'recent') {
+      return request<{
+        items: Record<string, unknown>[];
+        page: number;
+        limit: number;
+        total_count: number;
+        total_pages: number;
+      }>(`/community/posts?page=${page}&limit=${limit}&sort_by=${sortBy}`);
+    },
+
+    async post(postId: string) {
+      return request<Record<string, unknown>>(`/community/posts/${postId}`);
+    },
+
+    async createPost(payload: {
+      content: string;
+      tags?: string[];
+      media_urls?: string[];
+      post_type?: string;
+    }) {
+      return request<Record<string, unknown>>('/community/posts', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    async togglePostLike(postId: string) {
+      return request<{ liked: boolean; like_count: number }>(
+        `/community/posts/${postId}/like`,
+        { method: 'POST' }
+      );
+    },
+
+    async togglePostBookmark(postId: string) {
+      return request<{ bookmarked: boolean }>(
+        `/community/posts/${postId}/bookmark`,
+        { method: 'POST' }
+      );
+    },
+
+    async comments(postId: string, page = 1, limit = 50) {
+      return request<{ items: Record<string, unknown>[]; total_count: number }>(
+        `/community/posts/${postId}/comments?page=${page}&limit=${limit}`
+      );
+    },
+
+    async createComment(postId: string, content: string, parentId?: string) {
+      return request<Record<string, unknown>>(`/community/posts/${postId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content, parent_id: parentId ?? null }),
+      });
+    },
+
+    async likeComment(postId: string, commentId: string) {
+      return request<{ liked: boolean; like_count: number }>(
+        `/community/posts/${postId}/comments/${commentId}/like`,
+        { method: 'POST' }
+      );
+    },
+
+    async deleteComment(postId: string, commentId: string) {
+      return request(`/community/posts/${postId}/comments/${commentId}`, {
+        method: 'DELETE',
+      });
+    },
   },
+
 
   // ── Storage ──
   storage: {

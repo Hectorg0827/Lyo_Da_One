@@ -41,10 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.google.gson.JsonObject
 import com.lyo.app.data.api.ApiClient
-import com.lyo.app.data.api.CommentRequest
-import com.lyo.app.data.api.ReactionRequest
+import com.lyo.app.data.api.CommunityCommentRequest
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
@@ -74,40 +72,6 @@ private data class CommentItem(
     val createdAt: String?,
 )
 
-private fun JsonObject.str(key: String): String? =
-    runCatching { get(key)?.takeIf { !it.isJsonNull }?.asString }.getOrNull()
-
-private fun JsonObject.int(key: String): Int? =
-    runCatching { get(key)?.takeIf { !it.isJsonNull }?.asInt }.getOrNull()
-
-private fun parsePostDetail(obj: JsonObject): PostDetail {
-    val comments = runCatching {
-        obj.get("comments")?.takeIf { it.isJsonArray }?.asJsonArray
-            ?.mapNotNull { el ->
-                runCatching {
-                    val c = el.asJsonObject
-                    CommentItem(
-                        content = c.str("content").orEmpty(),
-                        authorName = c.str("author_name")
-                            ?: c.str("author_username")
-                            ?: "User",
-                        createdAt = c.str("created_at"),
-                    )
-                }.getOrNull()
-            }
-            .orEmpty()
-    }.getOrDefault(emptyList())
-
-    return PostDetail(
-        content = obj.str("content").orEmpty(),
-        authorName = obj.str("author_name") ?: obj.str("author_username") ?: "User",
-        likeCount = obj.int("like_count") ?: 0,
-        commentCount = obj.int("comment_count") ?: comments.size,
-        createdAt = obj.str("created_at"),
-        comments = comments,
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(nav: NavHostController, postId: String) {
@@ -121,8 +85,27 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(postId, refreshKey) {
-        runCatching { ApiClient.api.getPost(postId) }
-            .onSuccess { post = parsePostDetail(it) }
+        // Community post + its comments (separate endpoint, same as iOS)
+        val postResult = runCatching { ApiClient.api.communityPost(postId) }.getOrNull()
+        val commentsResult = runCatching { ApiClient.api.communityComments(postId) }.getOrNull()
+        if (postResult != null) {
+            val comments = commentsResult?.items.orEmpty().map {
+                CommentItem(
+                    content = it.content.orEmpty(),
+                    authorName = it.authorName ?: "Member",
+                    createdAt = it.createdAt,
+                )
+            }
+            post = PostDetail(
+                content = postResult.content.orEmpty(),
+                authorName = postResult.authorName ?: "Member",
+                likeCount = postResult.likeCount ?: 0,
+                commentCount = postResult.commentCount ?: comments.size,
+                createdAt = postResult.createdAt,
+                comments = comments,
+            )
+            liked = postResult.hasLiked == true
+        }
         loading = false
     }
 
@@ -173,8 +156,9 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
                         sending = true
                         scope.launch {
                             runCatching {
-                                ApiClient.api.createComment(
-                                    CommentRequest(postId.toLongOrNull() ?: 0, commentText.trim())
+                                ApiClient.api.createCommunityComment(
+                                    postId,
+                                    CommunityCommentRequest(commentText.trim()),
                                 )
                             }.onSuccess {
                                 commentText = ""
@@ -235,16 +219,15 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(
                                         onClick = {
-                                            if (!liked) {
-                                                liked = true
-                                                extraLikes++
-                                                scope.launch {
-                                                    runCatching {
-                                                        ApiClient.api.reactToPost(
-                                                            postId,
-                                                            ReactionRequest(postId.toLongOrNull() ?: 0),
-                                                        )
-                                                    }
+                                            val wasLiked = liked
+                                            liked = !wasLiked
+                                            extraLikes += if (wasLiked) -1 else 1
+                                            scope.launch {
+                                                runCatching {
+                                                    ApiClient.api.toggleCommunityPostLike(postId)
+                                                }.onFailure {
+                                                    liked = wasLiked
+                                                    extraLikes += if (wasLiked) 1 else -1
                                                 }
                                             }
                                         },

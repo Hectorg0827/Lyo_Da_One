@@ -23,79 +23,75 @@ import {
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
 import CommentThread from '@/components/community/CommentThread';
 import { useApi } from '@/hooks/use-api';
-import { api, adaptUser } from '@/lib/api';
+import { api } from '@/lib/api';
 import type { CommunityPost, Comment, User } from '@/types';
 
 // ============================================================
 // Helpers: map backend → frontend types
 // ============================================================
 
+/** Map a community PostRead (the same store iOS renders) to the view model. */
 function mapBackendPost(raw: Record<string, unknown>): CommunityPost {
-  const rawUser = (raw.user as Record<string, unknown>) || {};
-  const author: User = rawUser.id
-    ? adaptUser(rawUser)
-    : {
-        id: String(raw.user_id ?? ''),
-        email: '',
-        displayName: 'Unknown User',
-        username: 'unknown',
-        avatar: '',
-        bio: '',
-        role: 'student',
-        interests: [],
-        learningGoals: [],
-        streak: 0,
-        xp: 0,
-        level: 1,
-        coursesCompleted: 0,
-        followersCount: 0,
-        followingCount: 0,
-        createdAt: (raw.created_at as string) || new Date().toISOString(),
-        isPremium: false,
-      };
+  const author: User = {
+    id: String(raw.author_id ?? ''),
+    email: '',
+    displayName: (raw.author_name as string) || 'Member',
+    username: (raw.author_name as string) || 'member',
+    avatar: (raw.author_avatar as string) || '',
+    bio: '',
+    role: 'student',
+    interests: [],
+    learningGoals: [],
+    streak: 0,
+    xp: 0,
+    level: (raw.author_level as number) ?? 1,
+    coursesCompleted: 0,
+    followersCount: 0,
+    followingCount: 0,
+    createdAt: (raw.created_at as string) || new Date().toISOString(),
+    isPremium: false,
+  };
 
+  const tags = (raw.tags as string[]) || [];
   return {
     id: String(raw.id ?? ''),
     author,
-    type: (raw.type as CommunityPost['type']) || 'post',
-    title: (raw.title as string) || '',
+    type: 'post',
+    title: '',
     content: (raw.content as string) || '',
-    images: (raw.media_urls as string[]) || (raw.images as string[]) || [],
-    tags: (raw.tags as string[]) || [],
-    category: (raw.category as string) || 'General',
-    likes: (raw.like_count as number) ?? (raw.likes as number) ?? 0,
-    comments: (raw.comment_count as number) ?? (raw.comments as number) ?? 0,
-    views: (raw.view_count as number) ?? (raw.views as number) ?? 0,
-    isLiked: (raw.is_liked as boolean) ?? false,
-    isBookmarked: (raw.is_bookmarked as boolean) ?? false,
+    images: (raw.media_urls as string[]) || [],
+    tags,
+    category: tags[0] ?? 'General',
+    likes: (raw.like_count as number) ?? 0,
+    comments: (raw.comment_count as number) ?? 0,
+    views: 0,
+    isLiked: (raw.has_liked as boolean) ?? false,
+    isBookmarked: (raw.has_bookmarked as boolean) ?? false,
     isPinned: (raw.is_pinned as boolean) ?? false,
     createdAt: (raw.created_at as string) || new Date().toISOString(),
   };
 }
 
 function mapBackendComment(raw: Record<string, unknown>): Comment {
-  const rawUser = (raw.user as Record<string, unknown>) || {};
-  const author: User = rawUser.id
-    ? adaptUser(rawUser)
-    : {
-        id: String(raw.user_id ?? ''),
-        email: '',
-        displayName: 'Unknown',
-        username: 'unknown',
-        avatar: '',
-        bio: '',
-        role: 'student',
-        interests: [],
-        learningGoals: [],
-        streak: 0,
-        xp: 0,
-        level: 1,
-        coursesCompleted: 0,
-        followersCount: 0,
-        followingCount: 0,
-        createdAt: new Date().toISOString(),
-        isPremium: false,
-      };
+  const author: User = {
+    id: String(raw.author_id ?? ''),
+    email: '',
+    displayName: (raw.author_name as string) || 'Member',
+    username: (raw.author_name as string) || 'member',
+    avatar: (raw.author_avatar as string) || '',
+    bio: '',
+    role: 'student',
+    interests: [],
+    learningGoals: [],
+    streak: 0,
+    xp: 0,
+    level: 1,
+    coursesCompleted: 0,
+    followersCount: 0,
+    followingCount: 0,
+    createdAt: new Date().toISOString(),
+    isPremium: false,
+  };
 
   const rawReplies = (raw.replies as Record<string, unknown>[]) || [];
 
@@ -103,8 +99,8 @@ function mapBackendComment(raw: Record<string, unknown>): Comment {
     id: String(raw.id ?? ''),
     author,
     content: (raw.content as string) || '',
-    likes: (raw.like_count as number) ?? (raw.likes as number) ?? 0,
-    isLiked: (raw.is_liked as boolean) ?? false,
+    likes: (raw.like_count as number) ?? 0,
+    isLiked: (raw.has_liked as boolean) ?? false,
     createdAt: (raw.created_at as string) || new Date().toISOString(),
     replies: rawReplies.map(mapBackendComment),
   };
@@ -143,17 +139,18 @@ export default function PostDetailPage() {
     isLoading: postLoading,
     error: postError,
   } = useApi(
-    () => api.feed.get(postId),
+    () => api.community.post(postId),
     [postId]
   );
 
   const post: CommunityPost | null = rawPost ? mapBackendPost(rawPost) : null;
 
-  // Extract comments from the backend response (may be nested in the post response)
-  const backendComments = rawPost
-    ? ((rawPost.comments_list as Record<string, unknown>[]) || (rawPost.comments_data as Record<string, unknown>[]) || [])
-    : [];
-  const mappedComments: Comment[] = backendComments.map(mapBackendComment);
+  // Comments come from their own endpoint (same one iOS uses)
+  const { data: rawComments } = useApi(
+    () => api.community.comments(postId),
+    [postId]
+  );
+  const mappedComments: Comment[] = (rawComments?.items ?? []).map(mapBackendComment);
 
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -166,8 +163,14 @@ export default function PostDetailPage() {
     setIsLiked(post.isLiked ?? false);
     setLikeCount(post.likes);
     setIsBookmarked(post.isBookmarked ?? false);
-    setComments(mappedComments);
     setInitialized(true);
+  }
+
+  // Comments arrive from their own request — hydrate once when they land
+  const [commentsInitialized, setCommentsInitialized] = useState(false);
+  if (rawComments && !commentsInitialized) {
+    setComments(mappedComments);
+    setCommentsInitialized(true);
   }
 
   // ── Like handler ──
@@ -176,11 +179,7 @@ export default function PostDetailPage() {
     setIsLiked(!wasLiked);
     setLikeCount((c) => wasLiked ? c - 1 : c + 1);
     try {
-      if (wasLiked) {
-        await api.feed.unlike(postId);
-      } else {
-        await api.feed.like(postId);
-      }
+      await api.community.togglePostLike(postId);
     } catch {
       // revert on failure
       setIsLiked(wasLiked);
@@ -206,7 +205,7 @@ export default function PostDetailPage() {
     setComments((prev) => [tempComment, ...prev]);
 
     try {
-      const result = await api.feed.comment(postId, content);
+      const result = await api.community.createComment(postId, content);
       // Replace temp comment with real one if result is available
       if (result && typeof result === 'object' && (result as Record<string, unknown>).id) {
         const real = mapBackendComment(result as Record<string, unknown>);
@@ -457,7 +456,15 @@ export default function PostDetailPage() {
                 {/* Bookmark */}
                 <motion.button
                   whileTap={{ scale: 0.85 }}
-                  onClick={() => setIsBookmarked((v) => !v)}
+                  onClick={async () => {
+                    const was = isBookmarked;
+                    setIsBookmarked(!was);
+                    try {
+                      await api.community.togglePostBookmark(postId);
+                    } catch {
+                      setIsBookmarked(was);
+                    }
+                  }}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border',
                     isBookmarked
