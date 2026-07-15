@@ -78,3 +78,4 @@ __pycache__/
 Pods/
 build_temp*/
 nohup.out
+*.tsbuildinfo
