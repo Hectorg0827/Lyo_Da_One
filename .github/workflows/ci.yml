@@ -13,6 +13,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  parity:
+    name: Cross-platform parity contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify Community capabilities and design tokens
+        run: node scripts/verify-community-parity.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14

@@ -58,12 +58,16 @@ import kotlinx.coroutines.launch
 fun GroupsScreen(nav: NavHostController) {
     var groups by remember { mutableStateOf<List<GroupDto>>(emptyList()) }
     var joinedIds by remember { mutableStateOf(setOf<String>()) }
+    var busyIds by remember { mutableStateOf(setOf<String>()) }
     var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         runCatching { ApiClient.api.groups() }
-            .onSuccess { groups = it }
+            .onSuccess {
+                groups = it
+                joinedIds = it.filter { group -> group.isMember == true }.map { group -> group.idStr }.toSet()
+            }
         loading = false
     }
 
@@ -146,22 +150,36 @@ fun GroupsScreen(nav: NavHostController) {
                                 if (joined) {
                                     OutlinedButton(
                                         onClick = {
-                                            joinedIds = joinedIds - id
-                                            scope.launch {
-                                                runCatching { ApiClient.api.leaveGroup(id) }
+                                            if (id !in busyIds) {
+                                                joinedIds = joinedIds - id
+                                                busyIds = busyIds + id
+                                                scope.launch {
+                                                    runCatching {
+                                                        val response = ApiClient.api.leaveGroup(id)
+                                                        require(response.isSuccessful) { "Unable to leave group (${response.code()})" }
+                                                    }.onFailure { joinedIds = joinedIds + id }
+                                                    busyIds = busyIds - id
+                                                }
                                             }
                                         },
+                                        enabled = id !in busyIds,
                                     ) {
                                         Text("Leave", color = TextSecondary)
                                     }
                                 } else {
                                     Button(
                                         onClick = {
-                                            joinedIds = joinedIds + id
-                                            scope.launch {
-                                                runCatching { ApiClient.api.joinGroup(id) }
+                                            if (id !in busyIds) {
+                                                joinedIds = joinedIds + id
+                                                busyIds = busyIds + id
+                                                scope.launch {
+                                                    runCatching { ApiClient.api.joinGroup(id) }
+                                                        .onFailure { joinedIds = joinedIds - id }
+                                                    busyIds = busyIds - id
+                                                }
                                             }
                                         },
+                                        enabled = id !in busyIds,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = LyoPurple,
                                             contentColor = Color.White,

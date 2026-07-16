@@ -1,0 +1,51 @@
+{
+  "$schema": "Community release contract shared by iOS, Android, and web",
+  "version": "2.0.0",
+  "referencePlatform": "ios",
+  "responsiveRule": "Web preserves the same capabilities and visual tokens while adapting into a bounded multi-column desktop workspace.",
+  "canonicalBackend": "https://api.lyoapp.com",
+  "tabs": ["Posts", "Events"],
+  "postTypes": ["text", "question_discussion", "study_tip"],
+  "eventTypes": ["event", "group"],
+  "viewModes": ["list", "map"],
+  "creation": ["post", "group", "event"],
+  "postActions": ["like", "bookmark", "comment", "share"],
+  "groupActions": ["list", "create", "join", "leave"],
+  "eventActions": ["list", "create", "attend", "leave", "map"],
+  "apiPrefix": "/community",
+  "canonicalEndpoints": [
+    "/community/posts",
+    "/community/posts/{postId}/like",
+    "/community/posts/{postId}/bookmark",
+    "/community/posts/{postId}/comments",
+    "/community/study-groups",
+    "/community/study-groups/{groupId}/join",
+    "/community/study-groups/{groupId}/leave",
+    "/community/events",
+    "/community/events/{eventId}/attend"
+  ],
+  "design": {
+    "primary": "#6366F1",
+    "secondary": "#8B5CF6",
+    "background": "#0B1230",
+    "surface": "#0E173D",
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#C9D1F2"
+  },
+  "evidence": {
+    "ios": [
+      { "file": "Sources/Views/Community/CommunityView.swift", "markers": ["case posts, events", "CommunityGoogleStyleMap", "CreateCommunityItemSheet"] },
+      { "file": "Sources/Views/Community/CommunityFeedView.swift", "markers": ["onLike", "onBookmark", "CommentsView(post", "onShare"] },
+      { "file": "Sources/ViewModels/CommunityViewModel.swift", "markers": ["createEvent", "createStudyGroup"] }
+    ],
+    "android": [
+      { "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityScreen.kt", "markers": ["Posts", "Events", "CommunityEventMap", "CreateCommunityItemDialog", "toggleCommunityPostBookmark"] },
+      { "file": "android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt", "markers": ["createStudyGroup", "createCommunityEvent", "toggleCommunityPostLike", "toggleCommunityPostBookmark"] }
+    ],
+    "web": [
+      { "file": "web/src/app/(main)/community/page.tsx", "markers": ["Posts", "Events", "CommunityEventMap", "CreateCommunityItemModal"] },
+      { "file": "web/src/components/community/PostCard.tsx", "markers": ["togglePostLike", "togglePostBookmark", "navigator.share", "navigator.clipboard"] },
+      { "file": "web/src/lib/api.ts", "markers": ["createGroup", "createEvent", "togglePostLike", "togglePostBookmark"] }
+    ]
+  }
+}

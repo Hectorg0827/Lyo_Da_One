@@ -1107,6 +1107,7 @@ enum Endpoints {
         case getStudyGroups(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
         case getStudyGroup(id: String)
         case createStudyGroup(group: StudyGroup)
+        case createStudyGroupRequest(request: APICreateStudyGroupRequest)
         case joinStudyGroup(groupId: String)
         case leaveStudyGroup(groupId: String)
         case getUserGroups // NEW
@@ -1115,6 +1116,7 @@ enum Endpoints {
         case getEvents(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
         case getEvent(id: String)
         case createEvent(event: EducationalEvent)
+        case createEventRequest(request: APICreateEducationalEventRequest)
         case registerForEvent(eventId: String)
         case unregisterFromEvent(eventId: String)
         case getUserEvents // NEW
@@ -1156,7 +1158,7 @@ enum Endpoints {
             // Study Groups
             case .getStudyGroups: return "/api/v1/community/study-groups"
             case .getStudyGroup(let id): return "/api/v1/community/study-groups/\(id)"
-            case .createStudyGroup: return "/api/v1/community/study-groups"
+            case .createStudyGroup, .createStudyGroupRequest: return "/api/v1/community/study-groups"
             case .joinStudyGroup(let id): return "/api/v1/community/study-groups/\(id)/join"
             case .leaveStudyGroup(let id): return "/api/v1/community/study-groups/\(id)/leave"
             case .getUserGroups: return "/api/v1/community/study-groups/my"
@@ -1164,9 +1166,9 @@ enum Endpoints {
             // Events
             case .getEvents: return "/api/v1/community/events"
             case .getEvent(let id): return "/api/v1/community/events/\(id)"
-            case .createEvent: return "/api/v1/community/events"
-            case .registerForEvent(let id): return "/api/v1/community/events/\(id)/register"
-            case .unregisterFromEvent(let id): return "/api/v1/community/events/\(id)/unregister"
+            case .createEvent, .createEventRequest: return "/api/v1/community/events"
+            case .registerForEvent(let id): return "/api/v1/community/events/\(id)/attend"
+            case .unregisterFromEvent(let id): return "/api/v1/community/events/\(id)/attend"
             case .getUserEvents: return "/api/v1/community/events/my"
 
             // Marketplace
@@ -1214,8 +1216,8 @@ enum Endpoints {
                   .discoverCourses:
                  return .get
 
-            case .createStudyGroup, .joinStudyGroup,
-                 .createEvent, .registerForEvent,
+            case .createStudyGroup, .createStudyGroupRequest, .joinStudyGroup,
+                 .createEvent, .createEventRequest, .registerForEvent,
                  .createListing, .createQuestion, .answerQuestion,
                  .createBooking, .submitReview,
                  .createPrivateLesson, .createInstitution:
@@ -1237,8 +1239,14 @@ enum Endpoints {
             case .createStudyGroup(let group):
                 return group
 
+            case .createStudyGroupRequest(let request):
+                return request
+
             case .createEvent(let event):
                 return event
+
+            case .createEventRequest(let request):
+                return request
                 
             case .createQuestion(let question):
                 return question
@@ -2711,4 +2719,3 @@ struct CreateMarketplaceListingRequest: Encodable {
         let address: String?
     }
 }
-

@@ -188,6 +188,9 @@ data class GroupDto(
     val description: String? = null,
     @SerializedName("member_count") val memberCount: Int? = null,
     val category: String? = null,
+    val privacy: String? = null,
+    @SerializedName("max_members") val maxMembers: Int? = null,
+    @SerializedName("is_member") val isMember: Boolean? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
 }
@@ -198,15 +201,41 @@ data class EventDto(
     val name: String? = null,
     val description: String? = null,
     @SerializedName("start_time") val startTime: String? = null,
+    @SerializedName("end_time") val endTime: String? = null,
+    @SerializedName("event_type") val eventType: String? = null,
     val location: String? = null,
     @SerializedName("is_online") val isOnline: Boolean? = null,
     @SerializedName("attendee_count") val attendeeCount: Int? = null,
+    @SerializedName("max_attendees") val maxAttendees: Int? = null,
     @SerializedName("user_attendance_status") val userAttendanceStatus: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
     val displayTitle: String get() = title ?: name ?: "Event"
     val isAttending: Boolean get() = userAttendanceStatus != null
 }
+
+data class CreateStudyGroupRequest(
+    val name: String,
+    val description: String? = null,
+    val privacy: String = "public",
+    @SerializedName("max_members") val maxMembers: Int = 20,
+    @SerializedName("requires_approval") val requiresApproval: Boolean = false,
+)
+
+data class CreateCommunityEventRequest(
+    val title: String,
+    val description: String? = null,
+    @SerializedName("event_type") val eventType: String = "study_session",
+    val location: String? = null,
+    @SerializedName("max_attendees") val maxAttendees: Int = 50,
+    @SerializedName("start_time") val startTime: String,
+    @SerializedName("end_time") val endTime: String,
+    val timezone: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
 
 // ── Community posts (community/posts — the same store iOS renders) ──────────
 
@@ -219,6 +248,7 @@ data class CommunityPostDto(
     val content: String? = null,
     @SerializedName("media_urls") val mediaUrls: List<String>? = null,
     val tags: List<String>? = null,
+    @SerializedName("post_type") val postType: String? = null,
     @SerializedName("like_count") val likeCount: Int? = null,
     @SerializedName("comment_count") val commentCount: Int? = null,
     @SerializedName("has_liked") val hasLiked: Boolean? = null,

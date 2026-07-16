@@ -93,7 +93,7 @@ struct MainTabView: View {
     var body: some View {
         ZStack {
             // Background
-            Color(hex: "0f172a")
+            DesignTokens.Colors.background
                 .ignoresSafeArea()
             
             // Content
@@ -105,18 +105,7 @@ struct MainTabView: View {
                     .tag(Tab.clips)
                 
                 // Create Tab - Multi-Mode Creation Interface
-                VStack {
-                    MultiModeCreationView()
-
-                    // Debug: Add test view link
-                    NavigationLink("🧪 Content Feed Test") {
-                        ContentFeedTestView()
-                    }
-                    .padding()
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(8)
-                    .padding()
-                }
+                MultiModeCreationView()
                 .tag(Tab.create)
                 
                 // Community
@@ -1655,4 +1644,3 @@ struct DrawerStatChip: View {
 }
 
 // End of file
-

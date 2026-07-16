@@ -7,6 +7,7 @@ import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import CreateCommunityItemModal from '@/components/community/CreateCommunityItemModal';
 
 interface Group {
   id: string;
@@ -42,8 +43,8 @@ function mapBackendGroup(raw: Record<string, unknown>, index: number): Group {
     description: (raw.description as string) || '',
     memberCount: (raw.member_count as number) ?? (raw.memberCount as number) ?? 0,
     category: (raw.category as string) || 'General',
-    isPrivate: (raw.is_private as boolean) ?? false,
-    isJoined: (raw.is_joined as boolean) ?? false,
+    isPrivate: String(raw.privacy ?? '') === 'private' || ((raw.is_private as boolean) ?? false),
+    isJoined: (raw.is_member as boolean) ?? (raw.is_joined as boolean) ?? false,
     gradient: GRADIENT_OPTIONS[index % GRADIENT_OPTIONS.length],
     icon: (raw.icon as string) || '👥',
     recentActivity: (raw.recent_activity as string) || '',
@@ -52,7 +53,7 @@ function mapBackendGroup(raw: Record<string, unknown>, index: number): Group {
 
 const categories = ['All', 'Programming', 'Design', 'AI', 'Science', 'Math', 'Languages', 'Music', 'Business', 'Writing'];
 
-function GroupCard({ group, onJoinToggle }: { group: Group; onJoinToggle: (groupId: string, currentlyJoined: boolean) => void }) {
+function GroupCard({ group, onJoinToggle }: { group: Group; onJoinToggle: (groupId: string, currentlyJoined: boolean) => Promise<void> }) {
   const [joined, setJoined] = useState(group.isJoined);
   const [joining, setJoining] = useState(false);
 
@@ -61,7 +62,7 @@ function GroupCard({ group, onJoinToggle }: { group: Group; onJoinToggle: (group
     const wasJoined = joined;
     setJoined(!wasJoined);
     try {
-      onJoinToggle(group.id, wasJoined);
+      await onJoinToggle(group.id, wasJoined);
     } catch {
       setJoined(wasJoined);
     } finally {
@@ -115,6 +116,7 @@ function GroupCard({ group, onJoinToggle }: { group: Group; onJoinToggle: (group
 export default function GroupsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const [showCreate, setShowCreate] = useState(false);
 
   // ── Fetch groups from API ──
   const {
@@ -155,6 +157,7 @@ export default function GroupsPage() {
       refetch();
     } catch (err) {
       console.error('Failed to toggle group membership:', err);
+      throw err;
     }
   }, [refetch]);
 
@@ -186,7 +189,7 @@ export default function GroupsPage() {
           <p className="text-sm text-gray-400">Find your learning community</p>
         </div>
         <button
-          onClick={() => alert('Create Group coming soon!')}
+          onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-lyo-500/20"
         >
           <Plus className="h-4 w-4" />
@@ -268,6 +271,14 @@ export default function GroupsPage() {
           <Users className="w-12 h-12 text-white/20 mb-4" />
           <p className="text-white/40 text-sm">No groups found</p>
         </div>
+      )}
+
+      {showCreate && (
+        <CreateCommunityItemModal
+          initialType="group"
+          onClose={() => setShowCreate(false)}
+          onCreated={() => refetch()}
+        />
       )}
     </div>
   );

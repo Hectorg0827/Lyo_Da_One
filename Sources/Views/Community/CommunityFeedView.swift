@@ -13,6 +13,7 @@ struct CommunityFeedView: View {
     
     var body: some View {
         ZStack {
+            DesignTokens.Colors.background.ignoresSafeArea()
             feedContent
             
             // Floating action button
@@ -30,28 +31,13 @@ struct CommunityFeedView: View {
                 toastView(message: message, type: viewModel.toastType)
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                filterButton
-            }
-        }
         .sheet(isPresented: $showCreatePost) {
-            CreatePostSheet { content, mediaURLs, tags, postType, visibility in
-                await viewModel.createPost(
+            CreatePostSheet { content, tags, postType in
+                try await viewModel.createPost(
                     content: content,
-                    mediaURLs: mediaURLs,
                     tags: tags,
-                    postType: postType,
-                    visibility: visibility
+                    postType: postType
                 )
-            }
-        }
-        .sheet(isPresented: $viewModel.showFilters) {
-            CommunityFiltersSheet(filters: $viewModel.filters)
-        }
-        .sheet(item: $viewModel.selectedPostForAction) { post in
-            ReportContentSheet(post: post) { reason, description in
-                await viewModel.reportPost(post, reason: reason, description: description)
             }
         }
         .task {
@@ -77,21 +63,12 @@ struct CommunityFeedView: View {
     private var postsList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                // Active filters indicator
-                if viewModel.filters.postType != nil || !viewModel.filters.tags.isEmpty {
-                    activeFiltersView
-                }
-                
                 ForEach(viewModel.posts) { post in
                     CommunityPostCard(
                         post: post,
                         onLike: { viewModel.toggleLike(post: post) },
                         onBookmark: { viewModel.toggleBookmark(post: post) },
-                        onComment: { /* Navigation handled by card */ },
-                        onShare: { sharePost(post) },
-                        onReport: { viewModel.selectedPostForAction = post },
-                        onBlock: { Task { await viewModel.blockUser(post.authorId) } },
-                        onDelete: { viewModel.deletePost(post) }
+                        onShare: { sharePost(post) }
                     )
                     .onAppear {
                         Task {
@@ -261,14 +238,7 @@ struct CommunityPostCard: View {
     let post: CommunityPost
     let onLike: () -> Void
     let onBookmark: () -> Void
-    let onComment: () -> Void
     let onShare: () -> Void
-    let onReport: () -> Void
-    let onBlock: () -> Void
-    let onDelete: () -> Void
-    
-    @State private var showActions = false
-    @State private var showComments = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -289,11 +259,6 @@ struct CommunityPostCard: View {
                         Text(post.authorName)
                             .font(.subheadline.weight(.semibold))
                         
-                        if post.authorLevel >= 5 {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                        }
                     }
                     
                     HStack(spacing: 4) {
@@ -301,11 +266,6 @@ struct CommunityPostCard: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        if post.isEdited {
-                            Text("• edited")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
                     }
                 }
                 
@@ -321,30 +281,6 @@ struct CommunityPostCard: View {
                         .cornerRadius(12)
                 }
                 
-                Menu {
-                    Button(role: .destructive) {
-                        onReport()
-                    } label: {
-                        Label("Report", systemImage: "flag")
-                    }
-                    
-                    Button(role: .destructive) {
-                        onBlock()
-                    } label: {
-                        Label("Block User", systemImage: "hand.raised")
-                    }
-                    
-                    // Only show delete for own posts (would check userId in real app)
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.secondary)
-                        .padding(8)
-                }
             }
             
             // Content
@@ -369,16 +305,28 @@ struct CommunityPostCard: View {
                 }
             }
             
-            // Media preview (placeholder)
+            // Media returned by the shared Community store
             if !post.mediaURLs.isEmpty {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.secondary.opacity(0.1))
-                    .frame(height: 200)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                            .foregroundColor(.secondary)
-                    )
+                TabView {
+                    ForEach(post.mediaURLs, id: \.self) { mediaURL in
+                        AsyncImage(url: URL(string: mediaURL)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            case .failure:
+                                Image(systemName: "photo.badge.exclamationmark")
+                                    .foregroundColor(.secondary)
+                            default:
+                                ProgressView()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                    }
+                }
+                .frame(height: 200)
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: post.mediaURLs.count > 1 ? .automatic : .never))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             
             Divider()
@@ -427,7 +375,7 @@ struct CommunityPostCard: View {
             .padding(.vertical, 4)
         }
         .padding()
-        .background(Color(.systemBackground))
+        .background(DesignTokens.Colors.surface)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
     }
@@ -440,10 +388,10 @@ struct CreatePostSheet: View {
     @State private var content = ""
     @State private var tags = ""
     @State private var selectedPostType: CommunityPostType = .text
-    @State private var selectedVisibility: CommunityPostVisibility = .publicPost
     @State private var isSubmitting = false
+    @State private var errorMessage: String?
     
-    let onSubmit: (String, [String], [String], CommunityPostType, CommunityPostVisibility) async -> Void
+    let onSubmit: (String, [String], CommunityPostType) async throws -> Void
     
     var body: some View {
         NavigationStack {
@@ -457,18 +405,12 @@ struct CreatePostSheet: View {
                 
                 Section {
                     Picker("Post Type", selection: $selectedPostType) {
-                        ForEach(CommunityPostType.allCases, id: \.rawValue) { type in
+                        ForEach(CommunityPostType.crossPlatformCases, id: \.rawValue) { type in
                             Label(type.displayName, systemImage: type.iconName)
                                 .tag(type)
                         }
                     }
                     
-                    Picker("Visibility", selection: $selectedVisibility) {
-                        ForEach(CommunityPostVisibility.allCases, id: \.rawValue) { visibility in
-                            Label(visibility.displayName, systemImage: visibility.iconName)
-                                .tag(visibility)
-                        }
-                    }
                 }
                 
                 Section {
@@ -480,6 +422,8 @@ struct CreatePostSheet: View {
                     Text("Add relevant tags to help others find your post")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DesignTokens.Colors.background)
             .navigationTitle("New Post")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -494,7 +438,17 @@ struct CreatePostSheet: View {
                     .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
                 }
             }
+            .alert("Unable to create post", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "Please try again.")
+            }
         }
+        .tint(DesignTokens.Colors.accent)
+        .preferredColorScheme(.dark)
     }
     
     private func submitPost() {
@@ -502,8 +456,14 @@ struct CreatePostSheet: View {
         let tagList = tags.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
         
         Task {
-            await onSubmit(content, [], tagList, selectedPostType, selectedVisibility)
-            dismiss()
+            do {
+                try await onSubmit(content, tagList, selectedPostType)
+                isSubmitting = false
+                dismiss()
+            } catch {
+                isSubmitting = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }

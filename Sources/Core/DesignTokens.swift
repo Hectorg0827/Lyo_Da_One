@@ -59,7 +59,8 @@ public struct DesignTokens {
     public struct Colors {
         // Brand Colors
         public static let accent = Color("LyoAccent")
-        public static let accentSecondary = Color(hex: "A78BFA")
+        public static let accentSecondary = Color(hex: "8B5CF6")
+        public static let accentSecondaryLight = Color(hex: "A78BFA")
         
         // Semantic Colors
         public static let success = Color(hex: "10B981")

@@ -142,14 +142,20 @@ interface LyoApiService {
     @GET("community/study-groups")
     suspend fun groups(): List<GroupDto>
 
+    @POST("community/study-groups")
+    suspend fun createStudyGroup(@Body body: CreateStudyGroupRequest): GroupDto
+
     @POST("community/study-groups/{groupId}/join")
     suspend fun joinGroup(@Path("groupId") groupId: String): JsonObject
 
     @DELETE("community/study-groups/{groupId}/leave")
-    suspend fun leaveGroup(@Path("groupId") groupId: String): JsonObject
+    suspend fun leaveGroup(@Path("groupId") groupId: String): Response<Unit>
 
     @GET("community/events")
     suspend fun events(): List<EventDto>
+
+    @POST("community/events")
+    suspend fun createCommunityEvent(@Body body: CreateCommunityEventRequest): EventDto
 
     @POST("community/events/{eventId}/attend")
     suspend fun attendEvent(@Path("eventId") eventId: String): JsonObject

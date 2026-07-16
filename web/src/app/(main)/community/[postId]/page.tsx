@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -10,15 +10,8 @@ import {
   Share2,
   Bookmark,
   BookmarkCheck,
-  BarChart2,
-  Calendar,
-  HelpCircle,
-  BookOpen,
-  FileText,
-  Trophy,
-  Eye,
-  ExternalLink,
   Loader2,
+  Send,
 } from 'lucide-react';
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
 import CommentThread from '@/components/community/CommentThread';
@@ -53,10 +46,14 @@ function mapBackendPost(raw: Record<string, unknown>): CommunityPost {
   };
 
   const tags = (raw.tags as string[]) || [];
+  const rawType = String(raw.post_type ?? 'text');
+  const type: CommunityPost['type'] = rawType === 'question_discussion'
+    ? 'question'
+    : rawType === 'study_tip' ? 'study_tip' : 'post';
   return {
     id: String(raw.id ?? ''),
     author,
-    type: 'post',
+    type,
     title: '',
     content: (raw.content as string) || '',
     images: (raw.media_urls as string[]) || [],
@@ -107,25 +104,6 @@ function mapBackendComment(raw: Record<string, unknown>): Comment {
 }
 
 // ============================================================
-// Post type config
-// ============================================================
-const POST_TYPE_CONFIG = {
-  post: { label: 'Post', icon: FileText, color: 'bg-blue-500/20 text-blue-400' },
-  question: { label: 'Question', icon: HelpCircle, color: 'bg-yellow-500/20 text-yellow-400' },
-  event: { label: 'Event', icon: Calendar, color: 'bg-green-500/20 text-green-400' },
-  poll: { label: 'Poll', icon: BarChart2, color: 'bg-purple-500/20 text-purple-400' },
-  course_share: { label: 'Course', icon: BookOpen, color: 'bg-cyan-500/20 text-cyan-400' },
-  achievement: { label: 'Achievement', icon: Trophy, color: 'bg-amber-500/20 text-amber-400' },
-};
-
-const ROLE_BADGE: Record<string, string> = {
-  student: 'bg-blue-500/20 text-blue-400',
-  creator: 'bg-purple-500/20 text-purple-400',
-  mentor: 'bg-amber-500/20 text-amber-400',
-  admin: 'bg-red-500/20 text-red-400',
-};
-
-// ============================================================
 // Page
 // ============================================================
 export default function PostDetailPage() {
@@ -150,42 +128,63 @@ export default function PostDetailPage() {
     () => api.community.comments(postId),
     [postId]
   );
-  const mappedComments: Comment[] = (rawComments?.items ?? []).map(mapBackendComment);
-
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [commentCount, setCommentCount] = useState(0);
+  const [postActionBusy, setPostActionBusy] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [initialized, setInitialized] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
-  // Sync state from API response when loaded
-  if (post && !initialized) {
-    setIsLiked(post.isLiked ?? false);
-    setLikeCount(post.likes);
-    setIsBookmarked(post.isBookmarked ?? false);
-    setInitialized(true);
-  }
+  useEffect(() => {
+    if (!rawPost) return;
+    const hydrated = mapBackendPost(rawPost);
+    setIsLiked(hydrated.isLiked ?? false);
+    setLikeCount(hydrated.likes);
+    setIsBookmarked(hydrated.isBookmarked ?? false);
+    setCommentCount(hydrated.comments);
+  }, [rawPost]);
 
-  // Comments arrive from their own request — hydrate once when they land
-  const [commentsInitialized, setCommentsInitialized] = useState(false);
-  if (rawComments && !commentsInitialized) {
-    setComments(mappedComments);
-    setCommentsInitialized(true);
-  }
+  useEffect(() => {
+    if (rawComments) setComments((rawComments.items ?? []).map(mapBackendComment));
+  }, [rawComments]);
 
   // ── Like handler ──
   const handleLike = useCallback(async () => {
+    if (postActionBusy) return;
     const wasLiked = isLiked;
+    setPostActionBusy(true);
     setIsLiked(!wasLiked);
     setLikeCount((c) => wasLiked ? c - 1 : c + 1);
     try {
-      await api.community.togglePostLike(postId);
+      const result = await api.community.togglePostLike(postId);
+      setIsLiked(result.liked);
+      setLikeCount(result.like_count);
     } catch {
       // revert on failure
       setIsLiked(wasLiked);
       setLikeCount((c) => wasLiked ? c + 1 : c - 1);
+    } finally {
+      setPostActionBusy(false);
     }
-  }, [isLiked, postId]);
+  }, [isLiked, postActionBusy, postId]);
+
+  const handleBookmark = useCallback(async () => {
+    if (postActionBusy) return;
+    const wasBookmarked = isBookmarked;
+    setPostActionBusy(true);
+    setIsBookmarked(!wasBookmarked);
+    try {
+      const result = await api.community.togglePostBookmark(postId);
+      setIsBookmarked(result.bookmarked);
+    } catch {
+      setIsBookmarked(wasBookmarked);
+    } finally {
+      setPostActionBusy(false);
+    }
+  }, [isBookmarked, postActionBusy, postId]);
 
   // ── Comment handler ──
   const handleAddComment = useCallback(async (content: string) => {
@@ -203,6 +202,7 @@ export default function PostDetailPage() {
       replies: [],
     };
     setComments((prev) => [tempComment, ...prev]);
+    setCommentCount((count) => count + 1);
 
     try {
       const result = await api.community.createComment(postId, content);
@@ -211,32 +211,31 @@ export default function PostDetailPage() {
         const real = mapBackendComment(result as Record<string, unknown>);
         setComments((prev) => prev.map((c) => (c.id === tempComment.id ? real : c)));
       }
+      return true;
     } catch (err) {
       console.error('Failed to post comment:', err);
+      setComments((prev) => prev.filter((comment) => comment.id !== tempComment.id));
+      setCommentCount((count) => Math.max(0, count - 1));
+      return false;
     }
   }, [postId]);
 
-  const handleReply = (commentId: string, content: string) => {
-    const reply: Comment = {
-      id: `r_${Date.now()}`,
-      author: {
-        id: 'me', email: '', displayName: 'You', username: 'me',
-        avatar: '', bio: '', role: 'student', interests: [], learningGoals: [],
-        streak: 0, xp: 0, level: 1, coursesCompleted: 0, followersCount: 0,
-        followingCount: 0, createdAt: new Date().toISOString(), isPremium: false,
-      },
-      content,
-      likes: 0,
-      createdAt: new Date().toISOString(),
-    };
-    setComments((prev) =>
-      prev.map((c) =>
-        c.id === commentId
-          ? { ...c, replies: [...(c.replies ?? []), reply] }
-          : c
-      )
-    );
-  };
+  const submitComment = useCallback(async () => {
+    const content = commentText.trim();
+    if (!content || sendingComment) return;
+    setSendingComment(true);
+    setCommentError(null);
+    const created = await handleAddComment(content);
+    if (created) setCommentText('');
+    else setCommentError('Unable to post your comment. Please try again.');
+    setSendingComment(false);
+  }, [commentText, handleAddComment, sendingComment]);
+
+  const handleShare = useCallback(async () => {
+    const url = window.location.href;
+    if (navigator.share) await navigator.share({ title: 'LYO Community', text: post?.content, url });
+    else await navigator.clipboard.writeText(url);
+  }, [post?.content]);
 
   // Render rich content (bold, bullet-point style)
   const renderContent = (text: string) => {
@@ -291,9 +290,6 @@ export default function PostDetailPage() {
     );
   }
 
-  const typeConfig = POST_TYPE_CONFIG[post.type] ?? POST_TYPE_CONFIG.post;
-  const TypeIcon = typeConfig.icon;
-
   const initials = post.author.displayName
     .split(' ')
     .map((n) => n[0])
@@ -325,14 +321,6 @@ export default function PostDetailPage() {
           >
             {/* Post card */}
             <article className="glass-card p-5 mb-4">
-              {/* Pinned */}
-              {post.isPinned && (
-                <div className="flex items-center gap-1.5 text-xs text-amber-400 font-medium mb-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  Pinned Post
-                </div>
-              )}
-
               {/* Header */}
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3">
@@ -348,30 +336,17 @@ export default function PostDetailPage() {
                         {initials}
                       </div>
                     )}
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-[#111118]" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white">{post.author.displayName}</span>
-                      <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium capitalize', ROLE_BADGE[post.author.role])}>
-                        {post.author.role}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-white/40 mt-0.5">
-                      <span>{formatTimeAgo(post.createdAt)}</span>
-                      <span>·</span>
-                      <span className="flex items-center gap-1">
-                        <Eye className="w-3 h-3" />
-                        {formatNumber(post.views)} views
-                      </span>
-                    </div>
+                    <span className="font-semibold text-white">{post.author.displayName}</span>
+                    <div className="mt-0.5 text-xs text-white/40">{formatTimeAgo(post.createdAt)}</div>
                   </div>
                 </div>
-
-                <span className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0', typeConfig.color)}>
-                  <TypeIcon className="w-3 h-3" />
-                  {typeConfig.label}
-                </span>
+                {post.type !== 'post' && (
+                  <span className="shrink-0 rounded-full border border-lyo-500/30 bg-lyo-500/10 px-2.5 py-1 text-xs font-medium text-lyo-300">
+                    {post.type === 'question' ? 'Question' : 'Study tip'}
+                  </span>
+                )}
               </div>
 
               {/* Title */}
@@ -409,7 +384,7 @@ export default function PostDetailPage() {
                   {post.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2.5 py-1 rounded-full text-xs text-lyo-400 bg-lyo-500/10 border border-lyo-500/20 hover:bg-lyo-500/20 transition-colors cursor-pointer"
+                      className="rounded-full border border-lyo-500/20 bg-lyo-500/10 px-2.5 py-1 text-xs text-lyo-400"
                     >
                       #{tag}
                     </span>
@@ -418,12 +393,13 @@ export default function PostDetailPage() {
               )}
 
               {/* Action bar */}
-              <div className="flex items-center justify-between mt-5 pt-4 border-t border-white/8">
-                <div className="flex items-center gap-2">
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/8 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
                   {/* Like */}
                   <motion.button
                     whileTap={{ scale: 0.85 }}
                     onClick={handleLike}
+                    disabled={postActionBusy}
                     className={cn(
                       'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200',
                       isLiked
@@ -440,12 +416,12 @@ export default function PostDetailPage() {
                   {/* Comment count */}
                   <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/60 bg-white/5 border border-white/10">
                     <MessageCircle className="w-4 h-4" />
-                    <span>{comments.length}</span>
+                    <span>{commentCount}</span>
                   </div>
 
                   {/* Share */}
                   <button
-                    onClick={() => { navigator.clipboard.writeText(window.location.href); alert('Link copied!'); }}
+                    onClick={() => { handleShare().catch((error) => { if ((error as DOMException).name !== 'AbortError') console.error(error); }); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/60 bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
                   >
                     <Share2 className="w-4 h-4" />
@@ -456,15 +432,8 @@ export default function PostDetailPage() {
                 {/* Bookmark */}
                 <motion.button
                   whileTap={{ scale: 0.85 }}
-                  onClick={async () => {
-                    const was = isBookmarked;
-                    setIsBookmarked(!was);
-                    try {
-                      await api.community.togglePostBookmark(postId);
-                    } catch {
-                      setIsBookmarked(was);
-                    }
-                  }}
+                  onClick={handleBookmark}
+                  disabled={postActionBusy}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border',
                     isBookmarked
@@ -484,38 +453,18 @@ export default function PostDetailPage() {
                 comments={comments}
               />
               <div className="border-t border-white/5 p-4">
-                <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-lyo-500 to-accent-purple text-xs font-bold text-white">A</div>
-                  <input type="text" placeholder="Write a comment..." className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-lyo-500/50" onKeyDown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { handleAddComment(e.currentTarget.value); e.currentTarget.value = ''; }}} />
-                </div>
+                <form className="flex gap-3" onSubmit={(event) => { event.preventDefault(); submitComment(); }}>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-lyo-500 to-accent-purple text-xs font-bold text-white">You</div>
+                  <input value={commentText} onChange={(event) => setCommentText(event.target.value)} disabled={sendingComment} type="text" placeholder="Write a comment..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-lyo-500/50" />
+                  <button type="submit" disabled={!commentText.trim() || sendingComment} aria-label="Post comment" className="rounded-xl bg-lyo-500 p-2.5 text-white disabled:opacity-40">
+                    {sendingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </form>
+                {commentError && <p role="alert" className="mt-2 text-sm text-red-400">{commentError}</p>}
               </div>
             </div>
           </motion.div>
 
-          {/* Related posts sidebar */}
-          <aside className="hidden lg:block w-64 shrink-0">
-            <motion.div
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="glass-card p-4 sticky top-6"
-            >
-              <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">
-                Related Posts
-              </h3>
-              <div className="space-y-3">
-                <p className="text-xs text-white/30">Related posts coming soon</p>
-              </div>
-
-              <button
-                onClick={() => router.push('/community')}
-                className="flex items-center justify-center gap-2 w-full mt-3 py-2 rounded-xl text-xs text-lyo-400 hover:text-lyo-300 hover:bg-lyo-500/10 transition-all border border-lyo-500/20"
-              >
-                <ExternalLink className="w-3 h-3" />
-                View all posts
-              </button>
-            </motion.div>
-          </aside>
         </div>
       </div>
     </div>

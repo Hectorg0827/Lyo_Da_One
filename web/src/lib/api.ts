@@ -529,6 +529,19 @@ export const api = {
       return request<Record<string, unknown>[]>('/community/study-groups');
     },
 
+    async createGroup(payload: {
+      name: string;
+      description?: string;
+      privacy?: 'public' | 'private';
+      max_members?: number;
+      requires_approval?: boolean;
+    }) {
+      return request<Record<string, unknown>>('/community/study-groups', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
     async group(groupId: string) {
       return request<Record<string, unknown>>(`/community/study-groups/${groupId}`);
     },
@@ -543,6 +556,25 @@ export const api = {
 
     async events() {
       return request<Record<string, unknown>[]>('/community/events');
+    },
+
+    async createEvent(payload: {
+      title: string;
+      description?: string;
+      event_type: 'study_session' | 'workshop' | 'lecture' | 'discussion' | 'project_showcase' | 'networking' | 'other';
+      start_time: string;
+      end_time: string;
+      location?: string;
+      meeting_url?: string;
+      max_attendees?: number;
+      timezone: string;
+      latitude?: number;
+      longitude?: number;
+    }) {
+      return request<Record<string, unknown>>('/community/events', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     },
 
     async event(eventId: string) {

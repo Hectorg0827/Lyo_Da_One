@@ -220,7 +220,7 @@ final class CommunityFeedViewModel: ObservableObject {
         tags: [String] = [],
         postType: CommunityPostType = .text,
         visibility: CommunityPostVisibility = .publicPost
-    ) async {
+    ) async throws {
         let request = CommunityCreatePostRequest(
             content: content,
             mediaURLs: mediaURLs.isEmpty ? nil : mediaURLs,
@@ -236,6 +236,7 @@ final class CommunityFeedViewModel: ObservableObject {
             showToast("Post created!", type: .success)
         } catch {
             showToast("Failed to create post", type: .error)
+            throw error
         }
     }
     
@@ -355,4 +356,3 @@ extension CommunityFeedViewModel {
     }
 }
 #endif
-

@@ -78,10 +78,13 @@ actor NetworkClient: NetworkRequestable {
         }
         #endif
         
+        // FastAPI uses a true 204 response for leave/unattend operations. Decode
+        // an empty object for EmptyResponse instead of failing on zero bytes.
+        let responseData = processedResponse.data.isEmpty ? Data("{}".utf8) : processedResponse.data
         let decoded: T
         do {
             let decoder = JSONDecoder.lyoDecoder
-            decoded = try decoder.decode(T.self, from: processedResponse.data)
+            decoded = try decoder.decode(T.self, from: responseData)
         } catch let DecodingError.keyNotFound(key, context) {
             print("🚨 DECODE FAIL: Missing key '\\(key.stringValue)' — \\(context.debugDescription)")
             print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
@@ -524,4 +527,3 @@ extension URLRequest {
         return request
     }
 }
-

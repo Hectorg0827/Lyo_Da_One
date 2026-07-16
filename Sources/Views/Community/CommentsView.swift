@@ -2,7 +2,7 @@
 //  CommentsView.swift
 //  Lyo
 //
-//  Full comments system with replies, likes, and moderation
+//  Shared Community comments list and composer
 //
 
 import SwiftUI
@@ -11,7 +11,6 @@ import os
 struct CommentsView: View {
     let post: CommunityPost
     @StateObject private var viewModel: CommentsViewModel
-    @Environment(\.dismiss) private var dismiss
     
     init(post: CommunityPost) {
         self.post = post
@@ -51,14 +50,7 @@ struct CommentsView: View {
                         emptyCommentsView
                     } else {
                         ForEach(viewModel.comments) { comment in
-                            CommentRow(
-                                comment: comment,
-                                onLike: { viewModel.likeComment(comment) },
-                                onReply: { viewModel.startReply(to: comment) },
-                                onDelete: { viewModel.deleteComment(comment) },
-                                onReport: { viewModel.reportComment(comment) },
-                                canDelete: viewModel.canDelete(comment)
-                            )
+                            CommentRow(comment: comment)
                             .onAppear {
                                 viewModel.loadMoreIfNeeded(currentComment: comment)
                             }
@@ -80,9 +72,19 @@ struct CommentsView: View {
         }
         .navigationTitle("Comments")
         .navigationBarTitleDisplayMode(.inline)
+        .background(DesignTokens.Colors.background)
         .task {
             await viewModel.loadComments()
         }
+        .alert("Community error", isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button("OK", role: .cancel) { viewModel.error = nil }
+        } message: {
+            Text(viewModel.error ?? "Please try again.")
+        }
+        .preferredColorScheme(.dark)
     }
     
     // MARK: - Post Summary
@@ -112,11 +114,78 @@ struct CommentsView: View {
             
             Text(post.content)
                 .font(.subheadline)
-                .lineLimit(3)
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.Colors.textSecondary)
+
+            if post.postType != .text {
+                Label(post.postType.displayName, systemImage: post.postType.iconName)
+                    .font(.caption)
+                    .foregroundColor(DesignTokens.Colors.accent)
+            }
+
+            if !post.tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(post.tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.caption)
+                                .foregroundColor(DesignTokens.Colors.accent)
+                        }
+                    }
+                }
+            }
+
+            if !post.mediaURLs.isEmpty {
+                TabView {
+                    ForEach(post.mediaURLs, id: \.self) { mediaURL in
+                        AsyncImage(url: URL(string: mediaURL)) { phase in
+                            switch phase {
+                            case .success(let image): image.resizable().scaledToFill()
+                            case .failure: Image(systemName: "photo.badge.exclamationmark")
+                            default: ProgressView()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                    }
+                }
+                .frame(height: 200)
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: post.mediaURLs.count > 1 ? .automatic : .never))
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
+            }
+
+            HStack {
+                Button(action: viewModel.togglePostLike) {
+                    Label("\(viewModel.postLikeCount)", systemImage: viewModel.isPostLiked ? "heart.fill" : "heart")
+                        .foregroundColor(viewModel.isPostLiked ? .red : DesignTokens.Colors.textSecondary)
+                }
+                Spacer()
+                Label("\(viewModel.postCommentCount)", systemImage: "bubble.left")
+                    .foregroundColor(DesignTokens.Colors.textSecondary)
+                Spacer()
+                Button(action: viewModel.togglePostBookmark) {
+                    Image(systemName: viewModel.isPostBookmarked ? "bookmark.fill" : "bookmark")
+                        .foregroundColor(viewModel.isPostBookmarked ? DesignTokens.Colors.accent : DesignTokens.Colors.textSecondary)
+                }
+                Spacer()
+                Button(action: sharePost) {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundColor(DesignTokens.Colors.textSecondary)
+                }
+            }
+            .buttonStyle(.plain)
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(DesignTokens.Colors.surface)
+    }
+
+    private func sharePost() {
+        let activity = UIActivityViewController(
+            activityItems: ["\(post.authorName): \(post.content)"],
+            applicationActivities: nil
+        )
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = scene.windows.first?.rootViewController else { return }
+        root.present(activity, animated: true)
     }
     
     // MARK: - Empty State
@@ -142,26 +211,6 @@ struct CommentsView: View {
     
     private var commentInput: some View {
         VStack(spacing: 8) {
-            // Reply indicator
-            if let replyingTo = viewModel.replyingTo {
-                HStack {
-                    Text("Replying to \(replyingTo.authorName)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Button {
-                        viewModel.cancelReply()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
-            }
-            
             HStack(spacing: 12) {
                 TextField("Add a comment...", text: $viewModel.newCommentText, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -185,7 +234,7 @@ struct CommentsView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
-        .background(Color(.systemBackground))
+        .background(DesignTokens.Colors.background)
     }
 }
 
@@ -193,13 +242,6 @@ struct CommentsView: View {
 
 struct CommentRow: View {
     let comment: PostComment
-    let onLike: () -> Void
-    let onReply: () -> Void
-    let onDelete: () -> Void
-    let onReport: () -> Void
-    let canDelete: Bool
-    
-    @State private var showReplies = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -227,86 +269,14 @@ struct CommentRow: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        if comment.isEdited {
-                            Text("(edited)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
                         Spacer()
-                        
-                        Menu {
-                            Button {
-                                onReport()
-                            } label: {
-                                Label("Report", systemImage: "flag")
-                            }
-                            
-                            if canDelete {
-                                Button(role: .destructive) {
-                                    onDelete()
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(4)
-                        }
                     }
                     
                     // Content
                     Text(comment.content)
                         .font(.subheadline)
                     
-                    // Actions
-                    HStack(spacing: 16) {
-                        Button(action: onLike) {
-                            HStack(spacing: 4) {
-                                Image(systemName: comment.hasLiked ? "heart.fill" : "heart")
-                                    .font(.caption)
-                                    .foregroundColor(comment.hasLiked ? .red : .secondary)
-                                
-                                if comment.likeCount > 0 {
-                                    Text("\(comment.likeCount)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        
-                        Button(action: onReply) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrowshape.turn.up.left")
-                                    .font(.caption)
-                                Text("Reply")
-                                    .font(.caption)
-                            }
-                            .foregroundColor(.secondary)
-                        }
-                        
-                        if comment.replyCount > 0 {
-                            Button {
-                                showReplies.toggle()
-                            } label: {
-                                Text(showReplies ? "Hide replies" : "View \(comment.replyCount) replies")
-                                    .font(.caption)
-                                    .foregroundColor(.accentColor)
-                            }
-                        }
-                    }
-                    .padding(.top, 4)
                 }
-            }
-            
-            // Replies (would be loaded separately in full implementation)
-            if showReplies {
-                Text("Replies would load here...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 42)
             }
         }
         .padding(.horizontal)
@@ -325,8 +295,12 @@ final class CommentsViewModel: ObservableObject {
     @Published var isLoadingMore = false
     @Published var isSubmitting = false
     @Published var newCommentText = ""
-    @Published var replyingTo: PostComment?
     @Published var error: String?
+    @Published var isPostLiked: Bool
+    @Published var postLikeCount: Int
+    @Published var isPostBookmarked: Bool
+    @Published var postCommentCount: Int
+    @Published var isPostActionBusy = false
     
     private var currentPage = 1
     private var hasMorePages = true
@@ -335,6 +309,10 @@ final class CommentsViewModel: ObservableObject {
     
     init(post: CommunityPost) {
         self.post = post
+        self.isPostLiked = post.hasLiked
+        self.postLikeCount = post.likeCount
+        self.isPostBookmarked = post.hasBookmarked
+        self.postCommentCount = post.commentCount
     }
     
     func loadComments() async {
@@ -408,90 +386,61 @@ final class CommentsViewModel: ObservableObject {
         
         let request = CommunityCreateCommentRequest(
             content: trimmedText,
-            parentId: replyingTo?.id
+            parentId: nil
         )
         
         do {
             let newComment = try await service.createComment(postId: post.id, request: request)
             
-            if replyingTo != nil {
-                // For replies, we'd insert under parent - simplified here
-                comments.append(newComment)
-            } else {
-                comments.insert(newComment, at: 0)
-            }
-            
+            comments.insert(newComment, at: 0)
+            postCommentCount += 1
             newCommentText = ""
-            replyingTo = nil
             Log.social.info("Comment posted")
         } catch {
+            self.error = error.localizedDescription
             Log.social.error("Failed to post comment: \(error)")
         }
         
         isSubmitting = false
     }
-    
-    func startReply(to comment: PostComment) {
-        replyingTo = comment
-    }
-    
-    func cancelReply() {
-        replyingTo = nil
-    }
-    
-    func likeComment(_ comment: PostComment) {
-        guard let index = comments.firstIndex(where: { $0.id == comment.id }) else { return }
-        
-        // Optimistic update
-        comments[index].hasLiked.toggle()
-        comments[index].likeCount += comments[index].hasLiked ? 1 : -1
-        
+
+    func togglePostLike() {
+        guard !isPostActionBusy else { return }
+        let wasLiked = isPostLiked
+        isPostLiked.toggle()
+        postLikeCount += wasLiked ? -1 : 1
+        isPostActionBusy = true
         Task {
             do {
-                let response = try await service.likeComment(postId: post.id, commentId: comment.id)
-                comments[index].hasLiked = response.liked
-                comments[index].likeCount = response.likeCount
+                let response = try await service.toggleLike(postId: post.id)
+                isPostLiked = response.liked
+                postLikeCount = response.likeCount
             } catch {
-                // Revert
-                comments[index].hasLiked.toggle()
-                comments[index].likeCount += comments[index].hasLiked ? 1 : -1
+                isPostLiked = wasLiked
+                postLikeCount += wasLiked ? 1 : -1
+                self.error = error.localizedDescription
             }
+            isPostActionBusy = false
+        }
+    }
+
+    func togglePostBookmark() {
+        guard !isPostActionBusy else { return }
+        let wasBookmarked = isPostBookmarked
+        isPostBookmarked.toggle()
+        isPostActionBusy = true
+        Task {
+            do {
+                let response = try await service.toggleBookmark(postId: post.id)
+                isPostBookmarked = response.bookmarked
+            } catch {
+                isPostBookmarked = wasBookmarked
+                self.error = error.localizedDescription
+            }
+            isPostActionBusy = false
         }
     }
     
-    func deleteComment(_ comment: PostComment) {
-        Task {
-            do {
-                try await service.deleteComment(postId: post.id, commentId: comment.id)
-                comments.removeAll { $0.id == comment.id }
-            } catch {
-                Log.social.error("Failed to delete comment: \(error)")
-            }
-        }
-    }
-    
-    func reportComment(_ comment: PostComment) {
-        Task {
-            let request = CommunityReportRequest(
-                targetType: .comment,
-                targetId: comment.id,
-                reason: .harassment,
-                description: nil
-            )
-            do {
-                _ = try await service.reportContent(request)
-                Log.social.info("Comment reported")
-            } catch {
-                Log.social.error("Failed to report comment: \(error)")
-            }
-        }
-    }
-    
-    func canDelete(_ comment: PostComment) -> Bool {
-        // In real app, check against current user ID
-        // For now, allow delete on all (demo purposes)
-        return true
-    }
 }
 
 // MARK: - Preview

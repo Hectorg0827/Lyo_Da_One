@@ -4,8 +4,6 @@ import MapKit
 struct CommunityView: View {
     @StateObject private var viewModel = CommunityViewModel()
     @State private var showCreateSheet = false
-    @State private var showingActivities = false
-    @State private var showingLeaderboard = false // NEW
     @State private var selectedTab: CommunityTab = .posts
 
     enum CommunityTab: CaseIterable {
@@ -52,6 +50,7 @@ struct CommunityView: View {
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
             }
+            .background(DesignTokens.Colors.background)
             .navigationTitle("Community")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -76,15 +75,11 @@ struct CommunityView: View {
             CommunityPinDetailSheet(pin: pin)
                 .presentationDetents([.medium, .fraction(0.8)])
         }
-        .sheet(isPresented: $showingActivities) {
-            MyActivitiesView()
-        }
-        .sheet(isPresented: $showingLeaderboard) {
-            GlobalLeaderboardView()
-        }
         .onAppear {
             viewModel.loadData()
         }
+        .tint(DesignTokens.Colors.accent)
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -92,9 +87,6 @@ struct CommunityView: View {
 
 struct CommunityItemsView: View {
     @ObservedObject var viewModel: CommunityViewModel
-    @State private var showCreateSheet = false
-    @State private var showingActivities = false
-    @State private var showingLeaderboard = false
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -111,61 +103,13 @@ struct CommunityItemsView: View {
 
             // TOP BAR OVERLAY
             VStack(spacing: 0) {
-                CommunityTopBar(viewModel: viewModel, onShowActivities: {
-                    showingActivities = true
-                }, onShowLeaderboard: {
-                    showingLeaderboard = true
-                })
+                CommunityTopBar(viewModel: viewModel)
                     .background(.ultraThinMaterial)
                     .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 5)
-                    .padding(.trailing, 60) // Add padding to avoid overlap with AppDrawerButton at top right
 
                 Spacer()
-
-                // CURRENT LOCATION BUTTON
-                if viewModel.viewMode == .map {
-                    HStack {
-                        Spacer()
-                        Button(action: { viewModel.centerOnUserLocation() }) {
-                            Image(systemName: "location.fill")
-                                .font(.title3)
-                                .foregroundColor(.blue)
-                                .frame(width: 44, height: 44)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.1), radius: 4)
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 100) // Avoid Tab Bar overlap
-                    }
-                }
-
-                // ADD ITEM FAB
-                HStack {
-                    Spacer()
-                    Button(action: { showCreateSheet = true }) {
-                        Image(systemName: "plus")
-                            .font(.title2.bold())
-                            .foregroundColor(.white)
-                            .frame(width: 56, height: 56)
-                            .background(Color.blue)
-                            .clipShape(Circle())
-                            .shadow(radius: 4, y: 3)
-                    }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 100)
-                }
             } // end VStack overlay
         } // end ZStack
-        .sheet(isPresented: $showCreateSheet) {
-            CreateCommunityItemSheet(viewModel: viewModel)
-        }
-        .sheet(isPresented: $showingActivities) {
-            MyActivitiesView()
-        }
-        .sheet(isPresented: $showingLeaderboard) {
-            GlobalLeaderboardView()
-        }
     }
 }
 
@@ -173,8 +117,6 @@ struct CommunityItemsView: View {
 
 struct CommunityTopBar: View {
     @ObservedObject var viewModel: CommunityViewModel
-    var onShowActivities: () -> Void
-    var onShowLeaderboard: () -> Void // NEW
     @FocusState private var isSearchFocused: Bool
     
     var body: some View {
@@ -193,7 +135,7 @@ struct CommunityTopBar: View {
                 .padding(.vertical, 8)
                 .background(Color(.systemGray6))
                 .cornerRadius(10)
-                
+
                 // Map/List Toggle
                 Picker("Start", selection: $viewModel.viewMode) {
                     Image(systemName: "map.fill").tag(CommunityViewModel.ViewMode.map)
@@ -201,40 +143,12 @@ struct CommunityTopBar: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 100)
-                
-                // Activities Button
-                Button(action: onShowActivities) {
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.title3)
-                        .foregroundColor(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(Color(.systemGray6))
-                        .clipShape(Circle())
-                }
-                
-                // NEW: Leaderboard Button
-                Button(action: onShowLeaderboard) {
-                    Image(systemName: "crown.fill")
-                        .font(.title3)
-                        .foregroundColor(.orange)
-                        .frame(width: 36, height: 36)
-                        .background(Color(.systemGray6))
-                        .clipShape(Circle())
-                }
-                
-                // NEW: Toggle for real-world discovery (nearby places)
-                Button(action: { 
-                    withAnimation {
-                        viewModel.showNearbyPlaces.toggle()
+                .onChange(of: viewModel.viewMode) { _, mode in
+                    if viewModel.selectedFilter == .group && mode == .map {
+                        viewModel.viewMode = .list
                     }
-                }) {
-                    Image(systemName: viewModel.showNearbyPlaces ? "mappin.circle.fill" : "mappin.circle")
-                        .font(.title3)
-                        .foregroundColor(viewModel.showNearbyPlaces ? .blue : .primary)
-                        .frame(width: 36, height: 36)
-                        .background(Color(.systemGray6))
-                        .clipShape(Circle())
                 }
+
             }
             .padding(.horizontal)
             
@@ -250,9 +164,7 @@ struct CommunityTopBar: View {
                         ) {
                             withAnimation {
                                 viewModel.selectedFilter = type
-                                if viewModel.viewMode == .map {
-                                    // Trigger map refresh or filtering logic
-                                }
+                                if type == .group { viewModel.viewMode = .list }
                             }
                         }
                     }
@@ -353,188 +265,28 @@ struct CommunityListView: View {
                     .padding(.top, 50)
                 } else {
                     ForEach(viewModel.filteredItems) { item in
-                        if item.type == .course {
-                            if let course = item.courseData {
-                                SharedCourseCard(course: course) {
-                                  // Action handled by NavigationLink usually, but we can wrap it
-                                }
-                                .overlay(
-                                    NavigationLink(destination: destinationView(for: item)) {
-                                        EmptyView()
-                                    }
-                                    .opacity(0)
-                                )
-                            }
-                        } else {
-                            NavigationLink {
-                                destinationView(for: item)
-                            } label: {
-                                CommunityItemCard(item: item)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                        CommunityItemCard(item: item, viewModel: viewModel)
                     }
                 }
             }
             .padding(.bottom, 80) // Space for FAB
         }
-        .background(Color(.systemGroupedBackground))
+        .background(DesignTokens.Colors.background)
     }
-    
-    // MARK: - Navigation Helper
-    
-    @ViewBuilder
-    private func destinationView(for item: CommunityItem) -> some View {
-        switch item.type {
-        case .privateLesson:
-            if let lessonData = item.lessonData {
-                PrivateLessonDetailView(lesson: lessonData)
-            } else {
-                // Fallback: Create a lesson from item data
-                PrivateLessonDetailView(lesson: APIPrivateLesson(
-                    id: Int(item.id.hashValue),
-                    title: item.title,
-                    subject: "General",
-                    instructor: APIUserPreview(id: 1, name: "Instructor", avatar: item.userAvatar),
-                    cost: 50,
-                    durationMinutes: 60,
-                    description: item.subtitle,
-                    lat: item.coordinate.latitude,
-                    lng: item.coordinate.longitude,
-                    imageURL: item.imageURL
-                ))
-            }
-            
-        case .educationalCenter:
-            if let centerData = item.centerData {
-                EducationalCenterDetailView(center: centerData)
-            } else {
-                // Fallback: Create a center from item data
-                EducationalCenterDetailView(center: APIEducationalCenter(
-                    id: Int(item.id.hashValue),
-                    name: item.title,
-                    category: "Education",
-                    description: item.subtitle ?? "",
-                    lat: item.coordinate.latitude,
-                    lng: item.coordinate.longitude,
-                    address: nil,
-                    imageURL: item.imageURL,
-                    openingHours: nil
-                ))
-            }
-            
-        case .group:
-            if let groupData = item.groupData {
-                StudyGroupDetailView(group: groupData, viewModel: viewModel)
-            } else {
-                CommunityItemDetailPlaceholder(item: item)
-            }
-            
-        case .event:
-            if let eventData = item.eventData {
-                EducationalEventDetailView(event: eventData, viewModel: viewModel)
-            } else {
-                CommunityItemDetailPlaceholder(item: item)
-            }
-            
-        case .marketplace:
-            if let listingData = item.listingData {
-                MarketplaceListingDetailView(listing: listingData)
-            } else {
-                CommunityItemDetailPlaceholder(item: item)
-            }
-            
-        case .course:
-            if let courseData = item.courseData {
-                // Navigate to classroom directly or a detail view if we have one
-                LiveClassroomView(
-                    courseId: courseData.id,
-                    lessonId: "lesson-1", // Start at beginning
-                    courseTitle: courseData.title,
-                    lessonTitle: "Lesson 1"
-                )
-            } else {
-                CommunityItemDetailPlaceholder(item: item)
-            }
-            
-        default:
-            // Generic detail view for other types (questions, spots, etc.)
-            CommunityItemDetailPlaceholder(item: item)
-        }
-    }
-}
-
-// MARK: - Placeholder Detail View
-
-struct CommunityItemDetailPlaceholder: View {
-    let item: CommunityItem
-    
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Hero
-                ZStack {
-                    if let imageURL = item.imageURL, let url = URL(string: imageURL) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            default:
-                                item.type.color.opacity(0.3)
-                            }
-                        }
-                    } else {
-                        item.type.color.opacity(0.3)
-                    }
-                    
-                    VStack {
-                        Spacer()
-                        Text(item.title)
-                            .font(.title.bold())
-                            .foregroundColor(.white)
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                            )
-                    }
-                }
-                .frame(height: 200)
-                .clipped()
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    // Type badge
-                    Label(item.type.rawValue, systemImage: item.type.icon)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(item.type.color.opacity(0.1))
-                        .foregroundColor(item.type.color)
-                        .clipShape(Capsule())
-                    
-                    if let subtitle = item.subtitle {
-                        Text(subtitle)
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Text("Timestamp: \(item.timestamp, style: .date)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                Spacer()
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
 }
 
 struct CommunityItemCard: View {
     let item: CommunityItem
+    @ObservedObject var viewModel: CommunityViewModel
+    @State private var isActive: Bool
+    @State private var isBusy = false
+    @State private var errorMessage: String?
+
+    init(item: CommunityItem, viewModel: CommunityViewModel) {
+        self.item = item
+        self.viewModel = viewModel
+        _isActive = State(initialValue: item.groupData?.isMember ?? item.eventData?.isAttending ?? false)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -573,37 +325,79 @@ struct CommunityItemCard: View {
                 
                 Text(item.title)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(DesignTokens.Colors.textPrimary)
                 
                 if let subtitle = item.subtitle {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(DesignTokens.Colors.textSecondary)
                         .lineLimit(2)
                 }
-                
-                // Footer (Avatar etc)
-                HStack {
-                    if item.userAvatar != nil {
-                        // User Avatar Mock
-                        Circle() // AsyncImage here in real app
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 24, height: 24)
+
+                Button(action: toggleParticipation) {
+                    HStack {
+                        if isBusy { ProgressView().tint(.white) }
+                        Text(actionTitle)
+                            .font(.subheadline.weight(.semibold))
                     }
-                    Spacer()
-                    // Action Helper
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .foregroundColor(.white)
+                    .background(isActive ? DesignTokens.Colors.success.opacity(0.7) : DesignTokens.Colors.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Radius.md))
                 }
+                .disabled(isBusy)
                 .padding(.top, 4)
             }
             .padding(16)
         }
-        .background(Color.white)
+        .background(DesignTokens.Colors.surface)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 3, x: 0, y: 2)
         .padding(.horizontal)
+        .onChange(of: backendActive) { _, newValue in isActive = newValue }
+        .alert("Community error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "Please try again.")
+        }
+    }
+
+    private var backendActive: Bool {
+        item.groupData?.isMember ?? item.eventData?.isAttending ?? false
+    }
+
+    private var actionTitle: String {
+        if item.type == .group { return isActive ? "Leave Group" : "Join Group" }
+        return isActive ? "Going ✓" : "RSVP"
+    }
+
+    private func toggleParticipation() {
+        guard !isBusy else { return }
+        let wasActive = isActive
+        isActive.toggle()
+        isBusy = true
+        Task {
+            do {
+                if item.type == .group {
+                    if wasActive { try await viewModel.leaveStudyGroup(id: item.id) }
+                    else { try await viewModel.joinStudyGroup(id: item.id) }
+                } else {
+                    if wasActive { try await viewModel.unregisterFromEvent(id: item.id) }
+                    else { try await viewModel.registerForEvent(id: item.id) }
+                }
+                await MainActor.run { isBusy = false }
+            } catch {
+                await MainActor.run {
+                    isActive = wasActive
+                    isBusy = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }
 
@@ -636,27 +430,17 @@ struct CommunityPinDetailSheet: View {
             
             Divider()
             
-            HStack(spacing: 20) {
-                Button(action: {
-                    let mapItem = MKMapItem(placemark: MKPlacemark(coordinate: pin.coordinate))
-                    mapItem.name = pin.title
-                    mapItem.openInMaps(launchOptions: [
-                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-                    ])
-                }) {
-                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                Button(action: {
-                    HapticManager.shared.playLightImpact()
-                }) {
-                    Label("View Details", systemImage: "info.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
+            Button(action: {
+                let mapItem = MKMapItem(placemark: MKPlacemark(coordinate: pin.coordinate))
+                mapItem.name = pin.title
+                mapItem.openInMaps(launchOptions: [
+                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                ])
+            }) {
+                Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.bordered)
             .padding(.horizontal)
             
             Spacer()

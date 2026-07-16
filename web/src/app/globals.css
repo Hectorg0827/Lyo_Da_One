@@ -16,7 +16,12 @@
   --text-secondary: #c9d1f2;
   --lyo-500: #6366f1;
   --lyo-600: #4f46e5;
-  --lyo-400: #a78bfa;
+  --lyo-400: #8b5cf6;
+  --lyo-300: #a78bfa;
+  --accent-magenta: #d946ef;
+  --accent-gold: #d9b24c;
+  --surface-highlight: #343847;
+  --text-tertiary: rgba(255, 255, 255, 0.5);
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;

@@ -34,7 +34,7 @@ struct APISharedCourse: Codable, Identifiable {
     }
 }
 
-struct APIStudyGroup: Codable, Identifiable {
+struct APIStudyGroup: Decodable, Identifiable {
     let id: Int
     let name: String
     let description: String
@@ -48,6 +48,8 @@ struct APIStudyGroup: Codable, Identifiable {
     let lng: Double?
     let tags: [String]
     let host: APIUserPreview
+    let privacy: String
+    let isMember: Bool
     
     enum CodingKeys: String, CodingKey {
         case id, name, description, subject
@@ -56,11 +58,72 @@ struct APIStudyGroup: Codable, Identifiable {
         case nextSession = "next_session"
         case locationName = "location_name"
         case isRemote = "is_remote"
-        case lat, lng, tags, host
+        case lat, lng, tags, host, privacy
+        case isMember = "is_member"
+        case creatorId = "creator_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        subject = try container.decodeIfPresent(String.self, forKey: .subject) ?? "General"
+        memberCount = try container.decodeIfPresent(Int.self, forKey: .memberCount) ?? 0
+        maxMembers = try container.decodeIfPresent(Int.self, forKey: .maxMembers) ?? 0
+        nextSession = try container.decodeIfPresent(Date.self, forKey: .nextSession)
+        locationName = try container.decodeIfPresent(String.self, forKey: .locationName)
+        isRemote = try container.decodeIfPresent(Bool.self, forKey: .isRemote) ?? true
+        lat = try container.decodeIfPresent(Double.self, forKey: .lat)
+        lng = try container.decodeIfPresent(Double.self, forKey: .lng)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        privacy = try container.decodeIfPresent(String.self, forKey: .privacy) ?? "public"
+        isMember = try container.decodeIfPresent(Bool.self, forKey: .isMember) ?? false
+        host = try container.decodeIfPresent(APIUserPreview.self, forKey: .host)
+            ?? APIUserPreview(
+                id: try container.decodeIfPresent(Int.self, forKey: .creatorId) ?? 0,
+                name: "Community host",
+                avatar: nil
+            )
     }
 }
 
-struct APIEducationalEvent: Codable, Identifiable {
+struct APICreateStudyGroupRequest: Codable {
+    let name: String
+    let description: String?
+    let privacy: String
+    let maxMembers: Int
+    let requiresApproval: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case name, description, privacy
+        case maxMembers = "max_members"
+        case requiresApproval = "requires_approval"
+    }
+}
+
+struct APICreateEducationalEventRequest: Codable {
+    let title: String
+    let description: String?
+    let eventType: String
+    let location: String?
+    let maxAttendees: Int
+    let startTime: Date
+    let endTime: Date
+    let timezone: String
+    let latitude: Double?
+    let longitude: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case title, description, location, timezone, latitude, longitude
+        case eventType = "event_type"
+        case maxAttendees = "max_attendees"
+        case startTime = "start_time"
+        case endTime = "end_time"
+    }
+}
+
+struct APIEducationalEvent: Decodable, Identifiable {
     let id: Int
     let title: String
     let description: String
@@ -75,11 +138,9 @@ struct APIEducationalEvent: Codable, Identifiable {
     let cost: Double?
     let roomId: String?
     let organizerProfile: APIUserPreview?
-    // The instruction provided properties that seem to belong here,
-    // but the instruction also mentioned APIMarketplaceListing.
-    // Assuming the intent was to add these to APIEducationalEvent if they were missing or to update them.
-    // The `actions` and `onAction` properties are UI-related and don't belong in a DTO.
-    // The `imageURL` type was changed from String? to URL? in the instruction, reverting to String? for DTO consistency.
+    let userAttendanceStatus: String?
+
+    var isAttending: Bool { userAttendanceStatus != nil }
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, cost
@@ -87,11 +148,32 @@ struct APIEducationalEvent: Codable, Identifiable {
         case date = "start_time"
         case durationMinutes = "duration_minutes"
         case locationName = "location"
-        case lat, lng
+        case lat = "latitude"
+        case lng = "longitude"
         case imageURL = "image_url"
         case attendeeCount = "attendee_count"
         case roomId = "room_id"
         case organizerProfile = "organizer_profile"
+        case userAttendanceStatus = "user_attendance_status"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        date = try container.decode(Date.self, forKey: .date)
+        durationMinutes = try container.decodeIfPresent(Int.self, forKey: .durationMinutes)
+        locationName = try container.decodeIfPresent(String.self, forKey: .locationName) ?? "Online"
+        lat = try container.decodeIfPresent(Double.self, forKey: .lat)
+        lng = try container.decodeIfPresent(Double.self, forKey: .lng)
+        organizerId = try container.decodeIfPresent(Int.self, forKey: .organizerId) ?? 0
+        imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
+        attendeeCount = try container.decodeIfPresent(Int.self, forKey: .attendeeCount) ?? 0
+        cost = try container.decodeIfPresent(Double.self, forKey: .cost)
+        roomId = try container.decodeIfPresent(String.self, forKey: .roomId)
+        organizerProfile = try container.decodeIfPresent(APIUserPreview.self, forKey: .organizerProfile)
+        userAttendanceStatus = try container.decodeIfPresent(String.self, forKey: .userAttendanceStatus)
     }
 }
 

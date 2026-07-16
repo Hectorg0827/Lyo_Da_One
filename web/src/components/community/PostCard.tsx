@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -8,131 +8,20 @@ import {
   Share2,
   Bookmark,
   BookmarkCheck,
-  BarChart2,
-  Calendar,
   HelpCircle,
-  BookOpen,
   FileText,
-  Trophy,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
+  Lightbulb,
 } from 'lucide-react';
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
-import type { CommunityPost, PollOption } from '@/types';
+import { api } from '@/lib/api';
+import type { CommunityPost } from '@/types';
 
 // ---- Post type config ----
 const POST_TYPE_CONFIG = {
   post: { label: 'Post', icon: FileText, color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   question: { label: 'Question', icon: HelpCircle, color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-  event: { label: 'Event', icon: Calendar, color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  poll: { label: 'Poll', icon: BarChart2, color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-  course_share: { label: 'Course', icon: BookOpen, color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
-  achievement: { label: 'Achievement', icon: Trophy, color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+  study_tip: { label: 'Study tip', icon: Lightbulb, color: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
 };
-
-const ROLE_BADGE: Record<string, string> = {
-  student: 'bg-blue-500/20 text-blue-400',
-  creator: 'bg-purple-500/20 text-purple-400',
-  mentor: 'bg-amber-500/20 text-amber-400',
-  admin: 'bg-red-500/20 text-red-400',
-};
-
-// ---- Poll Component ----
-interface PollProps {
-  poll: NonNullable<CommunityPost['poll']>;
-  onVote?: (optionId: string) => void;
-}
-
-function PollComponent({ poll, onVote }: PollProps) {
-  const [voted, setVoted] = useState<string | null>(
-    poll.options.find((o) => o.isSelected)?.id ?? null
-  );
-  const [options, setOptions] = useState<PollOption[]>(poll.options);
-  const [total, setTotal] = useState(poll.totalVotes);
-
-  const hasVoted = voted !== null;
-
-  const handleVote = (optionId: string) => {
-    if (hasVoted) return;
-    setVoted(optionId);
-    setOptions((prev) =>
-      prev.map((o) =>
-        o.id === optionId ? { ...o, votes: o.votes + 1, isSelected: true } : o
-      )
-    );
-    setTotal((t) => t + 1);
-    onVote?.(optionId);
-  };
-
-  const getPercent = (votes: number) =>
-    total > 0 ? Math.round((votes / total) * 100) : 0;
-
-  return (
-    <div className="mt-3 space-y-2">
-      {options.map((option) => {
-        const pct = hasVoted ? getPercent(option.votes) : 0;
-        const isWinner =
-          hasVoted && option.votes === Math.max(...options.map((o) => o.votes));
-
-        return (
-          <button
-            key={option.id}
-            onClick={() => handleVote(option.id)}
-            disabled={hasVoted}
-            className={cn(
-              'relative w-full text-left rounded-xl border overflow-hidden transition-all duration-200',
-              hasVoted
-                ? 'cursor-default'
-                : 'hover:border-lyo-500/50 hover:bg-white/5 cursor-pointer active:scale-[0.99]',
-              option.id === voted
-                ? 'border-lyo-500/60 bg-lyo-500/10'
-                : 'border-white/10 bg-white/[0.03]'
-            )}
-          >
-            {hasVoted && (
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
-                className={cn(
-                  'absolute inset-0 rounded-xl opacity-20',
-                  isWinner ? 'bg-lyo-500' : 'bg-white/20'
-                )}
-              />
-            )}
-            <div className="relative flex items-center justify-between px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                {option.id === voted && (
-                  <CheckCircle2 className="w-4 h-4 text-lyo-400 shrink-0" />
-                )}
-                <span
-                  className={cn(
-                    'text-sm font-medium',
-                    option.id === voted ? 'text-white' : 'text-white/80'
-                  )}
-                >
-                  {option.text}
-                </span>
-              </div>
-              {hasVoted && (
-                <span
-                  className={cn(
-                    'text-xs font-bold ml-2 shrink-0',
-                    isWinner ? 'text-lyo-400' : 'text-white/50'
-                  )}
-                >
-                  {pct}%
-                </span>
-              )}
-            </div>
-          </button>
-        );
-      })}
-      <p className="text-xs text-white/40 mt-1">{formatNumber(total)} votes</p>
-    </div>
-  );
-}
 
 // ---- Main PostCard ----
 interface PostCardProps {
@@ -145,33 +34,67 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(post.isLiked ?? false);
   const [likeCount, setLikeCount] = useState(post.likes);
   const [isBookmarked, setIsBookmarked] = useState(post.isBookmarked ?? false);
-  const [expanded, setExpanded] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
+  const [actionBusy, setActionBusy] = useState<'like' | 'bookmark' | null>(null);
 
-  const typeConfig =
-    POST_TYPE_CONFIG[post.type] ?? POST_TYPE_CONFIG.post;
+  useEffect(() => {
+    setIsLiked(post.isLiked ?? false);
+    setLikeCount(post.likes);
+    setIsBookmarked(post.isBookmarked ?? false);
+  }, [post.isBookmarked, post.isLiked, post.likes]);
+
+  const typeConfig = POST_TYPE_CONFIG[post.type as keyof typeof POST_TYPE_CONFIG] ?? POST_TYPE_CONFIG.post;
   const TypeIcon = typeConfig.icon;
 
-  const CONTENT_LIMIT = 200;
-  const isLong = post.content.length > CONTENT_LIMIT;
-  const displayContent =
-    !expanded && isLong ? post.content.slice(0, CONTENT_LIMIT) + '…' : post.content;
-
-  const handleLike = (e: React.MouseEvent) => {
+  const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsLiked((v) => !v);
-    setLikeCount((c) => (isLiked ? c - 1 : c + 1));
+    if (actionBusy) return;
+    const wasLiked = isLiked;
+    setActionBusy('like');
+    setIsLiked(!wasLiked);
+    setLikeCount((c) => (wasLiked ? c - 1 : c + 1));
+    try {
+      const result = await api.community.togglePostLike(post.id);
+      setIsLiked(result.liked);
+      setLikeCount(result.like_count);
+    } catch {
+      setIsLiked(wasLiked);
+      setLikeCount((c) => (wasLiked ? c + 1 : c - 1));
+    } finally {
+      setActionBusy(null);
+    }
   };
 
-  const handleBookmark = (e: React.MouseEvent) => {
+  const handleBookmark = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsBookmarked((v) => !v);
+    if (actionBusy) return;
+    const wasBookmarked = isBookmarked;
+    setActionBusy('bookmark');
+    setIsBookmarked(!wasBookmarked);
+    try {
+      const result = await api.community.togglePostBookmark(post.id);
+      setIsBookmarked(result.bookmarked);
+    } catch {
+      setIsBookmarked(wasBookmarked);
+    } finally {
+      setActionBusy(null);
+    }
   };
 
-  const handleShare = (e: React.MouseEvent) => {
+  const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowShareToast(true);
-    setTimeout(() => setShowShareToast(false), 2000);
+    const url = `${window.location.origin}/community/${post.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'LYO Community', text: post.content, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShowShareToast(true);
+        setTimeout(() => setShowShareToast(false), 2000);
+      }
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') console.error('Unable to share post', error);
+    }
   };
 
   const initials = post.author.displayName
@@ -193,14 +116,6 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         className
       )}
     >
-      {/* Pinned badge */}
-      {post.isPinned && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-400 font-medium mb-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-          Pinned
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
@@ -217,24 +132,11 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
                 {initials}
               </div>
             )}
-            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-[#111118]" />
           </div>
 
           {/* Author info */}
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-white leading-none">
-                {post.author.displayName}
-              </span>
-              <span
-                className={cn(
-                  'px-1.5 py-0.5 rounded-full text-[10px] font-medium capitalize',
-                  ROLE_BADGE[post.author.role] ?? ROLE_BADGE.student
-                )}
-              >
-                {post.author.role}
-              </span>
-            </div>
+            <span className="text-sm font-semibold leading-none text-white">{post.author.displayName}</span>
             <span className="text-xs text-white/40 mt-0.5 block">
               {formatTimeAgo(post.createdAt)}
             </span>
@@ -242,15 +144,11 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         </div>
 
         {/* Post type badge */}
-        <span
-          className={cn(
-            'flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border shrink-0',
-            typeConfig.color
-          )}
-        >
-          <TypeIcon className="w-3 h-3" />
-          {typeConfig.label}
-        </span>
+        {post.type !== 'post' && (
+          <span className={cn('flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium', typeConfig.color)}>
+            <TypeIcon className="h-3 w-3" />{typeConfig.label}
+          </span>
+        )}
       </div>
 
       {/* Title */}
@@ -262,26 +160,7 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
 
       {/* Content */}
       <div className="text-sm text-white/70 leading-relaxed">
-        <p>{displayContent}</p>
-        {isLong && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded((v) => !v);
-            }}
-            className="flex items-center gap-1 text-lyo-400 text-xs font-medium mt-1 hover:text-lyo-300 transition-colors"
-          >
-            {expanded ? (
-              <>
-                Less <ChevronUp className="w-3 h-3" />
-              </>
-            ) : (
-              <>
-                Read more <ChevronDown className="w-3 h-3" />
-              </>
-            )}
-          </button>
-        )}
+        <p className="whitespace-pre-wrap break-words">{post.content}</p>
       </div>
 
       {/* Images */}
@@ -314,20 +193,13 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         </div>
       )}
 
-      {/* Poll */}
-      {post.poll && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <PollComponent poll={post.poll} />
-        </div>
-      )}
-
       {/* Tags */}
       {post.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-3">
           {post.tags.map((tag) => (
             <span
               key={tag}
-              className="px-2 py-0.5 rounded-full text-xs text-lyo-400 bg-lyo-500/10 border border-lyo-500/20 hover:bg-lyo-500/20 transition-colors cursor-pointer"
+              className="rounded-full border border-lyo-500/20 bg-lyo-500/10 px-2 py-0.5 text-xs text-lyo-400"
             >
               #{tag}
             </span>
@@ -342,6 +214,7 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
           <motion.button
             whileTap={{ scale: 0.85 }}
             onClick={handleLike}
+            disabled={actionBusy === 'like'}
             className={cn(
               'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
               isLiked
@@ -399,6 +272,7 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         <motion.button
           whileTap={{ scale: 0.85 }}
           onClick={handleBookmark}
+          disabled={actionBusy === 'bookmark'}
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
             isBookmarked

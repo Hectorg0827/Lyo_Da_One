@@ -39,6 +39,8 @@ enum CommunityPostType: String, Codable, CaseIterable {
     case courseShare = "course_share"
     case questionDiscussion = "question_discussion"
     case studyTip = "study_tip"
+
+    static let crossPlatformCases: [CommunityPostType] = [.text, .questionDiscussion, .studyTip]
     
     var displayName: String {
         switch self {

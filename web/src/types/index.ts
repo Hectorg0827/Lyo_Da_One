@@ -175,7 +175,7 @@ export interface StorySlide {
 export interface CommunityPost {
   id: string;
   author: User;
-  type: 'post' | 'question' | 'event' | 'poll' | 'course_share' | 'achievement';
+  type: 'post' | 'question' | 'study_tip' | 'event' | 'poll' | 'course_share' | 'achievement';
   title: string;
   content: string;
   images?: string[];

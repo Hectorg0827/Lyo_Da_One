@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Users, Check } from 'lucide-react'
 import { cn, formatNumber } from '@/lib/utils'
@@ -40,6 +40,11 @@ export default function GroupCard({ group, className }: GroupCardProps) {
   const [joined, setJoined] = useState(group.isJoined ?? false)
   const [memberCount, setMemberCount] = useState(group.memberCount)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setJoined(group.isJoined ?? false)
+    setMemberCount(group.memberCount)
+  }, [group.isJoined, group.memberCount])
 
   const gradient = CATEGORY_GRADIENTS[group.category] ?? CATEGORY_GRADIENTS.General
   const badgeStyle = CATEGORY_BADGE_STYLES[group.category] ?? CATEGORY_BADGE_STYLES.General
