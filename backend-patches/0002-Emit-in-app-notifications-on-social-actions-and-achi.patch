@@ -1,0 +1,250 @@
+From 001a7b9c8138d968f2590fcc23a99d90afdfec04 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 3 Jul 2026 18:13:52 +0000
+Subject: [PATCH 2/4] Emit in-app notifications on social actions and
+ achievement unlocks
+
+Adds reusable create_notification() and get_actor_display_name() helpers
+to the notifications router (co-located with the Notification model),
+then wires them into the core action paths so the notifications feed
+actually populates:
+
+- Comment on a post -> notifies the post author
+- React to a post   -> notifies the post author (new reactions only)
+- Follow a user     -> notifies the followed user
+- Achievement unlock -> notifies the earner (after batch commit)
+
+All notification creation is non-fatal (wrapped, self-notifications
+skipped) so it can never break the underlying action. Achievement
+notifications are collected during the check loop and emitted after the
+batch commit to preserve transaction semantics.
+
+https://claude.ai/code/session_01Q1rk7BZrjN1to3WbJRAPyR
+---
+ lyo_app/feeds/service.py         | 60 +++++++++++++++++++++++++++++--
+ lyo_app/gamification/service.py  | 28 +++++++++++++--
+ lyo_app/routers/notifications.py | 62 ++++++++++++++++++++++++++++++++
+ 3 files changed, 145 insertions(+), 5 deletions(-)
+
+diff --git a/lyo_app/feeds/service.py b/lyo_app/feeds/service.py
+index cfccc04..56ba6c2 100644
+--- a/lyo_app/feeds/service.py
++++ b/lyo_app/feeds/service.py
+@@ -284,7 +284,27 @@ class FeedsService:
+         db.add(db_comment)
+         await db.commit()
+         await db.refresh(db_comment)
+-        
++
++        # Notify the post author that someone commented (non-fatal)
++        try:
++            from lyo_app.routers.notifications import create_notification, get_actor_display_name
++            actor_name = await get_actor_display_name(db, author_id)
++            snippet = (comment_data.content or "").strip()
++            if len(snippet) > 80:
++                snippet = snippet[:77] + "..."
++            await create_notification(
++                db,
++                user_id=post.author_id,
++                type="comment",
++                title="New comment",
++                body=f'{actor_name} commented: "{snippet}"',
++                actor_id=author_id,
++                target_id=str(comment_data.post_id),
++                target_type="post",
++            )
++        except Exception:  # noqa: BLE001
++            pass
++
+         return db_comment
+ 
+     async def get_comments_by_post(
+@@ -364,7 +384,24 @@ class FeedsService:
+             db.add(db_reaction)
+             await db.commit()
+             await db.refresh(db_reaction)
+-            
++
++            # Notify the post author about the new reaction (non-fatal)
++            try:
++                from lyo_app.routers.notifications import create_notification, get_actor_display_name
++                actor_name = await get_actor_display_name(db, user_id)
++                await create_notification(
++                    db,
++                    user_id=post.author_id,
++                    type="like",
++                    title="New reaction",
++                    body=f"{actor_name} reacted to your post",
++                    actor_id=user_id,
++                    target_id=str(reaction_data.post_id),
++                    target_type="post",
++                )
++            except Exception:  # noqa: BLE001
++                pass
++
+             return db_reaction
+ 
+     async def react_to_comment(
+@@ -474,7 +511,24 @@ class FeedsService:
+         db.add(db_follow)
+         await db.commit()
+         await db.refresh(db_follow)
+-        
++
++        # Notify the followed user (non-fatal)
++        try:
++            from lyo_app.routers.notifications import create_notification, get_actor_display_name
++            actor_name = await get_actor_display_name(db, follower_id)
++            await create_notification(
++                db,
++                user_id=follow_data.following_id,
++                type="follow",
++                title="New follower",
++                body=f"{actor_name} started following you",
++                actor_id=follower_id,
++                target_id=str(follower_id),
++                target_type="user",
++            )
++        except Exception:  # noqa: BLE001
++            pass
++
+         return db_follow
+ 
+     async def unfollow_user(
+diff --git a/lyo_app/gamification/service.py b/lyo_app/gamification/service.py
+index f3149bd..13a08d7 100644
+--- a/lyo_app/gamification/service.py
++++ b/lyo_app/gamification/service.py
+@@ -476,7 +476,8 @@ class GamificationService:
+         # In a real implementation, you'd have more sophisticated criteria evaluation
+         
+         awarded_achievements = []
+-        
++        newly_awarded_info = []  # (name, xp_reward) for notifications, created after commit
++
+         # Get all active achievements that could be triggered by this action
+         result = await db.execute(
+             select(Achievement)
+@@ -526,8 +527,31 @@ class GamificationService:
+                     )
+                 
+                 awarded_achievements.append(user_achievement)
+-        
++                newly_awarded_info.append((
++                    getattr(achievement, "name", None) or "an achievement",
++                    getattr(achievement, "xp_reward", 0) or 0,
++                ))
++
+         await db.commit()
++
++        # Emit an in-app notification per newly-unlocked achievement (non-fatal)
++        if newly_awarded_info:
++            try:
++                from lyo_app.routers.notifications import create_notification
++                for name, xp in newly_awarded_info:
++                    xp_suffix = f" +{xp} XP" if xp else ""
++                    await create_notification(
++                        db,
++                        user_id=user_id,
++                        type="achievement",
++                        title="Achievement unlocked!",
++                        body=f'You earned "{name}".{xp_suffix}',
++                        actor_id=None,
++                        target_type="achievement",
++                    )
++            except Exception:  # noqa: BLE001
++                pass
++
+         return awarded_achievements
+ 
+     async def _evaluate_achievement_criteria(
+diff --git a/lyo_app/routers/notifications.py b/lyo_app/routers/notifications.py
+index 30507bc..add1d2f 100644
+--- a/lyo_app/routers/notifications.py
++++ b/lyo_app/routers/notifications.py
+@@ -1,6 +1,7 @@
+ """
+ Notifications Router - Push notification management endpoints
+ """
++import logging
+ from datetime import datetime
+ 
+ from fastapi import APIRouter, Depends, HTTPException, Query, status
+@@ -14,6 +15,8 @@ from lyo_app.auth.jwt_auth import get_current_user
+ from lyo_app.auth.models import User
+ from lyo_app.core.database import get_db, Base
+ 
++logger = logging.getLogger(__name__)
++
+ router = APIRouter(prefix="/notifications", tags=["Notifications"])
+ 
+ 
+@@ -34,6 +37,65 @@ class Notification(Base):
+     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+ 
+ 
++# ── Reusable helpers (used by feeds, gamification, etc.) ──────────────────────
++
++async def get_actor_display_name(db: AsyncSession, user_id: int) -> str:
++    """Resolve a user's display name for use in notification copy."""
++    try:
++        result = await db.execute(
++            select(User.first_name, User.last_name, User.username).where(User.id == user_id)
++        )
++        row = result.first()
++        if not row:
++            return "Someone"
++        first, last, uname = row
++        return " ".join(filter(None, [first, last])) or uname or "Someone"
++    except Exception:  # noqa: BLE001
++        return "Someone"
++
++
++async def create_notification(
++    db: AsyncSession,
++    user_id: int,
++    type: str,
++    title: str,
++    body: str,
++    actor_id: Optional[int] = None,
++    target_id: Optional[str] = None,
++    target_type: Optional[str] = None,
++) -> Optional["Notification"]:
++    """Create a notification for ``user_id``.
++
++    Non-fatal by design: any failure is logged and swallowed so notification
++    creation can never break the primary action (liking, commenting, etc.).
++    Self-notifications (actor_id == user_id) are skipped.
++    """
++    if actor_id is not None and actor_id == user_id:
++        return None
++    try:
++        notif = Notification(
++            user_id=user_id,
++            type=type,
++            title=title,
++            body=body,
++            actor_id=actor_id,
++            target_id=str(target_id) if target_id is not None else None,
++            target_type=target_type,
++            is_read=False,
++            created_at=datetime.utcnow(),
++        )
++        db.add(notif)
++        await db.commit()
++        return notif
++    except Exception as e:  # noqa: BLE001
++        logger.warning(f"Failed to create notification for user {user_id}: {e}")
++        try:
++            await db.rollback()
++        except Exception:  # noqa: BLE001
++            pass
++        return None
++
++
+ # ── Pydantic Schemas ──────────────────────────────────────────────────────────
+ 
+ class NotificationPreferences(BaseModel):
+-- 
+2.43.0
+
