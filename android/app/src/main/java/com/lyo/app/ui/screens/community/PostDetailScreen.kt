@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -51,6 +52,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.CommunityCommentRequest
 import com.lyo.app.ui.components.EmptyState
@@ -82,9 +84,13 @@ private data class PostDetail(
 )
 
 private data class CommentItem(
+    val id: String,
+    val authorId: String,
     val content: String,
     val authorName: String,
     val createdAt: String?,
+    val likeCount: Int,
+    val hasLiked: Boolean,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +108,53 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
     var refreshKey by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val currentUserId = Session.user?.id.orEmpty()
+
+    fun updateComment(commentId: String, transform: (CommentItem) -> CommentItem) {
+        post = post?.let { detail ->
+            detail.copy(comments = detail.comments.map { if (it.id == commentId) transform(it) else it })
+        }
+    }
+
+    // Optimistic like toggle, reverted on failure — same behavior as iOS + web
+    fun toggleCommentLike(comment: CommentItem) {
+        if (comment.id.isEmpty()) return
+        val wasLiked = comment.hasLiked
+        updateComment(comment.id) {
+            it.copy(hasLiked = !wasLiked, likeCount = (it.likeCount + if (wasLiked) -1 else 1).coerceAtLeast(0))
+        }
+        scope.launch {
+            runCatching { ApiClient.api.toggleCommunityCommentLike(postId, comment.id) }
+                .onSuccess { response ->
+                    updateComment(comment.id) {
+                        it.copy(hasLiked = response.liked ?: !wasLiked, likeCount = response.likeCount ?: it.likeCount)
+                    }
+                }
+                .onFailure {
+                    updateComment(comment.id) {
+                        it.copy(hasLiked = wasLiked, likeCount = (it.likeCount + if (wasLiked) 1 else -1).coerceAtLeast(0))
+                    }
+                }
+        }
+    }
+
+    // Delete own comment (backend enforces author-only)
+    fun deleteComment(comment: CommentItem) {
+        if (comment.id.isEmpty()) return
+        scope.launch {
+            runCatching {
+                val response = ApiClient.api.deleteCommunityComment(postId, comment.id)
+                check(response.isSuccessful) { "Unable to delete comment" }
+            }.onSuccess {
+                post = post?.let { detail ->
+                    detail.copy(
+                        comments = detail.comments.filterNot { it.id == comment.id },
+                        commentCount = (detail.commentCount - 1).coerceAtLeast(0),
+                    )
+                }
+            }.onFailure { commentError = it.localizedMessage ?: "Unable to delete comment" }
+        }
+    }
 
     LaunchedEffect(postId, refreshKey) {
         // Community post + its comments (separate endpoint, same as iOS)
@@ -110,9 +163,13 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
         if (postResult != null) {
             val comments = commentsResult?.items.orEmpty().map {
                 CommentItem(
+                    id = it.id.orEmpty(),
+                    authorId = it.authorIdStr,
                     content = it.content.orEmpty(),
                     authorName = it.authorName ?: "Member",
                     createdAt = it.createdAt,
+                    likeCount = it.likeCount ?: 0,
+                    hasLiked = it.hasLiked == true,
                 )
             }
             post = PostDetail(
@@ -395,6 +452,44 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = TextPrimary,
                                         )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(top = 4.dp),
+                                        ) {
+                                            IconButton(
+                                                onClick = { toggleCommentLike(comment) },
+                                                modifier = Modifier.size(26.dp),
+                                            ) {
+                                                Icon(
+                                                    if (comment.hasLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                                    contentDescription = if (comment.hasLiked) "Unlike comment" else "Like comment",
+                                                    tint = if (comment.hasLiked) LyoPink else TextSecondary,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                            if (comment.likeCount > 0) {
+                                                Spacer(Modifier.width(2.dp))
+                                                Text(
+                                                    comment.likeCount.toString(),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = TextSecondary,
+                                                )
+                                            }
+                                            if (currentUserId.isNotEmpty() && comment.authorId == currentUserId) {
+                                                Spacer(Modifier.width(12.dp))
+                                                IconButton(
+                                                    onClick = { deleteComment(comment) },
+                                                    modifier = Modifier.size(26.dp),
+                                                ) {
+                                                    Icon(
+                                                        Icons.Outlined.Delete,
+                                                        contentDescription = "Delete comment",
+                                                        tint = TextSecondary,
+                                                        modifier = Modifier.size(16.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

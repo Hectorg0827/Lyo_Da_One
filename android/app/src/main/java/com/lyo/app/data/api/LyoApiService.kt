@@ -12,7 +12,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * Retrofit surface for the LYO backend (api.lyoapp.com).
+ * Retrofit surface for the LYO backend (lyo-production.up.railway.app).
  * Mirrors web/src/lib/api.ts endpoint-for-endpoint.
  */
 interface LyoApiService {
@@ -195,6 +195,18 @@ interface LyoApiService {
         @Path("postId") postId: String,
         @Body body: CommunityCommentRequest,
     ): CommunityCommentDto
+
+    @POST("community/posts/{postId}/comments/{commentId}/like")
+    suspend fun toggleCommunityCommentLike(
+        @Path("postId") postId: String,
+        @Path("commentId") commentId: String,
+    ): LikeToggleResponse
+
+    @DELETE("community/posts/{postId}/comments/{commentId}")
+    suspend fun deleteCommunityComment(
+        @Path("postId") postId: String,
+        @Path("commentId") commentId: String,
+    ): Response<Unit>
 
     // ── Messages ──
     @GET("messages/conversations")

@@ -1,10 +1,24 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { Heart, Trash2 } from 'lucide-react'
 import { cn, formatTimeAgo, getInitials } from '@/lib/utils'
 import type { Comment } from '@/types'
 
-function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number }) {
+function CommentItem({
+  comment,
+  depth = 0,
+  currentUserId,
+  onLike,
+  onDelete,
+}: {
+  comment: Comment
+  depth?: number
+  currentUserId?: string
+  onLike?: (commentId: string) => void
+  onDelete?: (commentId: string) => void
+}) {
+  const isOwn = Boolean(currentUserId) && comment.author.id === currentUserId
   return (
     <motion.article
       initial={{ opacity: 0, y: 8 }}
@@ -25,9 +39,37 @@ function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number 
           </div>
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white/80">{comment.content}</p>
         </div>
+        {(onLike || (onDelete && isOwn)) && (
+          <div className="mt-1 flex items-center gap-3 pl-1">
+            {onLike && (
+              <button
+                onClick={() => onLike(comment.id)}
+                aria-label={comment.isLiked ? 'Unlike comment' : 'Like comment'}
+                className={cn(
+                  'flex items-center gap-1 text-xs transition-colors',
+                  comment.isLiked ? 'text-red-400' : 'text-white/40 hover:text-white'
+                )}
+              >
+                <Heart className={cn('h-3.5 w-3.5', comment.isLiked && 'fill-current')} />
+                {comment.likes > 0 && <span>{comment.likes}</span>}
+              </button>
+            )}
+            {onDelete && isOwn && (
+              <button
+                onClick={() => onDelete(comment.id)}
+                aria-label="Delete comment"
+                className="flex items-center gap-1 text-xs text-white/40 transition-colors hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
         {comment.replies && comment.replies.length > 0 && (
           <div className="mt-3 space-y-3">
-            {comment.replies.map((reply) => <CommentItem key={reply.id} comment={reply} depth={depth + 1} />)}
+            {comment.replies.map((reply) => (
+              <CommentItem key={reply.id} comment={reply} depth={depth + 1} currentUserId={currentUserId} onLike={onLike} onDelete={onDelete} />
+            ))}
           </div>
         )}
       </div>
@@ -35,12 +77,26 @@ function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number 
   )
 }
 
-export default function CommentThread({ comments, className }: { comments: Comment[]; className?: string }) {
+export default function CommentThread({
+  comments,
+  className,
+  currentUserId,
+  onLike,
+  onDelete,
+}: {
+  comments: Comment[]
+  className?: string
+  currentUserId?: string
+  onLike?: (commentId: string) => void
+  onDelete?: (commentId: string) => void
+}) {
   return (
     <div className={cn('space-y-4 p-4', className)}>
       {comments.length === 0
         ? <p className="py-6 text-center text-sm text-white/40">No comments yet. Be the first!</p>
-        : comments.map((comment) => <CommentItem key={comment.id} comment={comment} />)}
+        : comments.map((comment) => (
+          <CommentItem key={comment.id} comment={comment} currentUserId={currentUserId} onLike={onLike} onDelete={onDelete} />
+        ))}
     </div>
   )
 }

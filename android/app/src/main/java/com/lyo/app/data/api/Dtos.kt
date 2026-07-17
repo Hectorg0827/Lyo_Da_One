@@ -279,7 +279,9 @@ data class CommunityCommentDto(
     @SerializedName("like_count") val likeCount: Int? = null,
     @SerializedName("has_liked") val hasLiked: Boolean? = null,
     @SerializedName("created_at") val createdAt: String? = null,
-)
+) {
+    val authorIdStr: String get() = authorId?.toString()?.removeSuffix(".0") ?: ""
+}
 
 data class CommunityCommentsResponse(
     val items: List<CommunityCommentDto>? = null,
