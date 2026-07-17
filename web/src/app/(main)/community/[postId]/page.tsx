@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -203,7 +203,12 @@ export default function PostDetailPage() {
   }, [isBookmarked, postActionBusy, postId]);
 
   // ── Comment like / delete (same backend contract iOS + Android use) ──
+  // One in-flight request per comment, like the iOS view model's busy set
+  const busyCommentIds = useRef<Set<string>>(new Set());
+
   const handleLikeComment = useCallback(async (commentId: string) => {
+    if (busyCommentIds.current.has(commentId)) return;
+    busyCommentIds.current.add(commentId);
     const toggle = (comment: Comment): Comment => ({
       ...comment,
       isLiked: !comment.isLiked,
@@ -218,10 +223,15 @@ export default function PostDetailPage() {
     } catch {
       // revert the optimistic toggle on failure
       setComments((prev) => updateCommentTree(prev, commentId, toggle));
+      setCommentError('Unable to update the like. Please try again.');
+    } finally {
+      busyCommentIds.current.delete(commentId);
     }
   }, [postId]);
 
   const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (busyCommentIds.current.has(commentId)) return;
+    busyCommentIds.current.add(commentId);
     try {
       await api.community.deleteComment(postId, commentId);
       setComments((prev) => removeCommentFromTree(prev, commentId));
@@ -229,6 +239,8 @@ export default function PostDetailPage() {
     } catch (err) {
       console.error('Failed to delete comment:', err);
       setCommentError('Unable to delete the comment. Please try again.');
+    } finally {
+      busyCommentIds.current.delete(commentId);
     }
   }, [postId]);
 

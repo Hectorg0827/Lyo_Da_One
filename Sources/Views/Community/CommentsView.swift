@@ -288,9 +288,15 @@ struct CommentRow: View {
                     HStack(spacing: 16) {
                         if let onLike {
                             Button(action: onLike) {
-                                Label("\(comment.likeCount)", systemImage: comment.hasLiked ? "heart.fill" : "heart")
-                                    .font(.caption)
-                                    .foregroundColor(comment.hasLiked ? .red : .secondary)
+                                // Count hidden at zero, matching Android/web
+                                HStack(spacing: 4) {
+                                    Image(systemName: comment.hasLiked ? "heart.fill" : "heart")
+                                    if comment.likeCount > 0 {
+                                        Text("\(comment.likeCount)")
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundColor(comment.hasLiked ? .red : .secondary)
                             }
                             .accessibilityLabel(comment.hasLiked ? "Unlike comment" : "Like comment")
                         }

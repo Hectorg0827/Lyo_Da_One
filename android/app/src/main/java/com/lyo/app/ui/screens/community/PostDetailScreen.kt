@@ -109,6 +109,8 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val currentUserId = Session.user?.id.orEmpty()
+    // One in-flight request per comment, like the iOS view model's busy set
+    val busyCommentIds = remember { mutableSetOf<String>() }
 
     fun updateComment(commentId: String, transform: (CommentItem) -> CommentItem) {
         post = post?.let { detail ->
@@ -118,7 +120,7 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
 
     // Optimistic like toggle, reverted on failure — same behavior as iOS + web
     fun toggleCommentLike(comment: CommentItem) {
-        if (comment.id.isEmpty()) return
+        if (comment.id.isEmpty() || !busyCommentIds.add(comment.id)) return
         val wasLiked = comment.hasLiked
         updateComment(comment.id) {
             it.copy(hasLiked = !wasLiked, likeCount = (it.likeCount + if (wasLiked) -1 else 1).coerceAtLeast(0))
@@ -135,12 +137,13 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
                         it.copy(hasLiked = wasLiked, likeCount = (it.likeCount + if (wasLiked) 1 else -1).coerceAtLeast(0))
                     }
                 }
+            busyCommentIds.remove(comment.id)
         }
     }
 
     // Delete own comment (backend enforces author-only)
     fun deleteComment(comment: CommentItem) {
-        if (comment.id.isEmpty()) return
+        if (comment.id.isEmpty() || !busyCommentIds.add(comment.id)) return
         scope.launch {
             runCatching {
                 val response = ApiClient.api.deleteCommunityComment(postId, comment.id)
@@ -153,6 +156,7 @@ fun PostDetailScreen(nav: NavHostController, postId: String) {
                     )
                 }
             }.onFailure { commentError = it.localizedMessage ?: "Unable to delete comment" }
+            busyCommentIds.remove(comment.id)
         }
     }
 
