@@ -21,7 +21,7 @@ class LyoAITests: XCTestCase {
         // sendMessage() drives a real streaming request to the deployed
         // backend (mock fallbacks are disabled for market readiness), so this
         // is a live integration test: opt in with TEST_RUNNER_LIVE_BACKEND_TESTS=1
-        // in the xcodebuild environment. In CI a cold Cloud Run instance 503s
+        // in the xcodebuild environment. In CI a cold backend instance 503s
         // and the test fails on infrastructure, not on app behavior.
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["LIVE_BACKEND_TESTS"] == "1",

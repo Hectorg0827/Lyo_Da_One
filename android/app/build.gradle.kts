@@ -15,7 +15,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "API_BASE_URL", "\"https://api.lyoapp.com/\"")
+        buildConfigField("String", "API_BASE_URL", "\"https://lyo-production.up.railway.app/\"")
     }
 
     buildTypes {

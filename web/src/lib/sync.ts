@@ -9,7 +9,7 @@ import { getAccessToken } from '@/lib/api';
  * (iOS, Android, or another browser tab).
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://lyo-production.up.railway.app';
 const HEARTBEAT_MS = 30_000;
 const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 60_000;
