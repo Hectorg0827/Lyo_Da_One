@@ -40,12 +40,32 @@ struct BackendAIChatRequest: Encodable {
     let conversationHistory: [ConversationMessage]?
     let context: String?  // Must be a string, not a dictionary!
     let modeHint: String?
+    let conversationId: String?
+    let clientMessageId: String?
+
+    init(
+        message: String,
+        conversationHistory: [ConversationMessage]?,
+        context: String?,
+        modeHint: String?,
+        conversationId: String? = nil,
+        clientMessageId: String? = nil
+    ) {
+        self.message = message
+        self.conversationHistory = conversationHistory
+        self.context = context
+        self.modeHint = modeHint
+        self.conversationId = conversationId
+        self.clientMessageId = clientMessageId
+    }
     
     enum CodingKeys: String, CodingKey {
         case message
         case conversationHistory
         case context
         case modeHint = "mode_hint"
+        case conversationId = "conversation_id"
+        case clientMessageId = "client_message_id"
     }
 }
 
@@ -64,6 +84,7 @@ struct BackendAIChatResponse: Codable {
     // Primary fields from backend ChatResponse
     let response: String?
     let conversationHistory: [ConversationMessage]?
+    let conversationId: String?
     
     // Command fields (OPEN_CLASSROOM, etc.)
     let type: String?
@@ -98,6 +119,7 @@ struct BackendAIChatResponse: Codable {
     enum CodingKeys: String, CodingKey {
         case response
         case conversationHistory = "conversationHistory"
+        case conversationId = "conversationId"
         case type
         case payload
         case content
