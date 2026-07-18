@@ -1,6 +1,6 @@
 import type { User } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 
 function getOrCreateChatDeviceId(): string {
   if (typeof window === 'undefined') return 'web-server';

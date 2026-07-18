@@ -12,7 +12,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * Retrofit surface for the LYO backend (api.lyoapp.com).
+ * Retrofit surface for the LYO backend (api.lyoai.app).
  * Mirrors web/src/lib/api.ts endpoint-for-endpoint.
  */
 interface LyoApiService {
