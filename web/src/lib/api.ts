@@ -532,6 +532,18 @@ export const api = {
       return request<Record<string, unknown>>(`/community/study-groups/${groupId}`);
     },
 
+    async createGroup(input: {
+      name: string;
+      description?: string;
+      privacy?: 'public' | 'private';
+      max_members?: number;
+    }) {
+      return request<Record<string, unknown>>('/community/study-groups', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+    },
+
     async joinGroup(groupId: string) {
       return request(`/community/study-groups/${groupId}/join`, { method: 'POST' });
     },
