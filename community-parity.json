@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "referencePlatform": "ios",
   "responsiveRule": "Web preserves the same capabilities and visual tokens while adapting into a bounded multi-column desktop workspace.",
-  "canonicalBackend": "https://api.lyoapp.com",
+  "canonicalBackend": "https://api.lyoai.app",
   "tabs": ["Posts", "Events"],
   "postTypes": ["text", "question_discussion", "study_tip"],
   "eventTypes": ["event", "group"],
