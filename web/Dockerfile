@@ -5,7 +5,7 @@ RUN npm ci --no-audit --no-fund
 
 FROM node:22-alpine AS builder
 WORKDIR /app
-ARG NEXT_PUBLIC_API_URL=https://api.lyoapp.com
+ARG NEXT_PUBLIC_API_URL=https://api.lyoai.app
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
