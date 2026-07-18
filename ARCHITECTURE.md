@@ -75,7 +75,7 @@ on iOS, Room on Android, Zustand stores on web) is treated strictly as a
 backend first; the local store updates from the server response / socket
 event, not the other way around.
 
-Known gap: web/Android default to `https://api.lyoapp.com` while iOS
+Known gap: web/Android default to `https://api.lyoai.app` while iOS
 defaults to the Cloud Run URL in `Sources/Core/Configuration/AppConfig.swift`.
 These must be unified to whichever host is the real production backend —
 a deliberate decision for the product owner, since it redirects auth
