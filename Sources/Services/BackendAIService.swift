@@ -40,8 +40,24 @@ struct BackendAIChatRequest: Encodable {
     let conversationHistory: [ConversationMessage]?
     let context: String?  // Must be a string, not a dictionary!
     let modeHint: String?
-    let conversationId: String? = nil
-    let clientMessageId: String? = nil
+    let conversationId: String?
+    let clientMessageId: String?
+
+    init(
+        message: String,
+        conversationHistory: [ConversationMessage]?,
+        context: String?,
+        modeHint: String?,
+        conversationId: String? = nil,
+        clientMessageId: String? = nil
+    ) {
+        self.message = message
+        self.conversationHistory = conversationHistory
+        self.context = context
+        self.modeHint = modeHint
+        self.conversationId = conversationId
+        self.clientMessageId = clientMessageId
+    }
     
     enum CodingKeys: String, CodingKey {
         case message
