@@ -157,6 +157,8 @@ final class UnifiedChatService: ObservableObject {
             mode: mode,
             forcedIntent: forcedIntent,
             conversationHistory: conversationHistory,
+            conversationId: currentConversationId,
+            clientMessageId: userMessage.id,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
                 Task { @MainActor [weak self] in
@@ -183,7 +185,16 @@ final class UnifiedChatService: ObservableObject {
             await saveConversation()
             Log.ai.info("⚡ Instant response served on-device")
 
-        case .fastResponse(let text, let studyPlan, let latencyMs, let chips, let coursePayload):
+        case .fastResponse(
+            let text, let studyPlan, let latencyMs, let chips, let coursePayload,
+            let serverConversationId
+        ):
+            if let serverConversationId {
+                ConversationManager.shared.adoptCanonicalId(
+                    serverConversationId, replacing: currentConversationId
+                )
+                currentConversationId = serverConversationId
+            }
             // Single-agent non-streaming response
             let trimmedFastText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             let loweredFastText = trimmedFastText.lowercased()
@@ -447,7 +458,9 @@ final class UnifiedChatService: ObservableObject {
         // 4. Start Stream
         lyo2ChatService.sendMessageStreaming(
             text: trimmedText,
-            conversationHistory: memoryWindow
+            conversationHistory: memoryWindow,
+            conversationId: currentConversationId,
+            clientMessageId: userMessage.id
         ) { [weak self] event in
             guard let self else { return }
             self.handleLyo2Event(event, aiMessageId: aiMessageId)
@@ -458,6 +471,15 @@ final class UnifiedChatService: ObservableObject {
         Log.ai.info("📲 UnifiedChat: received event: \(String(describing: event).prefix(120))")
 
         switch event {
+        case .conversation(let id):
+            if id != currentConversationId {
+                Log.ai.info("🔄 Adopted canonical server conversation id: \(id)")
+                ConversationManager.shared.adoptCanonicalId(
+                    id, replacing: currentConversationId
+                )
+                currentConversationId = id
+            }
+
         case .skeleton(let blocks):
             Log.ai.info("💀 Skeleton received: \(blocks)")
 

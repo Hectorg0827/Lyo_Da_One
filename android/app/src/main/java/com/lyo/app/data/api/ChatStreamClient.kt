@@ -17,6 +17,7 @@ import java.io.IOException
 /** One streamed chunk from the AI, or a terminal signal. */
 sealed class ChatStreamEvent {
     data class Chunk(val text: String) : ChatStreamEvent()
+    data class Conversation(val id: String) : ChatStreamEvent()
     data object Done : ChatStreamEvent()
     data class Error(val message: String) : ChatStreamEvent()
 }
@@ -29,10 +30,16 @@ object ChatStreamClient {
 
     fun stream(
         text: String,
-        history: List<Map<String, String>> = emptyList(),
+        conversationId: String,
+        clientMessageId: String,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val payload = ApiClient.gson.toJson(
-            mapOf("text" to text, "history" to history)
+            mapOf(
+                "text" to text,
+                "conversation_id" to conversationId,
+                "device_id" to "android",
+                "client_message_id" to clientMessageId,
+            )
         ).toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()
@@ -71,8 +78,8 @@ object ChatStreamClient {
                                 close()
                                 return
                             }
-                            val chunkText = parseChunk(data)
-                            if (chunkText != null) trySend(ChatStreamEvent.Chunk(chunkText))
+                            val parsed = parseChunk(data)
+                            if (parsed != null) trySend(parsed)
                         }
                         trySend(ChatStreamEvent.Done)
                     } catch (e: Exception) {
@@ -87,13 +94,24 @@ object ChatStreamClient {
     }
 
     /** Extract text from the varied chunk shapes the backend emits. */
-    private fun parseChunk(data: String): String? = try {
+    private fun parseChunk(data: String): ChatStreamEvent? = try {
         val obj: JsonObject = JsonParser.parseString(data).asJsonObject
         when {
-            obj.has("data") && obj.get("data").isJsonPrimitive -> obj.get("data").asString
-            obj.has("content") && obj.get("content").isJsonPrimitive -> obj.get("content").asString
-            obj.has("text") && obj.get("text").isJsonPrimitive -> obj.get("text").asString
-            obj.has("answer") && obj.get("answer").isJsonPrimitive -> obj.get("answer").asString
+            obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
+                ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
+            obj.get("type")?.asString == "answer" && obj.has("block") -> {
+                val text = obj.getAsJsonObject("block")
+                    ?.getAsJsonObject("content")
+                    ?.get("text")
+                    ?.asString
+                text?.let { ChatStreamEvent.Chunk(it) }
+            }
+            obj.get("type")?.asString == "clarification" && obj.has("text") ->
+                ChatStreamEvent.Chunk(obj.get("text").asString)
+            obj.has("data") && obj.get("data").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("data").asString)
+            obj.has("content") && obj.get("content").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("content").asString)
+            obj.has("text") && obj.get("text").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("text").asString)
+            obj.has("answer") && obj.get("answer").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("answer").asString)
             else -> null
         }
     } catch (e: Exception) {

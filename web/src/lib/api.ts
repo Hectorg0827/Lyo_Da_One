@@ -2,6 +2,16 @@ import type { User } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
 
+function getOrCreateChatDeviceId(): string {
+  if (typeof window === 'undefined') return 'web-server';
+  const key = 'lyo_chat_device_id';
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const id = `web-${crypto.randomUUID()}`;
+  window.localStorage.setItem(key, id);
+  return id;
+}
+
 // ── Token management ─────────────────────────────────────────────────────────
 
 export function getAccessToken(): string | null {
@@ -200,6 +210,57 @@ export const api = {
 
   // ── AI Chat ──
   chat: {
+    async conversations() {
+      return request<{
+        conversations: Array<{
+          id: string;
+          title: string;
+          message_count: number;
+          last_message_preview?: string;
+          current_mode: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        }>;
+        has_more: boolean;
+      }>('/api/v1/chat/conversations');
+    },
+
+    async conversation(id: string) {
+      return request<{
+        id: string;
+        title: string;
+        created_at: string;
+        updated_at: string;
+        messages: Array<{
+          id: string;
+          role: 'user' | 'assistant' | 'system';
+          content: string;
+          created_at: string;
+        }>;
+      }>(`/api/v1/chat/conversations/${id}`);
+    },
+
+    async createConversation(title?: string) {
+      return request<{
+        id: string;
+        title: string;
+        created_at: string;
+        updated_at: string;
+        messages: [];
+      }>('/api/v1/chat/conversations', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          device_id: getOrCreateChatDeviceId(),
+        }),
+      });
+    },
+
+    async deleteConversation(id: string) {
+      return request<void>(`/api/v1/chat/conversations/${id}`, { method: 'DELETE' });
+    },
+
     async send(text: string, history?: { role: string; content: string }[]) {
       return request<{ answer_block: unknown; metadata: unknown }>('/api/v1/lyo2/chat', {
         method: 'POST',
@@ -212,7 +273,9 @@ export const api = {
       history: { role: string; content: string }[] | undefined,
       onChunk: (data: Record<string, unknown>) => void,
       onDone: () => void,
-      onError: (err: Error) => void
+      onError: (err: Error) => void,
+      conversationId?: string,
+      clientMessageId?: string
     ): AbortController {
       const controller = new AbortController();
       const token = getAccessToken();
@@ -223,7 +286,13 @@ export const api = {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ text, history }),
+        body: JSON.stringify({
+          text,
+          conversation_id: conversationId,
+          conversation_history: history,
+          device_id: getOrCreateChatDeviceId(),
+          client_message_id: clientMessageId,
+        }),
         signal: controller.signal,
       })
         .then(async (res) => {

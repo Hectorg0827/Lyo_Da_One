@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,7 +52,7 @@ import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
-import com.lyo.app.data.api.SimpleChatRequest
+import com.lyo.app.data.api.CreateAiConversationRequest
 import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
@@ -61,6 +62,7 @@ import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 import kotlin.math.max
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 data class ChatMsg(val role: String, val content: String)
 
@@ -77,18 +79,31 @@ fun ChatScreen(nav: NavHostController) {
     val messages = remember { mutableStateListOf<ChatMsg>() }
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
+    var activeConversationId by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
     fun send(raw: String) {
         val text = raw.trim()
         if (text.isEmpty() || isStreaming) return
-        val history = messages.map { mapOf("role" to it.role, "content" to it.content) }
+        val clientMessageId = UUID.randomUUID().toString()
         messages.add(ChatMsg("user", text))
         messages.add(ChatMsg("assistant", ""))
         input = ""
         isStreaming = true
         scope.launch {
-            ChatStreamClient.stream(text, history).collect { event ->
+            val conversationId = activeConversationId ?: runCatching {
+                ApiClient.api.createAiConversation(
+                    CreateAiConversationRequest(title = text.take(80))
+                ).id
+            }.getOrElse {
+                messages[messages.size - 1] = messages.last().copy(
+                    content = "I couldn't save this conversation. Please check your connection and try again."
+                )
+                isStreaming = false
+                return@launch
+            }
+            activeConversationId = conversationId
+            ChatStreamClient.stream(text, conversationId, clientMessageId).collect { event ->
                 when (event) {
                     is ChatStreamEvent.Chunk -> {
                         val last = messages.last()
@@ -98,17 +113,27 @@ fun ChatScreen(nav: NavHostController) {
 
                     is ChatStreamEvent.Done -> Unit
 
+                    is ChatStreamEvent.Conversation -> activeConversationId = event.id
+
                     is ChatStreamEvent.Error -> {
-                        val fallback = runCatching {
-                            ApiClient.api.simpleChat(SimpleChatRequest(text))
-                        }.getOrNull()?.response
                         messages[messages.size - 1] = messages.last().copy(
-                            content = fallback ?: "Sorry, something went wrong."
+                            content = "The response was interrupted. Your conversation is saved—please try again."
                         )
                     }
                 }
             }
             isStreaming = false
+        }
+    }
+
+    // Resume the most recent server conversation on any Android device.
+    LaunchedEffect(Unit) {
+        runCatching {
+            val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
+            val detail = ApiClient.api.aiConversation(latest.id)
+            activeConversationId = detail.id
+            messages.clear()
+            messages.addAll(detail.messages.map { ChatMsg(it.role, it.content) })
         }
     }
 
@@ -122,6 +147,20 @@ fun ChatScreen(nav: NavHostController) {
             .background(Background)
             .imePadding(),
     ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Text("Lyo AI", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            TextButton(
+                enabled = !isStreaming,
+                onClick = {
+                    activeConversationId = null
+                    messages.clear()
+                },
+            ) { Text("New chat", color = LyoPurple) }
+        }
         if (messages.isEmpty()) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

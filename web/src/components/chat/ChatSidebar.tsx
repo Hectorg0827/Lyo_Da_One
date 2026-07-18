@@ -106,7 +106,7 @@ export default function ChatSidebar({ className }: ChatSidebarProps) {
     conversations,
     activeConversationId,
     createConversation,
-    setActiveConversation,
+    loadConversation,
     deleteConversation,
   } = useChatStore();
 
@@ -170,7 +170,7 @@ export default function ChatSidebar({ className }: ChatSidebarProps) {
                   key={convo.id}
                   convo={convo}
                   isActive={convo.id === activeConversationId}
-                  onSelect={() => setActiveConversation(convo.id)}
+                  onSelect={() => loadConversation(convo.id)}
                   onDelete={(e) => handleDelete(e, convo.id)}
                 />
               ))}

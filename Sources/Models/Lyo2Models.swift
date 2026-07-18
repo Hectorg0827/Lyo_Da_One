@@ -18,6 +18,9 @@ struct Lyo2RouterRequest: Codable {
     let stateSummary: [String: AnyCodable]
     /// Recent conversation history so the AI maintains context across turns.
     let conversationHistory: [Lyo2ConversationTurn]?
+    let conversationId: String?
+    let deviceId: String
+    let clientMessageId: String?
     
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -28,6 +31,9 @@ struct Lyo2RouterRequest: Codable {
         case forcedIntent = "forced_intent"
         case stateSummary = "state_summary"
         case conversationHistory = "conversation_history"
+        case conversationId = "conversation_id"
+        case deviceId = "device_id"
+        case clientMessageId = "client_message_id"
     }
     
     init(
@@ -38,7 +44,10 @@ struct Lyo2RouterRequest: Codable {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
-        conversationHistory: [Lyo2ConversationTurn]? = nil
+        conversationHistory: [Lyo2ConversationTurn]? = nil,
+        conversationId: String? = nil,
+        deviceId: String = "ios",
+        clientMessageId: String? = nil
     ) {
         self.userId = userId
         self.text = text
@@ -48,6 +57,9 @@ struct Lyo2RouterRequest: Codable {
         self.forcedIntent = forcedIntent
         self.stateSummary = stateSummary
         self.conversationHistory = conversationHistory
+        self.conversationId = conversationId
+        self.deviceId = deviceId
+        self.clientMessageId = clientMessageId
     }
 }
 
@@ -141,6 +153,7 @@ enum Lyo2StreamEvent {
     case artifact(block: Lyo2UIBlock)
     case error(message: String)
     case done
+    case conversation(id: String)
     
     /// v1 backward-compat events (still emitted by deployed backend)
     case actions(blocks: [Lyo2UIBlock])

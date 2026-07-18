@@ -9,6 +9,39 @@ import Foundation
 import SwiftUI
 import os
 
+private struct ServerConversationList: Decodable {
+    let conversations: [ServerConversationSummary]
+}
+
+private struct ServerConversationSummary: Decodable {
+    let id: String
+    let title: String
+    let messageCount: Int
+    let lastMessagePreview: String?
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+private struct ServerConversationMessage: Decodable {
+    let id: String
+    let role: String
+    let content: String
+    let createdAt: Date
+}
+
+private struct ServerConversationDetail: Decodable {
+    let id: String
+    let title: String
+    let createdAt: Date
+    let updatedAt: Date
+    let messages: [ServerConversationMessage]
+}
+
+private struct ServerConversationUpdate: Encodable {
+    let title: String?
+    let isActive: Bool?
+}
+
 /// Represents a saved conversation
 struct SavedConversation: Identifiable, Codable {
     let id: String
@@ -69,6 +102,7 @@ class ConversationManager: ObservableObject {
     
     private init() {
         loadConversations()
+        Task { await refreshFromServer() }
     }
     
     // MARK: - Conversation Management
@@ -120,6 +154,25 @@ class ConversationManager: ObservableObject {
         // Persist to storage
         persistConversations()
     }
+
+    /// Replace a provisional device UUID with the canonical server UUID.
+    /// This prevents one first message from appearing as two conversations.
+    func adoptCanonicalId(_ canonicalId: String, replacing localId: String) {
+        guard canonicalId != localId else { return }
+        conversations.removeAll { $0.id == localId }
+        if let current = currentConversation, current.id == localId {
+            currentConversation = SavedConversation(
+                id: canonicalId,
+                title: current.title,
+                lastMessagePreview: current.lastMessagePreview,
+                lastUpdated: current.lastUpdated,
+                messageCount: current.messageCount,
+                messages: current.messages
+            )
+        }
+        userDefaults.set(canonicalId, forKey: currentConversationKey)
+        persistConversations()
+    }
     
     /// Update current conversation with new messages
     func updateCurrentConversation(with messages: [MultimodalMessage]) {
@@ -155,6 +208,10 @@ class ConversationManager: ObservableObject {
         Task { @MainActor in
             UnifiedChatService.shared.loadConversation(conversation)
         }
+
+        if conversation.messages.isEmpty {
+            Task { await hydrateConversation(id: conversation.id) }
+        }
     }
     
     /// Delete a conversation
@@ -165,6 +222,15 @@ class ConversationManager: ObservableObject {
         // If deleted conversation was current, create new one
         if currentConversation?.id == conversation.id {
             _ = createNewConversation()
+        }
+
+        Task {
+            let endpoint = DynamicEndpoint(
+                urlString: "/api/v1/chat/conversations/\(conversation.id)",
+                method: .delete,
+                requiresAuth: true
+            )
+            let _: EmptyResponse? = try? await NetworkClient.shared.request(endpoint)
         }
     }
     
@@ -178,6 +244,97 @@ class ConversationManager: ObservableObject {
         }
         
         persistConversations()
+        Task {
+            let endpoint = DynamicEndpoint(
+                urlString: "/api/v1/chat/conversations/\(conversation.id)",
+                method: .patch,
+                body: ServerConversationUpdate(title: newTitle, isActive: nil),
+                requiresAuth: true
+            )
+            let _: ServerConversationSummary? = try? await NetworkClient.shared.request(endpoint)
+        }
+    }
+
+    /// Replace stale device-local cache with the authenticated server history.
+    /// Local storage remains an offline cache, never the cross-device source of truth.
+    func refreshFromServer() async {
+        do {
+            let endpoint = DynamicEndpoint(
+                urlString: "/api/v1/chat/conversations?limit=30",
+                method: .get,
+                requiresAuth: true
+            )
+            let response: ServerConversationList = try await NetworkClient.shared.request(endpoint)
+            let serverRows = response.conversations.map { summary in
+                SavedConversation(
+                    id: summary.id,
+                    title: summary.title,
+                    lastMessagePreview: summary.lastMessagePreview ?? "No messages yet",
+                    lastUpdated: summary.updatedAt,
+                    messageCount: summary.messageCount,
+                    messages: []
+                )
+            }
+            guard !serverRows.isEmpty else { return }
+
+            let localById = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, $0) })
+            conversations = serverRows.map { row in
+                guard let cached = localById[row.id], !cached.messages.isEmpty else { return row }
+                return SavedConversation(
+                    id: row.id,
+                    title: row.title,
+                    lastMessagePreview: row.lastMessagePreview,
+                    lastUpdated: row.lastUpdated,
+                    messageCount: row.messageCount,
+                    messages: cached.messages
+                )
+            }
+            persistConversations()
+
+            if let latest = conversations.first {
+                await hydrateConversation(id: latest.id)
+            }
+        } catch {
+            Log.net.warning("Server chat history unavailable; using offline cache: \(error)")
+        }
+    }
+
+    private func hydrateConversation(id: String) async {
+        do {
+            let endpoint = DynamicEndpoint(
+                urlString: "/api/v1/chat/conversations/\(id)?limit=200",
+                method: .get,
+                requiresAuth: true
+            )
+            let detail: ServerConversationDetail = try await NetworkClient.shared.request(endpoint)
+            let messages = detail.messages.map { message in
+                MultimodalMessage(
+                    id: message.id,
+                    sessionId: detail.id,
+                    role: MultimodalMessage.MessageRole(rawValue: message.role) ?? .assistant,
+                    content: message.content,
+                    timestamp: message.createdAt
+                )
+            }
+            let hydrated = SavedConversation(
+                id: detail.id,
+                title: detail.title,
+                lastMessagePreview: SavedConversation.getLastMessagePreview(from: messages),
+                lastUpdated: detail.updatedAt,
+                messageCount: messages.count,
+                messages: messages
+            )
+            if let index = conversations.firstIndex(where: { $0.id == id }) {
+                conversations[index] = hydrated
+            } else {
+                conversations.insert(hydrated, at: 0)
+            }
+            currentConversation = hydrated
+            persistConversations()
+            UnifiedChatService.shared.loadConversation(hydrated)
+        } catch {
+            Log.net.warning("Could not hydrate server conversation \(id): \(error)")
+        }
     }
     
     // MARK: - Persistence
