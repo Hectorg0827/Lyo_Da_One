@@ -10,7 +10,9 @@ The production split is intentional:
 1. Open the same Railway project that contains `LyoBackendJune`.
 2. Select **New → GitHub Repo** and choose `Hectorg0827/Lyo_Da_One`.
 3. Open the new service settings and set **Root Directory** to `/web`.
-4. Confirm Railway detects `web/Dockerfile` and `web/railway.toml`.
+4. Set **Config File Path** to `/web/railway.toml`. Railway does not
+   automatically resolve config-as-code files relative to a service Root
+   Directory. The `Dockerfile` remains auto-detected from `/web`.
 5. Add these service variables:
 
    ```text
@@ -28,16 +30,21 @@ The production split is intentional:
 ## Move the public domain without losing the API
 
 1. In the `LyoBackendJune` service, keep `api.lyoai.app` attached.
-2. Add these backend `CORS_ORIGINS` entries if they are not already present:
+2. Set the backend `CORS_ORIGINS` variable to a valid JSON array containing
+   the production web origins (and preserve any other origins you still use):
 
-   ```text
-   https://lyoai.app,https://www.lyoai.app
+   ```json
+   ["https://lyoai.app","https://www.lyoai.app"]
    ```
 
+   The backend parses this setting as `List[str]`; a comma-separated value is
+   not valid. Redeploy the backend and verify a browser preflight from
+   `https://lyoai.app` succeeds before moving the domain.
 3. Remove only `lyoai.app` from `LyoBackendJune` after the temporary web
    domain passes the smoke test.
-4. Immediately add `lyoai.app` to the new web service and apply the exact DNS
-   record Railway displays.
+4. Immediately add `lyoai.app` to the new web service and apply the exact
+   CNAME/A/ALIAS and TXT records Railway displays. Both routing and ownership
+   verification records must be valid before the domain will serve the web app.
 5. Optionally attach `www.lyoai.app` to the web service and redirect it to the
    root domain at the DNS or application layer.
 
@@ -49,4 +56,3 @@ The production split is intentional:
 - The same conversation appears after refresh and on a second device.
 - Community posts, groups, and events load from the production account.
 - AI Classroom loads the published course catalog and resumes progress.
-
