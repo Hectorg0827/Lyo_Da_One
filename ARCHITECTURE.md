@@ -75,11 +75,10 @@ on iOS, Room on Android, Zustand stores on web) is treated strictly as a
 backend first; the local store updates from the server response / socket
 event, not the other way around.
 
-Known gap: web/Android default to `https://api.lyoai.app` while iOS
-defaults to the Cloud Run URL in `Sources/Core/Configuration/AppConfig.swift`.
-These must be unified to whichever host is the real production backend —
-a deliberate decision for the product owner, since it redirects auth
-traffic.
+Production routing is unified: iOS, Android, and web default to
+`https://api.lyoai.app`, while local development can opt into localhost via
+platform-specific overrides. The canonical hostname is also used by the
+parity contract and the production web image build.
 
 ## 3. One design language, iOS as source of truth (requirement 1)
 
