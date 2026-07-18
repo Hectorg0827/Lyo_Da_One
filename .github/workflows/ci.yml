@@ -170,7 +170,7 @@ jobs:
           file: web/Dockerfile
           push: true
           build-args: |
-            NEXT_PUBLIC_API_URL=https://api.lyoapp.com
+            NEXT_PUBLIC_API_URL=https://api.lyoai.app
           tags: |
             ghcr.io/${{ github.repository }}/web:sha-${{ github.sha }}
             ghcr.io/${{ github.repository }}/web:latest
