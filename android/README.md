@@ -1,6 +1,6 @@
 # LYO — Android App
 
-Native Android client for the LYO learning platform, built with **Kotlin + Jetpack Compose**, wired to the production backend at `https://api.lyoapp.com`. Mirrors the feature set and dark glassmorphism look of the web and iOS apps.
+Native Android client for the LYO learning platform, built with **Kotlin + Jetpack Compose**, wired to the production backend at `https://api.lyoai.app`. Mirrors the feature set and dark glassmorphism look of the web and iOS apps.
 
 ## Features
 
