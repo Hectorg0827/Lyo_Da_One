@@ -75,14 +75,10 @@ on iOS, Room on Android, Zustand stores on web) is treated strictly as a
 backend first; the local store updates from the server response / socket
 event, not the other way around.
 
-All three clients default to the canonical production backend
-`https://lyo-production.up.railway.app` (FastAPI on Railway, backed by
-Supabase Postgres) — iOS in `Sources/Core/Configuration/AppConfig.swift`,
-Android via `BuildConfig.API_BASE_URL` in `android/app/build.gradle.kts`,
-web in `web/src/lib/api.ts` / `web/src/lib/sync.ts`. Google Cloud Run is
-retired. The CI parity gate (`scripts/verify-community-parity.mjs`)
-verifies every client defaults to `canonicalBackend` from
-`community-parity.json`.
+Production routing is unified: iOS, Android, and web default to
+`https://api.lyoai.app`, while local development can opt into localhost via
+platform-specific overrides. The canonical hostname is also used by the
+parity contract and the production web image build.
 
 ## 3. One design language, iOS as source of truth (requirement 1)
 

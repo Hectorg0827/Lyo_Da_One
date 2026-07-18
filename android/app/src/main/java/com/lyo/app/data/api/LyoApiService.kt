@@ -12,7 +12,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * Retrofit surface for the LYO backend (lyo-production.up.railway.app).
+ * Retrofit surface for the LYO backend (api.lyoai.app).
  * Mirrors web/src/lib/api.ts endpoint-for-endpoint.
  */
 interface LyoApiService {
@@ -257,6 +257,24 @@ interface LyoApiService {
     suspend fun trending(): JsonObject
 
     // ── AI Chat (simple, non-streaming fallback) ──
+    @GET("api/v1/chat/conversations")
+    suspend fun aiConversations(): AiConversationListResponse
+
+    @GET("api/v1/chat/conversations/{conversationId}")
+    suspend fun aiConversation(
+        @Path("conversationId") conversationId: String,
+    ): AiConversationDetailDto
+
+    @POST("api/v1/chat/conversations")
+    suspend fun createAiConversation(
+        @Body body: CreateAiConversationRequest,
+    ): AiConversationDetailDto
+
+    @DELETE("api/v1/chat/conversations/{conversationId}")
+    suspend fun deleteAiConversation(
+        @Path("conversationId") conversationId: String,
+    ): Response<Unit>
+
     @POST("api/v1/ai/chat")
     suspend fun simpleChat(@Body body: SimpleChatRequest): SimpleChatResponse
 }

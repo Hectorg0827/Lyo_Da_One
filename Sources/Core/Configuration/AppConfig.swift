@@ -30,11 +30,11 @@ struct AppConfig {
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "http://localhost:8000"
             }
-            return "https://lyo-production.up.railway.app"
+            return "https://api.lyoai.app"
         case .staging:
-            return "https://lyo-production.up.railway.app"
+            return "https://api.lyoai.app"
         case .production:
-            return "https://lyo-production.up.railway.app"
+            return "https://api.lyoai.app"
         }
     }
 
@@ -90,11 +90,11 @@ struct AppConfig {
             if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
                 return "ws://localhost:8000/ws"
             }
-            return "wss://lyo-production.up.railway.app/ws"
+            return "wss://api.lyoai.app/ws"
         case .staging:
-            return "wss://lyo-production.up.railway.app/ws"
+            return "wss://api.lyoai.app/ws"
         case .production:
-            return "wss://lyo-production.up.railway.app/ws"
+            return "wss://api.lyoai.app/ws"
         }
     }
 

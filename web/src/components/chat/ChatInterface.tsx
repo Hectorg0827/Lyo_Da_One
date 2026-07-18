@@ -97,12 +97,16 @@ function EmptyState() {
 
 // ─── Main ChatInterface ───────────────────────────────────────────────────────
 export default function ChatInterface() {
-  const { getActiveConversation, isGenerating, generationProgress } = useChatStore();
+  const { getActiveConversation, isGenerating, generationProgress, hydrate } = useChatStore();
   const conversation = getActiveConversation();
   const messages = conversation?.messages ?? [];
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll when messages change or while generating
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, isGenerating]);

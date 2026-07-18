@@ -26,7 +26,7 @@ enum ChatRouteResult {
     /// Fast path completed — single text response with optional Study Plan + context chips + course payload
     case fastResponse(
         text: String, studyPlan: TestPrepData?, latencyMs: Double, suggestions: [SuggestionChip]?,
-        coursePayload: CoursePayload?)
+        coursePayload: CoursePayload?, conversationId: String?)
 
     /// Deep path initiated — streaming will deliver AgentBlocks
     case streamingStarted(sessionId: String)
@@ -79,6 +79,8 @@ final class ChatRouter: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         conversationHistory: [ConversationMessage] = [],
+        conversationId: String? = nil,
+        clientMessageId: String? = nil,
         onAgentBlock: ((AgentBlock) -> Void)? = nil,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)? = nil
     ) async -> ChatRouteResult {
@@ -96,10 +98,19 @@ final class ChatRouter: ObservableObject {
         // 2. Route based on tier
         switch intent.tier {
         case .instant:
-            let response = handleInstantResponse(message: message, intent: intent)
-            let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-            recordLatency(latency, for: .instant)
-            return .instantResponse(text: response)
+            // Chat turns must use the canonical server path even when an
+            // acknowledgement could be generated on-device. Otherwise those
+            // turns disappear when the user opens another device.
+            return await handleFastPath(
+                message: message,
+                mode: mode,
+                intent: intent,
+                conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
+                onStreamEvent: onStreamEvent,
+                startTime: startTime
+            )
 
         case .fast:
             return await handleFastPath(
@@ -107,6 +118,8 @@ final class ChatRouter: ObservableObject {
                 mode: mode,
                 intent: intent,
                 conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
             )
@@ -119,6 +132,8 @@ final class ChatRouter: ObservableObject {
                 intent: intent,
                 forcedIntent: forcedIntent,
                 conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
             )
@@ -146,6 +161,8 @@ final class ChatRouter: ObservableObject {
         mode: String,
         intent: ClassifiedIntent,
         conversationHistory: [ConversationMessage],
+        conversationId: String?,
+        clientMessageId: String?,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
         startTime: CFAbsoluteTime
     ) async -> ChatRouteResult {
@@ -155,7 +172,9 @@ final class ChatRouter: ObservableObject {
                 message: message,
                 mode: mode,
                 context: intent.category.rawValue,
-                conversationHistory: conversationHistory
+                conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId
             )
 
             let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
@@ -181,7 +200,8 @@ final class ChatRouter: ObservableObject {
 
             return .fastResponse(
                 text: response.responseText, studyPlan: response.studyPlan, latencyMs: latency,
-                suggestions: response.suggestions, coursePayload: coursePayload)
+                suggestions: response.suggestions, coursePayload: coursePayload,
+                conversationId: response.conversationId)
 
         } catch {
             Log.ai.error("⚡ Fast path failed, falling back to deep: \(error.localizedDescription)")
@@ -193,6 +213,8 @@ final class ChatRouter: ObservableObject {
                 intent: intent,
                 forcedIntent: nil,
                 conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
             )
@@ -208,6 +230,8 @@ final class ChatRouter: ObservableObject {
         intent: ClassifiedIntent,
         forcedIntent: String? = nil,
         conversationHistory: [ConversationMessage],
+        conversationId: String?,
+        clientMessageId: String?,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
         startTime: CFAbsoluteTime
     ) async -> ChatRouteResult {
@@ -226,7 +250,9 @@ final class ChatRouter: ObservableObject {
             attachmentIds: attachmentIds,
             forcedIntent: forcedIntent,
             stateSummary: buildStateSummary(mode: mode, intent: intent),
-            conversationHistory: memoryWindow
+            conversationHistory: memoryWindow,
+            conversationId: conversationId,
+            clientMessageId: clientMessageId
         ) { event in
             onStreamEvent?(event)
 
@@ -248,13 +274,17 @@ final class ChatRouter: ObservableObject {
         message: String,
         mode: String,
         context: String,
-        conversationHistory: [ConversationMessage]
+        conversationHistory: [ConversationMessage],
+        conversationId: String?,
+        clientMessageId: String?
     ) async throws -> BackendAIChatResponse {
         let request = BackendAIChatRequest(
             message: message,
             conversationHistory: conversationHistory.isEmpty ? nil : conversationHistory,
             context: context,
-            modeHint: backendAI.chatModeHint(for: mode)
+            modeHint: backendAI.chatModeHint(for: mode),
+            conversationId: conversationId,
+            clientMessageId: clientMessageId
         )
 
         let payload = try JSONEncoder().encode(request)

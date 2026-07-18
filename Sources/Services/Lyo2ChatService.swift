@@ -25,6 +25,8 @@ class Lyo2ChatService: ObservableObject {
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
         conversationHistory: [Lyo2ConversationTurn]? = nil,
+        conversationId: String? = nil,
+        clientMessageId: String? = nil,
         onEvent: @escaping (Lyo2StreamEvent) -> Void
     ) {
         // Cancel any in-flight stream before starting a new one
@@ -44,7 +46,9 @@ class Lyo2ChatService: ObservableObject {
             activeArtifact: activeArtifact,
             forcedIntent: forcedIntent,
             stateSummary: stateSummary,
-            conversationHistory: conversationHistory
+            conversationHistory: conversationHistory,
+            conversationId: conversationId,
+            clientMessageId: clientMessageId
         )
         
         let baseURL = NetworkClient.baseURL
@@ -294,6 +298,11 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 if let blocks = json["blocks"] as? [String] {
                     didReceiveContentEvent = true
                     callback?(.skeleton(blocks: blocks))
+                }
+
+            case "conversation":
+                if let id = json["conversation_id"] as? String {
+                    callback?(.conversation(id: id))
                 }
                 
             case "clarification":

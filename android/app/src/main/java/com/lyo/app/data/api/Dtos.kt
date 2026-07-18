@@ -408,3 +408,40 @@ data class SimpleChatRequest(
 data class SimpleChatResponse(
     val response: String? = null,
 )
+
+// ── Canonical AI conversation continuity ────────────────────────────────────
+
+data class AiConversationMessageDto(
+    val id: String,
+    @SerializedName("conversation_id") val conversationId: String,
+    val role: String,
+    val content: String,
+    @SerializedName("created_at") val createdAt: String,
+)
+
+data class AiConversationSummaryDto(
+    val id: String,
+    val title: String,
+    @SerializedName("message_count") val messageCount: Int = 0,
+    @SerializedName("last_message_preview") val lastMessagePreview: String? = null,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("updated_at") val updatedAt: String,
+)
+
+data class AiConversationDetailDto(
+    val id: String,
+    val title: String,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("updated_at") val updatedAt: String,
+    val messages: List<AiConversationMessageDto> = emptyList(),
+)
+
+data class AiConversationListResponse(
+    val conversations: List<AiConversationSummaryDto> = emptyList(),
+    @SerializedName("has_more") val hasMore: Boolean = false,
+)
+
+data class CreateAiConversationRequest(
+    val title: String? = null,
+    @SerializedName("device_id") val deviceId: String = "android",
+)
