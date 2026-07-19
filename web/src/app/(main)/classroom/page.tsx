@@ -58,7 +58,7 @@ function ClassroomStage() {
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, canContinue, continueLabel,
-    error, soundOn, voiceOn,
+    progressCurrent, progressTotal, error, soundOn, voiceOn,
     connect, disconnect, answerPrompt, answerQuiz, askQuestion, signal,
     continueLesson, toggleSound, toggleVoice, viewBoard,
   } = useClassroomStore();
@@ -110,6 +110,9 @@ function ClassroomStage() {
           <p className="text-[10px] text-white/45">
             {status === 'live' ? <span className="text-green-400">● class in session</span>
               : status === 'connecting' ? 'walking to class…' : status}
+            <span className="ml-2">
+              {progressCurrent}/{progressTotal} checkpoints mastered
+            </span>
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
