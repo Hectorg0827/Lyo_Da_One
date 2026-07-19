@@ -23,6 +23,8 @@ export interface ClassroomComponent {
   options?: QuizOption[];
   action_intent?: string;
   concept_id?: string | null;
+  current?: number;
+  total?: number;
   [key: string]: unknown;
 }
 
@@ -115,6 +117,8 @@ interface ClassroomStore {
   lyoState: string;
   waitingForScene: boolean;
   canContinue: boolean;
+  progressCurrent: number;
+  progressTotal: number;
   continueLabel: string;
   nextActionIntent: string;
   error: string | null;
@@ -451,6 +455,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         addBoardElement({ id: nextId(), kind: 'quiz', quiz: comp });
         pushTranscript('Teacher', `📝 Checkpoint: ${comp.question ?? ''}`);
         break;
+      case 'ProgressBar':
+        set({
+          progressCurrent: Math.max(0, comp.current ?? 0),
+          progressTotal: Math.max(1, comp.total ?? 1),
+        });
+        break;
       case 'CTAButton':
         set({
           canContinue: true,
@@ -520,6 +530,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     lyoState: 'reading',
     waitingForScene: false,
     canContinue: false,
+    progressCurrent: 0,
+    progressTotal: 1,
     continueLabel: 'Check understanding',
     nextActionIntent: 'continue',
     error: null,
@@ -541,6 +553,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         board: [], boardHistory: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, canContinue: false,
+        progressCurrent: 0, progressTotal: 1,
         continueLabel: 'Check understanding', nextActionIntent: 'continue', error: null,
       });
 
