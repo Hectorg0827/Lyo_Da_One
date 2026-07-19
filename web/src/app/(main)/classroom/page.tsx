@@ -2,13 +2,19 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
   NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
+  Accessibility, Gauge, Settings2, Timer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useClassroomStore, type ClassroomConnection } from '@/stores/classroom-store';
+import {
+  useClassroomStore,
+  type ClassroomConnection,
+  type ClassroomMode,
+  type HintLevel,
+} from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
@@ -53,35 +59,76 @@ function ClassroomStage() {
     || difficultyParam === 'advanced'
     ? difficultyParam
     : undefined;
-  const connection: ClassroomConnection = { topic, sessionId: courseId, objective, difficulty };
+  const modeParam = params.get('mode');
+  const initialMode: ClassroomMode = modeParam === 'classroom'
+    || modeParam === 'challenge'
+    || modeParam === 'review'
+    ? modeParam
+    : 'solo';
+  const parsedDuration = Number(params.get('duration'));
+  const initialDuration = [5, 10, 20].includes(parsedDuration) ? parsedDuration : 10;
+  const [mode, setMode] = useState<ClassroomMode>(initialMode);
+  const [durationMinutes, setDurationMinutes] = useState(initialDuration);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const systemReducedMotion = useReducedMotion();
+  const animationsOff = reduceMotion || systemReducedMotion === true;
+  const connection: ClassroomConnection = {
+    topic,
+    sessionId: courseId,
+    objective,
+    difficulty,
+    mode,
+    durationMinutes,
+    reducedMotion: animationsOff,
+  };
 
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, soundOn, voiceOn,
-    connect, disconnect, answerPrompt, answerQuiz, askQuestion, signal,
-    continueLesson, toggleSound, toggleVoice, viewBoard,
+    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
+    connect, disconnect, answerPrompt, answerQuiz, answerTransfer, askQuestion, signal,
+    requestHint, continueLesson, toggleSound, toggleVoice, setSpeechRate, viewBoard,
   } = useClassroomStore();
 
   const [question, setQuestion] = useState('');
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hintMenuOpen, setHintMenuOpen] = useState(false);
   const boardEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, objective, difficulty]);
+  }, [topic, courseId, objective, difficulty, mode, durationMinutes, animationsOff]);
 
   useEffect(() => {
     if (viewingBoard === -1) {
-      boardEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      boardEndRef.current?.scrollIntoView({
+        behavior: animationsOff ? 'auto' : 'smooth',
+        block: 'end',
+      });
     }
-  }, [board.length, viewingBoard]);
+  }, [board.length, viewingBoard, animationsOff]);
 
   const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
   const totalBoards = boardHistory.length;
+  const visibleCast = mode === 'classroom'
+    ? CAST
+    : CAST.filter((member) => member.name === 'Teacher');
+  const hintOptions: { level: HintLevel; label: string }[] = [
+    { level: 'nudge', label: 'Small nudge' },
+    { level: 'principle', label: 'Show the principle' },
+    { level: 'worked_step', label: 'Give me the first step' },
+    { level: 'full_example', label: 'Show a worked example' },
+    { level: 'prerequisite', label: 'Review the prerequisite' },
+  ];
+
+  const chooseHint = (level: HintLevel) => {
+    requestHint(level);
+    setHintMenuOpen(false);
+  };
 
   const submitQuestion = () => {
     if (!question.trim()) return;
@@ -139,8 +186,82 @@ function ClassroomStage() {
           >
             <NotebookPen className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setSettingsOpen((open) => !open)}
+            title="Classroom settings"
+            aria-expanded={settingsOpen}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              settingsOpen ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5',
+            )}
+          >
+            <Settings2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
+
+      {settingsOpen && (
+        <div
+          role="region"
+          aria-label="Classroom settings"
+          className="mx-4 mb-2 grid gap-3 rounded-xl border border-white/10 bg-[#111a38] p-3 text-xs text-white/75 sm:grid-cols-3"
+        >
+          <label className="space-y-1">
+            <span className="flex items-center gap-1.5 font-semibold text-white">
+              <Gauge className="h-3.5 w-3.5" /> Learning mode
+            </span>
+            <select
+              value={mode}
+              onChange={(event) => setMode(event.target.value as ClassroomMode)}
+              className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
+            >
+              <option value="solo">Solo teacher</option>
+              <option value="classroom">Classroom discussion</option>
+              <option value="challenge">Challenge mode</option>
+              <option value="review">Spaced review</option>
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="flex items-center gap-1.5 font-semibold text-white">
+              <Timer className="h-3.5 w-3.5" /> Session target
+            </span>
+            <select
+              value={durationMinutes}
+              onChange={(event) => setDurationMinutes(Number(event.target.value))}
+              className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
+            >
+              <option value={5}>5 minutes</option>
+              <option value={10}>10 minutes</option>
+              <option value={20}>20 minutes</option>
+            </select>
+          </label>
+          <div className="space-y-2">
+            <span className="flex items-center gap-1.5 font-semibold text-white">
+              <Accessibility className="h-3.5 w-3.5" /> Accessibility
+            </span>
+            <label className="flex items-center justify-between gap-2">
+              Reduced motion
+              <input
+                type="checkbox"
+                checked={reduceMotion}
+                onChange={(event) => setReduceMotion(event.target.checked)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              Voice speed
+              <select
+                value={speechRate}
+                onChange={(event) => setSpeechRate(Number(event.target.value))}
+                className="rounded border border-white/15 bg-[#0a1026] px-1.5 py-1 text-white"
+              >
+                <option value={0.75}>0.75×</option>
+                <option value={1}>1×</option>
+                <option value={1.25}>1.25×</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* ── THE BOARD — the main attraction ── */}
       <div className="relative flex-1 min-h-0 mx-4">
@@ -159,11 +280,20 @@ function ClassroomStage() {
               </div>
             )}
             {shownBoard.map((el) => (
-              <BoardElementView key={el.id} el={el} onQuizAnswer={answerQuiz} />
+              <BoardElementView
+                key={el.id}
+                el={el}
+                onQuizAnswer={answerQuiz}
+                onTransferSubmit={answerTransfer}
+                reducedMotion={animationsOff}
+              />
             ))}
             {waitingForScene && viewingBoard === -1 && (
               <div className="flex items-center gap-2 text-white/35 text-sm py-3">
-                <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.3, repeat: Infinity }}>
+                <motion.span
+                  animate={animationsOff ? { opacity: 1 } : { opacity: [0.3, 1, 0.3] }}
+                  transition={animationsOff ? { duration: 0 } : { duration: 1.3, repeat: Infinity }}
+                >
                   <Sparkles className="w-4 h-4" />
                 </motion.span>
                 the teacher is preparing…
@@ -210,11 +340,13 @@ function ClassroomStage() {
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
           className="absolute -bottom-3 right-3 w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20"
-          initial={{ scale: 0.7 }}
-          animate={lyoState === 'celebrating'
-            ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
-            : { scale: 1, rotate: 0, y: 0 }}
-          transition={{ duration: 0.6 }}
+          initial={animationsOff ? false : { scale: 0.7 }}
+          animate={animationsOff
+            ? { scale: 1, rotate: 0, y: 0 }
+            : lyoState === 'celebrating'
+              ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
+              : { scale: 1, rotate: 0, y: 0 }}
+          transition={{ duration: animationsOff ? 0 : 0.6 }}
         />
       </div>
 
@@ -223,6 +355,9 @@ function ClassroomStage() {
         <AnimatePresence mode="wait">
           {caption && (
             <motion.p
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
               key={caption.speaker + caption.text.slice(0, 24)}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -264,7 +399,7 @@ function ClassroomStage() {
 
       {/* ── The class, seated ── */}
       <div className="flex items-end justify-center gap-5 px-4 pt-1 pb-2">
-        {CAST.map((member, i) => {
+        {visibleCast.map((member, i) => {
           const speaking = activeSpeaker === member.name;
           return (
             <motion.div
@@ -306,17 +441,39 @@ function ClassroomStage() {
           </button>
         )}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => signal('confused')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0"
-          >
-            <HelpCircle className="w-3.5 h-3.5" /> Lost
-          </button>
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setHintMenuOpen((open) => !open)}
+              aria-expanded={hintMenuOpen}
+              aria-haspopup="menu"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <HelpCircle className="w-3.5 h-3.5" /> Get help
+            </button>
+            {hintMenuOpen && (
+              <div
+                role="menu"
+                aria-label="Choose a hint level"
+                className="absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden rounded-xl border border-white/15 bg-[#111a38] p-1 shadow-2xl"
+              >
+                {hintOptions.map((option) => (
+                  <button
+                    key={option.level}
+                    role="menuitem"
+                    onClick={() => chooseHint(option.level)}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-xs text-white/80 hover:bg-white/10 hover:text-white"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => signal('too_easy')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0"
           >
-            <Zap className="w-3.5 h-3.5" /> Too easy
+            <Zap className="w-3.5 h-3.5" /> Harder case
           </button>
 
           {handRaised ? (
@@ -326,7 +483,8 @@ function ClassroomStage() {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
-                placeholder="Ask your question out loud…"
+                placeholder="Ask the teacher…"
+                aria-label="Ask the teacher a question"
                 className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50"
               />
               <button
