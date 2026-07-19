@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { CheckCircle2, XCircle, ImageIcon } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, FileText, ImageIcon, Send, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
@@ -84,7 +84,12 @@ function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; l
   const step = (W - PAD * 2) / Math.max(n, 1);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H + 30}`} className="w-full max-w-xl mx-auto">
+    <svg
+      viewBox={`0 0 ${W} ${H + 30}`}
+      className="w-full max-w-xl mx-auto"
+      role="img"
+      aria-label={`${chartType} chart: ${labels.slice(0, n).map((label, index) => `${label} ${values[index]}`).join(', ')}`}
+    >
       {chartType === 'bar' &&
         values.slice(0, n).map((v, i) => {
           const h = (v / max) * (H - PAD);
@@ -151,20 +156,82 @@ function QuizView({
               onClick={() => onAnswer(el.id, opt)}
               className={cn(
                 'flex items-center justify-between px-4 py-3 rounded-xl text-sm text-left border transition-all',
-                chosen && el.wasCorrect && 'bg-green-500/15 border-green-500/40 text-white',
-                chosen && !el.wasCorrect && 'bg-red-500/15 border-red-500/40 text-white',
-                !chosen && el.answered && opt.is_correct && 'bg-green-500/10 border-green-500/30 text-white/80',
+                chosen && el.wasCorrect === true && 'bg-green-500/15 border-green-500/40 text-white',
+                chosen && el.wasCorrect === false && 'bg-red-500/15 border-red-500/40 text-white',
+                chosen && el.wasCorrect === undefined && 'bg-lyo-500/15 border-lyo-400/40 text-white',
                 !el.answered && 'bg-white/5 border-white/15 text-white/85 hover:bg-lyo-500/15 hover:border-lyo-500/40',
-                !chosen && el.answered && !opt.is_correct && 'bg-white/[0.03] border-white/5 text-white/30',
+                !chosen && el.answered && 'bg-white/[0.03] border-white/5 text-white/30',
               )}
             >
               <span>{opt.label}</span>
-              {chosen && (el.wasCorrect
-                ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                : <XCircle className="w-4 h-4 text-red-400 shrink-0" />)}
+              {chosen && el.wasCorrect === true && (
+                <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+              )}
+              {chosen && el.wasCorrect === false && (
+                <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+              )}
             </button>
           );
         })}
+      </div>
+      {el.feedback && (
+        <p
+          className={cn(
+            'text-sm rounded-lg border px-3 py-2',
+            el.wasCorrect
+              ? 'text-green-200 bg-green-500/10 border-green-500/25'
+              : 'text-amber-100 bg-amber-500/10 border-amber-500/25',
+          )}
+          role="status"
+        >
+          {el.feedback}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TransferView({
+  el,
+  onSubmit,
+}: {
+  el: Extract<BoardElement, { kind: 'transfer' }>;
+  onSubmit: (elementId: string, response: string) => void;
+}) {
+  const [response, setResponse] = useState(el.response || '');
+  const minWords = el.input.min_words ?? 6;
+  const wordCount = response.trim().split(/\s+/).filter(Boolean).length;
+  const ready = wordCount >= minWords && !el.submitted;
+  return (
+    <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
+      <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
+        ✍️ Show you can use it
+      </p>
+      <label htmlFor={`transfer-${el.id}`} className="block text-white text-base font-medium">
+        {el.input.question || 'Explain and apply the idea in your own words.'}
+      </label>
+      <textarea
+        id={`transfer-${el.id}`}
+        value={response}
+        disabled={el.submitted}
+        maxLength={Math.max(200, (el.input.max_words ?? 120) * 10)}
+        onChange={(event) => setResponse(event.target.value)}
+        placeholder={el.input.placeholder || 'Explain your reasoning…'}
+        className="w-full min-h-28 resize-y rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
+          {wordCount}/{minWords} minimum words
+        </span>
+        <button
+          type="button"
+          disabled={!ready}
+          onClick={() => onSubmit(el.id, response)}
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Send className="h-4 w-4" />
+          {el.submitted ? 'Submitted' : 'Submit application'}
+        </button>
       </div>
     </div>
   );
@@ -173,16 +240,18 @@ function QuizView({
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
-  el, onQuizAnswer,
+  el, onQuizAnswer, onTransferSubmit, reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
+  onTransferSubmit: (elementId: string, response: string) => void;
+  reducedMotion?: boolean;
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+      initial={reducedMotion ? false : { opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.45, ease: 'easeOut' }}
+      transition={{ duration: reducedMotion ? 0 : 0.45, ease: 'easeOut' }}
       className="board-element"
     >
       {el.kind === 'chalk' && (
@@ -210,8 +279,23 @@ export function BoardElementView({
               alt={el.caption || el.query}
               className="max-h-72 mx-auto rounded-xl border border-white/10 shadow-2xl object-contain"
             />
-            <figcaption className="text-center text-xs text-white/50 italic">
-              {el.caption || el.query}
+            <figcaption className="text-center text-xs text-white/50">
+              <span className="italic">{el.caption || el.query}</span>
+              {el.attribution && (
+                <>
+                  {' · '}
+                  {el.sourceUrl ? (
+                    <a
+                      href={el.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-white/75"
+                    >
+                      {el.attribution}
+                    </a>
+                  ) : el.attribution}
+                </>
+              )}
             </figcaption>
           </figure>
         ) : (
@@ -254,6 +338,35 @@ export function BoardElementView({
       )}
 
       {el.kind === 'quiz' && <QuizView el={el} onAnswer={onQuizAnswer} />}
+
+      {el.kind === 'transfer' && <TransferView el={el} onSubmit={onTransferSubmit} />}
+
+      {el.kind === 'summary' && (
+        <section className="space-y-3 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
+          <h2 className="flex items-center gap-2 text-base font-bold text-green-100">
+            <BookOpenCheck className="h-5 w-5" /> {el.title}
+          </h2>
+          {el.content && <p className="text-sm leading-relaxed text-white/80">{el.content}</p>}
+          {el.items.length > 0 && (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-white/75">
+              {el.items.map((item, index) => <li key={index}>{item}</li>)}
+            </ul>
+          )}
+          {el.retrievalScheduled && (
+            <p className="text-xs font-semibold text-lyo-200">Spaced retrieval scheduled</p>
+          )}
+        </section>
+      )}
+
+      {el.kind === 'source' && (
+        <aside className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">
+          <FileText className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <span className="font-semibold text-white/70">Source: </span>
+            {el.labels.join(' · ')}
+          </div>
+        </aside>
+      )}
 
       {el.kind === 'dismissal' && (
         <div className="text-center space-y-3 py-4">

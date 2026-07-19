@@ -207,7 +207,12 @@ export function Explorable({
         <code className="text-xs text-white/40 font-mono">{expression}</code>
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-xl mx-auto rounded-xl bg-black/25 border border-white/10">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full max-w-xl mx-auto rounded-xl bg-black/25 border border-white/10"
+        role="img"
+        aria-label={`Interactive graph of ${expression}. Current parameters: ${params.map((param) => `${param.name} ${values[param.name] ?? param.initial}`).join(', ')}`}
+      >
         {path.zeroY !== null && (
           <line x1={0} x2={W} y1={path.zeroY} y2={path.zeroY} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
         )}
@@ -221,8 +226,12 @@ export function Explorable({
       <div className="space-y-2 max-w-xl mx-auto">
         {params.map((p) => (
           <div key={p.name} className="flex items-center gap-3">
-            <code className="text-sm font-bold text-white/70 w-8">{p.name}</code>
+            <label htmlFor={`explorable-${p.name}`} className="text-sm font-bold text-white/70 w-8">
+              <code>{p.name}</code>
+            </label>
             <input
+              id={`explorable-${p.name}`}
+              aria-label={`Adjust ${p.name} from ${p.min} to ${p.max}`}
               type="range"
               min={p.min}
               max={p.max}
@@ -231,9 +240,13 @@ export function Explorable({
               onChange={(e) => setValues((v) => ({ ...v, [p.name]: Number(e.target.value) }))}
               className="flex-1 accent-accent-purple"
             />
-            <span className="text-xs text-white/50 font-mono w-12 text-right">
+            <output
+              htmlFor={`explorable-${p.name}`}
+              aria-live="polite"
+              className="text-xs text-white/50 font-mono w-12 text-right"
+            >
               {(values[p.name] ?? p.initial).toFixed(2)}
-            </span>
+            </output>
           </div>
         ))}
       </div>
