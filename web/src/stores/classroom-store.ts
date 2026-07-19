@@ -313,7 +313,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function addSources(labels?: string[]) {
-    const clean = [...new Set((labels ?? []).map((label) => label.trim()).filter(Boolean))];
+    const clean = Array.from(
+      new Set((labels ?? []).map((label) => label.trim()).filter(Boolean)),
+    );
     if (!clean.length) return;
     const alreadyShown = get().board.some(
       (el) => el.kind === 'source' && clean.every((label) => el.labels.includes(label)),
