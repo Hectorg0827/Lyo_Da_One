@@ -506,7 +506,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   return {
-  return {
     status: 'idle',
     topic: '',
     sessionId: '',
