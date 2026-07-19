@@ -45,10 +45,20 @@ function ClassroomStage() {
   const router = useRouter();
   const params = useSearchParams();
   const topic = params.get('topic') || 'General Learning';
+  const courseId = params.get('courseId') || topic;
+  const objective = params.get('objective') || `Understand and apply ${topic}`;
+  const difficultyParam = params.get('difficulty');
+  const difficulty = difficultyParam === 'beginner'
+    || difficultyParam === 'intermediate'
+    || difficultyParam === 'advanced'
+    ? difficultyParam
+    : undefined;
+  const connection = { topic, sessionId: courseId, objective, difficulty };
 
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
-    transcript, lyoState, waitingForScene, canContinue, error, soundOn, voiceOn,
+    transcript, lyoState, waitingForScene, canContinue, continueLabel,
+    error, soundOn, voiceOn,
     connect, disconnect, answerPrompt, answerQuiz, askQuestion, signal,
     continueLesson, toggleSound, toggleVoice, viewBoard,
   } = useClassroomStore();
@@ -59,10 +69,10 @@ function ClassroomStage() {
   const boardEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    connect(topic);
+    connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic]);
+  }, [topic, courseId, objective, difficulty]);
 
   useEffect(() => {
     if (viewingBoard === -1) {
@@ -94,6 +104,9 @@ function ClassroomStage() {
         </button>
         <div className="min-w-0">
           <h1 className="text-sm font-bold text-white truncate">{topic}</h1>
+          <p className="text-[11px] text-lyo-200/80 truncate" title={objective}>
+            Goal: {objective}
+          </p>
           <p className="text-[10px] text-white/45">
             {status === 'live' ? <span className="text-green-400">● class in session</span>
               : status === 'connecting' ? 'walking to class…' : status}
@@ -156,7 +169,7 @@ function ClassroomStage() {
             {status === 'error' && (
               <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
                 {error ?? 'Something went wrong.'}{' '}
-                <button className="underline" onClick={() => connect(topic)}>Retry</button>
+                <button className="underline" onClick={() => connect(connection)}>Retry</button>
               </div>
             )}
             <div ref={boardEndRef} />
@@ -286,7 +299,7 @@ function ClassroomStage() {
             onClick={continueLesson}
             className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all"
           >
-            Continue the lesson →
+            {continueLabel} →
           </button>
         )}
         <div className="flex items-center gap-2">
