@@ -8,7 +8,7 @@ import {
   NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useClassroomStore } from '@/stores/classroom-store';
+import { useClassroomStore, type ClassroomConnection } from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
@@ -48,12 +48,12 @@ function ClassroomStage() {
   const courseId = params.get('courseId') || topic;
   const objective = params.get('objective') || `Understand and apply ${topic}`;
   const difficultyParam = params.get('difficulty');
-  const difficulty = difficultyParam === 'beginner'
+  const difficulty: ClassroomConnection['difficulty'] = difficultyParam === 'beginner'
     || difficultyParam === 'intermediate'
     || difficultyParam === 'advanced'
     ? difficultyParam
     : undefined;
-  const connection = { topic, sessionId: courseId, objective, difficulty };
+  const connection: ClassroomConnection = { topic, sessionId: courseId, objective, difficulty };
 
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
