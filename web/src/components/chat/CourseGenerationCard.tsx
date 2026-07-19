@@ -57,7 +57,15 @@ export default function CourseGenerationCard({
   // which opens the Living Classroom for course cards).
   const handleStart = () => {
     const topic = course?.title || 'General Learning';
-    router.push(`/classroom?topic=${encodeURIComponent(topic)}`);
+    const objective = (
+      course?.modules?.[0]?.description
+      || course?.description
+      || `Understand and apply ${topic}`
+    ).slice(0, 240);
+    const query = new URLSearchParams({ topic, objective });
+    if (course?.id) query.set('courseId', course.id);
+    if (course?.difficulty) query.set('difficulty', course.difficulty);
+    router.push(`/classroom?${query.toString()}`);
   };
 
   // Customize: continue the conversation as a refine request.
