@@ -107,22 +107,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     if (convoId.startsWith('local-')) {
       const localId = convoId;
-      const remote = await api.chat.createConversation(content.slice(0, 80));
-      convoId = remote.id;
-      set((current) => ({
-        activeConversationId: remote.id,
-        conversations: current.conversations.map((conversation) =>
-          conversation.id === localId
-            ? {
-                ...conversation,
-                id: remote.id,
-                title: remote.title,
-                createdAt: remote.created_at,
-                updatedAt: remote.updated_at,
-              }
-            : conversation
-        ),
-      }));
+      try {
+        const remote = await api.chat.createConversation(content.slice(0, 80));
+        convoId = remote.id;
+        set((current) => ({
+          activeConversationId: remote.id,
+          conversations: current.conversations.map((conversation) =>
+            conversation.id === localId
+              ? {
+                  ...conversation,
+                  id: remote.id,
+                  title: remote.title,
+                  createdAt: remote.created_at,
+                  updatedAt: remote.updated_at,
+                }
+              : conversation
+          ),
+        }));
+      } catch {
+        // Never fail the send silently: keep the device-local thread so the
+        // user's message renders, and let the stream (or its error toast)
+        // take it from here.
+        toast.error("Couldn't sync this chat to your account—retrying with a local copy.");
+        convoId = localId;
+      }
     }
 
     const userMessage: ChatMessage = {
