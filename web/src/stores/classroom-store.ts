@@ -90,9 +90,18 @@ export interface Caption {
 
 type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 
+export interface ClassroomConnection {
+  topic: string;
+  sessionId?: string;
+  objective?: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+}
+
 interface ClassroomStore {
   status: Status;
   topic: string;
+  sessionId: string;
+  objective: string;
 
   board: BoardElement[];        // the live board
   boardHistory: BoardElement[][]; // erased boards (flip back through)
@@ -106,12 +115,14 @@ interface ClassroomStore {
   lyoState: string;
   waitingForScene: boolean;
   canContinue: boolean;
+  continueLabel: string;
+  nextActionIntent: string;
   error: string | null;
 
   soundOn: boolean;
   voiceOn: boolean;
 
-  connect: (topic: string) => void;
+  connect: (connection: ClassroomConnection) => void;
   disconnect: () => void;
   answerPrompt: (option: string) => void;
   answerQuiz: (elementId: string, option: QuizOption) => void;
@@ -135,9 +146,14 @@ const nextId = () => `cf_${++idCounter}`;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
 
-function wsUrl(topic: string, token: string | null): string {
+function wsUrl(connection: ClassroomConnection, token: string | null): string {
   const base = API_URL.replace(/^http/, 'ws').replace(/\/$/, '');
-  const params = new URLSearchParams({ session_id: topic, topic });
+  const params = new URLSearchParams({
+    session_id: connection.sessionId || connection.topic,
+    topic: connection.topic,
+  });
+  if (connection.objective) params.set('objective', connection.objective);
+  if (connection.difficulty) params.set('difficulty', connection.difficulty);
   if (token) params.set('token', token);
   else params.set('api_key', 'web_guest');
   return `${base}/api/v1/classroom/ws/connect?${params}`;
@@ -436,9 +452,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         pushTranscript('Teacher', `📝 Checkpoint: ${comp.question ?? ''}`);
         break;
       case 'CTAButton':
-        if ((comp.action_intent ?? 'continue') === 'continue') {
-          set({ canContinue: true, waitingForScene: false });
-        }
+        set({
+          canContinue: true,
+          continueLabel: comp.label || 'Continue',
+          nextActionIntent: comp.action_intent || 'continue',
+          waitingForScene: false,
+        });
         break;
       default:
         break;
@@ -477,7 +496,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const payload: Record<string, unknown> = {
       event_type: 'user_action',
-      session_id: get().topic,
+      session_id: get().sessionId,
       action_intent: actionIntent,
       component_id: componentId,
       timestamp: new Date().toISOString(),
@@ -486,27 +505,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     ws.send(JSON.stringify(payload));
   }
 
-  async function traceQuiz(skill: string, itemId: string, correct: boolean) {
-    try {
-      const token = localStorage.getItem('lyo_token');
-      if (!token) return;
-      const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const learnerId = String(claims.sub ?? claims.user_id ?? '');
-      if (!learnerId) return;
-      await fetch(`${API_URL}/api/v1/personalization/trace`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          learner_id: learnerId, skill_id: skill, item_id: itemId,
-          correct, time_taken_seconds: 15,
-        }),
-      });
-    } catch { /* never disturb the lesson */ }
-  }
-
+  return {
   return {
     status: 'idle',
     topic: '',
+    sessionId: '',
+    objective: '',
     board: [],
     boardHistory: [],
     viewingBoard: -1,
@@ -517,24 +521,31 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     lyoState: 'reading',
     waitingForScene: false,
     canContinue: false,
+    continueLabel: 'Check understanding',
+    nextActionIntent: 'continue',
     error: null,
     soundOn: false,
     voiceOn: false,
 
-    connect: (topic: string) => {
+    connect: (connection: ClassroomConnection) => {
       get().disconnect();
       const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
       idCounter = 0;
       turnQueue = [];
       pendingErase = false;
+      const sessionId = connection.sessionId || connection.topic;
       set({
-        status: 'connecting', topic,
+        status: 'connecting',
+        topic: connection.topic,
+        sessionId,
+        objective: connection.objective || '',
         board: [], boardHistory: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
-        lyoState: 'reading', waitingForScene: true, canContinue: false, error: null,
+        lyoState: 'reading', waitingForScene: true, canContinue: false,
+        continueLabel: 'Check understanding', nextActionIntent: 'continue', error: null,
       });
 
-      const socket = new WebSocket(wsUrl(topic, token));
+      const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
       ws = socket;
       socket.onopen = () => set({ status: 'live' });
       socket.onmessage = (e) => handleMessage(String(e.data));
@@ -578,11 +589,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         lyoState: correct ? 'celebrating' : 'thinking',
       }));
       pushTranscript('You', `${option.label} ${correct ? '✓' : '✗'}`);
-      sendAction('quiz_answer', el.quiz.component_id, {
+      sendAction('submit_answer', el.quiz.component_id, {
         selected_option_id: option.id,
         selected_option_label: option.label,
       });
-      void traceQuiz(el.quiz.concept_id || get().topic, el.quiz.component_id, correct);
     },
 
     askQuestion: (text: string) => {
@@ -591,18 +601,24 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       stopSpeech(); // barge-in: you raised your hand, the room listens
       pushTranscript('You', `✋ ${trimmed}`);
       set({ waitingForScene: true, lyoState: 'curious', caption: { speaker: 'You', text: trimmed } });
-      sendAction('user_message', 'web_ask', { message: trimmed });
+      sendAction('ask_question', 'web_ask', { message: trimmed });
     },
 
     signal: (kind) => {
       set({ waitingForScene: true, lyoState: kind === 'confused' ? 'thinking' : 'curious' });
       pushTranscript('You', kind === 'confused' ? '😕 (confused)' : '⚡ (too easy)');
-      sendAction(kind === 'confused' ? 'confused' : 'too_easy', 'web_signal');
+      sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal');
     },
 
     continueLesson: () => {
-      set({ canContinue: false, waitingForScene: true });
-      sendAction('continue', 'web_continue');
+      const actionIntent = get().nextActionIntent || 'continue';
+      set({
+        canContinue: false,
+        waitingForScene: true,
+        continueLabel: 'Check understanding',
+        nextActionIntent: 'continue',
+      });
+      sendAction(actionIntent, 'web_continue');
     },
 
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
