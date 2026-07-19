@@ -7,8 +7,10 @@ import os
 class LivingClassroomService: ObservableObject {
     @Published var currentScene: SDUIScene?
     @Published var renderedComponents: [SDUIComponent] = []
+    @Published var hasQueuedComponents: Bool = false
     @Published var isConnected: Bool = false
     @Published var error: Error?
+    @Published private(set) var sceneRevision: Int = 0
 
     // MARK: - Continuous-lesson state (drives the never-dead-end experience)
 
@@ -23,16 +25,64 @@ class LivingClassroomService: ObservableObject {
     /// Short status string for the UI (e.g. "Designing your lesson…").
     @Published var statusText: String?
 
+    private var componentQueue: [SDUIComponent] = []
+
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var isConnecting: Bool = false
     private var sessionId: String = ""
+    private var connectedSessionId: String = ""
+    private var localFallbackSceneIndex: Int = 0
     private let logger = Logger(subsystem: "com.lyo.app", category: "LivingClassroomService")
 
     // MARK: - On-device engine + continuation
 
     private let engine = LivingClassroomEngine()
     private var topic: String = ""
+    /// When the current scene began rendering — used to estimate time-on-task
+    /// for knowledge tracing.
+    private var sceneStartedAt = Date()
+    /// One-shot memory greeting composed from the mastery profile; prepended
+    /// to the first scene so the mascot visibly remembers the learner.
+    private var pendingMemoryGreeting: String?
+
+    // MARK: Voice tutoring
+    /// When on, teacher messages are spoken aloud as they reveal, making the
+    /// lesson a listen-along. Persisted across sessions.
+    @Published var voiceModeEnabled: Bool = UserDefaults.standard.bool(forKey: "classroom_voice_mode") {
+        didSet {
+            UserDefaults.standard.set(voiceModeEnabled, forKey: "classroom_voice_mode")
+            if !voiceModeEnabled { TextToSpeechService.shared.stop() }
+        }
+    }
+
+    /// Speaks a component if voice mode is on and the content is spoken-style
+    /// prose (backend teacher messages can carry JSON director turns — those
+    /// are skipped rather than read aloud).
+    private func narrateIfEnabled(_ component: SDUIComponent) {
+        guard voiceModeEnabled,
+            component.type == .teacherMessage,
+            !component.content.isEmpty
+        else { return }
+        let trimmed = component.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.hasPrefix("["), !trimmed.hasPrefix("{") else { return }
+        TextToSpeechService.shared.enqueue(trimmed)
+    }
+
+    /// Barge-in: the learner started talking — stop talking over them.
+    func bargeIn() {
+        TextToSpeechService.shared.stop()
+    }
+
+    // MARK: Struggle detection state
+    /// Wrong answers in a row — 2 triggers a live intervention.
+    private var consecutiveWrongAnswers = 0
+    /// Watches a revealed checkpoint for hesitation (unanswered too long).
+    private var hesitationTask: Task<Void, Never>?
+    /// Cooldown so interventions support rather than nag.
+    private var lastInterventionAt: Date?
+    private let interventionCooldown: TimeInterval = 90
+    private let hesitationThreshold: TimeInterval = 20
     /// Whether the backend has ever delivered a scene on this connection.
     private var didReceiveBackendScene: Bool = false
     /// Watchdog that switches to the on-device engine if the backend stalls.
@@ -50,6 +100,12 @@ class LivingClassroomService: ObservableObject {
     deinit {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         urlSession?.invalidateAndCancel()
+    }
+
+    private func normalizedSessionId(from rawSessionId: String) -> String {
+        rawSessionId.hasPrefix("GENERATE:")
+            ? String(rawSessionId.dropFirst("GENERATE:".count))
+            : rawSessionId
     }
 
     /// Connects to the real-time Server-Driven UI WebSockets.
@@ -71,20 +127,38 @@ class LivingClassroomService: ObservableObject {
         self.isGenerating = true
         self.statusText = "Connecting to your live classroom…"
 
+        // Load the persisted mastery profile so on-device generation starts
+        // where the learner actually is. Fire-and-forget: a miss just means
+        // prompts run without prior-session context.
+        Task { [weak self] in
+            if let profile = try? await PersonalizationService.shared.getMasteryProfile() {
+                self?.engine.setMasteryContext(profile)
+                self?.pendingMemoryGreeting = Self.composeMemoryGreeting(
+                    from: profile, topic: self?.topic ?? "")
+            }
+        }
+
         // Start a watchdog: if the backend doesn't deliver a first scene in time,
         // seamlessly switch to the on-device engine so the lesson never stalls.
         startStallWatchdog(timeout: firstSceneTimeout, reason: "first scene")
 
         Task {
             do {
-                // Use Lyo JWT access token (what the backend expects)
-                // Fall back to Firebase token, then guest mode
+                // Use Lyo JWT access token (what the backend expects).
+                // If the access token is absent, try refreshing via stored refresh token,
+                // then try exchanging the Firebase token for a Lyo JWT.
                 let token: String
                 if let lyoToken = await TokenManager.shared.getToken() {
                     token = lyoToken
-                } else if let fbToken = try? await FirebaseAuthManager.refreshToken() {
-                    token = fbToken
-                    self.logger.warning("Using Firebase token for WebSocket (no Lyo JWT available)")
+                } else if await TokenManager.shared.getRefreshToken() != nil,
+                          let freshToken = try? await DefaultAuthRepository().refreshToken() {
+                    token = freshToken
+                    self.logger.info("Obtained fresh Lyo JWT via refresh token")
+                } else if let fbToken = try? await FirebaseAuthManager.refreshToken(),
+                          (try? await LyoRepository.shared.loginWithGoogle(idToken: fbToken)) != nil,
+                          let freshToken = await TokenManager.shared.getToken() {
+                    token = freshToken
+                    self.logger.info("Re-exchanged Firebase token for Lyo JWT")
                 } else {
                     token = "guest"
                     self.logger.warning("No auth token available — connecting as guest")
@@ -97,13 +171,28 @@ class LivingClassroomService: ObservableObject {
                     .replacingOccurrences(of: "https://", with: "wss://")
                     .replacingOccurrences(of: "http://", with: "ws://")
 
+                // Strip "GENERATE:" prefix — pass just the topic as the session_id
+                let resolvedSessionId = self.normalizedSessionId(from: sessionId)
+                self.connectedSessionId = resolvedSessionId
+
                 let encodedSessionId =
-                    sessionId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                    ?? sessionId
+                    resolvedSessionId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+                    ?? resolvedSessionId
+                let encodedToken =
+                    token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+                    ?? token
+
+                // Topic: use passed topic, fall back to session_id itself
+                let resolvedTopic = topic ?? resolvedSessionId
+                let encodedTopic =
+                    resolvedTopic.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+                    ?? resolvedTopic
+
+                // Backend WebSocket auth requires token as query param (not header)
                 guard
                     let url = URL(
                         string:
-                            "\(wsBaseString)/api/v1/classroom/ws/connect?session_id=\(encodedSessionId)"
+                            "\(wsBaseString)/api/v1/classroom/ws/connect?session_id=\(encodedSessionId)&token=\(encodedToken)&topic=\(encodedTopic)"
                     )
                 else {
                     self.logger.error("Invalid WebSocket URL")
@@ -115,6 +204,8 @@ class LivingClassroomService: ObservableObject {
                 let session = URLSession(configuration: .default)
                 self.urlSession = session
 
+                // Send the token both as a query param (required) and as a header for
+                // backends that also honor Authorization.
                 var request = URLRequest(url: url)
                 request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
@@ -142,13 +233,36 @@ class LivingClassroomService: ObservableObject {
         stallTask = nil
         revealTask?.cancel()
         revealTask = nil
+        cancelHesitationWatch()
+        consecutiveWrongAnswers = 0
+        lastInterventionAt = nil
+        TextToSpeechService.shared.stop()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
         isConnected = false
         isConnecting = false
+        connectedSessionId = ""
+        localFallbackSceneIndex = 0
         logger.info("Disconnected from WebSocket")
+    }
+
+    /// Re-establishes the WebSocket using the previously stored sessionId. Used by the UI's reconnect banner.
+    func reconnect() {
+        guard !sessionId.isEmpty else {
+            logger.warning("Cannot reconnect — no sessionId stored")
+            return
+        }
+        logger.info("\u{1F501} Reconnecting WebSocket for session \(self.sessionId)")
+        // Clear any half-open task before reconnecting.
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
+        isConnecting = false
+        error = nil
+        connect(sessionId: sessionId)
     }
 
     /// Sends a user action (e.g. button tap) back to the backend.
@@ -164,9 +278,13 @@ class LivingClassroomService: ObservableObject {
             return
         }
 
+        let outboundSessionId = connectedSessionId.isEmpty
+            ? normalizedSessionId(from: sessionId)
+            : connectedSessionId
+
         var payload: [String: Any] = [
             "event_type": "user_action",
-            "session_id": sessionId,
+            "session_id": outboundSessionId,
             "action_intent": actionIntent,
             "component_id": componentId,
             "timestamp": ISO8601DateFormatter().string(from: Date()),
@@ -194,13 +312,38 @@ class LivingClassroomService: ObservableObject {
         }
     }
 
+    var nextQueuedComponent: SDUIComponent? {
+        componentQueue.first
+    }
+
+    func showLocalFallbackScene(topic: String) {
+        localFallbackSceneIndex += 1
+        let scene = makeLocalFallbackScene(topic: topic, sceneIndex: localFallbackSceneIndex)
+        logger.warning("Using local classroom fallback scene \(self.localFallbackSceneIndex) for \(topic)")
+        startSceneRender(scene)
+    }
+
+    func showLocalQuickCheck(topic: String, focusText: String? = nil) {
+        localFallbackSceneIndex += 1
+        let scene = makeLocalQuickCheckScene(
+            topic: topic,
+            focusText: focusText,
+            sceneIndex: localFallbackSceneIndex
+        )
+        logger.info("Using local classroom quick check \(self.localFallbackSceneIndex) for \(topic)")
+        startSceneRender(scene)
+    }
+
     /// Translate a UI action into an engine learner-signal and, in on-device mode,
     /// drive the lesson accordingly (answer questions immediately, adapt to quiz).
     private func captureLearnerInteraction(
         actionIntent: String, componentId: String, actionData: [String: Any]?
     ) {
         switch actionIntent {
-        case "quiz_answer":
+        case "quiz_answer", "submit_answer":
+            // ("submit_answer" is what local quick-check scenes fire — handling
+            // both closes a gap where those answers never recorded signals.)
+            cancelHesitationWatch()
             let selectedId = actionData?["selected_option_id"] as? String
             let selectedLabel = (actionData?["selected_option_label"] as? String) ?? selectedId ?? ""
             // Determine correctness from the component's known answer, if present.
@@ -212,6 +355,31 @@ class LivingClassroomService: ObservableObject {
             recordLearnerSignal(
                 .init(kind: .answeredQuiz(correct: correct, choice: selectedLabel),
                       detail: selectedLabel))
+            // Persist to the backend mastery profile (Deep Knowledge Tracing).
+            traceQuizOutcome(componentId: componentId, correct: correct)
+            // Struggle detection: two misses in a row → step in and help.
+            if correct {
+                consecutiveWrongAnswers = 0
+            } else {
+                consecutiveWrongAnswers += 1
+                if consecutiveWrongAnswers >= 2 {
+                    triggerIntervention(reason: .repeatedMisses)
+                }
+            }
+
+        case "intervention_choice":
+            let selectedId = actionData?["selected_option_id"] as? String
+            switch selectedId {
+            case "intervene_analogy":
+                requestReteach(
+                    "Please re-explain the last idea in a completely different way — use a simple, vivid analogy from everyday life.")
+            case "intervene_steps":
+                requestReteach(
+                    "Break the last concept down into very small steps, one at a time, with a concrete worked example.")
+            default:
+                // "I've got this" — respect it and get out of the way.
+                statusText = ""
+            }
 
         case "user_message", "ask_question":
             let message = (actionData?["message"] as? String) ?? ""
@@ -227,10 +395,170 @@ class LivingClassroomService: ObservableObject {
 
         case "confused":
             recordLearnerSignal(.init(kind: .confused, detail: ""))
+            reportAffect(valence: -0.5, arousal: 0.6, source: "classroom_confused")
         case "too_easy":
             recordLearnerSignal(.init(kind: .tooEasy, detail: ""))
+            reportAffect(valence: 0.2, arousal: -0.3, source: "classroom_too_easy")
         default:
             break
+        }
+    }
+
+    /// Composes a short spoken-style welcome that references the learner's
+    /// persisted mastery, so returning learners are greeted by name-of-skill
+    /// rather than a cold start. Returns nil for brand-new learners.
+    static func composeMemoryGreeting(from profile: MasteryProfile, topic: String) -> String? {
+        guard !profile.skills.isEmpty else { return nil }
+        let strength = profile.strengths.first
+        let weakness = (profile.recommendedFocus.first ?? profile.weaknesses.first)
+        let topicLine = topic.isEmpty ? "" : " Today we're on \(topic) — let's make it count."
+
+        switch (strength, weakness) {
+        case let (s?, w?) where s.caseInsensitiveCompare(w) != .orderedSame:
+            return "Welcome back! Last time you showed real strength in \(s), and \(w) put up a fight — if it comes up today, we'll hit it from a new angle.\(topicLine)"
+        case let (_, w?):
+            return "Welcome back! I remember \(w) gave us a good challenge last time — watch how today's ideas connect back to it.\(topicLine)"
+        case let (s?, _):
+            return "Welcome back! You've been on a roll with \(s).\(topicLine)"
+        default:
+            return "Welcome back!\(topicLine)"
+        }
+    }
+
+    // MARK: - Struggle-aware interventions
+
+    enum InterventionReason { case repeatedMisses, hesitation }
+
+    /// The mascot steps in when the learner is struggling — two misses in a
+    /// row or long hesitation on a checkpoint — and offers concrete help.
+    /// The offer is rendered as normal SDUI components (message + choice card),
+    /// so it works identically in backend and on-device modes.
+    private func triggerIntervention(reason: InterventionReason) {
+        if let last = lastInterventionAt,
+            Date().timeIntervalSince(last) < interventionCooldown { return }
+        lastInterventionAt = Date()
+        consecutiveWrongAnswers = 0
+        cancelHesitationWatch()
+
+        let message: String
+        switch reason {
+        case .repeatedMisses:
+            message = "Hey — this one's putting up a fight, and that's completely normal. It usually means we're right at the edge of something new. Want me to come at it from a different angle?"
+        case .hesitation:
+            message = "No rush — take your time. And if it would help, I can explain this one differently before you answer."
+        }
+
+        let msgComponent = SDUIComponent(
+            id: "intervention-msg-\(sceneRevision)-\(Int(Date().timeIntervalSince1970))",
+            type: .teacherMessage,
+            content: message,
+            animation: "fade_in",
+            emotion: "supportive"
+        )
+        let choiceComponent = SDUIComponent(
+            id: "intervention-choice-\(sceneRevision)-\(Int(Date().timeIntervalSince1970))",
+            type: .quizCard,
+            content: "How can I help?",
+            question: "How can I help?",
+            options: [
+                SDUIQuizOption(id: "intervene_analogy", label: "Explain it a different way"),
+                SDUIQuizOption(id: "intervene_steps", label: "Break it into small steps"),
+                SDUIQuizOption(id: "intervene_continue", label: "I've got this — keep going"),
+            ],
+            actionIntent: "intervention_choice"
+        )
+
+        // Front of the queue so the help appears NOW, not after remaining content.
+        componentQueue.insert(contentsOf: [msgComponent, choiceComponent], at: 0)
+        hasQueuedComponents = true
+        revealNextComponent()
+        revealNextComponent()
+        logger.info("🫱 Intervention offered (\(String(describing: reason)))")
+
+        // Also inform a connected backend so server-side pacing can adapt.
+        recordLearnerSignal(.init(kind: .confused, detail: "intervention:\(reason)"))
+    }
+
+    /// Routes an intervention choice through the established ask/user-message
+    /// flow — the backend answers it when connected; the on-device engine
+    /// answers it otherwise.
+    private func requestReteach(_ prompt: String) {
+        statusText = "Coming at it from a new angle…"
+        sendUserAction(
+            actionIntent: "user_message",
+            componentId: "intervention_reteach",
+            actionData: ["message": prompt]
+        )
+    }
+
+    /// Starts (or restarts) the hesitation watchdog for a just-revealed
+    /// checkpoint. If the learner neither answers nor advances within the
+    /// threshold, offer help once.
+    private func startHesitationWatch(for component: SDUIComponent) {
+        cancelHesitationWatch()
+        let watchedRevision = sceneRevision
+        hesitationTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((self?.hesitationThreshold ?? 20) * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            // Still on the same scene and the checkpoint is still the latest
+            // rendered component (i.e. genuinely unanswered)?
+            guard self.sceneRevision == watchedRevision,
+                self.renderedComponents.last?.id == component.id else { return }
+            self.triggerIntervention(reason: .hesitation)
+        }
+    }
+
+    private func cancelHesitationWatch() {
+        hesitationTask?.cancel()
+        hesitationTask = nil
+    }
+
+    // MARK: - Learner model persistence
+
+    /// Sends a quiz outcome to the backend knowledge tracer so mastery survives
+    /// the session. Fire-and-forget: a failure must never disturb the lesson.
+    private func traceQuizOutcome(componentId: String, correct: Bool) {
+        let skill = topic.isEmpty ? "general" : topic
+        let timeTaken = min(max(Date().timeIntervalSince(sceneStartedAt), 0), 600)
+        Task { [weak self] in
+            guard let learnerId = await TokenManager.shared.getUserId() else { return }
+            do {
+                let result = try await PersonalizationService.shared.traceKnowledge(
+                    trace: KnowledgeTraceRequest(
+                        learnerId: learnerId,
+                        skillId: skill,
+                        itemId: componentId,
+                        correct: correct,
+                        timeTakenSeconds: timeTaken
+                    ))
+                self?.logger.info("🧠 Traced quiz outcome (\(correct ? "correct" : "incorrect")) for skill \(skill)")
+                // Honest gamification: XP scales with the actual DKT mastery
+                // delta, and quest progress advances on weak-skill wins.
+                await GamificationService.shared.awardMasteryXP(
+                    skill: result.skillId,
+                    oldMastery: result.oldMastery ?? result.newMastery,
+                    newMastery: result.newMastery,
+                    correct: result.correct
+                )
+            } catch {
+                self?.logger.warning("Knowledge trace failed (lesson unaffected): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Reports an affect signal (confusion / boredom) to the learner state so
+    /// future sessions can adjust pacing. Fire-and-forget.
+    private func reportAffect(valence: Double, arousal: Double, source: String) {
+        Task {
+            guard let learnerId = await TokenManager.shared.getUserId() else { return }
+            try? await PersonalizationService.shared.updateState(
+                update: PersonalizationStateUpdate(
+                    learnerId: learnerId,
+                    affect: AffectSignals(
+                        valence: valence, arousal: arousal, confidence: 0.7,
+                        source: [source]
+                    )
+                ))
         }
     }
 
@@ -281,20 +609,30 @@ class LivingClassroomService: ObservableObject {
             let decoder = JSONDecoder()
             // The top level wrapper maps to WebSocketEnvelope to get the type and session
             let envelope = try decoder.decode(WebSocketEnvelope.self, from: data)
+            if let serverSessionId = envelope.sessionId, !serverSessionId.isEmpty {
+                let normalized = normalizedSessionId(from: serverSessionId)
+                if connectedSessionId != normalized {
+                    connectedSessionId = normalized
+                    logger.info("Using backend classroom session id: \(normalized)")
+                }
+            }
 
             Task { @MainActor in
                 switch envelope.type {
                 case "scene_stream", "scene_start", "SCENE_START":
-                    // Backend sends scene in root-level "scene" key, not inside "data"
-                    if let rootObj = try? JSONSerialization.jsonObject(with: data)
-                        as? [String: Any],
-                        let sceneDict = rootObj["scene"] as? [String: Any],
-                        let sceneData = try? JSONSerialization.data(withJSONObject: sceneDict),
-                        let scene = try? decoder.decode(SDUIScene.self, from: sceneData)
-                    {
-                        self.startSceneRender(scene)
-                    } else {
-                        self.logger.warning("scene_start: could not extract scene from message")
+                    // Backend may send scene at root["scene"] or nested under root["data"]["scene"]
+                    if let rootObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        let sceneDict =
+                            (rootObj["scene"] as? [String: Any])
+                            ?? (rootObj["data"] as? [String: Any]).flatMap { $0["scene"] as? [String: Any] }
+                        if let sceneDict = sceneDict,
+                           let sceneData = try? JSONSerialization.data(withJSONObject: sceneDict),
+                           let scene = try? decoder.decode(SDUIScene.self, from: sceneData)
+                        {
+                            self.startSceneRender(scene)
+                        } else {
+                            self.logger.warning("scene_start: could not extract scene from message")
+                        }
                     }
 
                 case "component_stream", "component_render", "COMPONENT_RENDER":
@@ -351,20 +689,40 @@ class LivingClassroomService: ObservableObject {
         stallTask = nil
         didReceiveBackendScene = didReceiveBackendScene || !usingLocalEngine
 
+        self.sceneRevision += 1
+        self.sceneStartedAt = Date()
+        cancelHesitationWatch()  // a new scene invalidates any pending watch
         self.currentScene = scene
+
+        // First scene of the session: lead with the memory greeting so the
+        // mascot visibly remembers the learner. Flows through the normal
+        // component-reveal pipeline; consumed exactly once.
+        var components = scene.components
+        if self.sceneRevision == 1, let greeting = pendingMemoryGreeting {
+            pendingMemoryGreeting = nil
+            components.insert(
+                SDUIComponent(
+                    id: "memory-greeting",
+                    type: .teacherMessage,
+                    content: greeting,
+                    animation: "fade_in",
+                    emotion: "warm"
+                ), at: 0)
+        }
+
         self.renderedComponents = []
+        self.componentQueue = components
+        self.hasQueuedComponents = !self.componentQueue.isEmpty
         self.isGenerating = false
         self.canContinue = false
         self.statusText = nil
+
         logger.info(
             "Started rendering scene: \(scene.sceneType) [\(scene.id)] with \(scene.components.count) components"
         )
 
-        // Render components embedded in the scene payload
-        for component in scene.components {
-            renderComponent(component)
-        }
-
+        // Auto-reveal the first chunk (staggered, teacher-paced)
+        revealNextComponent()
         // Once the staggered reveal completes, allow the learner to continue.
         scheduleCanContinue(after: scene)
     }
@@ -385,23 +743,74 @@ class LivingClassroomService: ObservableObject {
     }
 
     private func renderComponent(_ component: SDUIComponent) {
-        // Find if component already exists - if so, skip or update it
-        if !self.renderedComponents.contains(where: { $0.id == component.id }) {
-            // Respect the server-side staggered delay for cinematic effect
-            let delayTime = TimeInterval(component.delayMs) / 1000.0
+        // If it's already on screen, update it seamlessly
+        if let index = self.renderedComponents.firstIndex(where: { $0.id == component.id }) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                self.renderedComponents[index] = component
+            }
+            logger.info("Updated visible component: \(component.type.rawValue) - \(component.id)")
+        }
+        // If it's still in the queue, update its data so it's ready when revealed
+        else if let index = self.componentQueue.firstIndex(where: { $0.id == component.id }) {
+            self.componentQueue[index] = component
+            logger.info("Updated queued component: \(component.type.rawValue) - \(component.id)")
+        }
+        // If it's completely new, add it to the queue
+        else {
+            self.componentQueue.append(component)
+            self.hasQueuedComponents = true
+            logger.info("Queued new component: \(component.type.rawValue) - \(component.id)")
 
-            if delayTime > 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delayTime) {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                        self.renderedComponents.append(component)
+            if self.renderedComponents.isEmpty {
+                revealNextComponent()
+            }
+        }
+    }
+
+    /// Pulls the next component from the queue and displays it.
+    /// Manages the auto-pacing simulation of a "teacher teaching".
+    func revealNextComponent() {
+        guard !componentQueue.isEmpty else { return }
+
+        let component = componentQueue.removeFirst()
+        self.hasQueuedComponents = !componentQueue.isEmpty
+
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            self.renderedComponents.append(component)
+        }
+
+        // Voice tutoring: read teacher messages aloud as they reveal.
+        narrateIfEnabled(component)
+
+        // A checkpoint just appeared — watch for hesitation (long silence
+        // usually means the learner is stuck, not thinking). Our own
+        // intervention cards are exempt.
+        if component.type == .quizCard, component.actionIntent != "intervention_choice" {
+            startHesitationWatch(for: component)
+        }
+
+        // Simulate teacher pacing: Auto-reveal the next component after a reading delay,
+        // UNLESS the next component requires explicit user interaction.
+        if !componentQueue.isEmpty {
+            let nextComponent = componentQueue[0]
+
+            let requiresPause = nextComponent.type == .studentPrompt
+                             || nextComponent.type == .quizCard
+                             || nextComponent.type == .ctaButton
+
+            if !requiresPause {
+                // Calculate realistic reading delay (approx 50ms per character)
+                let charCount = max(component.content.count, 40)
+                let delay = Double(charCount) * 0.05
+                let cappedDelay = min(max(delay, 1.0), 5.0)
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) {
+                    // Only auto-reveal if the user hasn't manually tapped ahead
+                    if self.hasQueuedComponents && self.componentQueue.first?.id == nextComponent.id {
+                        self.revealNextComponent()
                     }
                 }
-            } else {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                    self.renderedComponents.append(component)
-                }
             }
-            logger.info("Rendered component: \(component.type.rawValue) - \(component.id)")
         }
     }
 
@@ -410,6 +819,149 @@ class LivingClassroomService: ObservableObject {
         // Backend signaled the scene is done — let the learner advance.
         isGenerating = false
         if !lessonComplete { canContinue = true }
+    }
+
+    private func makeLocalFallbackScene(topic: String, sceneIndex: Int) -> SDUIScene {
+        let cleanTopic = topic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "this topic"
+            : topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phase = (sceneIndex - 1) % 4
+        let prefix = "local_\(sceneIndex)"
+
+        let messages: [String]
+        switch phase {
+        case 0:
+            messages = [
+                "Let's start for real. \(cleanTopic) is not about memorizing harder; it is about choosing the right kind of effort at the right time.",
+                "The first move is attention. Before you study, decide what you are trying to understand, then remove one distraction that would split your focus.",
+                "The second move is active recall. After a short study pass, close the notes and pull the idea back from memory in your own words. That retrieval is where learning gets stronger."
+            ]
+        case 1:
+            messages = [
+                "Now let's make it practical. Strong learners use short cycles: learn, test, correct, then repeat.",
+                "If something feels familiar while you read it, that is not proof you know it. Proof comes when you can explain it without looking.",
+                "A useful rule is simple: if you cannot teach the idea in one minute, you have found the next thing to practice."
+            ]
+        case 2:
+            messages = [
+                "Here is the common trap: rereading feels productive because it is comfortable, but it often hides weak memory.",
+                "Better practice feels slightly harder. Mix old and new ideas, answer questions, and let mistakes show you where to focus next.",
+                "This is called desirable difficulty: the work is challenging enough to build memory, but not so hard that you cannot recover."
+            ]
+        default:
+            messages = [
+                "Let's lock this in. For \(cleanTopic), your study system should have three parts: focus, recall, and feedback.",
+                "Focus helps the idea enter clearly. Recall makes the memory stronger. Feedback shows what needs another pass.",
+                "Next, I can turn this into a quick classroom challenge so you can prove what you remember."
+            ]
+        }
+
+        var components = messages.enumerated().map { index, text in
+            SDUIComponent(
+                id: "\(prefix)_teacher_\(index + 1)",
+                type: .teacherMessage,
+                content: text,
+                delayMs: index == 0 ? 0 : 650,
+                animation: "fade_in",
+                emotion: index == 0 ? "encouraging" : "focused"
+            )
+        }
+
+        if phase == 3 {
+            components.append(
+                SDUIComponent(
+                    id: "\(prefix)_quiz",
+                    type: .quizCard,
+                    content: "Quick check",
+                    delayMs: 650,
+                    animation: "fade_in",
+                    emotion: "challenge",
+                    question: "Which study move best proves you actually understand an idea?",
+                    options: [
+                        SDUIQuizOption(id: "a", label: "Rereading the same notes many times"),
+                        SDUIQuizOption(id: "b", label: "Explaining it from memory without looking"),
+                        SDUIQuizOption(id: "c", label: "Highlighting the longest paragraph"),
+                        SDUIQuizOption(id: "d", label: "Waiting until the test to practice")
+                    ],
+                    actionIntent: "submit_answer",
+                    actionPayload: ["correct_option_id": "b"]
+                )
+            )
+        }
+
+        components.append(
+            SDUIComponent(
+                id: "\(prefix)_continue",
+                type: .ctaButton,
+                content: phase == 3 ? "Keep Practicing" : "Continue",
+                delayMs: 500,
+                animation: "fade_in",
+                actionIntent: "continue",
+                actionPayload: ["source": "local_fallback", "scene_index": String(sceneIndex)]
+            )
+        )
+
+        return SDUIScene(
+            id: "local_fallback_scene_\(sceneIndex)",
+            sceneType: phase == 3 ? "quiz" : "instruction",
+            components: components
+        )
+    }
+
+    private func makeLocalQuickCheckScene(
+        topic: String,
+        focusText: String?,
+        sceneIndex: Int
+    ) -> SDUIScene {
+        let cleanTopic = topic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "this topic"
+            : topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanFocus = focusText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let focus = cleanFocus?.isEmpty == false ? cleanFocus! : "the idea we just discussed"
+        let prefix = "quick_check_\(sceneIndex)"
+
+        let components: [SDUIComponent] = [
+            SDUIComponent(
+                id: "\(prefix)_teacher",
+                type: .teacherMessage,
+                content: "Checkpoint time. I made a quick question from \(cleanTopic) so you can test the idea instead of just rereading it.",
+                delayMs: 0,
+                animation: "fade_in",
+                emotion: "challenge"
+            ),
+            SDUIComponent(
+                id: "\(prefix)_quiz",
+                type: .quizCard,
+                content: "Quick check",
+                delayMs: 400,
+                animation: "fade_in",
+                emotion: "challenge",
+                question: "What should you do next if \(focus.lowercased()) still feels unclear?",
+                options: [
+                    SDUIQuizOption(id: "a", label: "Move on and hope it clicks later"),
+                    SDUIQuizOption(id: "b", label: "Explain it from memory, then fix the weak part"),
+                    SDUIQuizOption(id: "c", label: "Only reread the same paragraph"),
+                    SDUIQuizOption(id: "d", label: "Skip practice until the final test")
+                ],
+                actionIntent: "submit_answer",
+                actionPayload: ["correct_option_id": "b", "source": "local_quick_check"]
+            ),
+            SDUIComponent(
+                id: "\(prefix)_continue",
+                type: .ctaButton,
+                content: "Continue",
+                delayMs: 500,
+                animation: "fade_in",
+                actionIntent: "continue",
+                actionPayload: ["source": "local_quick_check", "scene_index": String(sceneIndex)]
+            )
+        ]
+
+        return SDUIScene(
+            id: "local_quick_check_scene_\(sceneIndex)",
+            sceneType: "quiz",
+            components: components
+        )
     }
 
     // MARK: - Continuation Loop (the core "never dead-ends" fix)
@@ -506,5 +1058,39 @@ class LivingClassroomService: ObservableObject {
     /// Feed learner interactions into the engine for adaptivity.
     func recordLearnerSignal(_ signal: LivingClassroomEngine.LearnerSignal) {
         engine.record(signal)
+    }
+
+    /// The session's checkpoint questions, packaged for a friend challenge.
+    /// Intervention cards are excluded; the correct answer is recovered from
+    /// the component's action payload.
+    func challengeQuestions() -> [ChallengeQuestion] {
+        renderedComponents.compactMap { component in
+            guard component.type == .quizCard,
+                component.actionIntent != "intervention_choice",
+                let options = component.options, options.count >= 2
+            else { return nil }
+            let questionText = component.question ?? component.content
+            guard !questionText.isEmpty else { return nil }
+            let answerId = component.actionPayload?["answer_option_id"]
+            let answerIndex = options.firstIndex(where: { $0.id == answerId }) ?? 0
+            return ChallengeQuestion(
+                question: questionText,
+                options: options.map(\.label),
+                answerIndex: answerIndex
+            )
+        }
+    }
+
+    /// Data for the shareable end-of-lesson recap card. Falls back to the
+    /// rendered teacher messages when the engine has no summaries (e.g. a
+    /// fully backend-driven lesson).
+    func lessonRecap() -> (topic: String, points: [String]) {
+        var points = engine.recapPoints
+        if points.isEmpty {
+            points = renderedComponents
+                .filter { $0.type == .teacherMessage || $0.type == .textBlock }
+                .map { String($0.content.prefix(120)) }
+        }
+        return (topic: topic, points: Array(points.suffix(4)))
     }
 }

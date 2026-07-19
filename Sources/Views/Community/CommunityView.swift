@@ -273,6 +273,155 @@ struct CommunityListView: View {
         }
         .background(DesignTokens.Colors.background)
     }
+    
+    // MARK: - Navigation Helper
+    
+    @ViewBuilder
+    private func destinationView(for item: CommunityItem) -> some View {
+        switch item.type {
+        case .privateLesson:
+            if let lessonData = item.lessonData {
+                PrivateLessonDetailView(lesson: lessonData)
+            } else {
+                // Fallback: Create a lesson from item data
+                PrivateLessonDetailView(lesson: APIPrivateLesson(
+                    id: Int(item.id.hashValue),
+                    title: item.title,
+                    subject: "General",
+                    instructor: APIUserPreview(id: 1, name: "Instructor", avatar: item.userAvatar),
+                    cost: 50,
+                    durationMinutes: 60,
+                    description: item.subtitle,
+                    lat: item.coordinate.latitude,
+                    lng: item.coordinate.longitude,
+                    imageURL: item.imageURL
+                ))
+            }
+            
+        case .educationalCenter:
+            if let centerData = item.centerData {
+                EducationalCenterDetailView(center: centerData)
+            } else {
+                // Fallback: Create a center from item data
+                EducationalCenterDetailView(center: APIEducationalCenter(
+                    id: Int(item.id.hashValue),
+                    name: item.title,
+                    category: "Education",
+                    description: item.subtitle ?? "",
+                    lat: item.coordinate.latitude,
+                    lng: item.coordinate.longitude,
+                    address: nil,
+                    imageURL: item.imageURL,
+                    openingHours: nil
+                ))
+            }
+            
+        case .group:
+            if let groupData = item.groupData {
+                StudyGroupDetailView(group: groupData, viewModel: viewModel)
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        case .event:
+            if let eventData = item.eventData {
+                EducationalEventDetailView(event: eventData, viewModel: viewModel)
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        case .marketplace:
+            if let listingData = item.listingData {
+                MarketplaceListingDetailView(listing: listingData)
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        case .course:
+            if let courseData = item.courseData {
+                // Navigate to classroom directly or a detail view if we have one
+                LivingClassroomView(
+                    courseId: courseData.id,
+                    courseTitle: courseData.title
+                )
+            } else {
+                CommunityItemDetailPlaceholder(item: item)
+            }
+            
+        default:
+            // Generic detail view for other types (questions, spots, etc.)
+            CommunityItemDetailPlaceholder(item: item)
+        }
+    }
+}
+
+// MARK: - Placeholder Detail View
+
+struct CommunityItemDetailPlaceholder: View {
+    let item: CommunityItem
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Hero
+                ZStack {
+                    if let imageURL = item.imageURL, let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            default:
+                                item.type.color.opacity(0.3)
+                            }
+                        }
+                    } else {
+                        item.type.color.opacity(0.3)
+                    }
+                    
+                    VStack {
+                        Spacer()
+                        Text(item.title)
+                            .font(.title.bold())
+                            .foregroundColor(.white)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+                            )
+                    }
+                }
+                .frame(height: 200)
+                .clipped()
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    // Type badge
+                    Label(item.type.rawValue, systemImage: item.type.icon)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(item.type.color.opacity(0.1))
+                        .foregroundColor(item.type.color)
+                        .clipShape(Capsule())
+                    
+                    if let subtitle = item.subtitle {
+                        Text(subtitle)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text("Timestamp: \(item.timestamp, style: .date)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Spacer()
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
 }
 
 struct CommunityItemCard: View {

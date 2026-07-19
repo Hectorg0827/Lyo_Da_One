@@ -164,22 +164,28 @@ struct UIStackCardView: View {
     }
     
     private var cardGradient: LinearGradient {
-        let colors: [Color]
+        // Course chips get topic-derived art so "Pre Calculus" looks the same
+        // here as it does in the catalog and the classroom hero. Tutor / collab
+        // / chat keep their type-coded gradients since they're not topics.
         switch item.type {
         case .course:
-            colors = [Color(hex: "667EEA"), Color(hex: "764BA2")]
+            return TopicArt.gradient(for: item.title)
         case .tutor:
-            colors = [Color(hex: "A855F7"), Color(hex: "6366F1")]
+            return LinearGradient(
+                colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
         case .collab:
-            colors = [Color(hex: "3B82F6"), Color(hex: "06B6D4")]
+            return LinearGradient(
+                colors: [Color(hex: "3B82F6"), Color(hex: "06B6D4")],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
         case .chat:
-            colors = [Color(hex: "374151"), Color(hex: "1F2937")]
+            return LinearGradient(
+                colors: [Color(hex: "374151"), Color(hex: "1F2937")],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
         }
-        return LinearGradient(
-            colors: colors,
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
     
     private var shadowColor: Color {

@@ -306,63 +306,55 @@ final class LiveClassroomViewModel: ObservableObject {
                         ))
                     continue
                 }
-                // Full content — add header + each lesson + completion summary
-                blocks.append(
-                    LiveLessonBlock(
-                        id: "mod_header_\(module.index)",
-                        type: .heading,
-                        title: "📚 \(module.title)",
-                        content: module.summary ?? "Module \(module.index)",
-                        subtitle: "h1"
-                    ))
+                
+                // Module intro — use hook if available, otherwise engaging header
+                let hookText = module.hook ?? module.summary ?? module.title
+                blocks.append(LiveLessonBlock(
+                    id: "mod_header_\(module.index)",
+                    type: .hook,
+                    title: module.title,
+                    subtitle: "Module \(module.index + 1)",
+                    lyoCommentary: hookText,
+                    mood: "enthusiastic"
+                ))
+                
                 for lesson in lessons {
-                    let rawContent = lesson.content ?? lesson.summary ?? ""
-                    // Parse markdown content into structured blocks (headings, code, images, etc.)
-                    let parsed = LiveLessonBlockParser.parseFromMarkdown(rawContent)
-                    if parsed.count > 1 || parsed.first?.type != .paragraph {
-                        // Add a lesson title heading, then the parsed blocks
-                        if let title = lesson.title, !title.isEmpty {
-                            blocks.append(
-                                LiveLessonBlock(
-                                    id: "lesson_title_\(lesson.id)",
-                                    type: .heading,
-                                    title: title,
-                                    subtitle: "h2"
-                                ))
-                        }
-                        for (i, parsed) in parsed.enumerated() {
-                            blocks.append(
-                                LiveLessonBlock(
-                                    id: "\(lesson.id)_\(i)",
-                                    type: parsed.type,
-                                    title: parsed.title,
-                                    content: parsed.content,
-                                    subtitle: parsed.subtitle,
-                                    imageURL: parsed.imageURL,
-                                    altText: parsed.altText,
-                                    caption: parsed.caption,
-                                    code: parsed.code,
-                                    language: parsed.language
-                                ))
-                        }
-                    } else {
-                        // Single paragraph — keep as-is
-                        blocks.append(
-                            LiveLessonBlock(
-                                id: "lesson_\(lesson.id)",
-                                type: .paragraph,
-                                title: lesson.title ?? "Lesson",
-                                content: rawContent
-                            ))
+                    // Parse lesson content into rich typed blocks
+                    let contentBlocks = Self.parseMarkdownIntoBlocks(
+                        lessonId: lesson.id,
+                        title: lesson.title,
+                        content: lesson.content ?? lesson.summary ?? ""
+                    )
+                    blocks.append(contentsOf: contentBlocks)
+                    
+                    // Add quiz for this lesson (if available from backend)
+                    if let quiz = lesson.quiz {
+                        // Quiz transition — give the user a breather
+                        blocks.append(LiveLessonBlock(
+                            id: "quiz_intro_\(lesson.id)",
+                            type: .revelation,
+                            title: "Quick Check ✨",
+                            content: "Let's see what you picked up from \(lesson.title ?? "this lesson"). No pressure — this is just to help it stick!",
+                            mood: "encouraging"
+                        ))
+                        // The actual quiz
+                        blocks.append(LiveLessonBlock(
+                            id: "quiz_\(lesson.id)",
+                            type: .quizMcq,
+                            question: quiz.question,
+                            options: quiz.options,
+                            correctIndex: quiz.correctIndex,
+                            explanation: quiz.explanation
+                        ))
                     }
                 }
-                blocks.append(
-                    LiveLessonBlock(
-                        id: "check_mod_\(module.index)",
-                        type: .summary,
-                        title: "✅ Module Complete: \(module.title)",
-                        content: "You've finished \(module.title). Ready to continue!"
-                    ))
+                
+                blocks.append(LiveLessonBlock(
+                    id: "check_mod_\(module.index)",
+                    type: .celebration,
+                    title: "Module Complete! 🎉",
+                    content: "You've finished \(module.title). That's real progress — let's keep going!"
+                ))
             case .building:
                 blocks.append(
                     LiveLessonBlock(
@@ -394,13 +386,12 @@ final class LiveClassroomViewModel: ObservableObject {
         // Add final summary only when all modules are done
         let allDone = course.modules.allSatisfy { $0.state == .ready || $0.state == .failed }
         if allDone {
-            blocks.append(
-                LiveLessonBlock(
-                    id: "final_summary",
-                    type: .summary,
-                    title: "🎉 Course Complete!",
-                    content: "Congratulations! You've completed '\(course.title)'. Keep practicing!"
-                ))
+            blocks.append(LiveLessonBlock(
+                id: "final_summary",
+                type: .celebration,
+                title: "🎉 Course Complete!",
+                content: "Congratulations! You've completed '\(course.title)'. You covered \(course.modules.count) modules. Time to put it all into practice!"
+            ))
         }
 
         withAnimation(.easeInOut(duration: 0.3)) {
@@ -418,7 +409,217 @@ final class LiveClassroomViewModel: ObservableObject {
             "✅ Progressive rebuild: \(blocks.count) blocks (\(readyModules.count) ready modules, was at block \(savedBlockIndex))"
         )
     }
-
+    
+    // MARK: - Markdown Content Parser
+    
+    /// Parses markdown lesson content into multiple typed LiveLessonBlocks.
+    /// Transforms a wall of text into digestible, visually varied cards.
+    static func parseMarkdownIntoBlocks(lessonId: String, title: String?, content: String) -> [LiveLessonBlock] {
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
+        
+        var blocks: [LiveLessonBlock] = []
+        let lines = content.components(separatedBy: "\n")
+        var currentParagraph: [String] = []
+        var blockIndex = 0
+        
+        func nextId(_ suffix: String) -> String {
+            blockIndex += 1
+            return "\(lessonId)_\(suffix)\(blockIndex)"
+        }
+        
+        func flushParagraph() {
+            let text = currentParagraph.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                blocks.append(LiveLessonBlock(
+                    id: nextId("p"),
+                    type: .paragraph,
+                    content: text
+                ))
+            }
+            currentParagraph = []
+        }
+        
+        // Add lesson title as a heading block
+        if let title = title, !title.isEmpty {
+            blocks.append(LiveLessonBlock(
+                id: nextId("title"),
+                type: .heading,
+                title: title,
+                subtitle: "h2"
+            ))
+        }
+        
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            
+            // --- Headings ---
+            if trimmed.hasPrefix("### ") {
+                flushParagraph()
+                blocks.append(LiveLessonBlock(
+                    id: nextId("h"),
+                    type: .heading,
+                    title: String(trimmed.dropFirst(4)),
+                    subtitle: "h3"
+                ))
+                i += 1
+                continue
+            }
+            if trimmed.hasPrefix("## ") {
+                flushParagraph()
+                blocks.append(LiveLessonBlock(
+                    id: nextId("h"),
+                    type: .heading,
+                    title: String(trimmed.dropFirst(3)),
+                    subtitle: "h2"
+                ))
+                i += 1
+                continue
+            }
+            if trimmed.hasPrefix("# ") {
+                flushParagraph()
+                blocks.append(LiveLessonBlock(
+                    id: nextId("h"),
+                    type: .heading,
+                    title: String(trimmed.dropFirst(2)),
+                    subtitle: "h1"
+                ))
+                i += 1
+                continue
+            }
+            
+            // --- Code blocks ---
+            if trimmed.hasPrefix("```") {
+                flushParagraph()
+                let lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                var codeLines: [String] = []
+                i += 1
+                while i < lines.count && !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    codeLines.append(lines[i])
+                    i += 1
+                }
+                if i < lines.count { i += 1 } // skip closing ```
+                blocks.append(LiveLessonBlock(
+                    id: nextId("code"),
+                    type: .code,
+                    code: codeLines.joined(separator: "\n"),
+                    language: lang.isEmpty ? nil : lang
+                ))
+                continue
+            }
+            
+            // --- Blockquotes / Callouts ---
+            if trimmed.hasPrefix("> ") {
+                flushParagraph()
+                var calloutLines: [String] = [String(trimmed.dropFirst(2))]
+                i += 1
+                while i < lines.count {
+                    let nextTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                    if nextTrimmed.hasPrefix("> ") {
+                        calloutLines.append(String(nextTrimmed.dropFirst(2)))
+                        i += 1
+                    } else {
+                        break
+                    }
+                }
+                blocks.append(LiveLessonBlock(
+                    id: nextId("callout"),
+                    type: .callout,
+                    content: calloutLines.joined(separator: "\n")
+                ))
+                continue
+            }
+            
+            // --- Numbered lists (step-by-step) ---
+            if trimmed.count > 2,
+               let firstChar = trimmed.first, firstChar.isNumber,
+               trimmed.dropFirst().hasPrefix(". ") || (trimmed.count > 3 && trimmed[trimmed.index(trimmed.startIndex, offsetBy: 1)...].hasPrefix(". ")) {
+                flushParagraph()
+                var stepLines: [String] = [trimmed]
+                i += 1
+                while i < lines.count {
+                    let nextTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                    if nextTrimmed.isEmpty {
+                        // Check if list continues after blank line
+                        if i + 1 < lines.count {
+                            let afterBlank = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                            if let fc = afterBlank.first, fc.isNumber, afterBlank.contains(". ") {
+                                i += 1
+                                continue
+                            }
+                        }
+                        break
+                    }
+                    if let fc = nextTrimmed.first, fc.isNumber, nextTrimmed.contains(". ") {
+                        stepLines.append(nextTrimmed)
+                        i += 1
+                    } else if nextTrimmed.hasPrefix("   ") || nextTrimmed.hasPrefix("-") {
+                        // Continuation or sub-list
+                        stepLines.append(nextTrimmed)
+                        i += 1
+                    } else {
+                        break
+                    }
+                }
+                blocks.append(LiveLessonBlock(
+                    id: nextId("steps"),
+                    type: .stepByStep,
+                    content: stepLines.joined(separator: "\n")
+                ))
+                continue
+            }
+            
+            // --- Bullet lists ---
+            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                flushParagraph()
+                var bulletLines: [String] = [trimmed]
+                i += 1
+                while i < lines.count {
+                    let nextTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                    if nextTrimmed.hasPrefix("- ") || nextTrimmed.hasPrefix("* ") || nextTrimmed.hasPrefix("  ") {
+                        bulletLines.append(nextTrimmed)
+                        i += 1
+                    } else if nextTrimmed.isEmpty {
+                        i += 1
+                        break
+                    } else {
+                        break
+                    }
+                }
+                blocks.append(LiveLessonBlock(
+                    id: nextId("list"),
+                    type: .paragraph,
+                    content: bulletLines.joined(separator: "\n")
+                ))
+                continue
+            }
+            
+            // --- Horizontal rules ---
+            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+                flushParagraph()
+                i += 1
+                continue
+            }
+            
+            // --- Empty lines flush paragraphs ---
+            if trimmed.isEmpty {
+                flushParagraph()
+                i += 1
+                continue
+            }
+            
+            // --- Regular text ---
+            currentParagraph.append(line)
+            i += 1
+        }
+        
+        flushParagraph()
+        return blocks
+    }
+    
     // MARK: - Public Methods
 
     /// Load a lesson by course and lesson ID
@@ -452,21 +653,11 @@ final class LiveClassroomViewModel: ObservableObject {
                         ]
                     }
                     // Parse markdown content into structured blocks
-                    let parsed = LiveLessonBlockParser.parseFromMarkdown(agentBlock.content)
-                    return parsed.enumerated().map { (i, p) in
-                        LiveLessonBlock(
-                            id: "\(agentBlock.id)_\(i)",
-                            type: p.type,
-                            title: p.title ?? agentBlock.blockType.rawValue.capitalized,
-                            content: p.content,
-                            subtitle: p.subtitle,
-                            imageURL: p.imageURL,
-                            altText: p.altText,
-                            caption: p.caption,
-                            code: p.code,
-                            language: p.language
-                        )
-                    }
+                    return Self.parseMarkdownIntoBlocks(
+                        lessonId: agentBlock.id,
+                        title: agentBlock.blockType.rawValue.capitalized,
+                        content: agentBlock.content
+                    )
                 }
 
                 self.lesson = LiveLesson(
@@ -641,7 +832,7 @@ final class LiveClassroomViewModel: ObservableObject {
             title: lesson.title,
             content: lesson.blocks.compactMap { $0.content }.joined(separator: "\n\n"),
             agentBlocks: nil,
-            a2uiComponentJSON: nil,
+            smartBlocks: nil,
             createdAt: Date(),
             lastAccessedAt: Date(),
             metadata: nil
@@ -659,7 +850,7 @@ final class LiveClassroomViewModel: ObservableObject {
             return false
         }
 
-        let firstLessonId = generated.modules.first?.lessons?.first?.id ?? lessonId
+        let firstLessonId = generated.modules.first?.lessons.first?.id ?? lessonId
         let playback = PlaybackState(
             courseId: generated.courseId,
             currentNodeId: firstLessonId,
@@ -1538,65 +1729,53 @@ final class LiveClassroomViewModel: ObservableObject {
 
             // Iterate through ALL modules and lessons
             for (moduleIndex, module) in generatedCourse.modules.enumerated() {
-                // Add module header
-                blocks.append(
-                    LiveLessonBlock(
-                        id: "mod_header_\(moduleIndex)",
-                        type: .heading,
-                        title: "📚 \(module.title)",
-                        content: module.description,
-                        subtitle: "h1"
-                    ))
-
+                // Module intro — use hook for engaging, topic-specific intro
+                let hookText = module.hook ?? module.summary ?? module.description
+                blocks.append(LiveLessonBlock(
+                    id: "mod_header_\(moduleIndex)",
+                    type: .hook,
+                    title: module.title,
+                    subtitle: "Module \(moduleIndex + 1)",
+                    lyoCommentary: hookText,
+                    mood: "enthusiastic"
+                ))
+                
                 for lesson in module.lessons ?? [] {
-                    let rawContent = lesson.content ?? ""
-                    // Parse markdown into structured blocks instead of dumping raw text
-                    let parsed = LiveLessonBlockParser.parseFromMarkdown(rawContent)
-                    if parsed.count > 1 || parsed.first?.type != .paragraph {
-                        if let title = lesson.title, !title.isEmpty {
-                            blocks.append(
-                                LiveLessonBlock(
-                                    id: "lesson_title_\(lesson.id)",
-                                    type: .heading,
-                                    title: title,
-                                    subtitle: "h2"
-                                ))
-                        }
-                        for (i, parsed) in parsed.enumerated() {
-                            blocks.append(
-                                LiveLessonBlock(
-                                    id: "\(lesson.id)_\(i)",
-                                    type: parsed.type,
-                                    title: parsed.title,
-                                    content: parsed.content,
-                                    subtitle: parsed.subtitle,
-                                    imageURL: parsed.imageURL,
-                                    altText: parsed.altText,
-                                    caption: parsed.caption,
-                                    code: parsed.code,
-                                    language: parsed.language
-                                ))
-                        }
-                    } else {
-                        blocks.append(
-                            LiveLessonBlock(
-                                id: "intro_\(lesson.id)",
-                                type: .paragraph,
-                                title: lesson.title ?? "Lesson",
-                                content: rawContent
-                            ))
+                    // Parse lesson markdown content into rich typed blocks
+                    let contentBlocks = Self.parseMarkdownIntoBlocks(
+                        lessonId: lesson.id,
+                        title: lesson.title,
+                        content: lesson.content ?? ""
+                    )
+                    blocks.append(contentsOf: contentBlocks)
+                    
+                    // Add quiz for this lesson (if available)
+                    if let quiz = lesson.quiz {
+                        blocks.append(LiveLessonBlock(
+                            id: "quiz_intro_\(lesson.id)",
+                            type: .revelation,
+                            title: "Quick Check ✨",
+                            content: "Let's see what you picked up from \(lesson.title ?? "this lesson"). No pressure — this is just to help it stick!",
+                            mood: "encouraging"
+                        ))
+                        blocks.append(LiveLessonBlock(
+                            id: "quiz_\(lesson.id)",
+                            type: .quizMcq,
+                            question: quiz.question,
+                            options: quiz.options,
+                            correctIndex: quiz.correctIndex,
+                            explanation: quiz.explanation
+                        ))
                     }
                 }
-
-                // Add a progress check at the end of each module (not a fake quiz)
-                blocks.append(
-                    LiveLessonBlock(
-                        id: "check_mod_\(moduleIndex)",
-                        type: .summary,
-                        title: "✅ Module Complete: \(module.title)",
-                        content:
-                            "You've finished \(module.title) with \(module.lessons?.count ?? 0) lessons. Ready to continue!"
-                    ))
+                
+                // Module completion
+                blocks.append(LiveLessonBlock(
+                    id: "check_mod_\(moduleIndex)",
+                    type: .celebration,
+                    title: "Module Complete! 🎉",
+                    content: "You've finished \(module.title) with \(module.lessons?.count ?? 0) lessons. That's real progress!"
+                ))
             }
 
             // Add final summary

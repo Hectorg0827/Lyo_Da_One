@@ -35,33 +35,10 @@ struct CourseProposalCardView: View {
         Array(payload.objectives.prefix(4))
     }
 
-    private var heroGradient: [Color] {
-        let topic = payload.topic.lowercased()
-        if topic.contains("math") || topic.contains("physics") {
-            return [Color(hex: "06B6D4"), Color(hex: "3B82F6")]
-        }
-        if topic.contains("design") || topic.contains("art") {
-            return [Color(hex: "F472B6"), Color(hex: "8B5CF6")]
-        }
-        if topic.contains("code") || topic.contains("swift") || topic.contains("ios") {
-            return [Color(hex: "6366F1"), Color(hex: "14B8A6")]
-        }
-        return [Color(hex: "8B5CF6"), Color(hex: "6366F1")]
-    }
-
-    private var topicIcon: String {
-        let topic = payload.topic.lowercased()
-        if topic.contains("math") { return "function" }
-        if topic.contains("swift") || topic.contains("ios") || topic.contains("code") {
-            return "chevron.left.forwardslash.chevron.right"
-        }
-        if topic.contains("history") { return "building.columns.fill" }
-        if topic.contains("design") || topic.contains("art") { return "paintpalette.fill" }
-        if topic.contains("language") || topic.contains("english") || topic.contains("spanish") {
-            return "character.book.closed.fill"
-        }
-        return "sparkles"
-    }
+    // Topic art is centralized — same gradient + glyph the user will see in
+    // the stack, the catalog, and the classroom hero once they start.
+    private var heroGradient: LinearGradient { TopicArt.gradient(for: payload.topic) }
+    private var topicIcon: String { TopicArt.iconName(for: payload.topic) }
 
     private var lessonEstimateText: String {
         let count = max(previewObjectives.count, payload.objectives.count)
@@ -222,13 +199,7 @@ struct CourseProposalCardView: View {
     private var heroCard: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 18)
-                .fill(
-                    LinearGradient(
-                        colors: heroGradient,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(heroGradient)
                 .frame(height: 170)
                 .overlay(
                     LinearGradient(

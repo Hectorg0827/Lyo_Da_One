@@ -6,6 +6,8 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatInterface from '@/components/chat/ChatInterface';
 import ChatSidebar from '@/components/chat/ChatSidebar';
+import MascotAvatar from '@/components/chat/MascotAvatar';
+import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 
 export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -95,11 +97,16 @@ export default function ChatPage() {
 
           {/* Title */}
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-lyo-500 to-accent-purple flex items-center justify-center">
-              <span className="text-[9px] font-bold text-white">LYO</span>
-            </div>
+            {/* Lands here after flying in from the nav button (shared layoutId) */}
+            <motion.div
+              layoutId={LYO_MASCOT_LAYOUT_ID}
+              transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
+              className="shrink-0"
+            >
+              <MascotAvatar idle size={28} />
+            </motion.div>
             <span className="text-sm font-semibold text-white/80 tracking-tight">
-              LYO AI
+              Lyo
             </span>
             {/* Live indicator */}
             <span className="flex items-center gap-1 ml-1">

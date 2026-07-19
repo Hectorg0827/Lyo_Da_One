@@ -23,7 +23,7 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
-    private let messagingService = MessagingService.shared
+    private let messagingService = MessagingService()
     private let webSocketManager = WebSocketManager.shared
     private var cancellables = Set<AnyCancellable>()
     private var typingTimer: Timer?

@@ -105,3 +105,37 @@ enum StreamingState: Equatable {
         }
     }
 }
+
+// MARK: - Lesson Generation State
+
+/// Per-lesson generation state for progressive UI (shimmer → title → content)
+enum LessonGenerationState: Equatable {
+    /// Lesson slot reserved but no content yet — show shimmer placeholder
+    case pending
+    /// Currently being generated — show title + spinner
+    case generating(title: String, progress: Int)
+    /// Fully generated — show complete content
+    case ready
+    /// Generation failed — show retry option
+    case failed(message: String)
+    
+    var isPending: Bool {
+        if case .pending = self { return true }
+        return false
+    }
+    
+    var isGenerating: Bool {
+        if case .generating = self { return true }
+        return false
+    }
+    
+    static func == (lhs: LessonGenerationState, rhs: LessonGenerationState) -> Bool {
+        switch (lhs, rhs) {
+        case (.pending, .pending): return true
+        case (.generating(let a, let b), .generating(let c, let d)): return a == c && b == d
+        case (.ready, .ready): return true
+        case (.failed(let a), .failed(let b)): return a == b
+        default: return false
+        }
+    }
+}

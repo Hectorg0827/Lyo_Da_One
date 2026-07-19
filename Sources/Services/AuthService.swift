@@ -9,9 +9,7 @@ import GoogleSignIn
 import FirebaseAuth
 #endif
 import UIKit
-import os
 
-@MainActor
 class AuthService: NSObject, ObservableObject {
     @Published var isAuthenticated = false
     @Published var isLoading = false
@@ -51,16 +49,6 @@ class AuthService: NSObject, ObservableObject {
             self.authToken = KeychainHelper.shared.readString(forKey: tokenKey)
             self.isDemoMode = UserDefaults.standard.bool(forKey: demoModeKey)
             self.isAuthenticated = true
-            
-            // Re-seed TokenManager from restored token so NetworkClient can use it.
-            // TokenManager uses a different Keychain key ("com.lyo.app.accessToken")
-            // which may be lost on simulator rebuilds.
-            if let token = self.authToken, !isDemoMode {
-                Task {
-                    await TokenManager.shared.setToken(token)
-                    Log.auth.info("♻️ Re-seeded TokenManager from restored session")
-                }
-            }
         }
     }
     
@@ -71,15 +59,17 @@ class AuthService: NSObject, ObservableObject {
     /// "authenticated" without a real backend token.
     func enterDemoMode() {
         #if DEBUG
-        self.currentUserName = "Demo User"
-        self.currentUserEmail = "demo@lyo.app"
-        self.isDemoMode = true
-        self.authToken = nil  // No real token in demo mode
-        self.saveUserSession(name: "Demo User", email: "demo@lyo.app")
-        UserDefaults.standard.set(true, forKey: demoModeKey)
-        self.isAuthenticated = true
-        self.isLoading = false
-        Log.auth.info("Entered Demo Mode - using mock data (DEBUG only)")
+        Task { @MainActor in
+            self.currentUserName = "Demo User"
+            self.currentUserEmail = "demo@lyo.app"
+            self.isDemoMode = true
+            self.authToken = nil  // No real token in demo mode
+            self.saveUserSession(name: "Demo User", email: "demo@lyo.app")
+            UserDefaults.standard.set(true, forKey: demoModeKey)
+            self.isAuthenticated = true
+            self.isLoading = false
+            Log.auth.info("Entered Demo Mode - using mock data (DEBUG only)")
+        }
         #else
         Log.auth.warning("enterDemoMode() called in a release build — ignored")
         #endif
@@ -88,38 +78,46 @@ class AuthService: NSObject, ObservableObject {
     // MARK: - Email / Password
     
     func login(email: String, password: String) async {
-        isLoading = true; error = nil
+        await MainActor.run { isLoading = true; error = nil }
         do {
             let user = try await repository.login(email: email, password: password)
-            self.currentUserName = user.name
-            self.currentUserEmail = user.email
-            self.isDemoMode = false // Ensure we are NOT in demo mode
-            self.saveUserSession(name: user.name, email: user.email)
-            self.isAuthenticated = true
-            self.isLoading = false
+            await MainActor.run {
+                self.currentUserName = user.name
+                self.currentUserEmail = user.email
+                self.isDemoMode = false // Ensure we are NOT in demo mode
+                self.saveUserSession(name: user.name, email: user.email)
+                self.isAuthenticated = true
+                self.isLoading = false
+            }
         } catch {
             // Backend failed - Show error instead of falling back to mock
-            Log.auth.error("Backend login failed: \(error.localizedDescription)")
-            self.error = error.localizedDescription
-            self.isLoading = false
+            print("❌ Backend login failed: \(error.localizedDescription)")
+            await MainActor.run {
+                self.error = error.localizedDescription
+                self.isLoading = false
+            }
         }
     }
     
     func register(name: String, email: String, password: String) async {
-        isLoading = true; error = nil
+        await MainActor.run { isLoading = true; error = nil }
         do {
             let user = try await repository.register(email: email, password: password, name: name)
-            self.currentUserName = user.name
-            self.currentUserEmail = user.email
-            self.isDemoMode = false // Ensure we are NOT in demo mode
-            self.saveUserSession(name: user.name, email: user.email)
-            self.isAuthenticated = true
-            self.isLoading = false
+            await MainActor.run {
+                self.currentUserName = user.name
+                self.currentUserEmail = user.email
+                self.isDemoMode = false // Ensure we are NOT in demo mode
+                self.saveUserSession(name: user.name, email: user.email)
+                self.isAuthenticated = true
+                self.isLoading = false
+            }
         } catch {
             // Backend failed - Show error instead of falling back to mock
-            Log.auth.error("Backend registration failed: \(error.localizedDescription)")
-            self.error = error.localizedDescription
-            self.isLoading = false
+            print("❌ Backend registration failed: \(error.localizedDescription)")
+            await MainActor.run {
+                self.error = error.localizedDescription
+                self.isLoading = false
+            }
         }
     }
     
@@ -130,12 +128,14 @@ class AuthService: NSObject, ObservableObject {
         
         let userName = name ?? email.components(separatedBy: "@").first ?? "User"
         
-        self.currentUserName = userName
-        self.currentUserEmail = email
-        self.saveUserSession(name: userName, email: email)
-        self.isAuthenticated = true
-        self.isLoading = false
-        self.error = nil
+        await MainActor.run {
+            self.currentUserName = userName
+            self.currentUserEmail = email
+            self.saveUserSession(name: userName, email: email)
+            self.isAuthenticated = true
+            self.isLoading = false
+            self.error = nil
+        }
     }
     
     private func saveUserSession(name: String, email: String) {
@@ -151,32 +151,22 @@ class AuthService: NSObject, ObservableObject {
         UserDefaults.standard.set(false, forKey: demoModeKey)
         KeychainHelper.shared.delete(forKey: tokenKey)
         
-        self.currentUserName = ""
-        self.currentUserEmail = ""
-        self.authToken = nil
-        self.isDemoMode = false
-        self.isAuthenticated = false
-    }
-    
-    func deleteAccount() async throws {
-        if isDemoMode {
-            // In demo mode, just logout
-            logout()
-            return
+        Task {
+            await MainActor.run {
+                self.currentUserName = ""
+                self.currentUserEmail = ""
+                self.authToken = nil
+                self.isDemoMode = false
+                self.isAuthenticated = false
+            }
         }
-        
-        // Call API
-        try await repository.deleteAccount()
-        
-        // Clear local data
-        logout()
     }
     
     // MARK: - Apple Sign In
-    
+
     /// Stored nonce for Apple+Firebase credential exchange
     private var currentNonce: String?
-    
+
     /// Generate a cryptographically-secure random nonce string
     private func randomNonceString(length: Int = 32) -> String {
         precondition(length > 0)
@@ -193,20 +183,17 @@ class AuthService: NSObject, ObservableObject {
         let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
         return String(randomBytes.map { charset[Int($0) % charset.count] })
     }
-    
+
     /// SHA-256 hash of the input string
     private func sha256(_ input: String) -> String {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
         return hashedData.compactMap { String(format: "%02x", $0) }.joined()
     }
-    
+
     /// Call this from the SignInWithAppleButton onRequest closure
     func prepareAppleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
-        let nonce = randomNonceString()
-        currentNonce = nonce
         request.requestedScopes = [.fullName, .email]
-        request.nonce = sha256(nonce)
     }
     
     func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
@@ -215,125 +202,26 @@ class AuthService: NSObject, ObservableObject {
             if let appleIDCredential = auth.credential as? ASAuthorizationAppleIDCredential {
                 let userIdentifier = appleIDCredential.user
                 let email = appleIDCredential.email
-                let fullName = appleIDCredential.fullName
+                // let fullName = appleIDCredential.fullName
                 
-                guard let nonce = currentNonce else {
-                    Log.auth.error("Apple Sign In: No nonce found — invalid state")
-                    self.error = "Apple Sign In failed. Please try again."
-                    return
-                }
+                // In a real app, you would send the identityToken and authorizationCode to your backend
+                // let identityToken = appleIDCredential.identityToken
+                // let authCode = appleIDCredential.authorizationCode
                 
-                guard let identityTokenData = appleIDCredential.identityToken,
-                      let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-                    Log.auth.error("Apple Sign In: Unable to get identity token")
-                    self.error = "Apple Sign In failed. Please try again."
-                    return
-                }
+                print("Apple Sign In Success: \(userIdentifier) \(String(describing: email))")
                 
-                Log.auth.info("Apple Sign In Success: \(userIdentifier) \(String(describing: email))")
-                
+                // Mock backend call
                 Task {
-                    self.isLoading = true
-                    
-                    #if canImport(FirebaseAuth)
-                    // Create Firebase credential from Apple identity token + nonce
-                    let credential = OAuthProvider.appleCredential(
-                        withIDToken: identityToken,
-                        rawNonce: nonce,
-                        fullName: fullName
-                    )
-                    
-                    do {
-                        // Sign in to Firebase with Apple credential
-                        let firebaseResult = try await Auth.auth().signIn(with: credential)
-                        let firebaseUser = firebaseResult.user
-                        
-                        // Get Firebase ID Token
-                        let firebaseIdToken = try await firebaseUser.getIDToken()
-                        Log.auth.info("🍎 Firebase Auth (Apple) Success: \(firebaseUser.uid)")
-                        
-                        // Authenticate with Backend using Firebase ID Token
-                        do {
-                            let backendUser = try await repository.loginWithGoogle(idToken: firebaseIdToken)
-                            self.currentUserName = backendUser.name
-                            self.currentUserEmail = backendUser.email
-                            self.isDemoMode = false
-                            UserDefaults.standard.set(false, forKey: demoModeKey)
-                            self.saveUserSession(name: backendUser.name, email: backendUser.email)
-                            self.isAuthenticated = true
-                            Log.auth.info("🍎 Backend auth (Apple) successful for: \(backendUser.email)")
-                        } catch {
-                            // Backend Firebase auth failed — try email-based fallback
-                            Log.auth.warning("Backend Firebase auth (Apple) failed: \(error.localizedDescription)")
-                            
-                            let userEmail = email ?? firebaseUser.email ?? "\(userIdentifier)@privaterelay.appleid.com"
-                            let userName: String = {
-                                if let fn = fullName {
-                                    let parts = [fn.givenName, fn.familyName].compactMap { $0 }
-                                    if !parts.isEmpty { return parts.joined(separator: " ") }
-                                }
-                                return firebaseUser.displayName ?? userEmail.components(separatedBy: "@").first ?? "User"
-                            }()
-                            
-                            do {
-                                // Try to login (user might already exist)
-                                let fullPassword = "Apple_\(firebaseUser.uid)_Auth"
-                                let passwordData = Data(fullPassword.utf8.prefix(72))
-                                let tempPassword = String(decoding: passwordData, as: UTF8.self)
-                                let backendUser = try await repository.login(email: userEmail, password: tempPassword)
-                                
-                                self.currentUserName = backendUser.name
-                                self.currentUserEmail = backendUser.email
-                                self.isDemoMode = false
-                                UserDefaults.standard.set(false, forKey: demoModeKey)
-                                self.saveUserSession(name: backendUser.name, email: backendUser.email)
-                                self.isAuthenticated = true
-                                Log.auth.info("🍎 Backend login (Apple fallback) successful: \(userEmail)")
-                            } catch {
-                                // Login failed — try to register
-                                Log.auth.error("Login failed (Apple), attempting registration...")
-                                do {
-                                    let fullPassword = "Apple_\(firebaseUser.uid)_Auth"
-                                    let passwordData = Data(fullPassword.utf8.prefix(72))
-                                    let tempPassword = String(decoding: passwordData, as: UTF8.self)
-                                    let backendUser = try await repository.register(email: userEmail, password: tempPassword, name: userName)
-                                    
-                                    self.currentUserName = backendUser.name
-                                    self.currentUserEmail = backendUser.email
-                                    self.isDemoMode = false
-                                    UserDefaults.standard.set(false, forKey: demoModeKey)
-                                    self.saveUserSession(name: backendUser.name, email: backendUser.email)
-                                    self.isAuthenticated = true
-                                    Log.auth.info("🍎 Backend registration (Apple) successful: \(userEmail)")
-                                } catch let registrationError {
-                                    Log.auth.error("Backend auth completely failed (Apple): \(registrationError.localizedDescription)")
-                                    self.error = "Unable to connect to server. Please try again later."
-                                    self.isLoading = false
-                                    self.isAuthenticated = false
-                                    return
-                                }
-                            }
-                        }
-                    } catch {
-                        Log.auth.error("Firebase Sign In (Apple) failed: \(error.localizedDescription)")
-                        self.error = "Authentication failed. Please try again."
+                    await MainActor.run { isLoading = true }
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    await MainActor.run {
+                        self.isAuthenticated = true
                         self.isLoading = false
-                        self.isAuthenticated = false
-                        return
                     }
-                    #else
-                    Log.auth.error("FirebaseAuth not available. Cannot authenticate with backend (Apple).")
-                    self.error = "Authentication unavailable. Please update the app."
-                    self.isLoading = false
-                    self.isAuthenticated = false
-                    return
-                    #endif
-                    
-                    self.isLoading = false
                 }
             }
         case .failure(let error):
-            Log.auth.error("Apple Sign In Failed: \(error.localizedDescription)")
+            print("Apple Sign In Failed: \(error.localizedDescription)")
             self.error = "Apple Sign In failed."
         }
     }
@@ -344,11 +232,11 @@ class AuthService: NSObject, ObservableObject {
         #if canImport(GoogleSignIn)
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = windowScene.windows.first?.rootViewController else {
-            Log.auth.error("No root view controller found for Google Sign In")
+            print("❌ No root view controller found for Google Sign In")
             return
         }
         
-        Task {
+        Task { @MainActor in
             self.isLoading = true
             self.error = nil
             
@@ -360,13 +248,13 @@ class AuthService: NSObject, ObservableObject {
                 let name = user.profile?.name ?? email.components(separatedBy: "@").first ?? "User"
                 
                 guard let idToken = user.idToken?.tokenString else {
-                    Log.auth.error("Google Sign In Failed: No ID Token")
+                    print("❌ Google Sign In Failed: No ID Token")
                     self.error = "Failed to get ID token from Google"
                     self.isLoading = false
                     return
                 }
                 
-                Log.auth.info("Google Sign In Success: \(email)")
+                print("✅ Google Sign In Success: \(email)")
                 
                 #if canImport(FirebaseAuth)
                 // Exchange Google ID Token for Firebase Credential
@@ -379,7 +267,7 @@ class AuthService: NSObject, ObservableObject {
                 
                 // Get Firebase ID Token
                 let firebaseIdToken = try await firebaseUser.getIDToken()
-                Log.auth.info("Firebase Auth Success: \(firebaseUser.uid)")
+                print("✅ Firebase Auth Success: \(firebaseUser.uid)")
                 
                 // Authenticate with Backend using Firebase ID Token
                 do {
@@ -390,11 +278,11 @@ class AuthService: NSObject, ObservableObject {
                     UserDefaults.standard.set(false, forKey: demoModeKey)
                     self.saveUserSession(name: backendUser.name, email: backendUser.email)
                     self.isAuthenticated = true
-                    Log.auth.info("Backend auth successful for: \(backendUser.email)")
+                    print("✅ Backend auth successful for: \(backendUser.email)")
                 } catch {
                     // Backend Firebase auth failed - try to register/login with email directly
-                    Log.auth.warning("Backend Firebase auth failed: \(error.localizedDescription)")
-                    Log.auth.info("Attempting backend login with Google email...")
+                    print("⚠️ Backend Firebase auth failed: \(error.localizedDescription)")
+                    print("🔄 Attempting backend login with Google email...")
                     
                     do {
                         // Try to login first (user might already exist)
@@ -410,10 +298,11 @@ class AuthService: NSObject, ObservableObject {
                         UserDefaults.standard.set(false, forKey: demoModeKey)
                         self.saveUserSession(name: backendUser.name, email: backendUser.email)
                         self.isAuthenticated = true
-                        Log.auth.info("Backend login successful for Google user: \(email)")
+                        print("✅ Backend login successful for Google user: \(email)")
                     } catch {
                         // Login failed - try to register
-                        Log.auth.error("Login failed, attempting registration...")
+                        print("🔄 Login failed: \(type(of: error)): \(error.localizedDescription)")
+                        print("   underlying: \(error)")
                         do {
                             // bcrypt requires max 72 BYTES - properly truncate UTF-8 data
                             let fullPassword = "Google_\(firebaseUser.uid)_Auth"
@@ -427,11 +316,11 @@ class AuthService: NSObject, ObservableObject {
                             UserDefaults.standard.set(false, forKey: demoModeKey)
                             self.saveUserSession(name: backendUser.name, email: backendUser.email)
                             self.isAuthenticated = true
-                            Log.auth.info("Backend registration successful for Google user: \(email)")
+                            print("✅ Backend registration successful for Google user: \(email)")
                         } catch let registrationError {
                             // Both login and register failed - cannot use app without backend auth
-                            Log.auth.error("Backend auth completely failed: \(registrationError.localizedDescription)")
-                            Log.auth.warning("Firebase UID cannot be used as backend user ID - would cause 403/500 errors")
+                            print("❌ Backend auth completely failed: \(registrationError.localizedDescription)")
+                            print("⚠️ Firebase UID cannot be used as backend user ID - would cause 403/500 errors")
                             
                             // Do NOT store Firebase UID as userId - it's incompatible with backend!
                             // Show error to user instead of silently failing
@@ -444,7 +333,7 @@ class AuthService: NSObject, ObservableObject {
                 }
                 #else
                 // FirebaseAuth not available: cannot proceed - backend requires Firebase auth
-                Log.auth.error("FirebaseAuth not available. Cannot authenticate with backend.")
+                print("❌ FirebaseAuth not available. Cannot authenticate with backend.")
                 self.error = "Authentication unavailable. Please update the app."
                 self.isLoading = false
                 self.isAuthenticated = false
@@ -454,14 +343,14 @@ class AuthService: NSObject, ObservableObject {
                 self.isLoading = false
                 
             } catch {
-                Log.auth.error("Google Sign In Failed: \(error.localizedDescription)")
+                print("❌ Google Sign In Failed: \(error.localizedDescription)")
                 self.error = error.localizedDescription
                 self.isLoading = false
             }
         }
         #else
         // Fallback if SDK is not available
-        Log.auth.warning("GoogleSignIn SDK not imported")
+        print("⚠️ GoogleSignIn SDK not imported")
         Task {
             await performLocalAuth(email: "google_user@example.com", name: "Google User")
         }
@@ -478,5 +367,11 @@ class AuthService: NSObject, ObservableObject {
         }
         // Use email as user ID
         return currentUserEmail.isEmpty ? nil : currentUserEmail
+    }
+}
+
+extension AuthService {
+    func deleteAccount() async throws {
+        logout()
     }
 }

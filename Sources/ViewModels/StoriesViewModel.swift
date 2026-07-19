@@ -331,7 +331,6 @@ final class StoriesViewModel: ObservableObject {
             try await storyService.addStory(
                 mediaURL: mediaPublicURL,
                 mediaType: mediaType,
-                caption: nil,
                 isLive: false
             )
             

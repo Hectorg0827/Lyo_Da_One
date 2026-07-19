@@ -550,6 +550,24 @@ private struct ModernStackCard: View {
                 // Card background with radial gradient
                 RoundedRectangle(cornerRadius: 20)
                     .fill(cardGradient)
+                    .overlay(alignment: .top) {
+                        // Thin topic-tinted strip across the top edge for course
+                        // items — gives a visual ID without fighting the dark
+                        // base. Other item types share the white hairline below.
+                        if item.type == .course {
+                            TopicArt.gradient(for: item.title)
+                                .frame(height: 4)
+                                .clipShape(
+                                    UnevenRoundedRectangle(
+                                        topLeadingRadius: 20,
+                                        bottomLeadingRadius: 0,
+                                        bottomTrailingRadius: 0,
+                                        topTrailingRadius: 20,
+                                        style: .continuous
+                                    )
+                                )
+                        }
+                    }
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.1), lineWidth: 1)
@@ -782,7 +800,9 @@ private struct ModernStackCard: View {
     
     private var typeIcon: String {
         switch item.type {
-        case .course: return "book.fill"
+        // Course pills get the topic glyph (function / camera / atom / …) so
+        // the pill matches the accent strip and the rest of the app.
+        case .course: return TopicArt.iconName(for: item.title)
         case .tutor: return "sparkles"
         case .collab: return "person.2.fill"
         case .chat: return "bubble.left.fill"

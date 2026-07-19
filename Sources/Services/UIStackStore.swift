@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import os
 
 // MARK: - Stack Store
 
@@ -47,7 +46,49 @@ final class UIStackStore: ObservableObject {
     func items(ofType type: UIStackItemType) -> [UIStackItem] {
         items.filter { $0.type == type }
     }
-    
+
+    // MARK: - Spaced-Repetition Reviews
+
+    /// Asks the personalization engine whether spaced-repetition reviews are due
+    /// and, if so, surfaces the learner's recommended-focus skills as review
+    /// cards in the stack. Tapping one opens the classroom on that topic
+    /// (GENERATE: session). Silent on failure — reviews are an enhancement,
+    /// never a blocker.
+    func refreshDueReviews() async {
+        // Fetch the profile first — it also powers the weekly weakness quest,
+        // which should refresh whether or not reviews are due.
+        guard let profile = try? await PersonalizationService.shared.getMasteryProfile()
+        else { return }
+
+        await MainActor.run {
+            GamificationService.shared.refreshWeeklyQuest(
+                weaknesses: profile.recommendedFocus.isEmpty
+                    ? profile.weaknesses : profile.recommendedFocus
+            )
+        }
+
+        guard let next = try? await PersonalizationService.shared.getNextAction(),
+              next.spacedRepetitionDue == true || next.action == .review
+        else { return }
+
+        let focus = profile.recommendedFocus.isEmpty ? profile.weaknesses : profile.recommendedFocus
+        let skills = focus
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(2)
+        guard !skills.isEmpty else { return }
+
+        await MainActor.run {
+            for skill in skills {
+                upsertCourse(
+                    courseId: "GENERATE:\(skill)",
+                    title: "Review: \(skill.capitalized)",
+                    subtitle: "Due for a quick refresher"
+                )
+            }
+        }
+    }
+
     // MARK: - Convenience Methods
     
     /// Add or update a course card
@@ -177,17 +218,10 @@ final class UIStackStore: ObservableObject {
     /// Sync course progress to backend (called automatically on updateCourseProgress)
     private func syncCourseProgressToBackend(courseId: String, progress: Double) async {
         do {
-            let _: EmptyResponse = try await NetworkClient.shared.request(
-                Endpoints.Analytics.trackLearningProgress(
-                    contentId: courseId,
-                    progress: progress,
-                    timeSpent: 0,
-                    sessionId: nil
-                )
-            )
-            Log.net.info("UIStackStore: Synced course progress to backend (\(Int(progress * 100))%)")
+            let _ = try await repository.getCourseProgress(courseId: courseId)
+            print("✅ UIStackStore: Synced course progress to backend (\(Int(progress * 100))%)")
         } catch {
-            Log.net.warning("UIStackStore: Failed to sync course progress: \(error.localizedDescription)")
+            print("⚠️ UIStackStore: Failed to sync course progress: \(error.localizedDescription)")
             // Don't block user - local tracking continues
         }
     }
@@ -203,7 +237,7 @@ final class UIStackStore: ObservableObject {
             let data = try JSONEncoder().encode(items)
             UserDefaults.standard.set(data, forKey: userDefaultsKey)
         } catch {
-            Log.net.error("UIStackStore: Failed to save to disk: \(error)")
+            print("UIStackStore: Failed to save to disk: \(error)")
         }
     }
     
@@ -216,7 +250,7 @@ final class UIStackStore: ObservableObject {
             items = try JSONDecoder().decode([UIStackItem].self, from: data)
             sortByRecency()
         } catch {
-            Log.net.error("UIStackStore: Failed to load from disk: \(error)")
+            print("UIStackStore: Failed to load from disk: \(error)")
         }
     }
 }

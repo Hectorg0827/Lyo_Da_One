@@ -446,7 +446,7 @@ struct NotesArtifactView: View {
     
     func decodePayload() {
         do {
-            let jsonData = try JSONSerialization.data(withJSONObject: artifact.content.value as Any)
+            let jsonData = try JSONSerialization.data(withJSONObject: AnyCodable.sanitizeForJSON(artifact.content.value))
             let decoded = try JSONDecoder().decode(NotesPayload.self, from: jsonData)
             payload = decoded
         } catch {

@@ -189,6 +189,22 @@ public struct KnowledgeTraceRequest: Codable {
     }
 }
 
+/// Response from POST /personalization/trace — carries the DKT mastery delta
+/// so clients can award honest, mastery-based XP.
+public struct KnowledgeTraceResult: Codable {
+    public let skillId: String
+    public let newMastery: Double
+    public let oldMastery: Double?
+    public let correct: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case correct
+        case skillId = "skill_id"
+        case newMastery = "new_mastery"
+        case oldMastery = "old_mastery"
+    }
+}
+
 public struct MasteryProfile: Codable {
     public let learnerId: String
     public let skills: [String: Double]

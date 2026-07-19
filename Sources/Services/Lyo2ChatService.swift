@@ -51,7 +51,7 @@ class Lyo2ChatService: ObservableObject {
             clientMessageId: clientMessageId
         )
         
-        let baseURL = NetworkClient.baseURL
+        let baseURL = AppConfig.baseURL
         Log.ai.info("Lyo2ChatService: using baseURL = \(baseURL)")
         
         guard let url = URL(string: "\(baseURL)/api/v1/lyo2/chat/stream") else {
@@ -102,6 +102,9 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
     private var dataTask: URLSessionDataTask?
     private var buffer = Data()
     private var callback: ((Lyo2StreamEvent) -> Void)?
+    
+    /// Last SSE event ID received — used for reconnection replay
+    private(set) var lastEventId: String?
     
     /// Tracks whether the stream delivered any real content events (answer, artifact, clarification, etc.).
     /// When the stream completes with zero content events, we surface an error instead of a silent blank.
@@ -276,6 +279,9 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
         for line in lines {
             if line.hasPrefix("data: ") {
                 data = String(line.dropFirst(6))
+            } else if line.hasPrefix("id: ") {
+                // Track event ID for potential reconnection replay
+                lastEventId = String(line.dropFirst(4))
             }
         }
         
@@ -384,9 +390,6 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     }
                 }
                 
-            case "a2ui":
-                // Stale event type — log and ignore
-                Log.ai.info("🎨 Lyo2 SSE: stale event type received — ignoring")
 
             // ── v2 events (LyoResponse envelope — primary path) ──────
 
@@ -427,6 +430,25 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     } catch {
                         Log.ai.error("Lyo2 Decoding Error (lyo_suggestions): \(error)")
                     }
+                }
+
+            case "smart_blocks":
+                didReceiveContentEvent = true
+                // Decode SmartBlock array directly from the original JSON data.
+                // IMPORTANT: Do NOT use JSONSerialization.data(withJSONObject: json["blocks"])
+                // because the deserialized Any values may contain __SwiftValue types
+                // that crash when re-serialized by JSONSerialization.
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                do {
+                    struct SmartBlocksEnvelope: Decodable {
+                        let blocks: [SmartBlock]
+                    }
+                    let envelope = try decoder.decode(SmartBlocksEnvelope.self, from: jsonData)
+                    Log.ai.info("🧱 Lyo2 SSE: decoded \(envelope.blocks.count) SmartBlocks")
+                    callback?(.smartBlocks(blocks: envelope.blocks))
+                } catch {
+                    Log.ai.error("Lyo2 Decoding Error (smart_blocks): \(error)")
                 }
 
             case "scene_start", "scene_update":

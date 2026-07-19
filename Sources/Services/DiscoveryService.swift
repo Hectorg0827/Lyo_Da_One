@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import os
 
 // MARK: - Discovery Service
 @MainActor
@@ -16,9 +15,9 @@ class DiscoveryService: ObservableObject {
     private let cloudStorage = CloudStorageService.shared
     
     private init() {
-        Task { [weak self] in
-            await self?.loadMyDiscoveries()
-            await self?.loadSavedDiscoveries()
+        Task {
+            await loadMyDiscoveries()
+            await loadSavedDiscoveries()
         }
     }
     
@@ -29,12 +28,13 @@ class DiscoveryService: ObservableObject {
         error = nil
         
         do {
-            let response = try await apiClient.fetchMyDiscoveries()
-            myDiscoveries = response.discoveries
-            Log.discover.info("Loaded \(self.myDiscoveries.count) my discoveries from backend")
+            myDiscoveries = try await apiClient.fetchMyDiscoveries()
+            print("✅ Loaded \(myDiscoveries.count) my discoveries from backend")
         } catch {
-            Log.discover.error("Failed to load my discoveries: \(error.localizedDescription)")
+            print("❌ Failed to load my discoveries: \(error.localizedDescription)")
             self.error = error.localizedDescription
+            // Fallback to mock data
+            loadMockDiscoveries()
         }
         
         isLoading = false
@@ -42,11 +42,10 @@ class DiscoveryService: ObservableObject {
     
     func loadSavedDiscoveries() async {
         do {
-            let response = try await apiClient.fetchSavedDiscoveries()
-            savedDiscoveries = response.discoveries
-            Log.discover.info("Loaded \(self.savedDiscoveries.count) saved discoveries from backend")
+            savedDiscoveries = try await apiClient.fetchSavedDiscoveries()
+            print("✅ Loaded \(savedDiscoveries.count) saved discoveries from backend")
         } catch {
-            Log.discover.error("Failed to load saved discoveries: \(error.localizedDescription)")
+            print("❌ Failed to load saved discoveries: \(error.localizedDescription)")
         }
     }
     
@@ -69,9 +68,9 @@ class DiscoveryService: ObservableObject {
             // Update local state
             myDiscoveries.insert(newDiscovery, at: 0)
             
-            Log.discover.info("Discovery created: \(title)")
+            print("✅ Discovery created: \(title)")
         } catch {
-            Log.discover.error("Failed to create discovery: \(error.localizedDescription)")
+            print("❌ Failed to create discovery: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -82,67 +81,72 @@ class DiscoveryService: ObservableObject {
     
     // MARK: - Save/Unsave Discovery
     
-    func saveDiscovery(discoveryId: Int) async throws {
+    func saveDiscovery(discoveryId: String) async throws {
         do {
-            try await apiClient.saveDiscovery(discoveryId: String(discoveryId))
+            try await apiClient.saveDiscovery(discoveryId: discoveryId)
             await loadSavedDiscoveries()
-            Log.discover.info("Discovery saved")
+            print("✅ Discovery saved")
         } catch {
-            Log.discover.error("Failed to save discovery: \(error.localizedDescription)")
+            print("❌ Failed to save discovery: \(error.localizedDescription)")
             throw error
         }
     }
     
-    func unsaveDiscovery(discoveryId: Int) async throws {
+    func unsaveDiscovery(discoveryId: String) async throws {
         do {
-            try await apiClient.unsaveDiscovery(discoveryId: String(discoveryId))
-            savedDiscoveries.removeAll { $0.id == discoveryId }
-            Log.discover.info("Discovery unsaved")
+            try await apiClient.unsaveDiscovery(discoveryId: discoveryId)
+            savedDiscoveries.removeAll { String($0.id) == discoveryId }
+            print("✅ Discovery unsaved")
         } catch {
-            Log.discover.error("Failed to unsave discovery: \(error.localizedDescription)")
+            print("❌ Failed to unsave discovery: \(error.localizedDescription)")
             throw error
         }
     }
-    
-    // MARK: - Social Interactions
-    
-    func likeDiscovery(discoveryId: Int) async throws {
-        // Assume discoveryId maps to a Post ID (backend might expect String or Int, request() handles both)
-        _ = try await apiClient.likePost(id: String(discoveryId))
-        
-        // Optimistically update local state if present
-        if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {
-            var item = myDiscoveries[index]
-            item.isLiked = true
-            item.likes += 1
-            myDiscoveries[index] = item
+
+    func likeDiscovery(discoveryId: String) async throws {
+        do {
+            try await apiClient.likeDiscovery(discoveryId: discoveryId)
+            if let index = myDiscoveries.firstIndex(where: { String($0.id) == discoveryId }) {
+                myDiscoveries[index].isLiked = true
+                myDiscoveries[index].likes += 1
+            }
+            print("✅ Discovery liked")
+        } catch {
+            print("❌ Failed to like discovery: \(error.localizedDescription)")
+            throw error
         }
-        
-        Log.discover.info("Discovery liked: \(discoveryId)")
     }
-    
-    func unlikeDiscovery(discoveryId: Int) async throws {
-        try await apiClient.unlikePost(id: String(discoveryId))
-        
-        if let index = myDiscoveries.firstIndex(where: { $0.id == discoveryId }) {
-            var item = myDiscoveries[index]
-            item.isLiked = false
-            item.likes = max(0, item.likes - 1)
-            myDiscoveries[index] = item
+
+    func unlikeDiscovery(discoveryId: String) async throws {
+        do {
+            try await apiClient.unlikeDiscovery(discoveryId: discoveryId)
+            if let index = myDiscoveries.firstIndex(where: { String($0.id) == discoveryId }) {
+                myDiscoveries[index].isLiked = false
+                myDiscoveries[index].likes = max(0, myDiscoveries[index].likes - 1)
+            }
+            print("✅ Discovery unliked")
+        } catch {
+            print("❌ Failed to unlike discovery: \(error.localizedDescription)")
+            throw error
         }
-        
-        Log.discover.info("Discovery unliked: \(discoveryId)")
     }
-    
+
     func fetchComments(discoveryId: Int) async throws -> [Comment] {
-        return try await apiClient.fetchComments(postId: String(discoveryId))
+        []
+    }
+
+    func postComment(discoveryId: Int, content: String) async throws -> Comment {
+        Comment(
+            id: UUID().uuidString,
+            postId: String(discoveryId),
+            author: UserDTO(id: "me", name: "You", email: nil, avatarURL: nil, level: nil, xp: nil),
+            content: content,
+            likes: 0,
+            createdAt: Date()
+        )
     }
     
-    func postComment(discoveryId: Int, content: String) async throws -> Comment {
-        let comment = try await apiClient.createComment(postId: String(discoveryId), content: content)
-        Log.discover.info("Comment posted on: \(discoveryId)")
-        return comment
-    }
+    // MARK: - Upload Media
     
     func uploadDiscoveryVideo(videoURL: URL) async throws -> String {
         // Upload to cloud storage (presigned PUT)
@@ -177,7 +181,7 @@ class DiscoveryService: ObservableObject {
     private func loadMockDiscoveries() {
         self.myDiscoveries = [
             Discovery(
-                id: 1,
+                id: Int.random(in: 10_000...99_999),
                 userId: 1,
                 userName: "You",
                 title: "My First Reel",
@@ -191,7 +195,7 @@ class DiscoveryService: ObservableObject {
                 createdAt: Date()
             ),
             Discovery(
-                id: 2,
+                id: Int.random(in: 10_000...99_999),
                 userId: 1,
                 userName: "You",
                 title: "Physics Experiment",
@@ -205,7 +209,7 @@ class DiscoveryService: ObservableObject {
                 createdAt: Date()
             ),
             Discovery(
-                id: 3,
+                id: Int.random(in: 10_000...99_999),
                 userId: 1,
                 userName: "You",
                 title: "Campus Tour",
@@ -222,7 +226,7 @@ class DiscoveryService: ObservableObject {
         
         self.savedDiscoveries = [
             Discovery(
-                id: 4,
+                id: Int.random(in: 10_000...99_999),
                 userId: 2,
                 userName: "Jane",
                 title: "Math Hacks",
@@ -236,7 +240,7 @@ class DiscoveryService: ObservableObject {
                 createdAt: Date()
             ),
             Discovery(
-                id: 5,
+                id: Int.random(in: 10_000...99_999),
                 userId: 3,
                 userName: "Bob",
                 title: "Study Tips",
@@ -252,4 +256,3 @@ class DiscoveryService: ObservableObject {
         ]
     }
 }
-

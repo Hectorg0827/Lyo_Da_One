@@ -64,362 +64,53 @@ struct LyoOverlayView: View {
     // ChatMessage struct removed, using LyoMessage from ViewModel
     
     var body: some View {
+        overlayContent
+    }
+
+    private var overlayContent: some View {
         GeometryReader { geometry in
             ZStack {
-                // Blurred Background & Ambient Effects
-                if animationState != .initial {
-                    ZStack {
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                            .ignoresSafeArea()
-                        
-                        // Ambient "Alive" Particles
-                        ForEach(0..<5) { i in
-                            Circle()
-                                .fill(Color(hex: "FF8C00").opacity(0.1))
-                                .frame(width: CGFloat.random(in: 50...150), height: CGFloat.random(in: 50...150))
-                                .position(
-                                    x: CGFloat.random(in: 0...geometry.size.width),
-                                    y: CGFloat.random(in: 0...geometry.size.height)
-                                )
-                                .blur(radius: 30)
-                                .animation(
-                                    Animation.easeInOut(duration: Double.random(in: 5...10))
-                                        .repeatForever(autoreverses: true),
-                                    value: animationState
-                                )
-                        }
-                    }
-                    .transition(.opacity)
-                    .onTapGesture {
-                        if animationState == .active {
-                            close()
-                        }
-                    }
-                }
-                
-                // Main Content Stack (Chat/Suggestions + Input)
-                VStack(spacing: 0) {
-                    if animationState == .chatting {
-                        ScrollViewReader { proxy in
-                            ScrollView {
-                                VStack(spacing: 24) { // Increased spacing between bubbles
-                                    ForEach(viewModel.messages) { message in
-                                        VStack(alignment: .leading, spacing: 0) {
-                                            // Convert LyoMessage to MultimodalMessage for message bubble
-                                            EnhancedMessageBubble(
-                                                message: MultimodalMessage(from: message),
-                                                onTTSToggle: nil,
-                                                onQuizAnswer: nil,
-                                                onCourseOpen: { id in
-                                                    viewModel.openCourse(id: id)
-                                                },
-                                                onTopicSelect: nil,
-                                                onModuleSelect: nil,
-                                                onSuggestionSelect: { suggestion in
-                                                    viewModel.inputText = suggestion
-                                                    submitText()
-                                                },
-                                                highlights: notebookStore.highlights(for: message.id),
-                                                onTextSelectionAction: { action in
-                                                    handleTextSelectionAction(action, messageId: message.id, isFromUser: message.isFromUser)
-                                                }
-                                            )
-                                        }
-                                        .id(message.id)
-                                    }
-                                    
-                                    // Thinking indicator bubble
-                                    if isThinking && !hasAssistantPlaceholderBubble {
-                                        LyoThinkingView()
-                                            .id("thinking")
-                                            .padding(.leading, 12)
-                                    }
-                                }
-                                .padding(.top, 60) // Space for header/back button
-                                .padding(.horizontal, 8) // Minimal side padding for full-width look
-                                .padding(.bottom, 20) // Minimal space before input
-                            }
-                            .onChange(of: isThinking) { _, newValue in
-                                if !newValue {
-                                    // Revert to original mascot state if needed (handled by view state)
-                                    HapticManager.shared.light()
-                                }
-                            }
-                            .onChange(of: viewModel.messages) { _, newMessages in
-                                if let lastId = newMessages.last?.id {
-                                    withAnimation {
-                                        proxy.scrollTo(lastId, anchor: .bottom)
-                                    }
-                                }
-                            }
-                            .onChange(of: isThinking) { _, thinking in
-                                if thinking {
-                                    withAnimation {
-                                        proxy.scrollTo("thinking", anchor: .bottom)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Spacer()
-                        
-                        // Greeting Text
-                        if animationState == .active && showGreeting {
-                            VStack(spacing: 16) {
-                                Text("Hello, \(userFirstName)!")
-                                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            colors: [.white, Color(hex: "FF8C00")],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .multilineTextAlignment(.center)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                                
-                                Text(motivationalMessages[greetingMessageIndex])
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .multilineTextAlignment(.center)
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                            }
-                            .padding(.horizontal, 40)
-                            .padding(.bottom, 250)
-                        }
-                        
-                        Spacer()
-                    }
-                    
-                    if animationState == .active {
-                        // Suggestions
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(viewModel.suggestions) { chip in
-                                    LyoSuggestionChip(text: chip.text) { 
-                                        viewModel.inputText = chip.text
-                                        submitText() 
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .padding(.bottom, 4)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    
-                    if animationState != .initial {
-                        // Input Bar
-                        // Input Bar
-                        // Input Bar (Docked Console)
-                        HybridInputBar(
-                            text: $viewModel.inputText,
-                            isListening: Binding(
-                                get: { viewModel.isVoiceActive },
-                                set: { active in
-                                    if active { viewModel.startListening() } else { viewModel.stopListening() }
-                                }
-                            ),
-                            selectedMode: $selectedMode,
-                            isThinking: isThinking,
-                            onSubmit: {
-                                submitText()
-                            }
-                        )
-                        // Removed .padding() to allow full width
-                        .padding(.bottom, 0) // Dock to bottom
-                        .transition(.move(edge: .bottom))
-                    }
-                }
-                
-                // Avatar - Only visible in active state (Center) or initial state (Tab Bar)
-                // In chatting state, it's now embedded in the chat bubbles
-                if animationState == .active {
-                    ZStack {
-                        // Large avatar glow in active state
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        Color(hex: "FF8C00").opacity(0.5),
-                                        Color(hex: "FF8C00").opacity(0.1),
-                                        Color.clear
-                                    ],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: 140
-                                )
-                            )
-                            .frame(width: 280, height: 280)
-                            .blur(radius: 25)
-                        
-                        // Live Transcript Overlay
-                        if viewModel.isLiveMode && !viewModel.lastLiveTranscript.isEmpty {
-                            VStack {
-                                Spacer().frame(height: 320)
-                                Text(viewModel.lastLiveTranscript)
-                                    .font(.system(size: 18, weight: .medium, design: .rounded))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 12)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(20)
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                                    .id(viewModel.lastLiveTranscript)
-                            }
-                        }
-                        
-                        LyoAvatarView(
-                            size: 200,
-                            isListening: viewModel.isVoiceActive || viewModel.isLiveMode,
-                            isThinking: viewModel.isAIThinking || viewModel.isLiveMode,
-                            isLiveMode: viewModel.isLiveMode,
-                            isSpeaking: viewModel.isAISpeaking,
-                            userLevel: viewModel.userLiveAudioLevel,
-                            aiLevel: viewModel.aiLiveAudioLevel
-                        )
-                    }
-                    .position(
-                        x: geometry.size.width / 2,
-                        y: geometry.size.height / 2 - 50 + avatarFloatOffset
-                    )
-                    .transition(.opacity.combined(with: .scale))
-                } else if animationState == .initial {
-                    LyoAvatarView(
-                        size: 60,
-                        isListening: false,
-                        isThinking: false,
-                        isLiveMode: false,
-                        isSpeaking: false
-                    )
-                    .position(x: startFrame.midX, y: startFrame.midY)
-                }
-                
-                // Live Stage Widget Area (Generative UI)
-                if let widget = viewModel.activeLiveWidget {
-                    LiveStageWidgetView(widget: widget)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .bottom).combined(with: .opacity)
-                        ))
-                        .offset(y: animationState == .active ? -220 : -120)
-                        .zIndex(150)
-                        .onTapGesture {
-                            withAnimation {
-                                viewModel.activeLiveWidget = nil
-                            }
-                        }
-                }
-                
-                // A2A Progress Overlay
-                if viewModel.showA2AProgressView {
-                    ZStack {
-                        Color.black.opacity(0.4).ignoresSafeArea()
-                        A2AProgressView()
-                            .padding(.horizontal, 24)
-                            .shadow(radius: 20)
-                    }
-                    .transition(.opacity)
-                    .zIndex(200)
-                }
-                
-                // Header Bar (Top)
-                if animationState != .initial {
-                    VStack {
-                        HStack(spacing: 16) {
-                            // History Button (Left)
-                            Button(action: { showHistory = true }) {
-                                Image(systemName: "list.bullet")
-                                    .font(.title3)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .frame(width: 40, height: 40)
-                                    .background(Color.white.opacity(0.1))
-                                    .clipShape(Circle())
-                            }
-                            
-                            Spacer()
-                            
-                            // Notebook Icon (only visible when notes exist)
-                            NotebookIconButton(store: notebookStore, showSheet: $showNotesSheet)
-                            
-                            // New Chat Button
-                            Button(action: createNewChat) {
-                                Image(systemName: "square.and.pencil")
-                                    .font(.title3)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .frame(width: 40, height: 40)
-                                    .background(Color.white.opacity(0.1))
-                                    .clipShape(Circle())
-                            }
-                            
-                            // Close Button (Right)
-                            Button(action: close) {
-                                Image(systemName: "xmark")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .frame(width: 40, height: 40)
-                                    .background(Color.white.opacity(0.1))
-                                    .clipShape(Circle())
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        
-                        Spacer()
-                    }
-                }
+                overlayBackground
+                mainContentStack
+                avatarLayer(geometry: geometry)
+                widgetLayer
+                a2aLayer
+                headerBarLayer
             }
         }
         .onAppear {
-            // Randomize greeting message on each visit
             greetingMessageIndex = Int.random(in: 0..<motivationalMessages.count)
-            
-            // Trigger the "Jump"
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                animationState = .active
-            }
-            
-            // Show greeting after avatar animation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    showGreeting = true
+            if !viewModel.messages.isEmpty {
+                animationState = .chatting
+            } else {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+                    animationState = .active
                 }
             }
-            
-            // Start floating animation for avatar
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                withAnimation(.easeInOut(duration: 0.5)) { showGreeting = true }
+            }
             withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
                 avatarFloatOffset = 10
             }
-            
-            // Start thinking ring rotation
             withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
                 thinkingRotation = 360
             }
-            
-            // Activate notebook store for current conversation
             if let convId = conversationManager.currentConversation?.id {
                 notebookStore.activateConversation(convId)
             }
         }
         .sheet(isPresented: $showHistory) {
             ChatHistoryView(
-                onSelectConversation: { conversation in
-                    // Load the selected conversation
-                    loadConversation(conversation)
-                },
-                onNewChat: {
-                    createNewChat()
-                }
+                onSelectConversation: { conversation in loadConversation(conversation) },
+                onNewChat: { createNewChat() }
             )
         }
         .sheet(isPresented: $showVoiceSheet) {
             VoiceSessionBottomSheet(viewModel: viewModel)
         }
         .onChange(of: viewModel.isVoiceActive) { _, newValue in
-            if newValue {
-                showVoiceSheet = true
-            }
+            if newValue { showVoiceSheet = true }
         }
         .sheet(isPresented: $showNotesSheet) {
             ChatNotesSheetView(
@@ -437,12 +128,299 @@ struct LyoOverlayView: View {
             )
         }
         .onChange(of: conversationManager.currentConversation?.id) { _, newId in
-            if let id = newId {
-                notebookStore.activateConversation(id)
+            if let id = newId { notebookStore.activateConversation(id) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dismissLyoOverlay)) { _ in
+            self.close()
+        }
+    }
+
+    private var overlayBackground: some View {
+        Group {
+            if animationState != .initial {
+                ZStack {
+                    // Dark underlay for better text contrast
+                    Color.black.opacity(0.75).ignoresSafeArea()
+                    
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .ignoresSafeArea()
+                }
+                .onTapGesture {
+                    if animationState == .active { close() }
+                }
             }
         }
     }
-    
+
+    private var mainContentStack: some View {
+        VStack(spacing: 0) {
+            if animationState == .chatting {
+                chatMessagesView
+            } else {
+                greetingAreaView
+            }
+            suggestionsRow
+            inputBarRow
+        }
+    }
+
+    private var chatMessagesView: some View {
+        ScrollViewReader { proxy in
+            chatScrollContent
+                .onChange(of: viewModel.messages) { _, newMessages in
+                    if let lastId = newMessages.last?.id {
+                        withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
+                    }
+                }
+                .onChange(of: isThinking) { _, thinking in
+                    if thinking { withAnimation { proxy.scrollTo("thinking", anchor: .bottom) } }
+                    else { HapticManager.shared.light() }
+                }
+        }
+    }
+
+    private var chatScrollContent: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                ForEach(viewModel.messages) { message in
+                    messageBubble(for: message)
+                }
+                if isThinking && !hasAssistantPlaceholderBubble {
+                    LyoThinkingView()
+                        .id("thinking")
+                        .padding(.leading, 12)
+                }
+            }
+            .padding(.top, 60)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 20)
+        }
+    }
+
+    @ViewBuilder
+    private func messageBubble(for message: LyoMessage) -> some View {
+        EnhancedMessageBubble(
+            message: MultimodalMessage(from: message),
+            onTTSToggle: nil,
+            onQuizAnswer: { index in
+                // Notify the AI of the user's selected option index
+                viewModel.inputText = "I selected option \(index + 1) in the quiz."
+                submitText()
+            },
+            onCourseOpen: { id in
+                NotificationCenter.default.post(
+                    name: Notification.Name("openClassroom"),
+                    object: nil,
+                    userInfo: ["courseId": id, "topic": id, "courseTitle": id, "lessonId": "intro_1", "lessonTitle": "Introduction", "shouldGenerateCourse": false]
+                )
+            },
+            onTopicSelect: nil,
+            onModuleSelect: { module in
+                // Directly launch the classroom with the selected module topic!
+                NotificationCenter.default.post(
+                    name: Notification.Name("openClassroom"),
+                    object: nil,
+                    userInfo: [
+                        "courseId": UUID().uuidString,
+                        "topic": module.title,
+                        "courseTitle": module.title,
+                        "lessonId": "intro_1",
+                        "lessonTitle": "Introduction",
+                        "shouldGenerateCourse": true
+                    ]
+                )
+            },
+            onSuggestionSelect: { suggestion in
+                viewModel.inputText = suggestion
+                submitText()
+            },
+            onSuggestedAction: { card in
+                handleSuggestedAction(card)
+            },
+            highlights: notebookStore.highlights(for: message.id),
+            onTextSelectionAction: { action in
+                handleTextSelectionAction(action, messageId: message.id, isFromUser: message.isFromUser)
+            }
+        )
+        .id(message.id)
+    }
+
+    private var greetingAreaView: some View {
+        VStack {
+            Spacer()
+            if animationState == .active && showGreeting {
+                VStack(spacing: 16) {
+                    Text("Hello, \(userFirstName)!")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(LinearGradient(colors: [.white, Color(hex: "FF8C00")], startPoint: .leading, endPoint: .trailing))
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    Text(motivationalMessages[greetingMessageIndex])
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+                .padding(.horizontal, 40)
+                .padding(.bottom, 250)
+            }
+            Spacer()
+        }
+    }
+
+    private var suggestionsRow: some View {
+        Group {
+            if animationState == .active && !viewModel.suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(viewModel.suggestions) { chip in
+                            LyoSuggestionChip(text: chip.text) {
+                                viewModel.inputText = chip.text
+                                submitText()
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 4)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var inputBarRow: some View {
+        Group {
+            if animationState != .initial {
+                HybridInputBar(
+                    text: $viewModel.inputText,
+                    isListening: Binding(
+                        get: { viewModel.isVoiceActive },
+                        set: { active in
+                            if active { viewModel.startListening() } else { viewModel.stopListening() }
+                        }
+                    ),
+                    selectedMode: $selectedMode,
+                    isThinking: isThinking,
+                    onSubmit: { submitText() }
+                )
+                .padding(.bottom, 0)
+                .transition(.move(edge: .bottom))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func avatarLayer(geometry: GeometryProxy) -> some View {
+        if animationState == .active {
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(
+                        colors: [Color(hex: "FF8C00").opacity(0.5), Color(hex: "FF8C00").opacity(0.1), Color.clear],
+                        center: .center, startRadius: 0, endRadius: 140
+                    ))
+                    .frame(width: 280, height: 280)
+                    .blur(radius: 25)
+                if viewModel.isLiveMode && !viewModel.lastLiveTranscript.isEmpty {
+                    VStack {
+                        Spacer().frame(height: 320)
+                        Text(viewModel.lastLiveTranscript)
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(20)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            .id(viewModel.lastLiveTranscript)
+                    }
+                }
+                LyoAvatarView(
+                    size: 200,
+                    isListening: viewModel.isVoiceActive || viewModel.isLiveMode,
+                    isThinking: viewModel.isAIThinking || viewModel.isLiveMode,
+                    isLiveMode: viewModel.isLiveMode,
+                    isSpeaking: viewModel.isAISpeaking,
+                    userLevel: viewModel.userLiveAudioLevel,
+                    aiLevel: viewModel.aiLiveAudioLevel
+                )
+            }
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2 - 50 + avatarFloatOffset)
+            .transition(.opacity.combined(with: .scale))
+        } else if animationState == .initial {
+            LyoAvatarView(size: 60, isListening: false, isThinking: false, isLiveMode: false, isSpeaking: false)
+                .position(x: startFrame.midX, y: startFrame.midY)
+        }
+    }
+
+    private var widgetLayer: some View {
+        Group {
+            if let widget = viewModel.activeLiveWidget {
+                LiveStageWidgetView(widget: widget)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    ))
+                    .offset(y: animationState == .active ? -220 : -120)
+                    .zIndex(150)
+                    .onTapGesture { withAnimation { viewModel.activeLiveWidget = nil } }
+            }
+        }
+    }
+
+    private var a2aLayer: some View {
+        Group {
+            if viewModel.showA2AProgressView {
+                ZStack {
+                    Color.black.opacity(0.4).ignoresSafeArea()
+                    A2AProgressView().padding(.horizontal, 24).shadow(radius: 20)
+                }
+                .transition(.opacity)
+                .zIndex(200)
+            }
+        }
+    }
+
+    private var headerBarLayer: some View {
+        Group {
+            if animationState != .initial {
+                VStack {
+                    HStack(spacing: 16) {
+                        Button(action: { showHistory = true }) {
+                            Image(systemName: "list.bullet")
+                                .font(.title3)
+                                .foregroundColor(.white.opacity(0.8))
+                                .frame(width: 40, height: 40)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        Spacer()
+                        NotebookIconButton(store: notebookStore, showSheet: $showNotesSheet)
+                        Button(action: createNewChat) {
+                            Image(systemName: "square.and.pencil")
+                                .font(.title3)
+                                .foregroundColor(.white.opacity(0.8))
+                                .frame(width: 40, height: 40)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        Button(action: close) {
+                            Image(systemName: "xmark")
+                                .font(.body.weight(.semibold))
+                                .foregroundColor(.white.opacity(0.8))
+                                .frame(width: 40, height: 40)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    Spacer()
+                }
+            }
+        }
+    }
+
     private var greetingText: String {
         return "Hello, \(userFirstName)!"
     }
@@ -486,6 +464,9 @@ struct LyoOverlayView: View {
             viewModel.messages.append(lyoMsg)
         }
         conversationManager.loadConversation(conversation)
+        withAnimation {
+            animationState = .chatting
+        }
     }
     
     // MARK: - Text Selection Actions
@@ -530,6 +511,101 @@ struct LyoOverlayView: View {
         }
     }
     
+    /// Stage A — primary tap on a SuggestedActionCard (under Lyo's reply).
+    ///
+    /// `.guidedLesson` opens the classroom on the card's topic.
+    /// `.studyPlan` posts the plan request back into the chat so Lyo can
+    /// build the plan inline (no persistence yet — that's Stage B).
+    private func handleSuggestedAction(_ card: SuggestedActionCard) {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        switch card.kind {
+        case .guidedLesson:
+            // card.title is always a CTA/question ("Open a guided lesson on this topic?")
+            // — never use it as a topic. If the card was built before the user named a
+            // topic (payload.topic/subject nil), fall back to the latest user message
+            // with conversational preamble stripped so the backend sees a clean subject.
+            let lastUserMessage = viewModel.messages.last(where: { $0.isFromUser })?.content
+            let fallbackUserText = lastUserMessage.map {
+                Self.stripTopicPreamble($0.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            let resolvedTopic = (card.payload.topic ?? card.payload.subject ?? fallbackUserText)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let topic = resolvedTopic, !topic.isEmpty else {
+                // No grounded topic — ask instead of opening a classroom with garbage.
+                viewModel.inputText = "What topic should the guided lesson cover?"
+                return
+            }
+            NotificationCenter.default.post(
+                name: Notification.Name("openClassroom"),
+                object: nil,
+                userInfo: [
+                    "courseId": "GENERATE:\(topic)",
+                    "topic": topic,
+                    "courseTitle": topic,
+                    "lessonId": "intro_1",
+                    "lessonTitle": "Introduction",
+                    "shouldGenerateCourse": true,
+                ]
+            )
+
+        case .studyPlan:
+            // Stage B2 — persist the plan to backend so it survives app
+            // restart. Fire-and-forget; if auth fails we fall through to
+            // the chat-only path so the user still gets a useful response.
+            Task {
+                try? await StudyPlanService.shared.create(
+                    StudyPlanRecordCreate(
+                        subject: card.payload.subject ?? card.payload.topic ?? "Study session",
+                        topics: card.payload.topics,
+                        deadline: card.payload.deadline,
+                        dailyBreakdown: [],  // populated in a later stage from the AI's reply
+                        sourceConversationId: nil
+                    )
+                )
+            }
+
+            // Re-prompt Lyo with a structured planning request so the AI builds
+            // the plan inline. The chat thread becomes the plan thread.
+            var prompt = "Please build a study plan"
+            if let subject = card.payload.subject { prompt += " for my \(subject)" }
+            if let deadline = card.payload.deadline { prompt += " for the \(deadline) test" }
+            if !card.payload.topics.isEmpty {
+                prompt += ". The topics are: " + card.payload.topics.joined(separator: ", ")
+            }
+            prompt += ". Show the daily breakdown and what I should do today."
+            viewModel.inputText = prompt
+            submitText()
+        }
+    }
+
+    /// Strip conversational preamble from a user message so it can serve as a topic.
+    /// "Create a course on pre calculus" → "pre calculus".
+    /// Returns the original string if no known preamble matches.
+    private static func stripTopicPreamble(_ text: String) -> String {
+        let lower = text.lowercased()
+        let preambles = [
+            "create a course on ", "create a course about ", "create a course for me on ",
+            "make a course on ", "make a course about ",
+            "build a course on ", "build a course about ",
+            "teach me about ", "teach me ",
+            "i want to learn about ", "i want to learn ",
+            "i'd like to learn about ", "i'd like to learn ",
+            "help me learn about ", "help me learn ",
+            "start a class on ", "start a class about ",
+            "open a guided lesson on ", "open a guided lesson about ",
+            "give me a lesson on ", "give me a lesson about ",
+            "show me ", "explain "
+        ]
+        for prefix in preambles where lower.hasPrefix(prefix) {
+            let stripped = String(text.dropFirst(prefix.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " .?!,;:"))
+            if !stripped.isEmpty { return stripped }
+        }
+        return text
+    }
+
     private func submitText() {
         guard !viewModel.inputText.isEmpty else { return }
         

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import MascotAvatar from '@/components/chat/MascotAvatar';
 
 // ── Animation variants ─────────────────────────────────────────────────────────
 
@@ -186,14 +187,11 @@ export default function SignupPage() {
             boxShadow: '0 32px 80px rgba(0,0,0,0.5)',
           }}
         >
-          {/* LYO orb */}
+          {/* Lyo mascot */}
           <div className="flex flex-col items-center gap-4">
-            <div className="relative">
-              <div
-                className="w-20 h-20 rounded-full orb-gradient animate-float"
-                style={{ boxShadow: '0 0 40px rgba(108,99,255,0.5)' }}
-              />
+            <div className="relative w-20 h-20 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full blur-xl opacity-50 orb-gradient" />
+              <MascotAvatar idle size={72} />
             </div>
             <div className="text-center">
               <h1 className="text-2xl font-black text-primary">Join LYO</h1>

@@ -120,6 +120,44 @@ class LyoAIViewModel: ObservableObject {
             await loadCourseCards()
             // Restore after the initial Combine emit has already set messages = []
             await restorePersistedMessages()
+            // Fresh session with learning history? Lyo remembers you.
+            await seedMemoryGreeting()
+        }
+    }
+
+    /// Seed a mastery-aware welcome from Lyo when the chat opens fresh —
+    /// the mascot remembers what the learner crushed and what fought back.
+    private func seedMemoryGreeting() async {
+        guard messages.isEmpty, unifiedChat.messages.isEmpty else { return }
+        guard let profile = try? await PersonalizationService.shared.getMasteryProfile(),
+              !profile.skills.isEmpty else { return }
+
+        let greeting = Self.composeMemoryGreeting(from: profile)
+        let message = LyoMessage(
+            id: "memory-greeting-\(UUID().uuidString)",
+            content: greeting,
+            isFromUser: false,
+            timestamp: Date(),
+            status: .sent
+        )
+        messages.append(message)
+        Log.ai.info("🧠 Seeded memory greeting (\(profile.skills.count) skills known)")
+    }
+
+    /// Composes a warm welcome that references the learner's persisted mastery.
+    static func composeMemoryGreeting(from profile: MasteryProfile) -> String {
+        let strength = profile.strengths.first
+        let weakness = (profile.recommendedFocus.first ?? profile.weaknesses.first)
+
+        switch (strength, weakness) {
+        case let (s?, w?):
+            return "Welcome back! 👋 You've been building real strength in **\(s)** — nice work. Last time, **\(w)** put up a bit of a fight. Want to take another crack at it together, or start something new?"
+        case let (s?, nil):
+            return "Welcome back! 👋 You're on a roll — **\(s)** is looking solid. Ready to push further, or explore something new today?"
+        case let (nil, w?):
+            return "Welcome back! 👋 Last time, **\(w)** gave us a good challenge. A quick session there would really move the needle — want to dive in?"
+        default:
+            return "Welcome back! 👋 Ready to pick up where we left off?"
         }
     }
 

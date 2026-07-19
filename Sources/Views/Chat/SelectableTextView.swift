@@ -61,10 +61,18 @@ struct SelectableTextView: UIViewRepresentable {
         context.coordinator.onAction = onAction
 
         let attributed = Self.buildAttributedString(content: content, highlights: highlights)
-        uiView.attributedText = attributed
-        // Ensure coordinator is up-to-date
-        uiView.coordinator = context.coordinator
-        uiView.invalidateIntrinsicContentSize()
+        
+        // Only trigger heavy updates if content actually changed during the stream
+        if uiView.attributedText?.string != attributed.string {
+            uiView.attributedText = attributed
+            uiView.coordinator = context.coordinator
+            
+            // Dispatch layout pass to next runloop so SwiftUI can process the frame change
+            DispatchQueue.main.async {
+                uiView.invalidateIntrinsicContentSize()
+                uiView.setNeedsLayout()
+            }
+        }
     }
 
     // MARK: - Attributed String Builder
@@ -74,11 +82,12 @@ struct SelectableTextView: UIViewRepresentable {
         content: String,
         highlights: [ChatHighlight]
     ) -> NSAttributedString {
-        let baseFont = UIFont.systemFont(ofSize: 16, weight: .regular)
-        let baseColor = UIColor.white.withAlphaComponent(0.9)
+        let baseFont = UIFont.systemFont(ofSize: 18, weight: .regular)
+        let baseColor = UIColor.white.withAlphaComponent(0.95)
 
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 4
+        paragraphStyle.lineSpacing = 8
+        paragraphStyle.paragraphSpacing = 12
 
         let baseAttributes: [NSAttributedString.Key: Any] = [
             .font: baseFont,
@@ -89,19 +98,19 @@ struct SelectableTextView: UIViewRepresentable {
         // Parse simple inline markdown into NSAttributedString
         let result = NSMutableAttributedString(string: content, attributes: baseAttributes)
 
-        // Apply bold (**text** or __text__)
+        // Apply bold (**text** or __text__) with a nice accent color
         applyMarkdownPattern(result, pattern: #"\*\*(.+?)\*\*"#, attributes: [
-            .font: UIFont.systemFont(ofSize: 17, weight: .bold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 18, weight: .bold),
+            .foregroundColor: UIColor(red: 1.0, green: 0.65, blue: 0.0, alpha: 1.0) // Premium orange/gold accent
         ])
         applyMarkdownPattern(result, pattern: #"__(.+?)__"#, attributes: [
-            .font: UIFont.systemFont(ofSize: 17, weight: .bold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 18, weight: .bold),
+            .foregroundColor: UIColor(red: 1.0, green: 0.65, blue: 0.0, alpha: 1.0)
         ])
 
         // Apply italic (*text* or _text_) – avoid matching ** or __
         applyMarkdownPattern(result, pattern: #"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"#, attributes: [
-            .font: UIFont.italicSystemFont(ofSize: 16),
+            .font: UIFont.italicSystemFont(ofSize: 17),
             .foregroundColor: UIColor.white.withAlphaComponent(0.85)
         ])
 
@@ -264,6 +273,26 @@ class LyoSelectableUITextView: UITextView {
             return coordinator
         }
         return super.target(forAction: action, withSender: sender)
+    }
+    
+    // MARK: - Safe Auto-Sizing for SwiftUI
+    
+    // Natively allows the UITextView to expand vertically in a SwiftUI container
+    // without clipping its text mid-word during streaming updates.
+    override var intrinsicContentSize: CGSize {
+        // Fallback width if bounds haven't been resolved by SwiftUI yet
+        let targetWidth = self.frame.width > 0 ? self.frame.width : UIScreen.main.bounds.width - 64
+        let size = self.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
+        return CGSize(width: UIView.noIntrinsicMetric, height: size.height)
+    }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Invalidate intrinsic size if the bounds change (e.g. rotation or padding change),
+        // forcing SwiftUI to allocate enough vertical space.
+        if abs(bounds.size.height - intrinsicContentSize.height) > 1 {
+            invalidateIntrinsicContentSize()
+        }
     }
 }
 
