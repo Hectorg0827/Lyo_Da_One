@@ -2,6 +2,14 @@
 
 import { create } from 'zustand';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
+import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
+import type {
+  ClassroomContractConnection,
+  ClassroomMode,
+  HintLevel,
+} from '@/lib/classroom-contract.mjs';
+
+export type { ClassroomMode, HintLevel };
 
 // ─── Wire types (match backend lyo_app/ai_classroom exactly) ─────────────────
 
@@ -11,6 +19,8 @@ export interface QuizOption {
   is_correct?: boolean;
   feedback_correct?: string | null;
   feedback_incorrect?: string | null;
+  misconception_tag?: string | null;
+  remediation_hint?: string | null;
 }
 
 export interface ClassroomComponent {
@@ -25,6 +35,24 @@ export interface ClassroomComponent {
   concept_id?: string | null;
   current?: number;
   total?: number;
+  placeholder?: string;
+  expected_keywords?: string[];
+  min_words?: number;
+  max_words?: number;
+  min_score?: number;
+  evidence_type?: string;
+  source_attributions?: string[];
+  title?: string;
+  content?: string;
+  block_type?: string;
+  block?: {
+    title?: string;
+    content?: string;
+    items?: string[];
+    source_attributions?: string[];
+    retrieval_scheduled?: boolean;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -65,11 +93,14 @@ export type BoardElement =
   | { id: string; kind: 'latex'; latex: string }
   | { id: string; kind: 'mermaid'; source: string }
   | { id: string; kind: 'code'; code: string }
-  | { id: string; kind: 'image'; url: string | null; caption?: string; query: string }
+  | { id: string; kind: 'image'; url: string | null; caption?: string; query: string; attribution?: string; sourceUrl?: string }
   | { id: string; kind: 'bullets'; items: string[] }
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
-  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string }
+  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean }
+  | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
+  | { id: string; kind: 'source'; labels: string[] }
   | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string };
 
 export interface TranscriptItem {
@@ -92,11 +123,8 @@ export interface Caption {
 
 type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 
-export interface ClassroomConnection {
-  topic: string;
-  sessionId?: string;
-  objective?: string;
-  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+export interface ClassroomConnection extends ClassroomContractConnection {
+  mode?: ClassroomMode;
 }
 
 interface ClassroomStore {
@@ -125,16 +153,20 @@ interface ClassroomStore {
 
   soundOn: boolean;
   voiceOn: boolean;
+  speechRate: number;
 
   connect: (connection: ClassroomConnection) => void;
   disconnect: () => void;
   answerPrompt: (option: string) => void;
   answerQuiz: (elementId: string, option: QuizOption) => void;
+  answerTransfer: (elementId: string, response: string) => void;
   askQuestion: (text: string) => void;
   signal: (kind: 'confused' | 'too_easy') => void;
+  requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
   toggleSound: () => void;
   toggleVoice: () => void;
+  setSpeechRate: (rate: number) => void;
   viewBoard: (index: number) => void; // -1 = live
 }
 
@@ -151,16 +183,7 @@ const nextId = () => `cf_${++idCounter}`;
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
 
 function wsUrl(connection: ClassroomConnection, token: string | null): string {
-  const base = API_URL.replace(/^http/, 'ws').replace(/\/$/, '');
-  const params = new URLSearchParams({
-    session_id: connection.sessionId || connection.topic,
-    topic: connection.topic,
-  });
-  if (connection.objective) params.set('objective', connection.objective);
-  if (connection.difficulty) params.set('difficulty', connection.difficulty);
-  if (token) params.set('token', token);
-  else params.set('api_key', 'web_guest');
-  return `${base}/api/v1/classroom/ws/connect?${params}`;
+  return buildClassroomWsUrl(API_URL, connection, token);
 }
 
 function speechDelay(text: string): number {
@@ -203,7 +226,11 @@ function classifyBoardContent(content: string): BoardElement {
 }
 
 /** Resolve an image query via Wikimedia Commons (free, keyless, CORS-open). */
-async function resolveImage(query: string): Promise<{ url: string; caption?: string } | null> {
+async function resolveImage(query: string): Promise<{
+  url: string;
+  attribution: string;
+  sourceUrl?: string;
+} | null> {
   try {
     const params = new URLSearchParams({
       action: 'query',
@@ -211,7 +238,8 @@ async function resolveImage(query: string): Promise<{ url: string; caption?: str
       gsrsearch: `filetype:bitmap ${query}`,
       gsrlimit: '1',
       gsrnamespace: '6',
-      prop: 'imageinfo',
+      prop: 'imageinfo|info',
+      inprop: 'url',
       iiprop: 'url|extmetadata',
       iiurlwidth: '760',
       format: 'json',
@@ -221,10 +249,18 @@ async function resolveImage(query: string): Promise<{ url: string; caption?: str
     const data = await res.json();
     const pages = data?.query?.pages;
     if (!pages) return null;
-    const first = Object.values(pages)[0] as { imageinfo?: { thumburl?: string; url?: string }[] };
+    const first = Object.values(pages)[0] as {
+      title?: string;
+      canonicalurl?: string;
+      imageinfo?: { thumburl?: string; url?: string }[];
+    };
     const info = first?.imageinfo?.[0];
     const url = info?.thumburl || info?.url;
-    return url ? { url } : null;
+    return url ? {
+      url,
+      attribution: first.title || 'Wikimedia Commons',
+      sourceUrl: first.canonicalurl,
+    } : null;
   } catch {
     return null;
   }
@@ -244,7 +280,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const utterance = new SpeechSynthesisUtterance(text);
       const profile = VOICE_PROFILE[speaker] ?? VOICE_PROFILE.Teacher;
       utterance.pitch = profile.pitch;
-      utterance.rate = profile.rate;
+      utterance.rate = profile.rate * get().speechRate;
       let finished = false;
       const done = () => { if (!finished) { finished = true; onDone(); } };
       utterance.onend = done;
@@ -274,6 +310,15 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     maybeEraseForNewScene();
     sfx('chalk');
     set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
+  }
+
+  function addSources(labels?: string[]) {
+    const clean = [...new Set((labels ?? []).map((label) => label.trim()).filter(Boolean))];
+    if (!clean.length) return;
+    const alreadyShown = get().board.some(
+      (el) => el.kind === 'source' && clean.every((label) => el.labels.includes(label)),
+    );
+    if (!alreadyShown) addBoardElement({ id: nextId(), kind: 'source', labels: clean });
   }
 
   function eraseBoard() {
@@ -351,7 +396,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           void resolveImage(query).then((img) => {
             set((s) => ({
               board: img
-                ? s.board.map((b) => (b.id === el.id ? { ...b, url: img.url } : b))
+                ? s.board.map((b) => (
+                    b.id === el.id
+                      ? { ...b, url: img.url, attribution: img.attribution, sourceUrl: img.sourceUrl }
+                      : b
+                  ))
                 : s.board.filter((b) => b.id !== el.id), // nothing found — erase quietly
             }));
           });
@@ -441,19 +490,52 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (text.startsWith('[')) {
           try {
             const turns = JSON.parse(text) as DirectorTurn[];
-            if (Array.isArray(turns)) { enqueueTurns(turns); return; }
+            if (Array.isArray(turns)) {
+              enqueueTurns(turns);
+              addSources(comp.source_attributions);
+              return;
+            }
           } catch { /* plain text below */ }
         }
         enqueueTurns([{ type: 'speech', speaker: 'Teacher', text }]);
+        addSources(comp.source_attributions);
         break;
       }
       case 'StudentPrompt':
         enqueueTurns([{ type: 'speech', speaker: comp.student_name || 'Maya', text: comp.text ?? '' }]);
         break;
       case 'QuizCard':
-        // The teacher writes the checkpoint on the board.
         addBoardElement({ id: nextId(), kind: 'quiz', quiz: comp });
-        pushTranscript('Teacher', `📝 Checkpoint: ${comp.question ?? ''}`);
+        pushTranscript('Teacher', `📝 Recognition check: ${comp.question ?? ''}`);
+        set({ canContinue: false });
+        break;
+      case 'InputField':
+        addBoardElement({ id: nextId(), kind: 'transfer', input: comp });
+        pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+        addSources(comp.source_attributions);
+        set({ canContinue: false, waitingForScene: false });
+        break;
+      case 'ExampleBlock':
+        addBoardElement({
+          id: nextId(),
+          kind: 'summary',
+          title: comp.title || 'Worked example',
+          content: comp.content,
+          items: [],
+        });
+        break;
+      case 'LessonBlock':
+        if (comp.block_type === 'summary' && comp.block) {
+          addBoardElement({
+            id: nextId(),
+            kind: 'summary',
+            title: comp.block.title || 'Lesson summary',
+            content: comp.block.content,
+            items: comp.block.items || [],
+            retrievalScheduled: comp.block.retrieval_scheduled === true,
+          });
+          addSources(comp.block.source_attributions);
+        }
         break;
       case 'ProgressBar':
         set({
@@ -537,10 +619,19 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     error: null,
     soundOn: false,
     voiceOn: false,
+    speechRate: 1,
 
     connect: (connection: ClassroomConnection) => {
       get().disconnect();
       const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
+      if (!token) {
+        set({
+          status: 'error',
+          error: 'Sign in to start a secure AI classroom.',
+          waitingForScene: false,
+        });
+        return;
+      }
       idCounter = 0;
       turnQueue = [];
       pendingErase = false;
@@ -591,19 +682,37 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     answerQuiz: (elementId, option) => {
       const el = get().board.find((b) => b.id === elementId);
       if (!el || el.kind !== 'quiz' || el.answered) return;
-      const correct = option.is_correct === true;
-      sfx(correct ? 'correct' : 'incorrect');
-      set((s) => ({
-        board: s.board.map((b) =>
-          b.id === elementId && b.kind === 'quiz'
-            ? { ...b, answered: option.label, wasCorrect: correct }
-            : b),
-        lyoState: correct ? 'celebrating' : 'thinking',
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && item.kind === 'quiz'
+            ? { ...item, answered: option.label }
+            : item),
+        lyoState: 'thinking',
+        waitingForScene: true,
       }));
-      pushTranscript('You', `${option.label} ${correct ? '✓' : '✗'}`);
+      pushTranscript('You', option.label);
       sendAction('submit_answer', el.quiz.component_id, {
         selected_option_id: option.id,
         selected_option_label: option.label,
+      });
+    },
+
+    answerTransfer: (elementId: string, response: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || el.kind !== 'transfer' || el.submitted) return;
+      const trimmed = response.trim();
+      if (!trimmed) return;
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && item.kind === 'transfer'
+            ? { ...item, response: trimmed, submitted: true }
+            : item),
+        waitingForScene: true,
+        lyoState: 'thinking',
+      }));
+      pushTranscript('You', `Application: ${trimmed}`);
+      sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
+        response: trimmed,
       });
     },
 
@@ -618,8 +727,22 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
     signal: (kind) => {
       set({ waitingForScene: true, lyoState: kind === 'confused' ? 'thinking' : 'curious' });
-      pushTranscript('You', kind === 'confused' ? '😕 (confused)' : '⚡ (too easy)');
-      sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal');
+      pushTranscript('You', kind === 'confused' ? 'Requested a small nudge' : 'Requested a harder case');
+      sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
+        kind === 'confused' ? { hint_level: 'nudge' } : undefined);
+    },
+
+    requestHint: (level) => {
+      const labels: Record<HintLevel, string> = {
+        nudge: 'small nudge',
+        principle: 'governing principle',
+        worked_step: 'first worked step',
+        full_example: 'full worked example',
+        prerequisite: 'prerequisite refresher',
+      };
+      set({ waitingForScene: true, lyoState: 'thinking' });
+      pushTranscript('You', `Requested: ${labels[level]}`);
+      sendAction('request_hint', 'web_hint', { hint_level: level });
     },
 
     continueLesson: () => {
@@ -639,6 +762,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       if (!next) stopSpeech();
       set({ voiceOn: next });
     },
+    setSpeechRate: (rate: number) => set({
+      speechRate: Math.max(0.75, Math.min(1.25, rate)),
+    }),
 
     viewBoard: (index: number) => set({ viewingBoard: index }),
   };
