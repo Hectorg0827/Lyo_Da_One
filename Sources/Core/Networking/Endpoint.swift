@@ -1122,7 +1122,6 @@ enum Endpoints {
             case .createEvent, .createEventRequest: return "/api/v1/community/events"
             case .registerForEvent(let id): return "/api/v1/community/events/\(id)/attend"
             case .unregisterFromEvent(let id): return "/api/v1/community/events/\(id)/attend"
-            case .getUserEvents: return "/api/v1/community/events/my"
 
             // Marketplace
             case .getListings: return "/api/v1/community/marketplace"
@@ -1155,8 +1154,7 @@ enum Endpoints {
             case .createStudyGroup, .createStudyGroupRequest, .joinStudyGroup,
                  .createEvent, .createEventRequest, .registerForEvent,
                  .createListing, .createQuestion, .answerQuestion,
-                 .createBooking, .submitReview,
-                 .createPrivateLesson, .createInstitution:
+                 .createBooking:
                 return .post
 
             case .leaveStudyGroup, .unregisterFromEvent:

@@ -8,10 +8,28 @@
 import Foundation
 import os
 
-struct FeedFilters {
+struct FeedFilters: Encodable {
     let postType: String?
     let tags: [String]?
     let sortBy: String
+
+    init(postType: String? = nil, tags: [String]? = nil, sortBy: String = "recent") {
+        self.postType = postType
+        self.tags = tags
+        self.sortBy = sortBy
+    }
+
+    func toQueryItems() -> [URLQueryItem] {
+        var items: [URLQueryItem] = []
+        if let postType = postType {
+            items.append(URLQueryItem(name: "post_type", value: postType))
+        }
+        if let tags = tags, !tags.isEmpty {
+            items.append(URLQueryItem(name: "tags", value: tags.joined(separator: ",")))
+        }
+        items.append(URLQueryItem(name: "sort_by", value: sortBy))
+        return items
+    }
 }
 
 /// Service for Community Feed API operations
