@@ -43,11 +43,12 @@
 	<string>1</string>
 	<key>GIDClientID</key>
 	<string>127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b.apps.googleusercontent.com</string>
-	<!-- Non-empty values override AppConfig defaults. Prefer Xcode env vars for temporary backend hosts. -->
+	<!-- Non-empty values override AppConfig defaults. Prefer Xcode env vars for temporary backend hosts.
+	     Left empty so the canonical AppConfig host (api.lyoai.app) applies. -->
 	<key>LyoAPIBaseURL</key>
-	<string>https://lyobackendjune-lyo.up.railway.app</string>
+	<string></string>
 	<key>LyoAPIWebSocketURL</key>
-	<string>wss://lyobackendjune-lyo.up.railway.app/ws</string>
+	<string></string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>google</string>
