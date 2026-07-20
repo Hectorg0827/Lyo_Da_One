@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Plus, Users, Lock, Globe, TrendingUp, Star, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Plus, Users, Lock, Globe, TrendingUp, Star, Loader2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { formatNumber } from '@/lib/utils';
 import Link from 'next/link';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
-import CreateCommunityItemModal from '@/components/community/CreateCommunityItemModal';
 
 interface Group {
   id: string;
@@ -109,6 +109,109 @@ function GroupCard({ group, onJoinToggle }: { group: Group; onJoinToggle: (group
           {joining ? 'Loading...' : joined ? '✓ Joined' : 'Join Group'}
         </button>
       </div>
+    </motion.div>
+  );
+}
+
+function CreateGroupModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    const trimmed = name.trim();
+    if (trimmed.length < 3) {
+      toast.error('Group name needs at least 3 characters');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.community.createGroup({
+        name: trimmed,
+        description: description.trim() || undefined,
+        privacy: isPrivate ? 'private' : 'public',
+      });
+      toast.success('Group created!');
+      onCreated();
+      onClose();
+    } catch {
+      toast.error("Couldn't create the group — are you signed in?");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 12 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 12 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl bg-[#111118] border border-white/10 p-6 space-y-4 shadow-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white">Create a group</h2>
+          <button onClick={onClose} className="p-1.5 text-white/50 hover:text-white rounded-lg" title="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-white/60">Name</label>
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={100}
+            placeholder="e.g. Spanish Conversation Club"
+            className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-white/60">Description <span className="text-white/30">(optional)</span></label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={2000}
+            rows={3}
+            placeholder="What's this group about?"
+            className="w-full resize-none rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsPrivate((v) => !v)}
+          className="flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          {isPrivate ? <Lock className="w-4 h-4 text-accent-gold" /> : <Globe className="w-4 h-4 text-accent-teal" />}
+          {isPrivate ? 'Private — invite only' : 'Public — anyone can join'}
+        </button>
+
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {submitting ? 'Creating…' : 'Create group'}
+        </button>
+      </motion.div>
     </motion.div>
   );
 }
@@ -269,17 +372,22 @@ export default function GroupsPage() {
       {allGroups.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
           <Users className="w-12 h-12 text-white/20 mb-4" />
-          <p className="text-white/40 text-sm">No groups found</p>
+          <p className="text-white/40 text-sm">No groups yet — be the first to start one</p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="mt-4 flex items-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2.5 text-sm font-medium text-white"
+          >
+            <Plus className="h-4 w-4" />
+            Create Group
+          </button>
         </div>
       )}
 
-      {showCreate && (
-        <CreateCommunityItemModal
-          initialType="group"
-          onClose={() => setShowCreate(false)}
-          onCreated={() => refetch()}
-        />
-      )}
+      <AnimatePresence>
+        {showCreate && (
+          <CreateGroupModal onClose={() => setShowCreate(false)} onCreated={refetch} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

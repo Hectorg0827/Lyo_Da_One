@@ -78,7 +78,7 @@ struct BattleCardView: View {
                             .frame(width: 60, height: 60)
                         
                         if let avatarURLString = battle.opponentAvatar, let avatarURL = URL(string: avatarURLString) {
-                            AsyncImage(url: avatarURL) { image in
+                            LyoImage(url: avatarURL) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()

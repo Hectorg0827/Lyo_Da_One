@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 // MARK: - API Response Types
 
@@ -99,14 +98,14 @@ final class LyoAPIClient {
     private func request<T: Codable>(
         method: String = "GET",
         path: String,
-        body: Data? = nil,
+        content: Data? = nil,
         requiresAuth: Bool = true
     ) async throws -> T {
         
         let httpMethod = HTTPMethod(rawValue: method.uppercased()) ?? .get
         
         // Wrap data if present to preserve structure while passing through NetworkClient
-        let encodableBody: Encodable? = body.map { DataWrapper(data: $0) }
+        let encodableBody: Encodable? = content.map { DataWrapper(data: $0) }
         
         let endpoint = DynamicEndpoint(
             urlString: path,
@@ -146,8 +145,11 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/courses", requiresAuth: false)
         } catch {
-            Log.net.warning("Failed to fetch courses: \(error)")
-
+            print("⚠️ Failed to fetch courses: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockCourses()
+            }
             throw error
         }
     }
@@ -160,21 +162,30 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/courses/\(courseId)/lessons", requiresAuth: false)
         } catch {
-            Log.net.warning("Failed to fetch lessons: \(error)")
-
+            print("⚠️ Failed to fetch lessons: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockLessons()
+            }
             throw error
         }
     }
     
     func fetchLiveLesson(courseId: String, lessonId: String) async throws -> LiveLesson {
         // Only use mock for demo IDs if mock fallbacks are allowed
-
+        if AppConfig.allowMockFallbacks && (["intro_1", "intro_2", "video_1"].contains(lessonId) || courseId.contains("demo") || courseId == "calculus_101") {
+            print("🚀 Loading mock for demo lesson: \(lessonId) (LYO_ALLOW_MOCKS=1)")
+            return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
+        }
         
         do {
             return try await request(path: "/api/v1/learning/courses/\(courseId)/lessons/\(lessonId)/live", requiresAuth: false)
         } catch {
-            Log.net.warning("Failed to fetch live lesson: \(error)")
-
+            print("⚠️ Failed to fetch live lesson: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockLiveLesson(courseId: courseId, lessonId: lessonId)
+            }
             throw error
         }
     }
@@ -183,8 +194,11 @@ final class LyoAPIClient {
         do {
             return try await request(path: "/api/v1/learning/enrollments")
         } catch {
-            Log.net.warning("Failed to fetch enrollments: \(error)")
-
+            print("⚠️ Failed to fetch enrollments: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockEnrollments()
+            }
             throw error
         }
     }
@@ -197,7 +211,7 @@ final class LyoAPIClient {
     
     func createCommunityEvent(_ requestBody: CreateEventRequest) async throws -> CommunityEvent {
         let body = try jsonEncoder.encode(requestBody)
-        return try await self.request(method: "POST", path: "/api/v1/community/events", body: body)
+        return try await self.request(method: "POST", path: "/api/v1/community/events", content: body)
     }
     
     func fetchCommunityEvent(id: String) async throws -> CommunityEvent {
@@ -208,9 +222,7 @@ final class LyoAPIClient {
     
     func fetchRecommendations() async throws -> [DiscoverItem] {
         let _: [String: AnyCodable] = try await request(path: "/api/v1/ai/recommendations")
-        // The backend returns a complex object, we'll need to map it if needed
-        // For now, if it fails, the caller handles empty list
-        return [] 
+        return []
     }
     
     // MARK: - Tutor API
@@ -218,7 +230,7 @@ final class LyoAPIClient {
     func createTutorSession(courseId: String, lessonId: String) async throws -> TutorSession {
         let payload = TutorSessionCreate(courseId: courseId, lessonId: lessonId)
         let body = try jsonEncoder.encode(payload)
-        return try await request(method: "POST", path: "/api/v1/tutor/sessions", body: body)
+        return try await request(method: "POST", path: "/api/v1/tutor/sessions", content: body)
     }
     
     func fetchTutorMessages(sessionId: String) async throws -> [TutorMessage] {
@@ -228,7 +240,7 @@ final class LyoAPIClient {
     func sendTutorMessage(sessionId: String, content: String) async throws -> TutorMessage {
         let payload = TutorMessageCreate(sessionId: sessionId, content: content)
         let body = try jsonEncoder.encode(payload)
-        return try await request(method: "POST", path: "/api/v1/tutor/messages", body: body)
+        return try await request(method: "POST", path: "/api/v1/tutor/messages", content: body)
     }
     
     func fetchStudyGroups() async throws -> [StudyGroup] {
@@ -241,10 +253,6 @@ final class LyoAPIClient {
     
     func fetchCommunityQuestions() async throws -> [CommunityQuestion] {
         return try await request(path: "/api/v1/community/questions")
-    }
-    
-    func discoverCommunityCourses(filters: String? = nil) async throws -> [APISharedCourse] {
-        return try await request(path: "/api/v1/community/courses/discover")
     }
     
     // MARK: - Gamification Endpoints (Real Backend)
@@ -297,7 +305,7 @@ final class LyoAPIClient {
             let media_urls: [String]?
         }
         let body = try jsonEncoder.encode(CreatePostRequest(content: content, media_urls: mediaURLs))
-        return try await request(method: "POST", path: "/api/v1/posts", body: body)
+        return try await request(method: "POST", path: "/api/v1/posts", content: body)
     }
     
     func likePost(id: String) async throws -> RepoPost {
@@ -349,7 +357,7 @@ final class LyoAPIClient {
     
     func createStackItem(_ item: CreateStackItemRequest) async throws -> StackItem {
         let body = try jsonEncoder.encode(item)
-        return try await request(method: "POST", path: "/api/v1/stack/items", body: body)
+        return try await request(method: "POST", path: "/api/v1/stack/items", content: body)
     }
     
     func deleteStackItem(id: String) async throws {
@@ -371,7 +379,7 @@ final class LyoAPIClient {
             let content: String
         }
         let body = try jsonEncoder.encode(SendMessageRequest(content: content))
-        return try await request(method: "POST", path: "/api/v1/messages/conversations/\(conversationId)/messages", body: body)
+        return try await request(method: "POST", path: "/api/v1/messages/conversations/\(conversationId)/messages", content: body)
     }
     
     // MARK: - Analytics (Real Backend)
@@ -383,7 +391,7 @@ final class LyoAPIClient {
         }
         let stringProps = properties?.compactMapValues { "\($0)" }
         let body = try jsonEncoder.encode(EventRequest(event_name: name, properties: stringProps))
-        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/analytics/events", body: body)
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/analytics/events", content: body)
     }
     
     func fetchActivitySummary() async throws -> ActivitySummary {
@@ -417,13 +425,16 @@ final class LyoAPIClient {
                 ))
             }
         } catch {
-            Log.net.error("Failed to fetch courses for discover: \(error)")
+            print("Failed to fetch courses for discover: \(error)")
         }
         
         // Fallback to mocks if we have no items (either request failed or returned empty)
         if discoverItems.isEmpty {
-
-            Log.net.warning("No discover items available from backend")
+            if AppConfig.allowMockFallbacks {
+                print("⚠️ Using mock discover items (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockDiscoverItems()
+            }
+            print("⚠️ No discover items available from backend")
             return []
         }
         
@@ -435,12 +446,12 @@ final class LyoAPIClient {
     func fetchCampusEvents(
         latitude: Double? = nil,
         longitude: Double? = nil,
-        radius: Double = 10.0, // Backend expects km
+        radius: Double = 1000,
         category: String? = nil
     ) async throws -> [CampusItem] {
         // Map community events to campus items
         do {
-            let events: [CommunityEvent] = try await request(path: "/api/v1/community/events?upcoming_only=true")
+            let events: [CommunityEvent] = try await request(path: "/api/v1/community/events")
             
             let items = events.map { event in
                 CampusItem(
@@ -456,55 +467,26 @@ final class LyoAPIClient {
                     startTime: event.startTime,
                     endTime: event.endTime ?? event.startTime.addingTimeInterval(3600),
                     roomId: String(event.id),
-                    hostName: event.effectiveHostName,
-                    hostAvatarURL: event.organizerProfile?.avatar,
+                    hostName: event.hostName ?? "Unknown",
+                    hostAvatarURL: nil,
                     attendeeCount: event.attendeeCount,
                     maxAttendees: event.maxAttendees,
-                    tags: [],
-                    userAttendanceStatus: event.userAttendanceStatus
+                    tags: []
                 )
             }
             
+            if items.isEmpty {
+                throw APIError.invalidResponse // Trigger fallback
+            }
             return items
             
         } catch {
-            Log.net.warning("Failed to fetch campus events: \(error)")
+            print("⚠️ Failed to fetch campus events: \(error)")
+            if AppConfig.allowMockFallbacks {
+                print("   Using mock data (LYO_ALLOW_MOCKS=1)")
+                return LyoAPIClient.mockCampusEvents()
+            }
             throw error
-        }
-    }
-    
-    /// NEW: Fetch beacons for the map (events, users, questions)
-    func fetchBeacons(
-        latitude: Double,
-        longitude: Double,
-        radiusKm: Double = 10.0
-    ) async throws -> [CampusItem] {
-        let path = "/api/v1/community/beacons?lat=\(latitude)&lng=\(longitude)&radius_km=\(radiusKm)"
-        // The backend returns a list of polymorphic beacons
-        // For now, we'll map them to CampusItem for compatibility
-        // In a real app, we'd have a specific Beacon type
-        let events: [CommunityEvent] = try await request(path: path)
-        return events.map { event in
-            CampusItem(
-                id: String(event.id),
-                type: mapEventType(event.eventType),
-                title: event.title,
-                subtitle: event.description,
-                locationName: event.location ?? "Nearby",
-                coordinate: CampusCoordinate(
-                    latitude: latitude,
-                    longitude: longitude
-                ),
-                startTime: event.startTime,
-                endTime: event.endTime ?? event.startTime.addingTimeInterval(3600),
-                roomId: String(event.id),
-                hostName: event.effectiveHostName,
-                hostAvatarURL: event.organizerProfile?.avatar,
-                attendeeCount: event.attendeeCount,
-                maxAttendees: event.maxAttendees,
-                tags: [],
-                userAttendanceStatus: event.userAttendanceStatus
-            )
         }
     }
     
@@ -516,24 +498,6 @@ final class LyoAPIClient {
         case "office_hours", "office": return .office
         default: return .event
         }
-    }
-    
-    // MARK: - Event RSVP (Attendance)
-    
-    func attendEvent(eventId: String) async throws -> EventAttendanceResponse {
-        return try await request(
-            method: "POST",
-            path: "/api/v1/community/events/\(eventId)/attend",
-            body: nil
-        )
-    }
-    
-    func cancelAttendance(eventId: String) async throws -> EmptyResponse {
-        return try await request(
-            method: "DELETE",
-            path: "/api/v1/community/events/\(eventId)/attend",
-            body: nil
-        )
     }
 }
 
@@ -628,7 +592,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 15,
                 maxAttendees: 25,
-                tags: ["AI", "Machine Learning", "Study Group"], userAttendanceStatus: nil
+                tags: ["AI", "Machine Learning", "Study Group"]
             ),
             CampusItem(
                 id: "campus_2",
@@ -644,7 +608,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 30,
                 maxAttendees: 50,
-                tags: ["Career", "Professional Development"], userAttendanceStatus: nil
+                tags: ["Career", "Professional Development"]
             ),
             CampusItem(
                 id: "campus_3",
@@ -660,7 +624,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 25,
                 maxAttendees: 40,
-                tags: ["iOS", "Swift", "Development"], userAttendanceStatus: nil
+                tags: ["iOS", "Swift", "Development"]
             ),
             CampusItem(
                 id: "campus_4",
@@ -676,7 +640,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 8,
                 maxAttendees: 12,
-                tags: ["Math", "Calculus", "Exam Prep"], userAttendanceStatus: nil
+                tags: ["Math", "Calculus", "Exam Prep"]
             ),
             CampusItem(
                 id: "campus_5",
@@ -692,7 +656,7 @@ extension LyoAPIClient {
                 hostAvatarURL: nil,
                 attendeeCount: 0,
                 maxAttendees: 5,
-                tags: ["Computer Science", "Office Hours"], userAttendanceStatus: nil
+                tags: ["Computer Science", "Office Hours"]
             )
         ]
     }
@@ -706,30 +670,25 @@ extension LyoAPIClient {
             subtitle: "Learn the fundamentals",
             blocks: [
                 LiveLessonBlock(
-                    id: "intro_\(lessonId)",
                     type: .paragraph,
                     title: "What is Programming?",
                     content: "Programming is the process of creating instructions for computers to follow. Think of it like writing a recipe - you're telling the computer exactly what steps to take."
                 ),
                 LiveLessonBlock(
-                    id: "img_\(lessonId)",
                     type: .image,
                     title: "The Programming Workflow",
                     content: "Here's how programmers typically work:",
                     imageURL: nil
                 ),
                 LiveLessonBlock(
-                    id: "para_\(lessonId)",
-                    type: .paragraph,
+                    type: .code,
                     title: "Your First Code",
                     content: "Let's look at a simple example:\n\n```python\nprint(\"Hello, World!\")\n```\n\nThis code tells the computer to display the text 'Hello, World!' on the screen."
                 ),
                 LiveLessonBlock(
-                    id: "quiz_\(lessonId)",
                     type: .quizMcq,
                     title: "Quick Check",
                     content: "What does the print() function do?",
-                    subtitle: "Quiz",
                     options: [
                         "Sends a document to a printer",
                         "Displays text on the screen",
@@ -740,7 +699,6 @@ extension LyoAPIClient {
                     explanation: "The print() function displays text or data on the screen. It's one of the most basic and commonly used functions in programming!"
                 ),
                 LiveLessonBlock(
-                    id: "summary_\(lessonId)",
                     type: .summary,
                     title: "Key Takeaways",
                     content: "In this lesson, you learned:\n\n• Programming is writing instructions for computers\n• Code follows a specific syntax (rules)\n• The print() function displays output\n\nGreat job completing your first lesson!"
@@ -859,64 +817,73 @@ extension LyoAPIClient {
         ]
     }
     
-    // MARK: - Stories API
-
-    func fetchStories() async throws -> StoriesResponse {
-        // For development, return mock data
-
-        return try await request(path: "/api/v1/stories")
-    }
-
+    // MARK: - Social API Methods
+    // Note: These methods are stubbed until backend social endpoints are available
+    
+    // Stories
     func createStory(_ request: CreateStoryRequest) async throws -> Story {
         let body = try jsonEncoder.encode(request)
-
-        // For development, return mock story
-
-
-        return try await self.request(method: "POST", path: "/api/v1/stories", body: body)
+        return try await self.request(method: "POST", path: "/api/v1/stories", content: body)
     }
-
-    // MARK: - Discovery API (Enhanced)
-
-    func fetchMyDiscoveries() async throws -> DiscoveriesResponse {
-        return try await request(path: "/api/v1/clips")
+    
+    func fetchStories() async throws -> StoriesResponse {
+        return try await self.request(path: "/api/v1/stories")
     }
-
+    
+    func deleteStory(storyId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/stories/\(storyId)")
+    }
+    
+    func markStorySeen(storyId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/stories/\(storyId)/seen")
+    }
+    
+    // Discoveries
     func createDiscovery(_ request: CreateDiscoveryRequest) async throws -> Discovery {
         let body = try jsonEncoder.encode(request)
-        return try await self.request(method: "POST", path: "/api/v1/clips", body: body)
+        let response: DiscoveryResponse = try await self.request(method: "POST", path: "/api/v1/clips", content: body)
+        if response.success, let clip = response.clip {
+            return clip
+        } else {
+            throw APIError.serverError(500, response.message ?? response.error ?? "Failed to create clip")
+        }
     }
-
-    func fetchSavedDiscoveries() async throws -> DiscoveriesResponse {
-        return try await request(path: "/api/v1/clips/saved")
+    
+    func fetchMyDiscoveries() async throws -> [Discovery] {
+        let response: DiscoveriesResponse = try await self.request(path: "/api/v1/clips")
+        return response.discoveries
     }
-
+    
+    func fetchSavedDiscoveries() async throws -> [Discovery] {
+        let response: DiscoveriesResponse = try await self.request(path: "/api/v1/clips/saved")
+        return response.discoveries
+    }
+    
     func saveDiscovery(discoveryId: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/discoveries/\(discoveryId)/save")
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(discoveryId)/save")
     }
-
+    
     func unsaveDiscovery(discoveryId: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/discoveries/\(discoveryId)/save")
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(discoveryId)/save")
     }
-
+    
+    func likeDiscovery(discoveryId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(discoveryId)/like")
+    }
+    
+    func unlikeDiscovery(discoveryId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(discoveryId)/like")
+    }
+    
     func fetchDiscoveriesFeed(limit: Int = 20, offset: Int = 0) async throws -> DiscoveriesResponse {
-        // Backend path is /clips/discover but DiscoveriesResponse expects a wrapper
-        // The backend ClipsListResponse has {'success': bool, 'clips': [], 'total': int, ...}
-        // iOS DiscoveriesResponse has {'discoveries': [], 'total': int, 'has_more': bool}
-        // CodingKeys for DiscoveriesResponse handles 'items' and 'posts' but NOT 'clips'
-        // I'll update SocialModels.swift to handle 'clips' key too.
-        return try await self.request(path: "/api/v1/clips/discover?per_page=\(limit)&page=\(offset/limit + 1)")
+        let page = (offset / limit) + 1
+        return try await self.request(path: "/api/v1/clips/discover?page=\(page)&per_page=\(limit)")
     }
-
-    // MARK: - Posts API (Enhanced)
-
+    
+    // Posts
     func createPost(_ request: CreatePostRequest) async throws -> Post {
         let body = try jsonEncoder.encode(request)
-
-        // For development, return mock post
-
-
-        return try await self.request(method: "POST", path: "/api/v1/posts", body: body)
+        return try await self.request(method: "POST", path: "/api/v1/posts", content: body)
     }
 
     func fetchPostsFeed(limit: Int = 20, offset: Int = 0) async throws -> PostsResponse {
@@ -933,129 +900,5 @@ extension LyoAPIClient {
 
     func unlikePost(postId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(postId)/like")
-    }
-
-    func deleteStory(storyId: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/stories/\(storyId)")
-    }
-
-    func markStorySeen(storyId: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/stories/\(storyId)/seen")
-    }
-
-    // MARK: - Mock Data for Development
-
-    private func mockStories() -> [Story] {
-        let sampleSlide = StorySlide(
-            id: UUID().uuidString,
-            type: .image,
-            mediaURL: "https://via.placeholder.com/400x600",
-            text: "Sample story content",
-            duration: 5.0
-        )
-
-        return [
-            Story(
-                id: "story_1",
-                userId: "user_1",
-                userName: "Alice",
-                userAvatar: "https://via.placeholder.com/100",
-                slides: [sampleSlide],
-                isLive: false,
-                createdAt: Date().addingTimeInterval(-3600),
-                expiresAt: Date().addingTimeInterval(20 * 3600),
-                isSeen: false
-            )
-        ]
-    }
-
-    private func mockMyStory() -> Story? {
-        let slide = StorySlide(
-            id: UUID().uuidString,
-            type: .text,
-            mediaURL: nil,
-            text: "My learning progress today",
-            duration: 3.0
-        )
-
-        return Story(
-            id: "my_story",
-            userId: "current_user",
-            userName: "You",
-            userAvatar: nil,
-            slides: [slide],
-            isLive: false,
-            createdAt: Date().addingTimeInterval(-1800),
-            expiresAt: Date().addingTimeInterval(22 * 3600),
-            isSeen: false
-        )
-    }
-
-    private func mockDiscoveries() -> [Discovery] {
-        return [
-            Discovery(
-                id: 1,
-                userId: 0,
-                userName: "You",
-                title: "Learning Swift UI",
-                description: "My journey with SwiftUI development",
-                thumbnailURL: "https://via.placeholder.com/300x200",
-                videoURL: "https://sample-videos.com/zip/10/mp4/SampleVideo_640x360_1mb.mp4",
-                likes: 12,
-                views: 45,
-                isLiked: false,
-                isSaved: false,
-                createdAt: Date().addingTimeInterval(-7200)
-            )
-        ]
-    }
-}
-
-// NOTE: Lyo2ChatService and Lyo2StreamingManager live in Lyo2ChatService.swift
-// Do NOT duplicate them here.
-
-// MARK: - Social Extensions
-extension LyoAPIClient {
-    
-    func fetchPost(id: String) async throws -> RepoPost {
-        return try await request(path: "/api/v1/posts/\(id)")
-    }
-    
-    func unlikePost(id: String) async throws {
-        let _: EmptyAPIResponse = try await request(method: "DELETE", path: "/api/v1/posts/\(id)/reactions")
-    }
-    
-    func createComment(postId: String, content: String) async throws -> Comment {
-        // Backend expects post_id as Int if possible, but let's try strict Int conversion
-        // If IDs are UUIDs (strings), this Int conversion will fail.
-        // Identify if backend uses Int or String for IDs.
-        // routes.py says post_id: int.
-        // RepoPost says id: String.
-        // This implies likely Int IDs cast to String in RepoPost.
-        
-        guard let postIdInt = Int(postId) else {
-             // If we can't convert, maybe try sending as string if backend accepts it?
-             // But routes.py is explicit.
-             // For now, fail if not Int.
-            throw APIError.invalidURL 
-        }
-        
-        struct CreateCommentRequest: Codable {
-            let post_id: Int
-            let content: String
-        }
-        
-        // Use JSONEncoder from self? No, LyoAPIClient has private jsonEncoder property?
-        // It is private. createComment is in extension.
-        // I can instantiate a new one or make the property internal.
-        // Or duplicate the logic.
-        let encoder = JSONEncoder()
-        
-        let body = try encoder.encode(CreateCommentRequest(post_id: postIdInt, content: content))
-        return try await request(method: "POST", path: "/api/v1/comments", body: body)
-    }
-    
-    func fetchComments(postId: String) async throws -> [Comment] {
-        return try await self.request(path: "/api/v1/comments?post_id=\(postId)")
     }
 }

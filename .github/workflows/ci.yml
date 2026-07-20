@@ -138,6 +138,10 @@ jobs:
         working-directory: web
         run: npm ci --no-audit --no-fund
 
+      - name: Classroom contract tests
+        working-directory: web
+        run: npm run test:classroom
+
       - name: Typecheck
         working-directory: web
         run: npx tsc --noEmit
@@ -163,6 +167,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Normalize GHCR image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/web" >> "$GITHUB_OUTPUT"
       - name: Build and publish immutable web image
         uses: docker/build-push-action@v6
         with:
@@ -172,7 +180,7 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.lyoai.app
           tags: |
-            ghcr.io/${{ github.repository }}/web:sha-${{ github.sha }}
-            ghcr.io/${{ github.repository }}/web:latest
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

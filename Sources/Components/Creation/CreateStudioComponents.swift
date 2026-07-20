@@ -324,7 +324,7 @@ struct AISuggestionsPanel: View {
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 1), spacing: 12) {
                         ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
-                            SuggestionCard(
+                            CreateStudioSuggestionCard(
                                 suggestion: suggestion,
                                 delay: Double(index) * 0.1
                             ) {
@@ -357,7 +357,7 @@ struct AISuggestionsPanel: View {
     }
 }
 
-struct SuggestionCard: View {
+struct CreateStudioSuggestionCard: View {
     let suggestion: String
     let delay: Double
     let action: () -> Void

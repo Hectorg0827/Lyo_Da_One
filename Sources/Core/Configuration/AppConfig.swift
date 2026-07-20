@@ -22,20 +22,38 @@ struct AppConfig {
     }
 
     // MARK: - API Configuration
-    static var baseURL: String {
+    ///
+    /// Resolution order:
+    /// 1. `LYO_API_BASE_URL` environment variable (Xcode scheme; useful when the Railway public URL changes)
+    /// 2. `LyoAPIBaseURL` in Info.plist when non-empty
+    /// 3. Canonical production domain below
+    static var baseURL: String { resolvedHTTPSBaseURL }
+
+    private static var resolvedHTTPSBaseURL: String {
+        if let useLocalhost = ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"],
+           useLocalhost == "1" || useLocalhost.lowercased() == "true" {
+            return "http://localhost:8000"
+        }
+        if let env = ProcessInfo.processInfo.environment["LYO_API_BASE_URL"] {
+            let trimmed = env.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return normalizedURLString(trimmed) }
+        }
+        if let plist = Bundle.main.object(forInfoDictionaryKey: "LyoAPIBaseURL") as? String {
+            let trimmed = plist.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return normalizedURLString(trimmed) }
+        }
         switch Environment.current {
-        case .development:
+        case .development, .staging, .production:
             // All three clients use the same canonical backend by default.
-            // Set LYO_USE_LOCALHOST=1 in Xcode scheme env vars to use local backend
-            if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
-                return "http://localhost:8000"
-            }
-            return "https://api.lyoai.app"
-        case .staging:
-            return "https://api.lyoai.app"
-        case .production:
             return "https://api.lyoai.app"
         }
+    }
+
+    /// Trims whitespace and strips trailing slashes so `URLComponents` concatenation stays valid.
+    private static func normalizedURLString(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        while s.hasSuffix("/") { s.removeLast() }
+        return s
     }
 
     // MARK: - Multi-Tenant API Key
@@ -85,17 +103,27 @@ struct AppConfig {
     }
 
     static var wsURL: String {
-        switch Environment.current {
-        case .development:
-            if ProcessInfo.processInfo.environment["LYO_USE_LOCALHOST"] == "1" {
-                return "ws://localhost:8000/ws"
-            }
-            return "wss://api.lyoai.app/ws"
-        case .staging:
-            return "wss://api.lyoai.app/ws"
-        case .production:
-            return "wss://api.lyoai.app/ws"
+        if let env = ProcessInfo.processInfo.environment["LYO_WS_URL"] {
+            let trimmed = env.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return normalizedURLString(trimmed) }
         }
+        if let plist = Bundle.main.object(forInfoDictionaryKey: "LyoAPIWebSocketURL") as? String {
+            let trimmed = plist.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return normalizedURLString(trimmed) }
+        }
+        return webSocketDerived(fromHTTPSBase: resolvedHTTPSBaseURL, path: "/ws")
+    }
+
+    private static func webSocketDerived(fromHTTPSBase httpBase: String, path: String) -> String {
+        let base = normalizedURLString(httpBase)
+        let suffix = path.hasPrefix("/") ? path : "/" + path
+        if base.hasPrefix("https://") {
+            return "wss://" + String(base.dropFirst("https://".count)) + suffix
+        }
+        if base.hasPrefix("http://") {
+            return "ws://" + String(base.dropFirst("http://".count)) + suffix
+        }
+        return base + suffix
     }
 
     static var sseURL: String {

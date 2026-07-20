@@ -83,6 +83,10 @@ final class DataService: ObservableObject {
         } catch {
             Log.data.error("Failed to fetch discover feed: \(error.localizedDescription)")
             lastError = error.localizedDescription
+            if AppConfig.allowMockFallbacks {
+                Log.data.warning("Using mock discover items fallback (LYO_ALLOW_MOCKS=1)")
+                return mockDiscoverItems()
+            }
             return [] 
         }
     }

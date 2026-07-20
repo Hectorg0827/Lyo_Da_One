@@ -924,12 +924,10 @@ final class UnifiedChatService: ObservableObject {
             Log.ai.info("🎨 v2 lyo_command event received")
             if let command = response.command {
                 if command.action == "open_classroom",
-                    let payload = command.payload,
-                    let payloadData = try? JSONSerialization.data(withJSONObject: payload),
-                    let courseDict = try? JSONSerialization.jsonObject(with: payloadData)
-                        as? [String: Any],
-                    let coursePayload = tryDecodeOpenClassroomDict(courseDict)
-                {
+                   let payload = command.payload,
+                   let payloadData = try? JSONSerialization.data(withJSONObject: payload.mapValues { $0.value }),
+                   let courseDict = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+                   let coursePayload = tryDecodeOpenClassroomDict(courseDict) {
                     let proposalContent =
                         "Here's your course proposal! Tap **Start Class** to begin. 🎓"
                     if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -966,6 +964,41 @@ final class UnifiedChatService: ObservableObject {
                     self.suggestions = newSuggestions
                     Log.ai.info("Set \(newSuggestions.count) v2 suggestion chips")
                 }
+            }
+
+        case .smartBlocks(let blocks):
+            Log.ai.info("🧱 SmartBlocks event: \(blocks.count) blocks")
+            if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                var msg = messages[idx]
+                msg.smartBlocks = blocks
+                
+                // If still showing .processing skeleton, replace with .text so .done
+                // doesn't treat this message as orphaned and overwrite it with the fallback.
+                if let types = msg.contentTypes,
+                   types.contains(where: { if case .processing = $0 { return true } else { return false } }) {
+                    msg.contentTypes = [.text]
+                    // Extract text from SmartBlocks if no answer event set it
+                    if msg.content.isEmpty {
+                        let textContent = blocks
+                            .compactMap { block -> String? in
+                                if case .text(let payload) = block.content { return payload.text }
+                                return nil
+                            }
+                            .joined(separator: "\n\n")
+                        msg = LyoMessage(
+                            id: msg.id,
+                            sessionId: msg.sessionId,
+                            content: textContent,
+                            isFromUser: false,
+                            timestamp: msg.timestamp,
+                            contentTypes: [.text],
+                            shouldAnimate: true
+                        )
+                        msg.smartBlocks = blocks
+                    }
+                }
+                
+                messages[idx] = msg
             }
 
         case .sceneStart(let scene):
@@ -1015,11 +1048,18 @@ final class UnifiedChatService: ObservableObject {
         switch block.blockType {
         case .quiz:
             if let question = block.content["question"]?.value as? String,
-                let options = block.content["options"]?.value as? [String],
                 let correctIndex = block.content["correct_index"]?.value as? Int
             {
+                // Backend may send options as [String] or [{"id":...,"text":...}]
+                var optionStrings: [String] = []
+                if let plainOptions = block.content["options"]?.value as? [String] {
+                    optionStrings = plainOptions
+                } else if let dictOptions = block.content["options"]?.value as? [[String: Any]] {
+                    optionStrings = dictOptions.compactMap { $0["text"] as? String }
+                }
+                guard !optionStrings.isEmpty else { return nil }
                 return .quiz(
-                    question: question, options: options, correctIndex: correctIndex,
+                    question: question, options: optionStrings, correctIndex: correctIndex,
                     explanation: block.content["explanation"]?.value as? String)
             }
             return nil

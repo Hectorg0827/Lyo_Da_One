@@ -39,16 +39,21 @@ struct User: Identifiable, Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
-        id = try container.decode(Int.self, forKey: .id)
-        email = try container.decode(String.self, forKey: .email)
+        if let intId = try? container.decode(Int.self, forKey: .id) {
+            id = intId
+        } else if let stringId = try? container.decode(String.self, forKey: .id), let intId = Int(stringId) {
+            id = intId
+        } else {
+            id = 0
+        }
+        
+        email = try container.decodeIfPresent(String.self, forKey: .email) ?? ""
         avatarURL = try container.decodeIfPresent(String.self, forKey: .avatarURL)
         
         // Handle Date
         if let date = try? container.decode(Date.self, forKey: .createdAt) {
             createdAt = date
-        } else {
-            // Fallback for fractional seconds
-            let dateString = try container.decode(String.self, forKey: .createdAt)
+        } else if let dateString = try? container.decode(String.self, forKey: .createdAt) {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             if let date = formatter.date(from: dateString) {
@@ -56,6 +61,8 @@ struct User: Identifiable, Codable {
             } else {
                 createdAt = Date()
             }
+        } else {
+            createdAt = Date()
         }
         
         username = try container.decodeIfPresent(String.self, forKey: .username)

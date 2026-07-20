@@ -175,8 +175,7 @@ class MockAIRepository: AIRepository {
                 )
             ],
             difficulty: difficulty.rawValue,
-            estimatedTime: 5,
-            timeLimit: nil
+            estimatedTime: 5
         )
     }
 

@@ -2,12 +2,16 @@ import type { User } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 
+// The backend stores this as session_id, a VARCHAR(64); older builds wrote
+// 40-char "web-<uuid>" ids to localStorage, so clamp on read as well.
+const MAX_DEVICE_ID_LENGTH = 36;
+
 function getOrCreateChatDeviceId(): string {
   if (typeof window === 'undefined') return 'web-server';
   const key = 'lyo_chat_device_id';
   const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-  const id = `web-${crypto.randomUUID()}`;
+  if (existing) return existing.slice(0, MAX_DEVICE_ID_LENGTH);
+  const id = `web-${crypto.randomUUID()}`.slice(0, MAX_DEVICE_ID_LENGTH);
   window.localStorage.setItem(key, id);
   return id;
 }

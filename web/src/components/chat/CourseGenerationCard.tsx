@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import type { Course } from '@/types';
+import { useChatStore } from '@/stores/chat-store';
 
 interface CourseGenerationCardProps {
   course?: Partial<Course>;
@@ -48,6 +50,32 @@ export default function CourseGenerationCard({
   isGenerating = false,
   generationProgress = 0,
 }: CourseGenerationCardProps) {
+  const router = useRouter();
+  const { sendMessage } = useChatStore();
+
+  // Start: enter the live adaptive classroom on this topic (mirrors iOS,
+  // which opens the Living Classroom for course cards).
+  const handleStart = () => {
+    const topic = course?.title || 'General Learning';
+    const objective = (
+      course?.modules?.[0]?.description
+      || course?.description
+      || `Understand and apply ${topic}`
+    ).slice(0, 240);
+    const query = new URLSearchParams({ topic, objective });
+    if (course?.id) query.set('courseId', course.id);
+    if (course?.difficulty) query.set('difficulty', course.difficulty);
+    router.push(`/classroom?${query.toString()}`);
+  };
+
+  // Customize: continue the conversation as a refine request.
+  const handleCustomize = () => {
+    const title = course?.title ?? 'this course';
+    void sendMessage(
+      `I'd like to customize "${title}" — can we adjust the difficulty, length, or focus areas?`
+    );
+  };
+
   const [modulesExpanded, setModulesExpanded] = useState(false);
   const currentStep = getStepIndex(generationProgress);
 
@@ -186,11 +214,15 @@ export default function CourseGenerationCard({
         {/* Actions */}
         {!isGenerating && (
           <div className="flex gap-2 pt-1">
-            <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.98] transition-all duration-200">
+            <button
+              onClick={handleStart}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.98] transition-all duration-200">
               <Play className="w-4 h-4" />
               Start Learning
             </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white active:scale-[0.98] transition-all duration-200">
+            <button
+              onClick={handleCustomize}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white active:scale-[0.98] transition-all duration-200">
               <Settings2 className="w-4 h-4" />
               Customize
             </button>

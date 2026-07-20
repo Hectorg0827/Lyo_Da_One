@@ -60,28 +60,12 @@ struct StackItem: Identifiable, Codable {
 struct CreateStackItemRequest: Codable {
     let type: StackItemType
     let refId: String
-    let title: String?
     let tags: [String]?
     let contextData: [String: String]? // Simplified for creation
-
-    init(
-        type: StackItemType,
-        refId: String,
-        title: String? = nil,
-        tags: [String]? = nil,
-        contextData: [String: String]? = nil
-    ) {
-        self.type = type
-        self.refId = refId
-        self.title = title
-        self.tags = tags
-        self.contextData = contextData
-    }
     
     enum CodingKeys: String, CodingKey {
         case type
         case refId = "ref_id"
-        case title
         case tags
         case contextData = "context_data"
     }

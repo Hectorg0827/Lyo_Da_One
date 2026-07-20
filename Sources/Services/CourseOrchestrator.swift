@@ -78,11 +78,19 @@ final class CourseOrchestrator: ObservableObject {
                     totalNodes: generatedCourse.modules.reduce(0) { $0 + $1.lessons.count },
                     createdAt: Date()
                 )
-                
+
+                // Hydrate the UI source-of-truth with real AI content (replaces the stub set in saveToCache).
+                // LiveClassroomViewModel observes CourseGenerationService.shared.generatedCourse,
+                // so without this swap the classroom keeps rendering the welcome/overview/quiz placeholders.
+                let realGenerated = A2ACourseService.shared.convertToLegacyFormat(generatedCourse)
+                await MainActor.run {
+                    CourseGenerationService.shared.generatedCourse = realGenerated
+                }
+
                 // Hot-swap the content
                 NotificationCenter.default.post(name: .courseDataUpdated, object: nil, userInfo: ["id": realCourse.id])
-                
-                Log.classroom.info("Orchestrator: Real A2A content ready for \(realCourse.title)")
+
+                Log.classroom.info("Orchestrator: Real A2A content ready for \(realCourse.title) — \(realGenerated.modules.count) modules hydrated")
                 
             } catch {
                 Log.classroom.warning("Orchestrator: A2A generation failed: \(error.localizedDescription), falling back to template content.")
@@ -186,14 +194,30 @@ final class CourseOrchestrator: ObservableObject {
             summary: "Check what you've learned"
         )
 
-        let stubGenerated = GeneratedCourse(
-            id: course.id,
-            jobId: nil,
+        let progressiveModules = [welcomeModule, coreModule, assessmentModule]
+        let stubGenerated = GeneratedCourseResponse(
+            courseId: course.id,
             title: course.title,
-            objective: course.description,
-            syllabus: ["Welcome & Orientation", "Core Concepts", "Assessment"],
-            modules: [welcomeModule, coreModule, assessmentModule],
-            schemaVersion: nil
+            description: course.description,
+            modules: progressiveModules.enumerated().map { moduleIndex, module in
+                GenerationCourseModule(
+                    id: module.id,
+                    title: module.title,
+                    description: module.summary ?? module.title,
+                    lessons: (module.lessons ?? []).enumerated().map { lessonIndex, lesson in
+                        GenerationCourseLesson(
+                            id: lesson.id,
+                            title: lesson.title ?? "Lesson \(lessonIndex + 1)",
+                            content: lesson.content ?? lesson.summary ?? "",
+                            durationMinutes: 10,
+                            order: lessonIndex
+                        )
+                    },
+                    order: moduleIndex
+                )
+            },
+            estimatedDuration: 30,
+            difficulty: "beginner"
         )
 
         Task { @MainActor in

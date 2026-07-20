@@ -123,9 +123,9 @@ class AICommandHandler: ObservableObject {
         // Trigger local navigation flag
         self.shouldOpenClassroom = true
 
-        // Route proposal-based starts through the progressive generation flow.
-        // The live classroom will kick off generation using this sentinel ID.
-        let resolvedCourseId = "GENERATE:\(course.topic)"
+        // For the new Living Classroom architecture, use the course UUID from the backend
+        // as the WebSocket session_id. Fall back to topic only if no UUID was provided.
+        let resolvedCourseId = course.id ?? course.topic
         
         // 1. Dismiss the Lyo overlay first so fullScreenCover can appear
         NotificationCenter.default.post(
@@ -141,7 +141,7 @@ class AICommandHandler: ObservableObject {
                 userInfo: [
                     "courseId": resolvedCourseId,
                     "topic": course.topic,
-                    "shouldGenerateCourse": true,
+                    "shouldGenerateCourse": (course.id == nil),
                     "lessonId": "intro_1",
                     "courseTitle": course.title,
                     "lessonTitle": "Introduction"
@@ -242,7 +242,6 @@ class AICommandHandler: ObservableObject {
             let request = CreateStackItemRequest(
                 type: itemType,
                 refId: item.title, // Using title as refId for now
-                title: item.title,
                 tags: course.map { [$0.topic, $0.level] } ?? [],
                 contextData: contextData
             )

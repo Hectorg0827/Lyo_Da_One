@@ -10,27 +10,28 @@ public class PersonalizationService {
         lessonId: String? = nil,
         currentSkill: String? = nil
     ) async throws -> NextActionResponse {
-        let learnerId = await TokenManager.shared.getUserId() ?? "unknown"
-        
-        let requestBody: [String: Any] = [
-            "learner_id": learnerId,
-            "lesson_id": lessonId as Any,
-            "current_skill": currentSkill as Any
-        ]
-        
-        // Filter nil values
-        let cleanBody = requestBody.compactMapValues { $0 }
-        
-        // Use AnyEncodable wrapper for the body
-        let encodableBody = cleanBody.mapValues { AnyEncodable(value: $0) }
-        
-        let endpoint = Endpoints.Personalization.nextAction(body: encodableBody)
-        
+        // Backend: GET /api/v1/personalization/next?lesson_id=&current_skill=
+        // (learner_id is derived server-side from the auth token)
+        var components = URLComponents(string: "/api/v1/personalization/next")!
+        var queryItems: [URLQueryItem] = []
+        if let lessonId { queryItems.append(URLQueryItem(name: "lesson_id", value: lessonId)) }
+        if let currentSkill { queryItems.append(URLQueryItem(name: "current_skill", value: currentSkill)) }
+        if !queryItems.isEmpty { components.queryItems = queryItems }
+
+        let endpoint = DynamicEndpoint(
+            urlString: components.string ?? "/api/v1/personalization/next",
+            method: .get
+        )
+
         return try await NetworkClient.shared.request(endpoint)
     }
     
     public func updateState(update: PersonalizationStateUpdate) async throws {
-        let endpoint = Endpoints.Personalization.updateState(body: update)
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/state",
+            method: .patch,
+            body: update
+        )
         
         do {
             let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
@@ -39,15 +40,23 @@ public class PersonalizationService {
         }
     }
     
-    public func traceKnowledge(trace: KnowledgeTraceRequest) async throws {
-        let endpoint = Endpoints.Personalization.traceKnowledge(body: trace)
-        
-        let _: EmptyResponse = try await NetworkClient.shared.request(endpoint)
+    @discardableResult
+    public func traceKnowledge(trace: KnowledgeTraceRequest) async throws -> KnowledgeTraceResult {
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/trace",
+            method: .post,
+            body: trace
+        )
+
+        return try await NetworkClient.shared.request(endpoint)
     }
-    
+
     public func getMasteryProfile() async throws -> MasteryProfile {
-        let endpoint = Endpoints.Personalization.masteryProfile
-        
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/mastery",
+            method: .get
+        )
+
         return try await NetworkClient.shared.request(endpoint)
     }
 }

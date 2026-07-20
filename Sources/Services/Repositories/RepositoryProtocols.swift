@@ -148,37 +148,6 @@ struct ChatResponse: Codable {
     let responseMode: ResponseMode?
     let quickExplainer: QuickExplainerData?
     let courseProposal: CourseProposalData?
-    let conversationHistory: [ChatMessageDTO]?
-    
-    // New fields for Open Classroom Event
-    let type: String?
-    let openClassroomPayload: OpenClassroomPayload?
-    
-    init(
-        response: String,
-        provider: String? = nil,
-        cost: Double? = nil,
-        tokens: Int? = nil,
-        cached: Bool? = nil,
-        responseMode: ResponseMode? = nil,
-        quickExplainer: QuickExplainerData? = nil,
-        courseProposal: CourseProposalData? = nil,
-        conversationHistory: [ChatMessageDTO]? = nil,
-        type: String? = nil,
-        openClassroomPayload: OpenClassroomPayload? = nil
-    ) {
-        self.response = response
-        self.provider = provider
-        self.cost = cost
-        self.tokens = tokens
-        self.cached = cached
-        self.responseMode = responseMode
-        self.quickExplainer = quickExplainer
-        self.courseProposal = courseProposal
-        self.conversationHistory = conversationHistory
-        self.type = type
-        self.openClassroomPayload = openClassroomPayload
-    }
     
     // Handle both "response" and "content" from different backend endpoints
     enum CodingKeys: String, CodingKey {
@@ -200,12 +169,6 @@ struct ChatResponse: Codable {
         case quickExplainerCamel = "quickExplainer"
         case courseProposalCamel = "courseProposal"
         case cacheHitCamel = "cacheHit"
-        case conversationHistory = "conversation_history"
-        case conversationHistoryCamel = "conversationHistory"
-        
-        // Open Classroom
-        case type
-        case payload
     }
     
     init(from decoder: Decoder) throws {
@@ -256,17 +219,11 @@ struct ChatResponse: Codable {
 
         // Mentor fields can be snake_case or camelCase
         responseMode = (try? container.decode(ResponseMode.self, forKey: .responseMode))
-             ?? (try? container.decode(ResponseMode.self, forKey: .responseModeCamel))
+            ?? (try? container.decode(ResponseMode.self, forKey: .responseModeCamel))
         quickExplainer = (try? container.decode(QuickExplainerData.self, forKey: .quickExplainer))
-             ?? (try? container.decode(QuickExplainerData.self, forKey: .quickExplainerCamel))
+            ?? (try? container.decode(QuickExplainerData.self, forKey: .quickExplainerCamel))
         courseProposal = (try? container.decode(CourseProposalData.self, forKey: .courseProposal))
-             ?? (try? container.decode(CourseProposalData.self, forKey: .courseProposalCamel))
-        conversationHistory = (try? container.decode([ChatMessageDTO].self, forKey: .conversationHistory))
-             ?? (try? container.decode([ChatMessageDTO].self, forKey: .conversationHistoryCamel))
-             
-        // Open Classroom fields
-        type = try? container.decode(String.self, forKey: .type)
-        openClassroomPayload = try? container.decode(OpenClassroomPayload.self, forKey: .payload)
+            ?? (try? container.decode(CourseProposalData.self, forKey: .courseProposalCamel))
     }
     
     func encode(to encoder: Encoder) throws {
@@ -279,17 +236,18 @@ struct ChatResponse: Codable {
         try container.encodeIfPresent(responseMode, forKey: .responseMode)
         try container.encodeIfPresent(quickExplainer, forKey: .quickExplainer)
         try container.encodeIfPresent(courseProposal, forKey: .courseProposal)
-        try container.encodeIfPresent(conversationHistory, forKey: .conversationHistory)
-        try container.encodeIfPresent(type, forKey: .type)
-        try container.encodeIfPresent(openClassroomPayload, forKey: .payload)
     }
     
-
-}
-
-struct ChatMessageDTO: Codable {
-    let role: String
-    let content: String
+    init(response: String, provider: String?, cost: Double?, tokens: Int?, cached: Bool?, responseMode: ResponseMode? = nil, quickExplainer: QuickExplainerData? = nil, courseProposal: CourseProposalData? = nil) {
+        self.response = response
+        self.provider = provider
+        self.cost = cost
+        self.tokens = tokens
+        self.cached = cached
+        self.responseMode = responseMode
+        self.quickExplainer = quickExplainer
+        self.courseProposal = courseProposal
+    }
 }
 
 struct ChatContextDTO: Codable {
@@ -320,7 +278,6 @@ struct Quiz: Codable {
     let questions: [QuizQuestion]
     let difficulty: String
     let estimatedTime: Int?
-    let timeLimit: TimeInterval?
 
     struct QuizQuestion: Codable {
         let id: String
@@ -330,6 +287,10 @@ struct Quiz: Codable {
         let explanation: String?
         let type: String // mcq, true_false, short_answer, etc.
     }
+}
+
+extension Quiz {
+    var timeLimit: TimeInterval? { estimatedTime.map(TimeInterval.init) }
 }
 
 struct AnswerVerification: Codable {
@@ -411,6 +372,12 @@ struct RepoFeedResponse: Codable {
     let posts: [RepoPost]
     let nextPage: Int?
     let hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case posts = "items"
+        case nextPage = "next_page"
+        case hasMore = "has_more"
+    }
 }
 
 struct RepoPost: Codable, Identifiable {
@@ -422,7 +389,10 @@ struct RepoPost: Codable, Identifiable {
     var comments: Int
     var isLiked: Bool
     let createdAt: Date
-    let postType: String?
+}
+
+extension RepoPost {
+    var postType: String { "post" }
 }
 
 struct UserDTO: Codable {

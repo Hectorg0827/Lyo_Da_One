@@ -267,8 +267,37 @@ struct LiveClassroomView: View {
                         .foregroundColor(.secondary)
                 }
             } else if let block = viewModel.currentBlock {
+                // Block-based rendering (the proven workhorse with 27+ block types)
+                // Takes priority over errorMessage — if we have local content, show it.
+                // Slightly softer scale + slide so transitions feel cinematic, not abrupt.
                 blockContentView(block: block)
                     .id(block.id)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+            } else if let errorMsg = viewModel.errorMessage {
+                // Error state — only when we have NO content at all
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.orange)
+                    Text("Something went wrong")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                    Text(errorMsg)
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button("Try Again") {
+                        Task {
+                            await viewModel.loadLesson(courseId: courseId, lessonId: lessonId)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
             } else if let lesson = viewModel.lesson, lesson.blocks.isEmpty {
                  VStack(spacing: 16) {
                     ProgressView()
@@ -280,7 +309,11 @@ struct LiveClassroomView: View {
             // Navigation arrows (Floating) - Optional, keep subtle
             HStack {
                 if !viewModel.isFirstBlock {
-                    Button(action: { withAnimation { viewModel.goToPreviousBlock() } }) {
+                    Button(action: {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                            viewModel.goToPreviousBlock()
+                        }
+                    }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(.gray)
@@ -289,7 +322,11 @@ struct LiveClassroomView: View {
                 }
                 Spacer()
                 if viewModel.canAdvance && !viewModel.isLastBlock {
-                    Button(action: { withAnimation { viewModel.advanceToNextBlock() } }) {
+                    Button(action: {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                            viewModel.advanceToNextBlock()
+                        }
+                    }) {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(.gray)
@@ -298,14 +335,36 @@ struct LiveClassroomView: View {
                 }
             }
         }
+        // Subtle reveal haptic each time a new block enters the stage.
+        // `.soft()` is the gentlest impact — feels like the content "landed"
+        // without intruding on whatever the user is reading.
+        .onChange(of: viewModel.currentBlockIndex) { _ in
+            HapticManager.shared.soft()
+        }
     }
-    
+
     // MARK: - Block Content View
     
     @ViewBuilder
     private func blockContentView(block: LiveLessonBlock) -> some View {
         ScrollView {
             VStack(spacing: 24) {
+                // Lesson banner — only on the first block so it reads as a
+                // title page, not chrome that repeats above every step.
+                if viewModel.isFirstBlock {
+                    let total = max(viewModel.lesson?.blocks.count ?? 1, 1)
+                    let progress = Double(viewModel.currentBlockIndex + 1) / Double(total)
+                    LessonHero(
+                        topic: courseTitle,
+                        subtitle: viewModel.lesson?.title,
+                        progress: progress,
+                        imageURL: nil
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
                 BlockRendererView(block: block, onQuizAnswer: { index in
                     viewModel.submitQuizAnswer(index)
                 }, onAction: { actionId in

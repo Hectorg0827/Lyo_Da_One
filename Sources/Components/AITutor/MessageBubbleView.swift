@@ -41,6 +41,7 @@ struct LyoMessageBubbleView: View {
             case .courseProposal: return true
             case .courseRoadmap: return true
             case .quiz: return true
+            case .quizDeck: return true
             case .flashcards: return true
             case .studyPlan: return true
             case .testPrep: return true
@@ -343,6 +344,11 @@ struct LyoMessageBubbleView: View {
                     onSmartBlockQuizAnswer?(question, selected, selected == correctIndex)
                 }
             )
+
+        case .quizDeck(let deck):
+            ChatQuizDeckView(deck: deck) { action in
+                onQuickChipTap?(action)
+            }
 
         case .flashcards(let title, let cards):
             // Render the real swipeable flashcard carousel (was previously a static card).

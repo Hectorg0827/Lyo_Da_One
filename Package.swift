@@ -9,7 +9,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/google/GoogleSignIn-iOS", from: "8.0.0"),
-        .package(url: "https://github.com/firebase/firebase-ios-sdk", from: "11.0.0")
+        .package(url: "https://github.com/firebase/firebase-ios-sdk", from: "11.0.0"),
+        .package(url: "https://github.com/kean/Nuke", from: "12.8.0")
     ],
     targets: [
         .target(
@@ -18,7 +19,9 @@ let package = Package(
                 .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS"),
                 .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
-                .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk")
+                .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk"),
+                .product(name: "Nuke", package: "Nuke"),
+                .product(name: "NukeUI", package: "Nuke")
             ],
             path: "Sources",
             exclude: ["Resources/Info.plist", "Tests"],

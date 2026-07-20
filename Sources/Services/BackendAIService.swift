@@ -7,29 +7,6 @@
 //
 
 import Foundation
-import os
-
-// MARK: - Backend AI Error
-
-enum BackendAIError: Error, LocalizedError {
-    case invalidResponse
-    case invalidPayload(String)
-    case networkError(String)
-    case serverError(String)
-    case unauthorized
-    case rateLimited
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidResponse: return "Invalid response from server"
-        case .invalidPayload(let msg): return "Invalid payload: \(msg)"
-        case .networkError(let msg): return "Network error: \(msg)"
-        case .serverError(let msg): return "Server error: \(msg)"
-        case .unauthorized: return "Unauthorized"
-        case .rateLimited: return "Rate limited"
-        }
-    }
-}
 
 // MARK: - Backend AI Request/Response Models
 
@@ -45,9 +22,9 @@ struct BackendAIChatRequest: Encodable {
 
     init(
         message: String,
-        conversationHistory: [ConversationMessage]?,
-        context: String?,
-        modeHint: String?,
+        conversationHistory: [ConversationMessage]? = nil,
+        context: String? = nil,
+        modeHint: String? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil
     ) {
@@ -58,7 +35,8 @@ struct BackendAIChatRequest: Encodable {
         self.conversationId = conversationId
         self.clientMessageId = clientMessageId
     }
-    
+
+
     enum CodingKeys: String, CodingKey {
         case message
         case conversationHistory
@@ -69,27 +47,14 @@ struct BackendAIChatRequest: Encodable {
     }
 }
 
-// NOTE: We use the shared OpenClassroomPayload from Models/LyoChat.swift 
-// and StackItemPayload/CoursePayload from Models/AICommandResponse.swift
-// to avoid ambiguity.
-
-// Private envelope for decoding the raw JSON structure
-private struct OpenClassroomEnvelope: Codable {
-    let type: String
-    let payload: OpenClassroomPayload
-}
-
-// Response from /api/v1/chat
+// Response from /api/v1/ai/chat
+// Backend returns: { "response": "...", "conversationHistory": [...] }
 struct BackendAIChatResponse: Codable {
     // Primary fields from backend ChatResponse
-    let response: String?
+    let response: String?  // Backend's main response field
     let conversationHistory: [ConversationMessage]?
     let conversationId: String?
-    
-    // Command fields (OPEN_CLASSROOM, etc.)
-    let type: String?
-    let payload: OpenClassroomCommand.OpenClassroomPayload?
-    
+
     // Legacy fields for backward compatibility (may not be present anymore)
     let content: String?  // Some endpoints still use this
     let primaryAi: String?
@@ -103,53 +68,80 @@ struct BackendAIChatResponse: Codable {
     let confidenceScore: Double?
     let modelVersions: [String: String]?
     let userId: Int?
-    
+
     // New fields for Mentor Mode
     let responseMode: ResponseMode?
     let quickExplainer: QuickExplainerData?
     let courseProposal: CourseProposalData?
+    let type: String?
+    let payload: OpenClassroomCommand.OpenClassroomPayload?
     let studyPlan: TestPrepData?
-    
-    // Lyo Protocol Fields
-    let lyoBlocks: [LyoBlock]?
-    
-    // Context-aware suggestion chips returned alongside each response
     let suggestions: [SuggestionChip]?
-    
+
+    let answerBlock: Lyo2UIBlock?
+    let artifactBlock: Lyo2UIBlock?
+    let openClassroomPayload: OpenClassroomCommand.OpenClassroomPayload?
+    let metadata: [String: AnyCodable]?
+
     enum CodingKeys: String, CodingKey {
         case response
-        case conversationHistory = "conversationHistory"
-        case conversationId = "conversationId"
+        case conversationHistory
+        case conversationId
+        case content
+        case primaryAi
+        case secondaryAi
+        case taskType
+        case reasoning
+        case conversationTone
+        case responseTimeMs
+        case tokensUsed
+        case costEstimate
+        case confidenceScore
+        case modelVersions
+        case userId
+        case responseMode
+        case quickExplainer
+        case courseProposal
         case type
         case payload
-        case content
-        case primaryAi = "primary_ai"
-        case secondaryAi = "secondary_ai"
-        case taskType = "task_type"
-        case reasoning
-        case conversationTone = "conversation_tone"
-        case responseTimeMs = "response_time_ms"
-        case tokensUsed = "tokensUsed"
-        case costEstimate = "cost_estimate"
-        case confidenceScore = "confidence_score"
-        case modelVersions = "model_versions"
-        case userId = "user_id"
-        case responseMode = "responseMode"
-        case quickExplainer = "quickExplainer"
-        case courseProposal = "courseProposal"
-        case studyPlan = "studyPlan"
-        case lyoBlocks = "lyoBlocks"
-        case suggestions = "suggestions"
+        case studyPlan
+        case suggestions
+        case answerBlock
+        case artifactBlock
+        case openClassroomPayload
+        case metadata
     }
-    
+
     // Computed property for easy access to the AI response text
     var responseText: String {
-        return response ?? content ?? "No response"
+        if let response, !response.isEmpty { return response }
+        if let content, !content.isEmpty { return content }
+        if let text = answerBlock?.content["text"]?.value as? String, !text.isEmpty { return text }
+        if let text = answerBlock?.content["message"]?.value as? String, !text.isEmpty { return text }
+        if let text = answerBlock?.content["markdown"]?.value as? String, !text.isEmpty { return text }
+        return "No response"
     }
-    
+
     // Computed property for AI source (with fallback)
     var aiSource: String {
-        return primaryAi ?? "gemini"
+        if let primaryAi { return primaryAi }
+        if let model = metadata?["model"]?.value as? String { return model }
+        if let source = metadata?["ai_source"]?.value as? String { return source }
+        return "gemini"
+    }
+}
+
+struct BackendAIRouterRequest: Encodable {
+    let userId: String
+    let text: String
+    let stateSummary: [String: AnyCodable]
+    let conversationHistory: [Lyo2ConversationTurn]
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case text
+        case stateSummary = "state_summary"
+        case conversationHistory = "conversation_history"
     }
 }
 
@@ -195,51 +187,45 @@ struct BackendAnswerAnalysisResponse: Codable {
 // MARK: - Course Generation Models
 
 struct CourseGenerationJobResponse: Codable {
-    // Note: Property names use camelCase, JSON uses snake_case
-    // lyoDecoder's .convertFromSnakeCase handles this automatically
     let jobId: String
     let status: String
     let qualityTier: String
-    let estimatedCostUsd: Double
+    let estimatedCostUSD: Double
     let message: String
     let pollUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case jobId = "job_id"
+        case status
+        case qualityTier = "quality_tier"
+        case estimatedCostUSD = "estimated_cost_usd"
+        case message
+        case pollUrl = "poll_url"
+    }
 }
 
 struct CourseGenerationStatusResponse: Codable {
-    // Note: Property names use camelCase, JSON uses snake_case
-    // lyoDecoder's .convertFromSnakeCase handles this automatically
     let jobId: String
     let status: String
     let progressPercent: Int
     let currentStep: String?
     let stepsCompleted: [String]
-    let estimatedTimeRemainingSeconds: Int?
+    let estimatedTimeRemainingSec: Int?
     let createdAt: String
     let updatedAt: String?
     let error: String?
-}
 
-struct CourseOutlineModule: Codable {
-    let id: String
-    let title: String
-    let description: String
-}
-
-struct CourseOutlineResponse: Codable {
-    let courseId: String
-    let title: String
-    let description: String
-    let modules: [CourseOutlineModule]
-    let estimatedDuration: Int
-    let difficulty: String
-    let outlineHash: String
-    let status: String
-}
-
-struct CourseModuleResponse: Codable {
-    let courseId: String
-    let module: CourseGenerationService.BackendCourseResult.BackendModule
-    let status: String
+    enum CodingKeys: String, CodingKey {
+        case jobId = "job_id"
+        case status
+        case progressPercent = "progress_percent"
+        case currentStep = "current_step"
+        case stepsCompleted = "steps_completed"
+        case estimatedTimeRemainingSec = "estimated_time_remaining_seconds"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case error
+    }
 }
 
 // MARK: - Backend AI Service
@@ -247,55 +233,49 @@ struct CourseModuleResponse: Codable {
 @MainActor
 final class BackendAIService {
     static let shared = BackendAIService()
-    
+
     private var baseURL: String { AppConfig.baseURL }
     private let tokenManager = TokenManager.shared
-    
+
     // Conversation state
     private var conversationHistory: [ConversationMessage] = []
     private var currentResourceId: String = "general_learning"
-    
+
     private init() {
-        Log.ai.info("BackendAIService initialized - using hybrid AI (Gemini + OpenAI)")
+        print("🧠 BackendAIService initialized - using hybrid AI (Gemini + OpenAI)")
     }
-    
+
+    func chatModeHint(for mode: String) -> String {
+        switch mode.lowercased() {
+        case "classroom", "learn", "course":
+            return "classroom"
+        case "mentor", "tutor", "focus":
+            return "mentor"
+        case "create", "studio":
+            return "creation"
+        default:
+            return mode
+        }
+    }
+
     // MARK: - JSON Coders
-    
+
     private var jsonDecoder: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }
-    
+
     private var jsonEncoder: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         return encoder
     }
 
-    /// Maps UI-facing chat modes to backend chat-module mode hints.
-    /// These hints are consumed by `/api/v1/chat` to select the correct agent path.
-    func chatModeHint(for mode: String) -> String {
-        switch mode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "course":
-            return "course_planner"
-        case "quiz", "practice":
-            return "practice"
-        case "study", "tutor", "focus":
-            return "quick_explainer"
-        case "test_prep", "testprep", "exam":
-            return "test_prep"
-        case "notes", "note", "note_taker":
-            return "note_taker"
-        default:
-            return "general"
-        }
-    }
-    
-    // MARK: - Context-Aware Suggestions
+    // MARK: - Context-Aware Suggestion Chips
 
-    /// Fetches context-aware suggestion chips from the fast `/api/v1/ai/chat` endpoint.
-    /// Returns an empty array on failure — callers should already show fallback chips.
+    /// Fetch context-aware suggestion chips from the backend for a given trigger message.
+    /// Returns an empty array if the backend supplies none; callers show local fallbacks.
     func fetchSuggestions(trigger message: String) async throws -> [SuggestionChip] {
         let endpoint = Endpoints.AI.chat(message: message, provider: nil, context: nil)
         let response: BackendAIChatResponse = try await NetworkClient.shared.request(endpoint)
@@ -303,21 +283,16 @@ final class BackendAIService {
     }
 
     // MARK: - Streaming Study Session
-    
+
     /// Stream AI response in real-time using Server-Sent Events
     /// Much better UX - shows text as it's generated instead of waiting
-    ///
-    /// Includes:
-    /// - 60-second timeout watchdog (resets on each chunk)
-    /// - Automatic retry (up to 2 attempts on transient failures)
-    /// - Safe MainActor dispatch for all callbacks
     func streamStudySession(
         message: String,
         resourceId: String? = nil,
         mode: String = "focus",
-        onChunk: @escaping @Sendable (String) -> Void,
-        onComplete: @escaping @Sendable (String, Double) -> Void,
-        onError: @escaping @Sendable (Error) -> Void
+        onChunk: @escaping (String) -> Void,
+        onComplete: @escaping (String, Double) -> Void,
+        onError: @escaping (Error) -> Void
     ) {
         // Update resource context if provided
         if let resourceId = resourceId {
@@ -326,276 +301,237 @@ final class BackendAIService {
                 currentResourceId = resourceId
             }
         }
-        
+
         // Build context
         var contextDict: [String: String] = [
             "mode": mode,
             "topic": currentResourceId
         ]
-        
+
         if !conversationHistory.isEmpty {
             let historyContext = conversationHistory.suffix(4).map { "\($0.role): \($0.content)" }.joined(separator: "\n")
             contextDict["conversation_history"] = historyContext
         }
-        
+
+        // Build request
+        // Note: Request body is constructed in Endpoint.swift for chatStream
+
         Task {
-            let maxRetries = 2
-            var lastError: Error?
-            
-            for attempt in 0...maxRetries {
-                if attempt > 0 {
-                    let backoff = UInt64(pow(2.0, Double(attempt - 1))) * 1_000_000_000
-                    Log.ai.info("SSE retry attempt \(attempt)/\(maxRetries) after \(attempt)s backoff")
-                    try? await Task.sleep(nanoseconds: backoff)
-                }
-                
-                do {
-                    try await performStream(
-                        message: message,
-                        contextDict: contextDict,
-                        onChunk: onChunk,
-                        onComplete: onComplete
-                    )
-                    return // Success — exit retry loop
-                } catch is CancellationError {
-                    onError(CancellationError())
+            do {
+                let (bytes, response) = try await NetworkClient.shared.stream(Endpoints.AI.chatStream(message: message, context: contextDict))
+
+                guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+                    onError(BackendAIError.invalidResponse)
                     return
-                } catch {
-                    lastError = error
-                    let isTransient = (error as NSError).code == NSURLErrorTimedOut
-                        || (error as NSError).code == NSURLErrorNetworkConnectionLost
-                    if !isTransient || attempt == maxRetries {
-                        Log.ai.error("SSE stream failed (attempt \(attempt + 1)): \(error.localizedDescription)")
-                        onError(error)
-                        return
-                    }
                 }
-            }
-            onError(lastError ?? BackendAIError.networkError("Stream failed after retries"))
-        }
-    }
-    
-    /// Internal stream execution with a 60-second stall timeout
-    private func performStream(
-        message: String,
-        contextDict: [String: String],
-        onChunk: @escaping @Sendable (String) -> Void,
-        onComplete: @escaping @Sendable (String, Double) -> Void
-    ) async throws {
-        let streamTimeout: UInt64 = 60_000_000_000 // 60 seconds
-        
-        let (bytes, response) = try await NetworkClient.shared.stream(Endpoints.AI.chatStream(message: message, context: contextDict))
-        
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw BackendAIError.invalidResponse
-        }
-        
-        var fullContent = ""
-        var responseTime: Double = 0
-        
-        // Wrap the stream iteration with a timeout watchdog
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Shared state for timeout coordination
-            let lastActivity = UnsafeMutablePointer<UInt64>.allocate(capacity: 1)
-            lastActivity.pointee = DispatchTime.now().uptimeNanoseconds
-            defer { lastActivity.deallocate() }
-            
-            // Watchdog: fires if no chunks arrive for 60s
-            group.addTask {
-                while !Task.isCancelled {
-                    try await Task.sleep(nanoseconds: 5_000_000_000) // Check every 5s
-                    let elapsed = DispatchTime.now().uptimeNanoseconds - lastActivity.pointee
-                    if elapsed > streamTimeout {
-                        throw BackendAIError.networkError("Stream stalled — no data for 60 seconds")
-                    }
-                }
-            }
-            
-            // Main stream consumer
-            group.addTask { [self] in
+
+                var fullContent = ""
+                var responseTime: Double = 0
+
                 for try await line in bytes.lines {
-                    lastActivity.pointee = DispatchTime.now().uptimeNanoseconds
-                    
-                    guard line.hasPrefix("data: ") else { continue }
-                    let jsonStr = String(line.dropFirst(6))
-                    guard let jsonData = jsonStr.data(using: .utf8),
-                          let event = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { continue }
-                    
-                    let eventType = event["type"] as? String ?? ""
-                    
-                    switch eventType {
-                    case "start":
-                        let primaryAI = event["primary_ai"] as? String ?? "unknown"
-                        Log.ai.info("Stream started with \(primaryAI)")
-                        
-                    case "chunk":
-                        if let content = event["content"] as? String {
-                            fullContent += content
-                            onChunk(content)
-                        }
-                        
-                    case "done":
-                        responseTime = event["response_time_ms"] as? Double ?? 0
-                        Log.ai.info("Stream completed in \(responseTime)ms")
-                        
-                        // Update conversation history on MainActor
-                        await MainActor.run {
-                            self.conversationHistory.append(ConversationMessage(role: "user", content: message))
-                            self.conversationHistory.append(ConversationMessage(role: "assistant", content: fullContent))
-                            if self.conversationHistory.count > 10 {
-                                self.conversationHistory = Array(self.conversationHistory.suffix(10))
+                    if line.hasPrefix("data: ") {
+                        let jsonStr = String(line.dropFirst(6))
+                        if let jsonData = jsonStr.data(using: .utf8),
+                           let event = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+
+                            let eventType = event["type"] as? String ?? ""
+
+                            switch eventType {
+                            case "start":
+                                let primaryAI = event["primary_ai"] as? String ?? "unknown"
+                                print("🚀 Stream started with \(primaryAI)")
+
+                            case "chunk":
+                                if let content = event["content"] as? String {
+                                    fullContent += content
+                                    onChunk(content)
+                                }
+
+                            case "done":
+                                responseTime = event["response_time_ms"] as? Double ?? 0
+                                print("✅ Stream completed in \(responseTime)ms")
+
+                                // Update conversation history
+                                self.conversationHistory.append(ConversationMessage(role: "user", content: message))
+                                self.conversationHistory.append(ConversationMessage(role: "assistant", content: fullContent))
+
+                                if self.conversationHistory.count > 10 {
+                                    self.conversationHistory = Array(self.conversationHistory.suffix(10))
+                                }
+
+                                onComplete(fullContent, responseTime)
+
+                            case "error":
+                                let errorMsg = event["message"] as? String ?? "Unknown error"
+                                print("❌ Stream error: \(errorMsg)")
+                                onError(BackendAIError.serverError(errorMsg))
+
+                            default:
+                                break
                             }
                         }
-                        
-                        onComplete(fullContent, responseTime)
-                        return // Stream finished normally
-                        
-                    case "error":
-                        let errorMsg = event["message"] as? String ?? "Unknown error"
-                        Log.ai.error("Stream error: \(errorMsg)")
-                        throw BackendAIError.serverError(errorMsg)
-                        
-                    default:
-                        break
                     }
                 }
+            } catch {
+                onError(error)
             }
-            
-            // Wait for either the stream to finish or the watchdog to fire
-            try await group.next()
-            group.cancelAll()
         }
     }
-    
+
     // MARK: - Study Session (Socratic Dialogue)
-    
+
     /// Send a message through the backend AI for Socratic-style tutoring
     /// Uses backend's dual-AI system (Gemini for reasoning, OpenAI for conversation)
     func studySession(
         message: String,
         resourceId: String? = nil,
         mode: String = "focus",
-        history: [ConversationMessage]? = nil
-    ) async throws -> (response: String, source: String, wasCommand: Bool, openClassroomPayload: OpenClassroomCommand.OpenClassroomPayload?) {
-        
+        additionalContext: String? = nil
+    ) async throws -> (response: String, source: String) {
+
         // Update resource context if provided
         if let resourceId = resourceId {
             if resourceId != currentResourceId {
-                // New topic - reset conversation (only if using internal history)
-                if history == nil {
-                     conversationHistory.removeAll()
-                }
+                // New topic - reset conversation
+                conversationHistory.removeAll()
                 currentResourceId = resourceId
             }
         }
-        
-        // Build the system prompt - this must be sent as part of conversation history
-        // NOT in the context field (which backend treats as metadata)
+
+        // Build context string with system prompt for the backend
+        // The backend expects context as an optional string, not a dictionary
+        var contextString: String? = nil
         let systemPrompt = buildSystemPrompt(for: mode, resourceId: currentResourceId)
-        
-        // Build conversation history with system prompt at the start
-        var historyWithSystem: [ConversationMessage] = []
-        
-        // Add system prompt as first message if this is a new conversation
-        // Use provided history or internal history
-        let previousHistory = history ?? conversationHistory
-        
-        if previousHistory.isEmpty {
-            historyWithSystem.append(ConversationMessage(role: "system", content: systemPrompt))
+
+        // Include mode, topic, system instruction, and (Stage B1) any
+        // user-specific learning profile context the caller passed in.
+        var contextParts = [
+            "Mode: \(mode)",
+            "Topic: \(currentResourceId)",
+            "System Instruction: \(systemPrompt)"
+        ]
+        if let extra = additionalContext, !extra.isEmpty {
+            contextParts.append("Learner profile: \(extra)")
         }
-        
-        // Add existing conversation history
-        historyWithSystem.append(contentsOf: previousHistory.suffix(8))
-        
-        // Build request - context should be simple metadata, not the full prompt
-        let contextMetadata = "mode=\(mode),topic=\(currentResourceId)"
-        
+        contextString = contextParts.joined(separator: "\n")
+
+        // Build request for /api/v1/ai/chat endpoint (public, no auth required)
+        // Backend schema: message (required), conversationHistory (optional), context (optional string)
         let request = BackendAIChatRequest(
             message: message,
-            conversationHistory: historyWithSystem.isEmpty ? nil : historyWithSystem,
-            context: contextMetadata,
-            modeHint: chatModeHint(for: mode)
+            conversationHistory: conversationHistory.isEmpty ? nil : Array(conversationHistory.suffix(10)),
+            context: contextString
         )
-        
-        // Use /api/v1/chat (Chat Module)
-        let endpoint = "\(baseURL)/api/v1/chat"
-        
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: request,
-            requiresAuth: true
+
+        let endpoint = "\(baseURL)/api/v1/ai/chat"
+
+        do {
+            let response: BackendAIChatResponse = try await postPublic(endpoint: endpoint, body: request)
+            return recordChatTurn(message: message, response: response)
+        } catch let error as LyoError {
+            if case .network(.notFound) = error {
+                let response = try await sendViaLyo2Router(
+                    message: message,
+                    contextString: contextString
+                )
+                return recordChatTurn(message: message, response: response)
+            }
+
+            print("⚠️ Backend AI failed: \(error). Will fallback to local.")
+            throw error
+        } catch {
+            print("⚠️ Backend AI failed: \(error). Will fallback to local.")
+            throw error
+        }
+    }
+
+    private func sendViaLyo2Router(
+        message: String,
+        contextString: String?
+    ) async throws -> BackendAIChatResponse {
+        let userId = AuthService.shared.currentUserEmail.isEmpty
+            ? "ios_guest"
+            : AuthService.shared.currentUserEmail
+
+        let routerRequest = BackendAIRouterRequest(
+            userId: userId,
+            text: message,
+            stateSummary: ["context": AnyCodable(contextString ?? "")],
+            conversationHistory: conversationHistory.suffix(10).map {
+                Lyo2ConversationTurn(role: $0.role, content: $0.content)
+            }
         )
-        
-        let chatResponse: BackendAIChatResponse = try await NetworkClient.shared.request(dynamicEndpoint)
-        
-        // Update internal conversation history
+
+        let routerEndpoint = "\(baseURL)/api/v1/lyo2/chat"
+        print("↪️ /api/v1/ai/chat not found. Trying \(routerEndpoint)")
+        return try await postPublic(endpoint: routerEndpoint, body: routerRequest)
+    }
+
+    private func recordChatTurn(
+        message: String,
+        response: BackendAIChatResponse
+    ) -> (response: String, source: String) {
+        let responseText = response.responseText
+
         conversationHistory.append(ConversationMessage(role: "user", content: message))
-        conversationHistory.append(ConversationMessage(role: "assistant", content: chatResponse.responseText))
+        conversationHistory.append(ConversationMessage(role: "assistant", content: responseText))
+
         if conversationHistory.count > 10 {
             conversationHistory = Array(conversationHistory.suffix(10))
         }
-        
-        // Detect command
-        let wasCommand = chatResponse.type == "OPEN_CLASSROOM"
-        
-        return (
-            response: chatResponse.responseText,
-            source: chatResponse.aiSource,
-            wasCommand: wasCommand,
-            openClassroomPayload: chatResponse.payload
-        )
+
+        return (response: responseText, source: response.aiSource)
     }
-    
+
     // MARK: - Generate Quiz
-    
+
     /// Generate a quiz through the backend AI
     func generateQuiz(
         resourceId: String,
         quizType: String = "multiple_choice",
         questionCount: Int = 5
     ) async throws -> [BackendQuizQuestion] {
-        
+
         let request = BackendQuizRequest(
             resourceId: resourceId,
             quizType: quizType,
             questionCount: questionCount
         )
-        
+
         let endpoint = "\(baseURL)/api/v1/ai/generate-quiz"
-        
+
         return try await post(endpoint: endpoint, body: request)
     }
-    
+
     // MARK: - Analyze Answer
-    
+
     /// Get AI feedback on a quiz answer
     func analyzeAnswer(
         question: String,
         correctAnswer: String,
         userAnswer: String
     ) async throws -> String {
-        
+
         let request = BackendAnswerAnalysisRequest(
             question: question,
             correctAnswer: correctAnswer,
             userAnswer: userAnswer
         )
-        
+
         let endpoint = "\(baseURL)/api/v1/ai/analyze-answer"
-        
+
         let response: BackendAnswerAnalysisResponse = try await post(endpoint: endpoint, body: request)
         return response.feedback
     }
-    
+
     // MARK: - Conversation Management
-    
+
     /// Clear conversation history (start fresh)
     func clearConversation() {
         conversationHistory.removeAll()
         currentResourceId = "general_learning"
     }
-    
+
     /// Set the learning context/topic
     func setContext(resourceId: String) {
         if resourceId != currentResourceId {
@@ -603,9 +539,9 @@ final class BackendAIService {
             currentResourceId = resourceId
         }
     }
-    
+
     // MARK: - Course Generation (Multi-Agent v2)
-    
+
     /// Estimate cost for generating a course
     func estimateCost(
         topic: String,
@@ -615,12 +551,12 @@ final class BackendAIService {
             topic: topic,
             options: options
         )
-        
-        let endpoint = Endpoints.CourseGenerationV2.estimateCost(body: request)
-        
-        return try await NetworkClient.shared.request(endpoint)
+
+        let endpoint = "\(baseURL)/api/v2/courses/estimate-cost"
+
+        return try await postPublic(endpoint: endpoint, body: request)
     }
-    
+
     /// Generate a course with enhanced quality and feature controls
     func generateCourse(
         topic: String,
@@ -637,36 +573,6 @@ final class BackendAIService {
             "qa_strictness": options.qaStrictness,
             "target_language": options.targetLanguage
         ]
-        
-        if let budget = options.maxBudgetUSD {
-            requestDict["max_budget_usd"] = budget
-        }
-        
-        if let context = userContext {
-            requestDict["user_context"] = context
-        }
-        
-        let endpoint = Endpoints.CourseGenerationV2.generate(body: DataWrapper(data: try JSONSerialization.data(withJSONObject: requestDict)))
-        
-        return try await NetworkClient.shared.request(endpoint)
-    }
-
-    /// Generate course outline immediately and continue full generation in background
-    func generateCourseOutline(
-        topic: String,
-        options: CourseGenerationOptions = .recommended,
-        userContext: [String: String]? = nil
-    ) async throws -> CourseOutlineResponse {
-        var requestDict: [String: Any] = [
-            "request": topic,
-            "quality_tier": options.qualityTier.rawValue,
-            "enable_code_examples": options.includeCodeExamples,
-            "enable_practice_exercises": options.includePracticeExercises,
-            "enable_final_quiz": options.includeFinalQuiz,
-            "enable_multimedia_suggestions": options.includeMultimediaSuggestions,
-            "qa_strictness": options.qaStrictness,
-            "target_language": options.targetLanguage
-        ]
 
         if let budget = options.maxBudgetUSD {
             requestDict["max_budget_usd"] = budget
@@ -676,86 +582,24 @@ final class BackendAIService {
             requestDict["user_context"] = context
         }
 
-        let endpoint = Endpoints.CourseGenerationV2.outline(body: DataWrapper(data: try JSONSerialization.data(withJSONObject: requestDict)))
-        return try await NetworkClient.shared.request(endpoint)
+        let endpoint = "\(baseURL)/api/v2/courses/generate"
+
+        return try await postJSONDict(endpoint: endpoint, body: requestDict)
     }
 
-    func getCourseModule(courseId: String, moduleId: String) async throws -> CourseModuleResponse {
-        let endpoint = Endpoints.CourseGenerationV2.getModule(courseId: courseId, moduleId: moduleId)
-        return try await NetworkClient.shared.request(endpoint)
-    }
-
-    func generateCourseModule(courseId: String, moduleId: String) async throws -> CourseModuleResponse {
-        let endpoint = Endpoints.CourseGenerationV2.generateModule(courseId: courseId, moduleId: moduleId, body: nil)
-        return try await NetworkClient.shared.request(endpoint)
-    }
-    
-    // MARK: - V2 Generator Endpoints (Strict LyoSchema)
-
-    private struct GenerateCourseV2Request: Encodable {
-        let topic: String
-        let targetAudience: String
-        let learningObjectives: [String]
-
-        enum CodingKeys: String, CodingKey {
-            case topic
-            case targetAudience = "target_audience"
-            case learningObjectives = "learning_objectives"
-        }
-    }
-    
-    /// Fetches the static 'Spanish 101' demo course to verify V2 schema parsing.
-    func fetchSpanish101Demo() async throws -> LyoCourse {
-        let endpoint = Endpoints.CourseGenerationV2.generatorDemo
-        return try await NetworkClient.shared.request(endpoint)
-    }
-    
-    /// Generates a full V2 course (blocking call for MVP)
-    func generateCourseV2(topic: String, audience: String, objectives: [String]) async throws -> LyoCourse {
-        let body = GenerateCourseV2Request(
-            topic: topic,
-            targetAudience: audience,
-            learningObjectives: objectives
-        )
-        
-        let endpoint = Endpoints.CourseGenerationV2.generatorGenerate(body: body)
-        
-        return try await NetworkClient.shared.request(endpoint)
-    }
-    
     /// Poll for course generation status
     func getCourseGenerationStatus(jobId: String) async throws -> CourseGenerationStatusResponse {
-        let endpoint = Endpoints.CourseGenerationV2.status(jobId: jobId)
-        
-        return try await NetworkClient.shared.request(endpoint)
-    }
-    
-    // MARK: - System Prompt Builder
-    
-    // MARK: - Private Networking Helpers
-    
-    /// Generic POST helper (authenticated)
-    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: body,
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v2/courses/status/\(jobId)",
+            method: .get,
             requiresAuth: true
         )
-        return try await NetworkClient.shared.request(dynamicEndpoint)
+
+        return try await NetworkClient.shared.request(endpoint)
     }
-    
-    /// Generic POST helper (public / no auth)
-    internal func postPublic<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
-        let dynamicEndpoint = DynamicEndpoint(
-            urlString: endpoint,
-            method: .post,
-            body: body,
-            requiresAuth: false
-        )
-        return try await NetworkClient.shared.request(dynamicEndpoint)
-    }
-    
+
+    // MARK: - System Prompt Builder
+
     private func buildSystemPrompt(for mode: String, resourceId: String) -> String {
         return """
         You are **Lyo**, the AI assistant inside the **Lyo** learning app.
@@ -843,6 +687,90 @@ final class BackendAIService {
             }
           }
         }
+        ```
+
+        ### 2.1. Rules for the JSON output
+
+        * You must output **valid JSON only**.
+        * Do **NOT** include markdown, code fences, backticks, comments, or any extra text.
+        * The top-level field **must** be `"type": "OPEN_CLASSROOM"`.
+        * `"payload.stack_item.category"` must be `"Course"` for course requests.
+        * `"payload.stack_item.status"` must be `"active"` for new courses.
+        * `"payload.stack_item.due"` can be `null` unless the user explicitly mentions a deadline (then you can set a simple string like `"Exam next month"`).
+        * `title` and `subtitle` must be short enough to fit on a mobile card:
+          * `title`: very short, clear, and attractive.
+          * `subtitle`: one line that summarizes the focus or benefit.
+        * `language` must match the language the user used in the request (e.g., Spanish vs English).
+        * `objectives` should be **2–5 short bullet-style phrases**, not long paragraphs.
+
+        The app will:
+        * Use `stack_item` to create a card in “Today’s Stack”.
+        * Use `course` to configure the AI Classroom for that topic.
+
+        ---
+
+        ## 3. Normal chat behavior (no classroom)
+
+        If the user is **not clearly** asking for a full course or class:
+        * Answer directly in chat as a helpful tutor.
+        * Be clear and concise. Use steps and examples when helpful.
+        * You may **offer** a course as an option, e.g.:
+          * “If you want, I can create a full course on this for you.”
+        * But only trigger the JSON event **after** the user explicitly agrees or asks for a course.
+
+        When in normal chat mode, you must NOT send the `OPEN_CLASSROOM` JSON.
         """
+    }
+
+    // MARK: - Network Helpers
+
+    /// POST request WITH authentication (for auth-required endpoints)
+    private func post<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: body,
+            requiresAuth: true
+        )
+        return try await NetworkClient.shared.request(dynamicEndpoint)
+    }
+
+    /// POST request WITHOUT authentication (for public endpoints like /api/v1/ai/chat)
+    private func postPublic<T: Encodable, R: Codable>(endpoint: String, body: T) async throws -> R {
+        let dynamicEndpoint = DynamicEndpoint(
+            urlString: endpoint,
+            method: .post,
+            body: body,
+            requiresAuth: false
+        )
+        return try await NetworkClient.shared.request(dynamicEndpoint)
+    }
+}
+
+// MARK: - Errors
+
+enum BackendAIError: LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case unauthorized
+    case rateLimited
+    case serverError(String)
+    case networkError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid URL"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .unauthorized:
+            return "Please log in to use AI features"
+        case .rateLimited:
+            return "Too many requests. Please wait a moment."
+        case .serverError(let message):
+            return message
+        case .networkError(let message):
+            return "Network error: \(message)"
+        }
     }
 }

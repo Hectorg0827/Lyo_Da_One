@@ -130,12 +130,17 @@ struct ModuleCardView: View {
             }
             
         case .ready:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title3)
-                .foregroundColor(.green)
-                .frame(width: 34, height: 34)
-                .background(Color.green.opacity(0.1))
-                .clipShape(Circle())
+            // Topic-derived glyph + matching gradient so each module reads as
+            // its own thing in a long list. Locked/building/failed keep their
+            // state-coded icons since those states convey hard semantics.
+            ZStack {
+                Circle().fill(TopicArt.gradient(for: module.title))
+                Image(systemName: TopicArt.iconName(for: module.title))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+            }
+            .frame(width: 34, height: 34)
             
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill")

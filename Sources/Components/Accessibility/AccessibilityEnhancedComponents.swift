@@ -658,7 +658,7 @@ struct AccessibleClipView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Video thumbnail with accessibility image
-            AsyncImage(url: URL(string: clip.thumbnailURL)) { image in
+            LyoImage(url: URL(string: clip.thumbnailURL)) { image in
                 image
                     .resizable()
                     .aspectRatio(16/9, contentMode: .fill)

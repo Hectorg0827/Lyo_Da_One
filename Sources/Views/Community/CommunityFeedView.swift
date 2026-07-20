@@ -64,7 +64,7 @@ struct CommunityFeedView: View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 ForEach(viewModel.posts) { post in
-                    CommunityPostCard(
+                    CommunityFeedPostCard(
                         post: post,
                         onLike: { viewModel.toggleLike(post: post) },
                         onBookmark: { viewModel.toggleBookmark(post: post) },
@@ -234,7 +234,7 @@ struct CommunityFeedView: View {
 
 // MARK: - Post Card
 
-struct CommunityPostCard: View {
+struct CommunityFeedPostCard: View {
     let post: CommunityPost
     let onLike: () -> Void
     let onBookmark: () -> Void

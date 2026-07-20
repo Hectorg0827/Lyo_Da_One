@@ -81,7 +81,7 @@ final class DiscoverViewModel: ObservableObject {
     func prepareShareItems(for item: DiscoverItem) -> [Any] {
         // If it's linked to a course, share as a course
         if let courseId = item.courseId {
-            return CourseShareService.shared.getShareItems(
+            return CourseShareService.shared.shareItems(
                 courseId: courseId,
                 title: item.title,
                 description: item.subtitle
@@ -131,9 +131,9 @@ final class DiscoverViewModel: ObservableObject {
         Task { 
             do {
                 if updatedItem.isLiked {
-                    try await DiscoveryService.shared.likeDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.likeDiscovery(discoveryId: item.id)
                 } else {
-                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
                 }
             } catch {
                 print("Failed to toggle like: \(error)")
@@ -164,9 +164,9 @@ final class DiscoverViewModel: ObservableObject {
         Task {
             do {
                 if updatedItem.isSaved {
-                    try await DiscoveryService.shared.saveDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.saveDiscovery(discoveryId: item.id)
                 } else {
-                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: Int(item.id) ?? 0)
+                    try await DiscoveryService.shared.unsaveDiscovery(discoveryId: item.id)
                 }
             } catch {
                 // Revert on failure
@@ -203,20 +203,33 @@ final class DiscoverViewModel: ObservableObject {
         return context
     }
     
-    /// Trigger generation of a mini-course from this reel
+    /// Clip → classroom: the clip is the hook, the classroom is the depth.
+    /// Opens the Living Classroom on this topic immediately and drops a card
+    /// in the Focus stack so the thread survives the session. (Previously this
+    /// fired an invisible background generation job — the button appeared to
+    /// do nothing.)
     func convertToCourse(item: DiscoverItem) {
         HapticManager.shared.success()
-        Log.ui.info("Generating mini-course for: \(item.title)")
-        
-        Task {
-            let topic = item.topic ?? item.title
-            let level = item.level.rawValue
-            await CourseGenerationService.shared.startCourseGeneration(
-                topic: topic,
-                level: level
-            )
-            Log.ui.info("Mini-course generation started for: \(item.title)")
-        }
+        let topic = item.topic ?? item.title
+        Log.ui.info("Clip → classroom: \(topic)")
+
+        UIStackStore.shared.upsertCourse(
+            courseId: "GENERATE:\(topic)",
+            title: topic,
+            subtitle: "From a clip you watched"
+        )
+
+        NotificationCenter.default.post(
+            name: .openClassroom,
+            object: nil,
+            userInfo: [
+                "courseId": "gen_clip_\(item.id)",
+                "topic": topic,
+                "shouldGenerateCourse": true,
+                "courseTitle": topic,
+                "lessonTitle": "Deep dive",
+            ]
+        )
     }
     
     /// Load items from backend or demo data

@@ -120,7 +120,7 @@ final class A2ACourseAgent {
         for part in courseArtifact.parts {
             if part.type == "data", let data = part.data {
                 // Convert AnyCodableValue dict to JSON
-                let jsonData = try JSONSerialization.data(withJSONObject: data.mapValues { $0.value })
+                let jsonData = try JSONSerialization.data(withJSONObject: AnyCodable.sanitizeForJSON(data.mapValues { $0.value }))
                 return try JSONDecoder().decode(GeneratedCourseResponse.self, from: jsonData)
             }
             

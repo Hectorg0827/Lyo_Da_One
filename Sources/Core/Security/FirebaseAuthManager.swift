@@ -29,12 +29,7 @@ class FirebaseAuthManager {
         }
         
         // getIDTokenForcingRefresh is the correct async/await method
-        let token = try await user.getIDToken()
-        
-        // Store in TokenManager for subsequent requests
-        await TokenManager.shared.setToken(token)
-        
-        return token
+        return try await user.getIDToken()
     }
     
     /// Force refresh the token (bypass cache)
@@ -49,9 +44,6 @@ class FirebaseAuthManager {
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else if let token = token {
-                    Task {
-                        await TokenManager.shared.setToken(token)
-                    }
                     continuation.resume(returning: token)
                 } else {
                     continuation.resume(throwing: LyoError.network(.unauthorized))

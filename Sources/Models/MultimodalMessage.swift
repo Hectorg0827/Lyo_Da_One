@@ -18,6 +18,7 @@ enum MessageContentType: Codable, Equatable {
     case file(url: String, name: String, mimeType: String, size: Int64)
     case codeSnippet(language: String, code: String)
     case quiz(question: String, options: [String], correctIndex: Int, explanation: String?)
+    case quizDeck(ChatQuizDeck)
     case courseCard(courseId: String, title: String, subtitle: String?, thumbnail: String?)
     case poll(question: String, options: [String], votes: [Int]?)
     case richCard(title: String, body: String, imageURL: String?, actions: [CardAction]?)
@@ -31,15 +32,21 @@ enum MessageContentType: Codable, Equatable {
     case testPrep(data: TestPrepContent)
     case testPrepProgress(data: TestPrepContent)
     case courseProposal(payload: CoursePayload)
-    
+    /// Stage A — chat-side intent nudge.
+    /// Renders a calm card under Lyo's reply offering the next learning
+    /// experience (guided lesson, study plan, quiz, mini lesson). Built
+    /// locally by the iOS classifier; not produced by the backend.
+    case suggestedActionCard(card: SuggestedActionCard)
+
     enum CodingKeys: String, CodingKey {
         case type, url, caption, duration, transcript, thumbnail, name, mimeType, size
         case language, code, question, options, correctIndex, explanation
+        case quizDeck
         case courseId, title, subtitle, body, imageURL, actions, votes
         case step, progress, topics
         case modules, totalModules, completedModules, sections
         case cards, component, studyPlan, testPrepData
-        case coursePayload
+        case coursePayload, suggestedActionCard
     }
     
     init(from decoder: Decoder) throws {
@@ -79,6 +86,9 @@ enum MessageContentType: Codable, Equatable {
             let correctIndex = try container.decode(Int.self, forKey: .correctIndex)
             let explanation = try container.decodeIfPresent(String.self, forKey: .explanation)
             self = .quiz(question: question, options: options, correctIndex: correctIndex, explanation: explanation)
+        case "quiz_deck":
+            let deck = try container.decode(ChatQuizDeck.self, forKey: .quizDeck)
+            self = .quizDeck(deck)
         case "course_card":
             let courseId = try container.decode(String.self, forKey: .courseId)
             let title = try container.decode(String.self, forKey: .title)
@@ -122,9 +132,6 @@ enum MessageContentType: Codable, Equatable {
             let title = try container.decode(String.self, forKey: .title)
             let options = try container.decode([String].self, forKey: .options)
             self = .suggestions(title: title, options: options)
-        case "recursive_ui", "a2ui":
-            // Legacy types removed — decode as plain text fallback
-            self = .text
         case "study_plan":
             let plan = try container.decode(StudyPlan.self, forKey: .studyPlan)
             self = .studyPlan(plan: plan)
@@ -140,6 +147,9 @@ enum MessageContentType: Codable, Equatable {
         case "course_proposal":
             let payload = try container.decode(CoursePayload.self, forKey: .coursePayload)
             self = .courseProposal(payload: payload)
+        case "suggested_action_card":
+            let card = try container.decode(SuggestedActionCard.self, forKey: .suggestedActionCard)
+            self = .suggestedActionCard(card: card)
         case "generative_ui":
             // Generative UI removed — decode as plain text fallback
             self = .text
@@ -184,6 +194,9 @@ enum MessageContentType: Codable, Equatable {
             try container.encode(options, forKey: .options)
             try container.encode(correctIndex, forKey: .correctIndex)
             try container.encodeIfPresent(explanation, forKey: .explanation)
+        case .quizDeck(let deck):
+            try container.encode("quiz_deck", forKey: .type)
+            try container.encode(deck, forKey: .quizDeck)
         case .courseCard(let courseId, let title, let subtitle, let thumbnail):
             try container.encode("course_card", forKey: .type)
             try container.encode(courseId, forKey: .courseId)
@@ -233,6 +246,9 @@ enum MessageContentType: Codable, Equatable {
         case .testPrep(let data):
             try container.encode("test_prep", forKey: .type)
             try container.encode(data, forKey: .testPrepData)
+        case .suggestedActionCard(let card):
+            try container.encode("suggested_action_card", forKey: .type)
+            try container.encode(card, forKey: .suggestedActionCard)
         case .testPrepProgress(let data):
             try container.encode("test_prep_progress", forKey: .type)
             try container.encode(data, forKey: .testPrepData)
@@ -251,6 +267,7 @@ enum MessageContentType: Codable, Equatable {
         case (.file(let u1, let n1, let m1, let s1), .file(let u2, let n2, let m2, let s2)): return u1 == u2 && n1 == n2 && m1 == m2 && s1 == s2
         case (.codeSnippet(let l1, let c1), .codeSnippet(let l2, let c2)): return l1 == l2 && c1 == c2
         case (.quiz(let q1, let o1, let c1, let e1), .quiz(let q2, let o2, let c2, let e2)): return q1 == q2 && o1 == o2 && c1 == c2 && e1 == e2
+        case (.quizDeck(let d1), .quizDeck(let d2)): return d1 == d2
         case (.courseCard(let i1, let t1, let s1, let th1), .courseCard(let i2, let t2, let s2, let th2)): return i1 == i2 && t1 == t2 && s1 == s2 && th1 == th2
         case (.poll(let q1, let o1, let v1), .poll(let q2, let o2, let v2)): return q1 == q2 && o1 == o2 && v1 == v2
         case (.richCard(let t1, let b1, let i1, let a1), .richCard(let t2, let b2, let i2, let a2)): return t1 == t2 && b1 == b2 && i1 == i2 && a1 == a2
@@ -264,6 +281,7 @@ enum MessageContentType: Codable, Equatable {
         case (.testPrep(let d1), .testPrep(let d2)): return d1 == d2
         case (.testPrepProgress(let d1), .testPrepProgress(let d2)): return d1 == d2
         case (.courseProposal(let p1), .courseProposal(let p2)): return p1.title == p2.title && p1.topic == p2.topic
+        case (.suggestedActionCard(let c1), .suggestedActionCard(let c2)): return c1 == c2
         default: return false
         }
     }
@@ -427,7 +445,33 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
         self.id = legacyMessage.id
         self.role = legacyMessage.isFromUser ? .user : .assistant
         self.content = legacyMessage.content
-        self.contentTypes = legacyMessage.contentTypes ?? [.text]
+        var mappedTypes = legacyMessage.contentTypes ?? [.text]
+        
+        // Map v2 SmartBlocks to legacy content types so EnhancedMessageBubble can render them
+        if let blocks = legacyMessage.smartBlocks {
+            for block in blocks {
+                switch block.content {
+                case .quiz(let payload):
+                    // Avoid duplicating if the backend already populated contentTypes
+                    let hasQuiz = mappedTypes.contains { type in
+                        if case .quiz = type { return true }
+                        return false
+                    }
+                    if !hasQuiz {
+                        mappedTypes.append(.quiz(
+                            question: payload.question,
+                            options: payload.options.map { $0.text },
+                            correctIndex: payload.correctIndex,
+                            explanation: payload.explanation
+                        ))
+                    }
+                // Map other SmartBlocks here if necessary in the future
+                default: break
+                }
+            }
+        }
+        
+        self.contentTypes = mappedTypes
         self.attachments = legacyMessage.attachments?.compactMap { attachment in
             ChatAttachment(
                 id: attachment.id,

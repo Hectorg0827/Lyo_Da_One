@@ -2,99 +2,210 @@
 //  CourseShareService.swift
 //  Lyo
 //
-//  Service for sharing courses and deep linking
+//  Service for sharing courses via UIActivityViewController
 //
 
+import Foundation
 import UIKit
 import SwiftUI
-import os
+
+// MARK: - Course Share Service
 
 @MainActor
-final class CourseShareService: ObservableObject {
+final class CourseShareService {
     static let shared = CourseShareService()
     
     private init() {}
     
-    /// Generate share items for a course (Deep Link + Text)
-    /// - Parameters:
-    ///   - courseId: The unique identifier of the course
-    ///   - title: The title of the course
-    ///   - description: Optional description of the course
-    /// - Returns: An array of items to share (Strings, URLs)
-    func getShareItems(courseId: String, title: String, description: String?) -> [Any] {
-        let deepLink = "lyoapp://course/\(courseId)"
-        let shareText = """
-        Check out this course on Lyo: "\(title)"
-        
-        \(description ?? "Join me and learn something new today!")
-        
-        Join here: \(deepLink)
-        """
-        // We can add the URL object too if needed, but text often suffices for general sharing
-        // Let's return just the text for now to match previous behavior, or [shareText, URL(string: deepLink)!]
-        return [shareText]
+    // MARK: - Share Methods
+    
+    /// Share a course with native iOS share sheet
+    func shareItems(courseId: String, title: String, description: String? = nil) -> [Any] {
+        var items: [Any] = [buildShareMessage(title: title, description: description)]
+        if let url = buildCourseDeepLink(courseId: courseId) {
+            items.append(url)
+        }
+        return items
     }
 
-    /// Share a course with a standardized link and message
-    /// - Parameters:
-    ///   - courseId: The unique identifier of the course
-    ///   - title: The title of the course
-    ///   - description: Optional description of the course
-    ///   - from: The view controller to present the share sheet from
-    func shareCourse(courseId: String, title: String, description: String?, from viewController: UIViewController) {
-        let items = getShareItems(courseId: courseId, title: title, description: description)
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+    func shareCourse(
+        courseId: String,
+        title: String,
+        description: String? = nil,
+        from viewController: UIViewController? = nil
+    ) {
+        // Build share URL with deep link
+        let shareURL = buildCourseDeepLink(courseId: courseId)
         
-        // iPad support
-        if let popover = activityVC.popoverPresentationController {
-            popover.sourceView = viewController.view
-            popover.sourceRect = CGRect(x: viewController.view.bounds.midX, y: viewController.view.bounds.midY, width: 0, height: 0)
-            popover.permittedArrowDirections = []
+        // Build share message
+        let message = buildShareMessage(title: title, description: description)
+        
+        // Create share items
+        var shareItems: [Any] = [message]
+        if let url = shareURL {
+            shareItems.append(url)
         }
         
-        viewController.present(activityVC, animated: true)
+        // Present activity view controller
+        let activityVC = UIActivityViewController(
+            activityItems: shareItems,
+            applicationActivities: nil
+        )
         
-        Log.net.info("📤 Sharing course: \(courseId)")
+        // Exclude irrelevant activities
+        activityVC.excludedActivityTypes = [
+            .assignToContact,
+            .addToReadingList,
+            .openInIBooks
+        ]
         
-        // 🏆 Award XP for viral contribution
-        Task {
-            _ = try? await LyoRepository.shared.awardXP(amount: 50, category: "viral")
-            _ = try? await LyoRepository.shared.awardContributorXP(courseId: courseId, action: "share")
+        // Present from current window
+        if let vc = viewController ?? UIApplication.shared.keyWindow?.rootViewController {
+            // iPad support: set popover presentation controller
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = vc.view
+                popover.sourceRect = CGRect(x: vc.view.bounds.midX, y: vc.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            
+            vc.present(activityVC, animated: true)
+            print("📤 CourseShareService: Presented share sheet for course: \(title)")
         }
     }
     
-    /// Share a course completion achievement
-    /// - Parameters:
-    ///   - courseId: The unique identifier of the course
-    ///   - title: The title of the course
-    ///   - score: The completion score or XP earned
-    ///   - from: The view controller to present the share sheet from
-    func shareCompletion(courseId: String, title: String, score: Int, from viewController: UIViewController) {
-        let deepLink = "lyoapp://course/\(courseId)"
-        let shareText = """
-        🎯 Just completed "\(title)" on Lyo!
+    /// Share completion achievement (when user finishes a course)
+    func shareCompletion(
+        courseId: String,
+        title: String,
+        completionDate: Date,
+        score: Int? = nil,
+        from viewController: UIViewController? = nil
+    ) {
+        let shareURL = buildCourseDeepLink(courseId: courseId)
         
-        I earned \(score) XP and leveled up my skills.
-        
-        Check out this course: \(deepLink)
-        """
-        
-        let activityVC = UIActivityViewController(activityItems: [shareText], applicationActivities: nil)
-        
-        // iPad support
-        if let popover = activityVC.popoverPresentationController {
-            popover.sourceView = viewController.view
-            popover.sourceRect = CGRect(x: viewController.view.bounds.midX, y: viewController.view.bounds.midY, width: 0, height: 0)
-            popover.permittedArrowDirections = []
+        let message: String
+        if let score = score {
+            message = """
+            🎉 I just completed "\(title)" on Lyo!
+            Score: \(score)%
+            
+            Check it out on Lyo - Learn Your Own Way!
+            """
+        } else {
+            message = """
+            🎉 I just completed "\(title)" on Lyo!
+            
+            Check it out on Lyo - Learn Your Own Way!
+            """
         }
         
-        viewController.present(activityVC, animated: true)
-        
-        Log.net.info("🏆 Sharing completion for course: \(courseId)")
-        
-        // 🏆 Award XP for celebration
-        Task {
-            try? await LyoRepository.shared.awardXP(amount: 25, category: "social")
+        var shareItems: [Any] = [message]
+        if let url = shareURL {
+            shareItems.append(url)
         }
+        
+        let activityVC = UIActivityViewController(
+            activityItems: shareItems,
+            applicationActivities: nil
+        )
+        
+        if let vc = viewController ?? UIApplication.shared.keyWindow?.rootViewController {
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = vc.view
+                popover.sourceRect = CGRect(x: vc.view.bounds.midX, y: vc.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            
+            vc.present(activityVC, animated: true)
+        }
+    }
+    
+    // MARK: - Deep Link Generation
+    
+    /// Build deep link URL for course
+    private func buildCourseDeepLink(courseId: String) -> URL? {
+        // Deep link format: lyoapp://course/{courseId}
+        let urlString = "lyoapp://course/\(courseId)"
+        return URL(string: urlString)
+    }
+    
+    /// Build share message for course
+    private func buildShareMessage(title: String, description: String?) -> String {
+        if let description = description, !description.isEmpty {
+            return """
+            📚 Check out "\(title)" on Lyo!
+            
+            \(description)
+            
+            Learn your own way with AI-powered courses!
+            """
+        } else {
+            return """
+            📚 Check out "\(title)" on Lyo!
+            
+            Learn your own way with AI-powered courses!
+            """
+        }
+    }
+}
+
+// MARK: - SwiftUI View Extension
+
+extension View {
+    /// Present native share sheet for course
+    func shareSheet(
+        isPresented: Binding<Bool>,
+        courseId: String,
+        title: String,
+        description: String? = nil
+    ) -> some View {
+        self.background(
+            ShareSheetController(
+                isPresented: isPresented,
+                courseId: courseId,
+                title: title,
+                description: description
+            )
+        )
+    }
+}
+
+// MARK: - UIViewControllerRepresentable for SwiftUI
+
+private struct ShareSheetController: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
+    let courseId: String
+    let title: String
+    let description: String?
+    
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController() // Placeholder
+    }
+    
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        if isPresented {
+            presentShareSheet(from: uiViewController)
+            isPresented = false
+        }
+    }
+    
+    private func presentShareSheet(from viewController: UIViewController) {
+        CourseShareService.shared.shareCourse(
+            courseId: courseId,
+            title: title,
+            description: description,
+            from: viewController
+        )
+    }
+}
+
+// MARK: - UIApplication Extension
+
+private extension UIApplication {
+    var keyWindow: UIWindow? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
     }
 }

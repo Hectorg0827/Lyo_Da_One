@@ -322,6 +322,12 @@
 			],
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "Build+Install Lyo (Simulator)",
+			"type": "shell",
+			"command": "xcodebuild -project Lyo.xcodeproj -scheme Lyo -destination \"platform=iOS Simulator,name=iPhone 17\" build",
+			"group": "build"
 		}
 	]
 }

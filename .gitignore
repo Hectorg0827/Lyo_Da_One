@@ -20,6 +20,44 @@ build/
 /SourcePackages
 /Packages
 SourcePackages/
+
+# === Swift Package Manager ===
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# === Secrets & credentials ===
+.netrc
+.fake
+
+# === Prevent one-off helper scripts from being committed ===
+# Use Sources/ for real app code; keep root clean.
+/*.rb
+/*.py
+/*.sh
+/*.log
+/*.txt
+
+# === Prevent stale docs/reports from accumulating in root ===
+# Put real docs in a docs/ folder instead.
+# (README.md and CHANGELOG.md are allowed)
+
+# === Misc ===
+*.ipa
+*.dSYM.zip
+*.dSYM
+Pods/
+
+# === merged from web/android branch ===
+# macOS System Files
+
+# Swift Package Manager
+.build/
+
+# Xcode / CocoaPods
+.derived-data-sim/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/
 build/EagerLinkingTBDs/
 build/Lyo.build/
 build/XCBuildData/
@@ -70,6 +108,7 @@ __pycache__/
 
 # === Claude / Agent folders ===
 .claude/
+build_temp*/
 
 # === Misc ===
 *.ipa

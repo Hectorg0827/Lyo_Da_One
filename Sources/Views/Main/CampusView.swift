@@ -1,7 +1,6 @@
 import SwiftUI
 import MapKit
 import AVKit
-import os
 
 // MARK: - Campus View Mode
 
@@ -97,7 +96,7 @@ struct CampusView: View {
                     onJoin: { joinItem(item) },
                     onSave: { viewModel.saveToStack(item: item) },
                     onAskLio: { askLioAbout(item) },
-                    onRSVP: { viewModel.toggleAttendance(for: item) }
+                    onRSVP: { joinItem(item) }
                 )
                 .presentationDetents([PresentationDetent.medium, PresentationDetent.large])
             }
@@ -111,7 +110,7 @@ struct CampusView: View {
                 .environmentObject(uiState)
         }
         .sheet(isPresented: $showModeSheet) {
-            ModeSelectionSheet(
+            CampusModeSelectionSheet(
                 selectedMode: $viewModel.selectedMode,
                 isPresented: $showModeSheet
             )
@@ -411,11 +410,20 @@ struct CampusView: View {
     }
     
     private var emptyState: some View {
-        EmptyStateView(
-            iconName: "mappin.slash",
-            title: "No events found",
-            message: "Try a different search or filter to find events."
-        )
+        VStack(spacing: 16) {
+            Image(systemName: "mappin.slash")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary.opacity(0.5))
+            
+            Text("No events found")
+                .font(.headline)
+                .foregroundColor(.secondary)
+            
+            Text("Try a different search or filter")
+                .font(.subheadline)
+                .foregroundColor(.secondary.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
     }
     
@@ -783,8 +791,146 @@ struct PremiumFilterChip: View {
     }
 }
 
-// MARK: - End of CampusView Components
-// Note: FloatingModeButton and ModeSelectionSheet are in separate files under Campus/
+// MARK: - Floating Mode Button (FAB)
+
+struct FloatingModeButton: View {
+    @Binding var showModeSheet: Bool
+    let currentMode: CampusViewMode
+    
+    var body: some View {
+        Button {
+            HapticManager.shared.light()
+            showModeSheet = true
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.purple, Color.blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 56, height: 56)
+                    .shadow(color: .purple.opacity(0.4), radius: 12, x: 0, y: 6)
+                
+                Image(systemName: currentMode.iconName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+        }
+        .padding(.trailing, 20)
+        .padding(.bottom, 100)
+    }
+}
+
+// MARK: - Mode Selection Sheet
+
+struct CampusModeSelectionSheet: View {
+    @Binding var selectedMode: CampusViewMode
+    @Binding var isPresented: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.white.opacity(0.3))
+                .frame(width: 40, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+            
+            Text("View Mode")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.bottom, 16)
+            
+            ForEach(CampusViewMode.allCases, id: \.self) { mode in
+                CampusModeOptionRow(
+                    mode: mode,
+                    isSelected: selectedMode == mode
+                ) {
+                    HapticManager.shared.medium()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedMode = mode
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        isPresented = false
+                    }
+                }
+                
+                if mode != CampusViewMode.allCases.last {
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                        .padding(.horizontal, 16)
+                }
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hexString: "1E293B"), Color(hexString: "0F172A")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .ignoresSafeArea()
+        )
+        .presentationDetents([.height(320)])
+        .presentationDragIndicator(.hidden)
+    }
+}
+
+// MARK: - Mode Option Row
+
+struct CampusModeOptionRow: View {
+    let mode: CampusViewMode
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? 
+                              LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing) :
+                              LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: mode.iconName)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.rawValue)
+                        .font(.body.weight(.semibold))
+                        .foregroundColor(.white)
+                    
+                    Text(mode.modeSubtitle)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(
+                            LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(isSelected ? Color.white.opacity(0.05) : Color.clear)
+        }
+    }
+}
 
 // MARK: - CampusViewMode Extension
 
@@ -936,8 +1082,7 @@ struct CampusLibraryView: View {
                 .foregroundColor(.white)
             Spacer()
             Button("See All") {
-                // Navigate handled by parent tab controller
-                Log.ui.info("📚 See All tapped for: \(title)")
+                // TODO: Navigate to list
             }
             .font(.subheadline)
             .foregroundColor(.white.opacity(0.6))
@@ -1475,10 +1620,10 @@ struct CourseDetailSheet: View {
                     Spacer()
                     
                     Button(action: {
-                        Log.ui.info("📚 Starting course: \(course.title)")
+                        // TODO: Navigate to course content/player
+                        print("📚 Starting course: \\(course.title)")
                         HapticManager.shared.medium()
                         isPresented = false
-                        // Course player will be opened by the parent via onDismiss
                     }) {
                         HStack {
                             Image(systemName: "play.fill")
@@ -1522,4 +1667,3 @@ struct CourseDetailSheet: View {
         }
     }
 }
-

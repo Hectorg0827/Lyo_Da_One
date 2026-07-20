@@ -3,6 +3,31 @@ import os
 
 // Redundant models moved to LessonBlock.swift for unified rich-content rendering.
 
+typealias LessonBlock = LiveLessonBlock
+
+extension LiveLessonBlock {
+    init(
+        id: String = UUID().uuidString,
+        type: LessonBlockType,
+        title: String? = nil,
+        body: String? = nil,
+        assetURL: URL? = nil,
+        options: [String]? = nil,
+        correctIndex: Int? = nil,
+        explanation: String? = nil
+    ) {
+        self.init(
+            id: id,
+            type: type,
+            title: title,
+            content: body,
+            imageURL: assetURL,
+            options: options,
+            correctIndex: correctIndex,
+            explanation: explanation
+        )
+    }
+}
 
 // MARK: - Live Lesson
 
@@ -160,7 +185,8 @@ enum LessonBlockType: String, Codable, CaseIterable {
     case diagram       // Mermaid/PlantUML
     case table
     case math          // LaTeX equations
-    
+    case explorable    // Interactive manipulable (slider-driven curve explorer)
+
     // Learning Aids
     case flashcard
     case flashcardDeck
@@ -232,6 +258,38 @@ enum LessonBlockType: String, Codable, CaseIterable {
 
 /// Complete block model that can represent ANY content type
 /// Designed to be parsed from backend JSON safely
+/// Configuration for an interactive "explorable" block — a small manipulable
+/// the learner can play with (e.g. sliders bound to a curve that redraws
+/// live). Expressions are evaluated by a safe on-device mini-parser
+/// (ExpressionEvaluator) — never by executing code.
+struct ExplorableConfig: Codable, Equatable {
+    /// Widget kind. Currently "curve_explorer".
+    let kind: String
+    /// Math expression in x and the named params, e.g. "a * x^2 + b * x".
+    let expression: String
+    /// Plot domain; defaults to -5…5 when nil.
+    let xMin: Double?
+    let xMax: Double?
+    /// A nudge shown under the widget, e.g. "Increase a — what happens?"
+    let prompt: String?
+    /// The sliders.
+    let params: [ExplorableParam]
+
+    struct ExplorableParam: Codable, Equatable {
+        let name: String
+        let min: Double
+        let max: Double
+        let initial: Double
+        let step: Double?
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind, expression, prompt, params
+        case xMin = "x_min"
+        case xMax = "x_max"
+    }
+}
+
 struct LiveLessonBlock: Identifiable, Codable {
     let id: String
     let type: LessonBlockType
@@ -268,6 +326,9 @@ struct LiveLessonBlock: Identifiable, Codable {
     // Math/Diagram
     let latex: String?         // LaTeX equation
     let mermaid: String?       // Mermaid diagram code
+
+    // Interactive manipulable (type == .explorable)
+    let explorable: ExplorableConfig?
     
     // Flashcard
     let front: String?
@@ -316,6 +377,7 @@ struct LiveLessonBlock: Identifiable, Codable {
         chartData: ChartDataPayload? = nil,
         latex: String? = nil,
         mermaid: String? = nil,
+        explorable: ExplorableConfig? = nil,
         front: String? = nil,
         back: String? = nil,
         cards: [FlashcardPayload]? = nil,
@@ -351,6 +413,7 @@ struct LiveLessonBlock: Identifiable, Codable {
         self.chartData = chartData
         self.latex = latex
         self.mermaid = mermaid
+        self.explorable = explorable
         self.front = front
         self.back = back
         self.cards = cards
@@ -409,6 +472,7 @@ struct LiveLessonBlock: Identifiable, Codable {
         case chartType = "chart_type"
         case chartData = "chart_data"
         case latex, mermaid
+        case explorable
         case front, back, cards
         case headers, rows
         case style
@@ -463,6 +527,7 @@ struct LiveLessonBlock: Identifiable, Codable {
         self.chartData = try? container.decodeIfPresent(ChartDataPayload.self, forKey: .chartData)
         self.latex = try? container.decodeIfPresent(String.self, forKey: .latex)
         self.mermaid = try? container.decodeIfPresent(String.self, forKey: .mermaid)
+        self.explorable = try? container.decodeIfPresent(ExplorableConfig.self, forKey: .explorable)
         self.front = try? container.decodeIfPresent(String.self, forKey: .front)
         self.back = try? container.decodeIfPresent(String.self, forKey: .back)
         self.cards = try? container.decodeIfPresent([FlashcardPayload].self, forKey: .cards)

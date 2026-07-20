@@ -423,7 +423,6 @@ class CreateViewModel: ObservableObject {
         try await storyService.addStory(
             mediaURL: mediaURL,
             mediaType: mediaType,
-            caption: contentText.isEmpty ? nil : contentText,
             isLive: false
         )
         
@@ -497,7 +496,11 @@ class CreateViewModel: ObservableObject {
             difficultyLevel: courseLevel,
             instructorId: await TokenManager.shared.getUserId() ?? "unknown"
         )
-        try await repository.saveCourse(data: persistenceData)
+        try await repository.saveCourse(
+            title: persistenceData.title,
+            description: persistenceData.topic,
+            modules: persistenceData.modules.map(\.title)
+        )
         
         progress = 1.0
         
@@ -694,4 +697,3 @@ enum CreateError: LocalizedError {
         }
     }
 }
-

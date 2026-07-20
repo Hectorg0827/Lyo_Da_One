@@ -5,6 +5,8 @@ import os
 struct EnhancedLyoHomeView: View {
     @StateObject private var viewModel = LyoAIViewModel()
     @EnvironmentObject var rootViewModel: RootViewModel
+    @EnvironmentObject var uiStackStore: UIStackStore
+    @EnvironmentObject var uiState: AppUIState
     
     // Services
     @StateObject private var smartMemory = SmartMemoryService.shared
@@ -26,6 +28,7 @@ struct EnhancedLyoHomeView: View {
     // Wrapper for using item-based fullScreenCover with a String id
     struct ClassroomSession: Identifiable, Equatable {
         let id: String
+        let title: String
     }
     
     // Accessibility
@@ -102,9 +105,11 @@ struct EnhancedLyoHomeView: View {
                     .zIndex(150)
             }
         }
-        // Present ClassroomView as fullScreenCover when classroomSession is set
+        // Present LivingClassroomView as fullScreenCover when classroomSession is set
         .fullScreenCover(item: $classroomSession) { session in
-            ClassroomView(sessionId: session.id)
+            LivingClassroomView(courseId: session.id, courseTitle: session.title)
+                .environmentObject(uiStackStore)
+                .environmentObject(uiState)
                 .zIndex(200)
         }
         .onAppear {
@@ -134,11 +139,14 @@ struct EnhancedLyoHomeView: View {
                     onActionTap: { action in
                         handleAction(action)
                     },
-                    onCourseStart_A2A: { course in
-                        viewModel.onCourseStart(course: course)
+                    onCourseStart: { course in
+                        // Proposal tapped — ask the AI to actually build/start the course.
+                        viewModel.inputText = "Start course: \(course.title)"
+                        Task { await viewModel.sendMessage() }
                     },
-                    onQuizAnswer_A2A: { question, answerIndex in
-                        viewModel.onQuizAnswer(question: question, answerIndex: answerIndex)
+                    onCourseStart_A2A: { course in
+                        // Fully-built course ready to open in the classroom.
+                        viewModel.onCourseStart(course: course)
                     }
                 )
             }
@@ -507,7 +515,8 @@ struct EnhancedLyoHomeView: View {
                 )
                 
                 await MainActor.run {
-                    self.classroomSession = ClassroomSession(id: session.id)
+                    let title = lessonData["title"] as? String ?? "New Lesson"
+                    self.classroomSession = ClassroomSession(id: session.id, title: title)
                     self.isCreatingSession = false
                     
                     // Post global notification for cinematic flow

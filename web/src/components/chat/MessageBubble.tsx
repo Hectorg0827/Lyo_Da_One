@@ -7,20 +7,11 @@ import { Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
+import MascotAvatar from './MascotAvatar';
+import { useChatStore } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
   message: ChatMessage;
-}
-
-function LYOAvatar() {
-  return (
-    <div className="relative shrink-0 w-8 h-8">
-      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink animate-pulse-slow blur-sm opacity-60" />
-      <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-lyo-500 via-accent-purple to-accent-pink flex items-center justify-center shadow-lg">
-        <span className="text-[11px] font-bold text-white tracking-tight">LYO</span>
-      </div>
-    </div>
-  );
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -113,6 +104,102 @@ const markdownComponents = {
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [hovered, setHovered] = useState(false);
+  
+  const { isGenerating, generationProgress, getActiveConversation } = useChatStore();
+
+  // Helper to extract OPEN_CLASSROOM JSON block from assistant messages.
+  // Uses string-aware brace counting — a lazy regex stops at the FIRST '}',
+  // which breaks on the (always-nested) payload and left raw JSON on screen.
+  const getOpenClassroomData = (content: string) => {
+    if (isUser) return null;
+
+    const marker = content.search(/\{\s*"type"\s*:\s*"OPEN_CLASSROOM"/i);
+    if (marker === -1) return null;
+
+    let depth = 0;
+    let end = -1;
+    let inString = false;
+    let escaped = false;
+    for (let i = marker; i < content.length; i++) {
+      const ch = content[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    // Unbalanced braces = the command is still streaming in; wait for more.
+    if (end === -1) return null;
+
+    {
+      try {
+        const parsed = JSON.parse(content.slice(marker, end + 1));
+        const cleanText = (content.slice(0, marker) + content.slice(end + 1))
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim();
+        const courseData = parsed.payload?.course || parsed.course;
+        
+        if (courseData) {
+          // Normalize difficulty
+          if (courseData.difficulty) {
+            courseData.difficulty = courseData.difficulty.toLowerCase();
+          }
+          // Normalize duration string/number
+          const rawDuration = courseData.estimated_duration || courseData.duration;
+          let sanitizedDuration = 60; // fallback to 60 mins
+          if (typeof rawDuration === 'number') {
+            sanitizedDuration = rawDuration;
+          } else if (typeof rawDuration === 'string') {
+            const numMatch = rawDuration.match(/\d+/);
+            if (numMatch) {
+              const num = parseInt(numMatch[0]);
+              if (rawDuration.toLowerCase().includes('hour')) {
+                sanitizedDuration = num * 60;
+              } else {
+                sanitizedDuration = num;
+              }
+            }
+          }
+          courseData.estimatedDuration = sanitizedDuration;
+
+          // Normalize lessons to modules
+          if (!courseData.modules && courseData.lessons) {
+            courseData.modules = courseData.lessons.map((lesson: any, index: number) => ({
+              id: lesson.id || `l-${index}`,
+              title: lesson.title,
+              description: lesson.description || '',
+              order: index + 1,
+              lessons: [lesson]
+            }));
+          }
+        }
+        
+        return {
+          course: courseData,
+          cleanText
+        };
+      } catch {
+        // Mid-stream the braces can balance before the JSON is complete —
+        // expected transient state; the card renders once the stream finishes.
+      }
+    }
+    return null;
+  };
+
+  const ocData = getOpenClassroomData(message.content);
+  const displayContent = ocData ? ocData.cleanText : message.content;
+  const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
+  const displayType = ocData ? 'course_proposal' : message.type;
+
+  // Determine if this specific card is active and currently generating in the store
+  const activeConvo = getActiveConversation();
+  const isLatestMessage = activeConvo?.messages[activeConvo.messages.length - 1]?.id === message.id;
+  const isCurrentlyGeneratingThis = isLatestMessage && isGenerating && displayType === 'course_proposal';
 
   return (
     <motion.div
@@ -120,47 +207,56 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={cn(
-        'flex items-end gap-3 w-full group',
-        isUser ? 'flex-row-reverse' : 'flex-row'
+        'flex w-full group',
+        isUser ? 'flex-row-reverse items-end gap-3' : 'flex-col'
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Avatar – assistant only */}
-      {!isUser && <LYOAvatar />}
+      {/* Header – assistant only (mirrors iOS: mascot + "Lyo" name) */}
+      {!isUser && (
+        <div className="flex items-center gap-2 mb-1.5">
+          <MascotAvatar
+            thinking={isLatestMessage && isGenerating}
+            size={32}
+          />
+          <span className="text-xs font-bold text-white/90">Lyo</span>
+        </div>
+      )}
 
       {/* Bubble */}
       <div
         className={cn(
           'relative max-w-[78%] md:max-w-[68%]',
-          isUser ? 'items-end' : 'items-start',
+          isUser ? 'items-end' : 'items-start pl-10',
           'flex flex-col gap-1'
         )}
       >
         {/* Course proposal card */}
-        {message.type === 'course_proposal' && !isUser && (
+        {displayType === 'course_proposal' && !isUser && (
           <CourseGenerationCard
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            course={message.metadata?.course as any}
+            course={displayCourse as any}
+            isGenerating={isCurrentlyGeneratingThis}
+            generationProgress={generationProgress}
           />
         )}
 
         {/* Regular text bubble */}
-        {(message.type === 'text' || !message.type) && (
+        {(displayType === 'text' || !displayType) && displayContent && (
           <div
             className={cn(
               'px-4 py-3 rounded-2xl text-sm leading-relaxed',
               isUser
-                ? 'bg-gradient-to-br from-lyo-600 to-accent-purple text-white rounded-br-sm shadow-lg shadow-lyo-900/30'
+                ? 'bg-gradient-to-br from-accent-purple to-lyo-500 text-white rounded-br-sm shadow-lg shadow-lyo-900/30'
                 : 'bg-white/5 border border-white/10 text-white/80 rounded-bl-sm backdrop-blur-sm'
             )}
           >
             {isUser ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="whitespace-pre-wrap">{displayContent}</p>
             ) : (
               <div className="prose-invert prose-sm max-w-none">
                 <ReactMarkdown components={markdownComponents}>
-                  {message.content}
+                  {displayContent}
                 </ReactMarkdown>
               </div>
             )}

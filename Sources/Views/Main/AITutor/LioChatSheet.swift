@@ -1,5 +1,12 @@
 import SwiftUI
-import os
+
+typealias LioChatMessage = LyoMessage
+
+private extension LyoMessage {
+    var text: String { content }
+    var isUser: Bool { isFromUser }
+    var source: String? { nil }
+}
 
 // MARK: - Lio Chat Sheet
 /// The unified AI chat interface presented when tapping the Lio orb
@@ -12,46 +19,87 @@ struct LioChatSheet: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showMasteryProfile = false
     
-    // Current mode for display
-    private var currentModeName: String {
-        if let explicit = viewModel.selectedIntent {
-            switch explicit {
-            case "STUDY_PLAN": return "Study Plan"
-            case "QUIZ": return "Quiz"
-            case "CHAT": return "Chat"
-            case "COURSE": return "Course"
-            default: return "Auto"
-            }
-        }
-        
-        // This could be enhanced to reflect actual mode state
-        // For now, using the tab context
-        switch uiState.currentTab {
-        case .focus: return "Study"
-        case .discover: return "Explore"
-        case .campus: return "Chat"
-        default: return "Auto"
-        }
-    }
-    
     // Voice Animation State
     @State private var waveformPhase: CGFloat = 0
-    
-    // AI Command Handler for course creation navigation
-    @StateObject private var commandHandler = AICommandHandler.shared
-    @State private var showingClassroom = false
-    
-    // Waiting Room State
-    @State private var showingWaitingRoom = false
-    @State private var courseTitleToGenerate: String = ""
-    @State private var pendingCourseCallback: (() -> Void)? = nil
-    @Namespace private var mascotAnimation
     
     // MARK: - Body
     
     var body: some View {
         NavigationStack {
-            mainContentView
+            ZStack {
+                // Dark Base for better contrast
+                Color.black.opacity(0.8).ignoresSafeArea()
+                
+                // Content-Aware Background
+                AnimatedGradient(colors: contextColors)
+                    .ignoresSafeArea()
+                    .opacity(0.25)
+                
+                VStack(spacing: 0) {
+                    // Custom Header
+                    headerView
+                    
+                    // Messages area
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 16) {
+                                if viewModel.messages.isEmpty {
+                                    emptyStateView
+                                } else {
+                                    ForEach(viewModel.messages) { msg in
+                                        LyoMessageBubbleView(
+                                            message: msg,
+                                            onActionTap: { action in
+                                                viewModel.executeAction(action)
+                                            },
+                                            onQuickChipTap: { chip in
+                                                viewModel.inputText = chip
+                                                Task { await viewModel.sendMessage() }
+                                            },
+                                            onCourseStart: { course in
+                                                viewModel.inputText = "Start course: \(course.title)"
+                                                Task { await viewModel.sendMessage() }
+                                            }
+                                        )
+                                        .id(msg.id)
+                                    }
+                                }
+                                
+                                // Typing indicator when sending
+                                if viewModel.isLoading {
+                                    LioChatTypingIndicator()
+                                        .id("typing")
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 20)
+                            .padding(.bottom, 100) // Space for input bar
+                        }
+                        .onAppear { scrollProxy = proxy }
+                        .onChange(of: viewModel.messages.count) {
+                            scrollToBottom(using: proxy)
+                        }
+                    }
+                }
+                
+                // Floating Input Bar
+                VStack {
+                    Spacer()
+                    
+                    if !viewModel.isVoiceActive {
+                        nextActionView
+                    }
+                    
+                    if viewModel.isVoiceActive {
+                        voiceListeningView
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        inputBar
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
+                    }
+                }
+            }
             .navigationBarHidden(true)
             .sheet(isPresented: $showMasteryProfile) {
                 MasteryProfileView()
@@ -71,7 +119,7 @@ struct LioChatSheet: View {
                 
                 // Check if we need to load a specific history session
                 if #available(iOS 17.0, *), let sessionToLoad = uiState.chatSessionToLoad as? ChatSession {
-                    Log.ai.info("Loading chat history: \(sessionToLoad.title)")
+                    print("Loading chat history: \(sessionToLoad.title)")
                     viewModel.loadHistory(from: sessionToLoad)
                     // Clear state so it doesn't reload on next appear if not intended
                     uiState.chatSessionToLoad = nil
@@ -88,148 +136,7 @@ struct LioChatSheet: View {
                     CourseDetailSheet(course: course, isPresented: $uiState.showCourseDetail)
                 }
             }
-            // A2A Multi-Agent Generation Progress View
-            .fullScreenCover(isPresented: $viewModel.showA2AProgressView) {
-                A2AGenerationProgressView(
-                    topic: viewModel.a2aGenerationTopic,
-                    qualityTier: viewModel.a2aGenerationTier,
-                    onComplete: { course in
-                        viewModel.handleA2AGenerationComplete(course: course)
-                    },
-                    onCancel: {
-                        viewModel.handleA2AGenerationCancelled()
-                    }
-                )
-            }
-            // AI Command Handler - Classroom Navigation
-            .onChange(of: commandHandler.shouldOpenClassroom) { _, shouldOpen in
-                if shouldOpen {
-                    // Reset command handler state after notification is sent
-                    // MainTabView will handle the actual navigation via .openClassroom notification
-                    isPresented = false 
-                    commandHandler.clearPendingNavigation()
-                }
-            }
         }
-    }
-    
-    // MARK: - Main Content (extracted for type-checker)
-    
-    private var mainContentView: some View {
-        ZStack {
-            // FORCE BLACK BACKGROUND
-            Color.black.ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Custom Header
-                headerView
-
-                // Messages area
-                chatMessagesArea
-            }
-            
-            // Floating Input Bar
-            VStack {
-                Spacer()
-                
-                if !viewModel.isVoiceActive {
-                    nextActionView
-                }
-                
-                if viewModel.isVoiceActive {
-                    voiceListeningView
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else {
-                    inputBar
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
-                }
-            }
-            
-            // Waiting Room Overlay
-            if showingWaitingRoom {
-                Color.black.opacity(0.8).ignoresSafeArea()
-                WaitingRoomView(
-                    courseTitle: courseTitleToGenerate,
-                    mascotNamespace: mascotAnimation
-                ) {
-                    showingWaitingRoom = false
-                    pendingCourseCallback?()
-                }
-                .transition(.opacity)
-            }
-        }
-    }
-    
-    // MARK: - Chat Messages Area (extracted for type-checker)
-    
-    private var chatMessagesArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if viewModel.messages.isEmpty {
-                        emptyStateView
-                    } else {
-                        ForEach(viewModel.messages) { msg in
-                            messageBubble(for: msg)
-                                .id(msg.id)
-                        }
-                    }
-                    
-                    // Typing indicator when sending
-                    if viewModel.isLoading {
-                        LyoUnifiedThinkingIndicator()
-                            .id("typing")
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 20)
-                .padding(.bottom, 100) // Space for input bar
-            }
-            .onAppear { scrollProxy = proxy }
-            .onChange(of: viewModel.messages.count) {
-                scrollToBottom(using: proxy)
-            }
-        }
-    }
-    
-    // MARK: - Message Bubble Helper (extracted for type-checker)
-    
-    private func messageBubble(for msg: LyoMessage) -> some View {
-        LyoMessageBubbleView(
-            message: msg,
-            onActionTap: { action in
-                viewModel.executeAction(action)
-            },
-            onQuickChipTap: { chip in
-                viewModel.inputText = chip
-                Task { await viewModel.sendMessage() }
-            },
-            onCourseStart: { data in
-                let payload = CoursePayload(
-                    id: nil,
-                    title: data.title,
-                    topic: data.subtext,
-                    level: data.summary,
-                    language: nil,
-                    duration: nil,
-                    objectives: data.modules
-                )
-                AICommandHandler.shared.executeOpenClassroom(for: payload)
-            },
-            onAudioToggle: { messageId, text in
-                viewModel.toggleMessageAudio(messageId: messageId, text: text)
-            },
-            isPlayingAudio: viewModel.currentlyPlayingMessageId == msg.id,
-            audioProgress: viewModel.currentlyPlayingMessageId == msg.id ? viewModel.playbackProgress : 0,
-            onSmartBlockQuizAnswer: { question, selected, isCorrect in
-                viewModel.reportQuizResult(question: question, selectedAnswer: selected, isCorrect: isCorrect)
-            },
-            onSmartBlockTestPrepScheduled: { date, course, desc, attachmentIds in
-                viewModel.handleTestPrepScheduled(date: date, course: course, description: desc, attachmentIds: attachmentIds)
-            },
-            mascotNamespace: mascotAnimation
-        )
     }
     
     // MARK: - Subviews
@@ -287,7 +194,7 @@ struct LioChatSheet: View {
         .padding(.bottom, 8)
         .background(Material.thinMaterial)
     }
-
+    
     private var modeIndicator: some View {
         HStack(spacing: 6) {
             Circle()
@@ -325,22 +232,79 @@ struct LioChatSheet: View {
         VStack(spacing: 24) {
             Spacer()
                 .frame(height: 20)
-
-            VStack(spacing: 8) {
-                Text("How can I help?")
-                    .font(.title3.weight(.semibold))
-                Text("Ask a question or try a suggestion below.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            
+            // Animated orb
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: contextColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 80, height: 80)
+                    .blur(radius: 10)
+                    .opacity(0.5)
+                
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: contextColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 60, height: 60)
+                    .shadow(color: contextColors.first!.opacity(0.3), radius: 10)
+                
+                Image(systemName: "sparkles")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
             }
-
-            if !viewModel.suggestions.isEmpty {
-                SuggestionChipsView(suggestions: viewModel.suggestions) { chip in
-                    viewModel.executeSuggestion(chip)
+            
+            VStack(spacing: 8) {
+                Text("Hi! I'm Lio")
+                    .font(.title2.bold())
+                
+                Text("Your AI learning companion. Ask me anything about \(uiState.currentTab.displayName.lowercased())!")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            
+            // Suggestion chips
+            suggestionChips
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var suggestionChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(activeSuggestions, id: \.self) { suggestion in
+                    Button {
+                        viewModel.inputText = suggestion
+                        send()
+                    } label: {
+                        Text(suggestion)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Material.ultraThinMaterial)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                            )
+                    }
                 }
             }
-
-            Spacer()
+            .padding(.horizontal, 16)
         }
         .padding(.top, 10)
     }
@@ -362,7 +326,7 @@ struct LioChatSheet: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("NEXT SUGGESTION")
+                            Text("NEXR SUGGESTION")
                                 .font(.system(size: 10, weight: .black))
                                 .foregroundColor(.yellow)
                             Text(action.contentString)
@@ -432,330 +396,65 @@ struct LioChatSheet: View {
         }
     }
     
-    // MARK: - Multimodal Input Bar
-    
-    @State private var showMediaPicker = false
-    @State private var mediaPickerSource: MediaPickerSource = .photoLibrary
-    @State private var selectedImage: UIImage? = nil
-    
-    enum MediaPickerSource {
-        case photoLibrary, camera, files
-    }
-    
     private var inputBar: some View {
-        VStack(spacing: 0) {
-            // Attachment Preview
-            if !viewModel.attachments.isEmpty {
-                attachmentPreviewBar
+        HStack(alignment: .bottom, spacing: 12) {
+            // Add File Button
+            Button(action: {
+                // Placeholder for file picker
+                HapticManager.shared.light()
+            }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(Color.black.opacity(0.05))
+                    .clipShape(Circle())
             }
             
-            // Voice Recording Overlay
-            if viewModel.isRecordingVoice {
-                voiceRecordingBar
-            } else {
-                standardInputBar
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 20)
-        // Solid Black Background with Gradient Trim (Island Style)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 28)
-                    .fill(Color.black)
-                
-                RoundedRectangle(cornerRadius: 28)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color(hex: "8B5CF6").opacity(0.6), Color(hex: "3B82F6").opacity(0.4)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.5
-                    )
-            }
-        )
-        .padding(.horizontal, 12) // Outer padding to make it look like an island
-        .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
-        .sheet(isPresented: $showMediaPicker) {
-            mediaPickerSheet
-        }
-    }
-    
-    private var attachmentPreviewBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(viewModel.attachments) { attachment in
-                    AttachmentPreviewChip(
-                        attachment: attachment,
-                        onRemove: { viewModel.removeAttachment(attachment) }
-                    )
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-    }
-    
-    private var standardInputBar: some View {
-        VStack(spacing: 12) {
-            // Row 1: Text Input Area (Full Width)
-            HStack {
-                TextField("Ask anything...", text: $viewModel.inputText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(minHeight: 48)
-                    .background(Color(white: 0.08))
-                    .cornerRadius(20)
-                    .foregroundColor(.white)
-                    .accentColor(DesignTokens.Colors.accent)
-                    .lineLimit(1...6)
-            }
+            // Text Input
+            TextField("Ask Lio anything…", text: $viewModel.inputText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .padding(12)
+                .background(Color.black.opacity(0.05))
+                .cornerRadius(20)
+                .lineLimit(1...5)
             
-            // Row 2: Bottom Toolbar Island
-            HStack(spacing: 12) {
-                // Left: Single "+" Menu button
-                Menu {
-                    Button(action: { openPhotoPicker() }) {
-                        Label("Photo Library", systemImage: "photo.on.rectangle")
-                    }
-                    Button(action: { openCamera() }) {
-                        Label("Take Photo", systemImage: "camera")
-                    }
-                    Button(action: { openFilePicker() }) {
-                        Label("Choose File", systemImage: "doc")
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
+            // Mic Button (or Send if typing)
+            if viewModel.inputText.isEmpty {
+                Button(action: {
+                    HapticManager.shared.medium()
+                    viewModel.toggleVoiceMode()
+                }) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.secondary)
                         .frame(width: 36, height: 36)
-                        .background(Color(white: 0.15))
-                        .clipShape(Circle())
                 }
-                
-                // Middle: Mode Selector
-                Menu {
-                    Button(action: { viewModel.selectedIntent = nil }) {
-                        Label("Auto", systemImage: "sparkles")
-                        if viewModel.selectedIntent == nil { Image(systemName: "checkmark") }
-                    }
-                    Button(action: { viewModel.selectedIntent = "STUDY_PLAN" }) {
-                        Label("Study Plan", systemImage: "book.fill")
-                        if viewModel.selectedIntent == "STUDY_PLAN" { Image(systemName: "checkmark") }
-                    }
-                    Button(action: { viewModel.selectedIntent = "QUIZ" }) {
-                        Label("Quiz", systemImage: "questionmark.circle")
-                        if viewModel.selectedIntent == "QUIZ" { Image(systemName: "checkmark") }
-                    }
-                    Button(action: { viewModel.selectedIntent = "CHAT" }) {
-                        Label("Chat", systemImage: "message")
-                        if viewModel.selectedIntent == "CHAT" { Image(systemName: "checkmark") }
-                    }
-                    Button(action: { viewModel.selectedIntent = "COURSE" }) {
-                        Label("Course", systemImage: "graduationcap")
-                        if viewModel.selectedIntent == "COURSE" { Image(systemName: "checkmark") }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(currentModeName)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color(white: 0.15))
-                    .clipShape(Capsule())
-                }
-                
-                Spacer()
-                
-                // Right: Mic / Live / Send
-                HStack(spacing: 12) {
-                    // Live Mode Button
-                    Button(action: {
-                        HapticManager.shared.playLightImpact()
-                        // Handle Live Mode
-                    }) {
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white.opacity(0.8))
-                            .frame(width: 36, height: 36)
-                            .background(Color(white: 0.15))
-                            .clipShape(Circle())
-                    }
-                    
-                    if viewModel.inputText.isEmpty && viewModel.attachments.isEmpty {
-                        // Mic (TTS) Button
-                        Button(action: {
-                            HapticManager.shared.playMediumImpact()
-                            viewModel.toggleVoiceMode()
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 36, height: 36)
-                                
-                                Image(systemName: "mic.fill")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    } else {
-                        // Send Button
-                        Button(action: {
-                            HapticManager.shared.playSuccess()
-                            Task { await viewModel.sendMessage() }
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(DesignTokens.Colors.accent)
-                                    .frame(width: 36, height: 36)
-                                
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private var voiceRecordingBar: some View {
-        HStack(spacing: 16) {
-            // Cancel Button
-            Button(action: {
-                viewModel.cancelVoiceRecording()
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.red.opacity(0.8))
-            }
-            
-            // Waveform Visualization
-            VoiceWaveformView(level: viewModel.voiceInputLevel)
-                .frame(height: 40)
-            
-            // Recording Indicator
-            Circle()
-                .fill(Color.red)
-                .frame(width: 12, height: 12)
-                .opacity(0.8)
-                .modifier(PulseAnimation())
-            
-            // Stop/Send Button
-            Button(action: {
-                viewModel.stopVoiceRecording()
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.purple, .blue],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+            } else {
+                Button(action: send) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: contextColors,
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                        )
-                        .frame(width: 44, height: 44)
-                    
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
                 }
+                .disabled(viewModel.isLoading)
             }
         }
         .padding(12)
-    }
-    
-    @ViewBuilder
-    private var mediaPickerSheet: some View {
-        switch mediaPickerSource {
-        case .photoLibrary:
-            ImagePickerView(selectedImage: $selectedImage, isPresented: $showMediaPicker)
-                .onChange(of: selectedImage) { _, newImage in
-                    if let image = newImage,
-                       let data = image.jpegData(compressionQuality: 0.8) {
-                        let media = PickedMedia(
-                            type: .image,
-                            data: data,
-                            filename: "photo_library_image.jpg",
-                            mimeType: "image/jpeg",
-                            thumbnail: image,
-                            originalURL: nil
-                        )
-                        viewModel.handlePickedMedia(media)
-                        selectedImage = nil // Reset for next use
-                    }
-                }
-        case .camera:
-            CameraPickerView { media in
-                if let media = media {
-                    viewModel.handlePickedMedia(media)
-                }
-                showMediaPicker = false
-            }
-        case .files:
-            DocumentPickerView { url in
-                if let url = url {
-                    // Convert URL to PickedMedia
-                    let filename = url.lastPathComponent
-                    let pathExtension = url.pathExtension.lowercased()
-                    let mimeType: String
-                    switch pathExtension {
-                    case "pdf": mimeType = "application/pdf"
-                    case "txt": mimeType = "text/plain"
-                    case "doc", "docx": mimeType = "application/msword"
-                    case "xls", "xlsx": mimeType = "application/vnd.ms-excel"
-                    case "ppt", "pptx": mimeType = "application/vnd.ms-powerpoint"
-                    case "jpg", "jpeg": mimeType = "image/jpeg"
-                    case "png": mimeType = "image/png"
-                    default: mimeType = "application/octet-stream"
-                    }
-                    
-                    if let data = try? Data(contentsOf: url) {
-                        let media = PickedMedia(
-                            type: .document,
-                            data: data,
-                            filename: filename,
-                            mimeType: mimeType,
-                            thumbnail: nil,
-                            originalURL: url
-                        )
-                        viewModel.handlePickedMedia(media)
-                    }
-                }
-                showMediaPicker = false
-            }
-        }
-    }
-    
-    private func openPhotoPicker() {
-        mediaPickerSource = .photoLibrary
-        showMediaPicker = true
-    }
-    
-    private func openCamera() {
-        mediaPickerSource = .camera
-        showMediaPicker = true
-    }
-    
-    private func openFilePicker() {
-        mediaPickerSource = .files
-        showMediaPicker = true
+        .background(Material.regularMaterial)
+        .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
     }
     
     
@@ -763,15 +462,10 @@ struct LioChatSheet: View {
     
     private func send() {
         let trimmed = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !viewModel.attachments.isEmpty else { return }
-        HapticManager.shared.playLightImpact()
-        
-        if viewModel.attachments.isEmpty {
-            viewModel.inputText = trimmed
-            Task { await viewModel.sendMessage() }
-        } else {
-            Task { await viewModel.sendMessageWithAttachments(text: trimmed, attachments: viewModel.attachments) }
-        }
+        guard !trimmed.isEmpty else { return }
+        viewModel.inputText = trimmed
+        HapticManager.shared.light()
+        Task { await viewModel.sendMessage() }
     }
 
     // MARK: - Voice UI
@@ -835,11 +529,129 @@ struct LioChatSheet: View {
     }
 }
 
+// MARK: - Chat Message Row
+
+struct ChatMessageRow: View {
+    let message: LioChatMessage
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if !message.isUser {
+                // AI Avatar
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [DesignSystem.Colors.fallbackPrimary, DesignSystem.Colors.fallbackSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 32, height: 32)
+                    
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            
+            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
+                Text(message.isUser ? "You" : "Lio")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                
+                Text(message.text)
+                    .font(.body)
+                    .padding(12)
+                    .background(
+                        message.isUser ?
+                        AnyShapeStyle(
+                            LinearGradient(
+                                colors: [DesignSystem.Colors.fallbackPrimary, DesignSystem.Colors.fallbackSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        ) :
+                        AnyShapeStyle(Material.thinMaterial)
+                    )
+                    .foregroundColor(message.isUser ? .white : .primary)
+                    .cornerRadius(16, corners: message.isUser ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight])
+                
+                // Source indicator for AI messages
+                if !message.isUser, let source = message.source, source != "system" {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(source == "ai" ? Color.green : Color.orange)
+                            .frame(width: 6, height: 6)
+                        Text(source == "ai" ? "AI" : "Local")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
+            
+            if message.isUser {
+                Spacer(minLength: 32)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+    }
+}
+
 // MARK: - Helper Extension for Rounded Corners
 // RoundedCorner is now in Sources/Utils/ShapeExtensions.swift
 
 // MARK: - Typing Indicator
 
+struct LioChatTypingIndicator: View {
+    @State private var animationOffset: CGFloat = 0
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // AI Avatar
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [DesignSystem.Colors.fallbackPrimary, DesignSystem.Colors.fallbackSecondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            
+            HStack(spacing: 4) {
+                ForEach(0..<3) { index in
+                    Circle()
+                        .fill(Color.secondary)
+                        .frame(width: 6, height: 6)
+                        .offset(y: animationOffset(for: index))
+                }
+            }
+            .padding(12)
+            .background(Material.thinMaterial)
+            .cornerRadius(16, corners: [.topLeft, .topRight, .bottomRight])
+            
+            Spacer()
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.6).repeatForever()) {
+                animationOffset = -6
+            }
+        }
+    }
+    
+    private func animationOffset(for index: Int) -> CGFloat {
+        let delay = Double(index) * 0.15
+        return animationOffset * (1.0 - delay)
+    }
+}
 
 // MARK: - Preview
 

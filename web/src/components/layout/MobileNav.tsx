@@ -3,8 +3,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { Home, BookOpen, Sparkles, Users, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import MascotAvatar from '@/components/chat/MascotAvatar';
+import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 
 const navItems = [
   { href: '/', icon: Home, label: 'Home' },
@@ -49,7 +52,17 @@ export function MobileNav() {
                       : 'hover:scale-105 active:scale-95',
                   )}
                 >
-                  <Icon className="w-6 h-6 text-white" />
+                  {/* Lyo "lives" here when not in chat — flies to the chat
+                      header on tap (shared layoutId), and back on the way out. */}
+                  {!isActive && (
+                    <motion.div
+                      layoutId={LYO_MASCOT_LAYOUT_ID}
+                      transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
+                      className="flex items-center justify-center"
+                    >
+                      <MascotAvatar idle size={34} />
+                    </motion.div>
+                  )}
                 </div>
                 <span
                   className={cn(

@@ -1,5 +1,4 @@
 import SwiftUI
-import AVKit
 
 struct StoryViewer: View {
     @Binding var isPresented: Bool
@@ -64,29 +63,11 @@ struct StoryViewer: View {
                         // Header
                         HStack {
                             if let avatar = story.userAvatar {
-                                if avatar == "sparkles" || avatar == "atom" {
-                                    Image(systemName: avatar)
-                                        .resizable()
-                                        .frame(width: 32, height: 32)
-                                        .clipShape(Circle())
-                                        .foregroundColor(.white)
-                                } else if let url = URL(string: avatar) {
-                                    AsyncImage(url: url) { phase in
-                                        if let image = phase.image {
-                                            image.resizable().scaledToFill()
-                                        } else {
-                                            Image(systemName: "person.circle.fill").foregroundColor(.gray)
-                                        }
-                                    }
+                                Image(systemName: avatar == "sparkles" ? "sparkles" : "person.circle.fill")
+                                    .resizable()
                                     .frame(width: 32, height: 32)
                                     .clipShape(Circle())
-                                } else {
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .frame(width: 32, height: 32)
-                                        .clipShape(Circle())
-                                        .foregroundColor(.white)
-                                }
+                                    .foregroundColor(.white)
                             }
                             Text(story.userName)
                                 .font(.subheadline.bold())
@@ -240,29 +221,11 @@ struct StoryViewer: View {
     private func renderSlide(_ slide: StorySlide, in size: CGSize) -> some View {
         switch slide.type {
         case .image:
-            if let urlString = slide.mediaURL, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ZStack {
-                            Color.black
-                            ProgressView()
-                        }
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: size.width, height: size.height)
-                            .clipped()
-                    case .failure:
-                        Color.gray
-                            .overlay(Text("Failed to load image").foregroundColor(.white))
-                    @unknown default:
-                        Color.black
-                    }
-                }
+            if let url = slide.mediaURL, let _ = URL(string: url) {
+               // AsyncImage place
+               Color.gray.overlay(Text("Image from URL").foregroundColor(.white))
             } else {
-                // Mock visual fallback
+                // Mock visual
                 ZStack {
                      LinearGradient(colors: [.purple, .blue], startPoint: .top, endPoint: .bottom)
                      VStack {
@@ -291,11 +254,7 @@ struct StoryViewer: View {
                     .padding()
             }
         case .video:
-            if let urlString = slide.mediaURL, let url = URL(string: urlString) {
-                StoryVideoSlide(url: url)
-            } else {
-                Color.black.overlay(Text("Video Placeholder").foregroundColor(.white))
-            }
+            Color.black.overlay(Text("Video Placeholder").foregroundColor(.white))
         }
     }
 }
@@ -311,23 +270,5 @@ struct ProgressBar: View {
             }
         }
         .frame(height: 3)
-    }
-}
-
-struct StoryVideoSlide: View {
-    let url: URL
-    @State private var player: AVPlayer?
-    
-    var body: some View {
-        VideoPlayer(player: player)
-            .onAppear {
-                if player == nil {
-                    player = AVPlayer(url: url)
-                }
-                player?.play()
-            }
-            .onDisappear {
-                player?.pause()
-            }
     }
 }
