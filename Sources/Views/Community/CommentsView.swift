@@ -50,7 +50,13 @@ struct CommentsView: View {
                         emptyCommentsView
                     } else {
                         ForEach(viewModel.comments) { comment in
-                            CommentRow(comment: comment)
+                            CommentRow(
+                                comment: comment,
+                                onLike: { viewModel.toggleCommentLike(comment) },
+                                onDelete: UserSessionManager.shared.isCurrentUser(comment.authorId)
+                                    ? { viewModel.deleteComment(comment) }
+                                    : nil
+                            )
                             .onAppear {
                                 viewModel.loadMoreIfNeeded(currentComment: comment)
                             }
@@ -242,7 +248,9 @@ struct CommentsView: View {
 
 struct CommentRow: View {
     let comment: PostComment
-    
+    var onLike: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
@@ -255,27 +263,54 @@ struct CommentRow: View {
                             .font(.caption.weight(.semibold))
                             .foregroundColor(.accentColor)
                     )
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     // Author and time
                     HStack {
                         Text(comment.authorName)
                             .font(.subheadline.weight(.semibold))
-                        
+
                         Text("•")
                             .foregroundColor(.secondary)
-                        
+
                         Text(comment.createdAt.timeAgoDisplay())
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
+
                         Spacer()
                     }
-                    
+
                     // Content
                     Text(comment.content)
                         .font(.subheadline)
-                    
+
+                    // Actions: like (everyone) + delete (author only)
+                    HStack(spacing: 16) {
+                        if let onLike {
+                            Button(action: onLike) {
+                                // Count hidden at zero, matching Android/web
+                                HStack(spacing: 4) {
+                                    Image(systemName: comment.hasLiked ? "heart.fill" : "heart")
+                                    if comment.likeCount > 0 {
+                                        Text("\(comment.likeCount)")
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundColor(comment.hasLiked ? .red : .secondary)
+                            }
+                            .accessibilityLabel(comment.hasLiked ? "Unlike comment" : "Like comment")
+                        }
+                        if let onDelete {
+                            Button(role: .destructive, action: onDelete) {
+                                Image(systemName: "trash")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .accessibilityLabel("Delete comment")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
                 }
             }
         }
@@ -440,7 +475,53 @@ final class CommentsViewModel: ObservableObject {
             isPostActionBusy = false
         }
     }
-    
+
+    // MARK: - Comment actions
+
+    private var busyCommentIds: Set<String> = []
+
+    /// Toggle like on a comment (optimistic, reverted on failure)
+    func toggleCommentLike(_ comment: PostComment) {
+        guard !busyCommentIds.contains(comment.id),
+              let index = comments.firstIndex(where: { $0.id == comment.id }) else { return }
+        busyCommentIds.insert(comment.id)
+        let wasLiked = comments[index].hasLiked
+        comments[index].hasLiked = !wasLiked
+        comments[index].likeCount = max(0, comments[index].likeCount + (wasLiked ? -1 : 1))
+        Task {
+            do {
+                let response = try await service.likeComment(postId: post.id, commentId: comment.id)
+                if let idx = comments.firstIndex(where: { $0.id == comment.id }) {
+                    comments[idx].hasLiked = response.liked
+                    comments[idx].likeCount = response.likeCount
+                }
+            } catch {
+                if let idx = comments.firstIndex(where: { $0.id == comment.id }) {
+                    comments[idx].hasLiked = wasLiked
+                    comments[idx].likeCount = max(0, comments[idx].likeCount + (wasLiked ? 1 : -1))
+                }
+                self.error = error.localizedDescription
+            }
+            busyCommentIds.remove(comment.id)
+        }
+    }
+
+    /// Delete the current user's own comment (backend enforces author-only)
+    func deleteComment(_ comment: PostComment) {
+        guard !busyCommentIds.contains(comment.id) else { return }
+        busyCommentIds.insert(comment.id)
+        Task {
+            do {
+                try await service.deleteComment(postId: post.id, commentId: comment.id)
+                comments.removeAll { $0.id == comment.id }
+                postCommentCount = max(0, postCommentCount - 1)
+            } catch {
+                self.error = error.localizedDescription
+            }
+            busyCommentIds.remove(comment.id)
+        }
+    }
+
 }
 
 // MARK: - Preview

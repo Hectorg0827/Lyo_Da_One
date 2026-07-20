@@ -82,17 +82,64 @@ public final class InteractiveCinemaService: ObservableObject {
     public func startCourse(courseId: String) async throws -> PlaybackState {
         isLoading = true
         defer { isLoading = false }
-        
+
         // Check for mock course
         if courseId.starts(with: "mock_") {
+            // A generated course cached under this id takes priority over the
+            // generic mock — otherwise real generated content is silently
+            // replaced by placeholder lessons (the "Classroom Shell" bug).
+            if let generated = CourseGenerationService.shared.generatedCourse,
+               generated.courseId == courseId,
+               let state = playbackState(fromGenerated: generated) {
+                currentPlaybackState = state
+                return state
+            }
             print("🎬 Starting Mock Course: \(courseId)")
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay
             return getMockPlaybackState(courseId: courseId)
         }
-        
+
         let playbackState: PlaybackState = try await NetworkClient.shared.request(Endpoints.Classroom.startCourse(id: courseId))
         currentPlaybackState = playbackState
         return playbackState
+    }
+
+    /// Build a playable state from a locally generated course so the
+    /// classroom shows the real generated lessons instead of mock content.
+    private func playbackState(fromGenerated course: GeneratedCourseResponse) -> PlaybackState? {
+        let lessons = course.modules
+            .sorted { $0.order < $1.order }
+            .flatMap { $0.lessons.sorted { $0.order < $1.order } }
+        guard let first = lessons.first else { return nil }
+
+        let currentNode = LearningNodeWithAssets(
+            id: first.id,
+            nodeType: "explanation",
+            title: first.title,
+            content: ["text": AnyCodable(first.content)],
+            orderIndex: 1,
+            assets: nil
+        )
+        let nextNodes = lessons.dropFirst().enumerated().map { index, lesson in
+            LearningNode(
+                id: lesson.id,
+                nodeType: "explanation",
+                title: lesson.title,
+                content: ["text": AnyCodable(lesson.content)],
+                orderIndex: index + 2
+            )
+        }
+        return PlaybackState(
+            courseId: course.courseId,
+            currentNodeId: first.id,
+            currentNode: currentNode,
+            nextNodes: Array(nextNodes),
+            completedNodes: [],
+            progressPercent: 0.0,
+            totalTimeSeconds: 0,
+            canGoBack: false,
+            isAtInteraction: false
+        )
     }
     
     public func advanceToNextNode(

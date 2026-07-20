@@ -1122,7 +1122,6 @@ enum Endpoints {
             case .createEvent, .createEventRequest: return "/api/v1/community/events"
             case .registerForEvent(let id): return "/api/v1/community/events/\(id)/attend"
             case .unregisterFromEvent(let id): return "/api/v1/community/events/\(id)/attend"
-            case .getUserEvents: return "/api/v1/community/events/my"
 
             // Marketplace
             case .getListings: return "/api/v1/community/marketplace"
@@ -1155,8 +1154,7 @@ enum Endpoints {
             case .createStudyGroup, .createStudyGroupRequest, .joinStudyGroup,
                  .createEvent, .createEventRequest, .registerForEvent,
                  .createListing, .createQuestion, .answerQuestion,
-                 .createBooking, .submitReview,
-                 .createPrivateLesson, .createInstitution:
+                 .createBooking:
                 return .post
 
             case .leaveStudyGroup, .unregisterFromEvent:
@@ -1989,106 +1987,6 @@ extension Endpoints {
                 return body
             case .validateCode(let body):
                 return body
-            }
-        }
-    }
-
-    enum CommunityFeed: Endpoint {
-        case getPosts(page: Int, limit: Int, filters: FeedFilters)
-        case createPost(request: CommunityCreatePostRequest)
-        case getPost(id: String)
-        case updatePost(id: String, request: CommunityUpdatePostRequest)
-        case deletePost(id: String)
-        case likePost(id: String)
-        case bookmarkPost(id: String)
-        case getComments(postId: String, page: Int, limit: Int)
-        case createComment(postId: String, request: CommunityCreateCommentRequest)
-        case deleteComment(postId: String, commentId: String)
-        case likeComment(postId: String, commentId: String)
-        case report(request: CommunityReportRequest)
-        case blockUser(request: CommunityBlockUserRequest)
-        case unblockUser(userId: String)
-        case getBlockedUsers
-
-        var path: String {
-            switch self {
-            case .getPosts, .createPost:
-                return "/community/feed/posts"
-            case .getPost(let id), .updatePost(let id, _), .deletePost(let id):
-                return "/community/feed/posts/\(id)"
-            case .likePost(let id):
-                return "/community/feed/posts/\(id)/like"
-            case .bookmarkPost(let id):
-                return "/community/feed/posts/\(id)/bookmark"
-            case .getComments(let postId, _, _), .createComment(let postId, _):
-                return "/community/feed/posts/\(postId)/comments"
-            case .deleteComment(let postId, let commentId):
-                return "/community/feed/posts/\(postId)/comments/\(commentId)"
-            case .likeComment(let postId, let commentId):
-                return "/community/feed/posts/\(postId)/comments/\(commentId)/like"
-            case .report:
-                return "/community/feed/report"
-            case .blockUser:
-                return "/community/feed/blocks"
-            case .unblockUser(let userId):
-                return "/community/feed/blocks/\(userId)"
-            case .getBlockedUsers:
-                return "/community/feed/blocks"
-            }
-        }
-
-        var method: HTTPMethod {
-            switch self {
-            case .getPosts, .getPost, .getComments, .getBlockedUsers:
-                return .get
-            case .createPost, .likePost, .bookmarkPost, .createComment, .likeComment, .report, .blockUser:
-                return .post
-            case .updatePost:
-                return .patch
-            case .deletePost, .deleteComment, .unblockUser:
-                return .delete
-            }
-        }
-
-        var body: Encodable? {
-            switch self {
-            case .createPost(let request):
-                return request
-            case .updatePost(_, let request):
-                return request
-            case .createComment(_, let request):
-                return request
-            case .report(let request):
-                return request
-            case .blockUser(let request):
-                return request
-            default:
-                return nil
-            }
-        }
-
-        var queryItems: [URLQueryItem]? {
-            switch self {
-            case .getPosts(let page, let limit, let filters):
-                var items = [
-                    URLQueryItem(name: "page", value: "\(page)"),
-                    URLQueryItem(name: "limit", value: "\(limit)")
-                ]
-                if let postType = filters.postType {
-                    items.append(URLQueryItem(name: "post_type", value: postType))
-                }
-                if let tags = filters.tags, !tags.isEmpty {
-                    items.append(URLQueryItem(name: "tags", value: tags.joined(separator: ",")))
-                }
-                items.append(URLQueryItem(name: "sort_by", value: filters.sortBy))
-                return items
-            case .getComments(_, let page, let limit):
-                return [
-                    URLQueryItem(name: "page", value: "\(page)"),
-                    URLQueryItem(name: "limit", value: "\(limit)")
-                ]
-            default:
-                return nil
             }
         }
     }

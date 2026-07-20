@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -17,6 +17,7 @@ import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
 import CommentThread from '@/components/community/CommentThread';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth-store';
 import type { CommunityPost, Comment, User } from '@/types';
 
 // ============================================================
@@ -103,6 +104,20 @@ function mapBackendComment(raw: Record<string, unknown>): Comment {
   };
 }
 
+/** Apply `transform` to the comment with `id` anywhere in the thread. */
+function updateCommentTree(list: Comment[], id: string, transform: (c: Comment) => Comment): Comment[] {
+  return list.map((comment) => comment.id === id
+    ? transform(comment)
+    : { ...comment, replies: comment.replies ? updateCommentTree(comment.replies, id, transform) : comment.replies });
+}
+
+/** Remove the comment with `id` anywhere in the thread. */
+function removeCommentFromTree(list: Comment[], id: string): Comment[] {
+  return list
+    .filter((comment) => comment.id !== id)
+    .map((comment) => ({ ...comment, replies: comment.replies ? removeCommentFromTree(comment.replies, id) : comment.replies }));
+}
+
 // ============================================================
 // Page
 // ============================================================
@@ -110,6 +125,7 @@ export default function PostDetailPage() {
   const params = useParams();
   const router = useRouter();
   const postId = params.postId as string;
+  const currentUser = useAuthStore((state) => state.user);
 
   // ── Fetch post from API ──
   const {
@@ -186,11 +202,53 @@ export default function PostDetailPage() {
     }
   }, [isBookmarked, postActionBusy, postId]);
 
+  // ── Comment like / delete (same backend contract iOS + Android use) ──
+  // One in-flight request per comment, like the iOS view model's busy set
+  const busyCommentIds = useRef<Set<string>>(new Set());
+
+  const handleLikeComment = useCallback(async (commentId: string) => {
+    if (busyCommentIds.current.has(commentId)) return;
+    busyCommentIds.current.add(commentId);
+    const toggle = (comment: Comment): Comment => ({
+      ...comment,
+      isLiked: !comment.isLiked,
+      likes: Math.max(0, comment.likes + (comment.isLiked ? -1 : 1)),
+    });
+    setComments((prev) => updateCommentTree(prev, commentId, toggle));
+    try {
+      const result = await api.community.likeComment(postId, commentId);
+      setComments((prev) => updateCommentTree(prev, commentId, (comment) => ({
+        ...comment, isLiked: result.liked, likes: result.like_count,
+      })));
+    } catch {
+      // revert the optimistic toggle on failure
+      setComments((prev) => updateCommentTree(prev, commentId, toggle));
+      setCommentError('Unable to update the like. Please try again.');
+    } finally {
+      busyCommentIds.current.delete(commentId);
+    }
+  }, [postId]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (busyCommentIds.current.has(commentId)) return;
+    busyCommentIds.current.add(commentId);
+    try {
+      await api.community.deleteComment(postId, commentId);
+      setComments((prev) => removeCommentFromTree(prev, commentId));
+      setCommentCount((count) => Math.max(0, count - 1));
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+      setCommentError('Unable to delete the comment. Please try again.');
+    } finally {
+      busyCommentIds.current.delete(commentId);
+    }
+  }, [postId]);
+
   // ── Comment handler ──
   const handleAddComment = useCallback(async (content: string) => {
     const tempComment: Comment = {
       id: `c_${Date.now()}`,
-      author: {
+      author: currentUser ?? {
         id: 'me', email: '', displayName: 'You', username: 'me',
         avatar: '', bio: '', role: 'student', interests: [], learningGoals: [],
         streak: 0, xp: 0, level: 1, coursesCompleted: 0, followersCount: 0,
@@ -218,7 +276,7 @@ export default function PostDetailPage() {
       setCommentCount((count) => Math.max(0, count - 1));
       return false;
     }
-  }, [postId]);
+  }, [postId, currentUser]);
 
   const submitComment = useCallback(async () => {
     const content = commentText.trim();
@@ -451,6 +509,9 @@ export default function PostDetailPage() {
             <div className="glass-card overflow-hidden">
               <CommentThread
                 comments={comments}
+                currentUserId={currentUser?.id}
+                onLike={handleLikeComment}
+                onDelete={handleDeleteComment}
               />
               <div className="border-t border-white/5 p-4">
                 <form className="flex gap-3" onSubmit={(event) => { event.preventDefault(); submitComment(); }}>

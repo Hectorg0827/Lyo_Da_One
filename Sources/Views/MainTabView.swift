@@ -100,14 +100,9 @@ struct MainTabView: View {
                 Color.clear
                     .tag(Tab.create)
                 
-                // Community
-                Group {
-                    if #available(iOS 17.0, *) {
-                        CommunityMapView()
-                    } else {
-                        CommunityMapFallbackView()
-                    }
-                }
+                // Community — the cross-platform Posts|Events experience
+                // (community-parity.json contract; iOS is the reference platform)
+                CommunityView()
                     .tag(Tab.community)
                 
                 // Profile - Hidden from tab bar but accessible

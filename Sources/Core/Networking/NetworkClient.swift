@@ -1,5 +1,19 @@
 import Foundation
 
+/// Type-erased Encodable wrapper so the cache can store a value whose
+/// concrete type is only known to be Encodable at runtime.
+private struct AnyEncodableBox: Encodable {
+    private let encodeClosure: (Encoder) throws -> Void
+
+    init(_ value: any Encodable) {
+        self.encodeClosure = value.encode
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try encodeClosure(encoder)
+    }
+}
+
 // MARK: - Network Client
 /// Actor-based thread-safe networking client with interceptors, retry logic, and automatic token refresh
 actor NetworkClient {
@@ -30,8 +44,10 @@ actor NetworkClient {
 
     // MARK: - Public API
 
-    /// Execute a network request with automatic retry and caching
-    func request<T: Codable>(
+    /// Execute a network request with automatic retry and caching.
+    /// Only Decodable is required — response types across the app are not all
+    /// Encodable. Responses that ARE Encodable still get cached below.
+    func request<T: Decodable>(
         _ endpoint: Endpoint,
         cachePolicy: CachePolicy = .default
     ) async throws -> T {
@@ -101,11 +117,13 @@ actor NetworkClient {
             throw error
         }
 
-        // 7. Cache if policy allows
-        if cachePolicy != .reloadIgnoringCache {
+        // 7. Cache if policy allows, the endpoint is cacheable, and the
+        //    decoded type can be re-encoded (not all response types are).
+        if cachePolicy != .reloadIgnoringCache, endpoint.cacheTTL > 0,
+           let encodable = decoded as? any Encodable {
             await cache.set(
                 key: endpoint.cacheKey,
-                value: decoded,
+                value: AnyEncodableBox(encodable),
                 ttl: endpoint.cacheTTL
             )
             logger.log("💾 Cached: \(endpoint.path)")

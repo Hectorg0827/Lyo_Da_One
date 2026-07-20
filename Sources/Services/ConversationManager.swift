@@ -9,11 +9,13 @@ import Foundation
 import SwiftUI
 import os
 
-private struct ServerConversationList: Decodable {
+// NetworkClient.request<T: Codable> needs both directions, so these are
+// Codable even though the app only ever decodes them.
+private struct ServerConversationList: Codable {
     let conversations: [ServerConversationSummary]
 }
 
-private struct ServerConversationSummary: Decodable {
+private struct ServerConversationSummary: Codable {
     let id: String
     let title: String
     let messageCount: Int
@@ -22,14 +24,14 @@ private struct ServerConversationSummary: Decodable {
     let updatedAt: Date
 }
 
-private struct ServerConversationMessage: Decodable {
+private struct ServerConversationMessage: Codable {
     let id: String
     let role: String
     let content: String
     let createdAt: Date
 }
 
-private struct ServerConversationDetail: Decodable {
+private struct ServerConversationDetail: Codable {
     let id: String
     let title: String
     let createdAt: Date

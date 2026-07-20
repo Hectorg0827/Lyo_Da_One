@@ -196,6 +196,18 @@ interface LyoApiService {
         @Body body: CommunityCommentRequest,
     ): CommunityCommentDto
 
+    @POST("community/posts/{postId}/comments/{commentId}/like")
+    suspend fun toggleCommunityCommentLike(
+        @Path("postId") postId: String,
+        @Path("commentId") commentId: String,
+    ): LikeToggleResponse
+
+    @DELETE("community/posts/{postId}/comments/{commentId}")
+    suspend fun deleteCommunityComment(
+        @Path("postId") postId: String,
+        @Path("commentId") commentId: String,
+    ): Response<Unit>
+
     // ── Messages ──
     @GET("messages/conversations")
     suspend fun conversations(): ConversationsResponse

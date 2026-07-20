@@ -68,11 +68,23 @@ targets:
       - package: LaTeXSwiftUI
         product: LaTeXSwiftUI
 
+  LyoTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - Sources/Tests
+    dependencies:
+      - target: Lyo
+
 schemes:
   Lyo:
     build:
       targets:
         Lyo: all
+        LyoTests: all
     run:
       environmentVariables:
         IDE_DISABLED_OS_ACTIVITY_MODE: "disable"
@@ -83,7 +95,7 @@ schemes:
         # LYO_WS_URL: "wss://YOUR-SERVICE.up.railway.app/ws"
     test:
       targets:
-        - Lyo
+        - LyoTests
     profile:
       config: Release
     analyze:
