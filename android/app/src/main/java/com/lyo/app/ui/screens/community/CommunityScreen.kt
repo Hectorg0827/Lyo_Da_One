@@ -73,6 +73,7 @@ import com.lyo.app.data.api.CreateCommunityEventRequest
 import com.lyo.app.data.api.CreateStudyGroupRequest
 import com.lyo.app.data.api.EventDto
 import com.lyo.app.data.api.GroupDto
+import com.lyo.app.data.api.SearchUserDto
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
@@ -88,6 +89,7 @@ import com.lyo.app.ui.theme.TextSecondary
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -278,6 +280,7 @@ fun CommunityScreen(nav: NavHostController) {
                         }
                     }
                 },
+                onOpenProfile = { userId -> nav.navigate(Routes.userProfile(userId)) },
             )
         }
     }
@@ -451,23 +454,63 @@ private fun CommunityExplore(
     busyIds: Set<String>,
     onJoinGroup: (GroupDto) -> Unit,
     onRsvp: (EventDto) -> Unit,
+    onOpenProfile: (String) -> Unit,
 ) {
     var filter by remember { mutableStateOf("all") }
     var viewMode by remember { mutableStateOf("map") }
     var search by remember { mutableStateOf("") }
+    var people by remember { mutableStateOf<List<SearchUserDto>>(emptyList()) }
     val query = search.trim().lowercase()
     val visibleEvents = events.filter { query.isEmpty() || "${it.displayTitle} ${it.description.orEmpty()} ${it.location.orEmpty()}".lowercase().contains(query) }
     val visibleGroups = groups.filter { query.isEmpty() || "${it.name.orEmpty()} ${it.description.orEmpty()}".lowercase().contains(query) }
+
+    // People come from the backend search — other users aren't in the local data.
+    LaunchedEffect(search) {
+        val q = search.trim()
+        if (q.length < 2) { people = emptyList(); return@LaunchedEffect }
+        delay(250)
+        people = runCatching { ApiClient.api.search(q, type = "users", limit = 6).users.orEmpty() }
+            .getOrDefault(emptyList())
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
-            placeholder = { Text("Search events and groups", color = TextSecondary) },
+            placeholder = { Text("Search people, events, and groups", color = TextSecondary) },
             singleLine = true,
             colors = communityTextFieldColors(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
+        if (people.isNotEmpty()) {
+            Text(
+                "People",
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            ) {
+                items(people, key = { it.idStr }) { person ->
+                    GlassCard(modifier = Modifier.clickable { onOpenProfile(person.idStr) }) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        ) {
+                            LyoAvatar(name = person.name ?: "M", avatarUrl = person.avatarUrl, size = 30)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(person.name ?: "Member", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+                                Text("@${person.username.orEmpty()}", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
             listOf("all" to "All", "event" to "Events", "group" to "Groups").forEach { (value, label) ->
                 FilterChip(selected = filter == value, onClick = { filter = value; if (value == "group") viewMode = "list" }, label = { Text(label) })

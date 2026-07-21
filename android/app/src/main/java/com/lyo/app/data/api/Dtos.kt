@@ -99,19 +99,86 @@ data class FollowRequest(
 
 // ── Clips ────────────────────────────────────────────────────────────────────
 
+// The clips backend serializes camelCase (Clip.to_dict); keep the snake_case
+// alternates so older payload shapes still decode.
 data class ClipDto(
     val id: Any? = null,
     val title: String? = null,
     val description: String? = null,
-    @SerializedName("video_url") val videoUrl: String? = null,
-    @SerializedName("thumbnail_url") val thumbnailUrl: String? = null,
-    @SerializedName("view_count") val viewCount: Int? = null,
-    @SerializedName("like_count") val likeCount: Int? = null,
+    @SerializedName(value = "videoURL", alternate = ["video_url", "videoUrl"]) val videoUrl: String? = null,
+    @SerializedName(value = "thumbnailURL", alternate = ["thumbnail_url", "thumbnailUrl"]) val thumbnailUrl: String? = null,
+    @SerializedName(value = "viewCount", alternate = ["view_count"]) val viewCount: Int? = null,
+    @SerializedName(value = "likeCount", alternate = ["like_count"]) val likeCount: Int? = null,
+    @SerializedName(value = "commentCount", alternate = ["comment_count"]) val commentCount: Int? = null,
+    @SerializedName(value = "shareCount", alternate = ["share_count"]) val shareCount: Int? = null,
+    @SerializedName(value = "isLiked", alternate = ["is_liked"]) val isLiked: Boolean? = null,
+    @SerializedName(value = "isSaved", alternate = ["is_saved"]) val isSaved: Boolean? = null,
+    @SerializedName(value = "authorName", alternate = ["author_name"]) val authorName: String? = null,
     val subject: String? = null,
-    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName(value = "createdAt", alternate = ["created_at"]) val createdAt: String? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
 }
+
+data class ClipCreateRequest(
+    // The clips create endpoint reads camelCase keys (pydantic ClipCreate).
+    val title: String,
+    val description: String? = null,
+    val videoUrl: String,
+    val thumbnailUrl: String? = null,
+    val durationSeconds: Double = 0.0,
+    val subject: String? = null,
+    val topic: String? = null,
+    val level: String = "beginner",
+    val keyPoints: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
+    val isPublic: Boolean = true,
+    val enableCourseGeneration: Boolean = true,
+)
+
+data class ClipCreateResponse(
+    val success: Boolean? = null,
+    val clip: ClipDto? = null,
+)
+
+data class ClipCommentDto(
+    val id: String? = null,
+    val userId: Any? = null,
+    val authorName: String? = null,
+    @SerializedName("authorAvatarURL") val authorAvatar: String? = null,
+    val content: String? = null,
+    val createdAt: String? = null,
+) {
+    val userIdStr: String get() = userId?.toString()?.removeSuffix(".0") ?: ""
+}
+
+data class ClipCommentsResponse(
+    val items: List<ClipCommentDto>? = null,
+    @SerializedName("total_count") val totalCount: Int? = null,
+)
+
+data class MediaUploadResponse(
+    val success: Boolean? = null,
+    val url: String? = null,
+    val path: String? = null,
+)
+
+// ── Search ───────────────────────────────────────────────────────────────────
+
+data class SearchUserDto(
+    val id: Any? = null,
+    val username: String? = null,
+    val name: String? = null,
+    @SerializedName("avatar_url") val avatarUrl: String? = null,
+) {
+    val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
+}
+
+data class SearchResponse(
+    val query: String? = null,
+    val users: List<SearchUserDto>? = null,
+    val total: Int? = null,
+)
 
 data class ClipsResponse(
     val clips: List<ClipDto>? = null,

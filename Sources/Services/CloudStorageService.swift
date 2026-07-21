@@ -45,7 +45,15 @@ final class CloudStorageService {
     
     // MARK: - Upload File
     
-    /// Upload a file directly to cloud storage using presigned URL
+    /// Response from the backend's multipart media upload endpoint.
+    private struct MediaUploadResponse: Decodable {
+        let success: Bool
+        let url: String?
+        let path: String?
+    }
+
+    /// Upload a file via the backend's multipart media endpoint
+    /// (POST /api/v1/media/upload) — the same path web and Android use.
     func uploadFile(
         data: Data,
         filename: String,
@@ -53,37 +61,40 @@ final class CloudStorageService {
         folder: String = "uploads",
         progressHandler: ((Double) -> Void)? = nil
     ) async throws -> UploadResult {
-        // 1. Get presigned URL from backend
-        let presigned = try await getPresignedURL(
-            filename: filename,
-            contentType: contentType,
-            folder: folder
-        )
-        
-        guard presigned.success, let uploadURL = presigned.uploadUrl else {
-            throw CloudStorageError.serverError(presigned.error ?? "Failed to get upload URL")
-        }
-        
-        // 2. Upload directly to cloud storage
-        guard let url = URL(string: uploadURL) else {
-            throw CloudStorageError.serverError("Invalid upload URL")
-        }
-        
+        progressHandler?(0.1)
+
+        // The media endpoint accepts lowercase [a-z0-9_-] folder names.
+        let safeFolder = folder.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
+
         do {
-            try await NetworkClient.shared.uploadBinary(
-                url: url,
+            let response: MediaUploadResponse = try await NetworkClient.shared.upload(
+                Endpoints.Uploads.mediaUpload,
                 data: data,
-                contentType: contentType,
-                headers: presigned.headers
+                fileName: filename,
+                mimeType: contentType,
+                extraFields: ["folder": safeFolder.isEmpty ? "content" : safeFolder]
             )
-            
-            Log.net.info("File uploaded: \(presigned.publicUrl ?? "unknown")")
-            
+
+            guard response.success, let publicURL = response.url else {
+                throw CloudStorageError.uploadFailed
+            }
+
+            progressHandler?(1.0)
+            Log.net.info("File uploaded: \(publicURL)")
+
             return UploadResult(
                 success: true,
-                publicURL: presigned.publicUrl,
-                blobName: presigned.blobName
+                publicURL: publicURL,
+                blobName: response.path
             )
+        } catch let error as LyoError {
+            if case .network(.unauthorized) = error {
+                throw CloudStorageError.notAuthenticated
+            }
+            Log.net.error("Upload failed: \(error)")
+            throw CloudStorageError.uploadFailed
+        } catch let error as CloudStorageError {
+            throw error
         } catch {
             Log.net.error("Upload failed: \(error)")
             throw CloudStorageError.uploadFailed

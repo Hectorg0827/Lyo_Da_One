@@ -150,7 +150,8 @@ actor NetworkClient {
         _ endpoint: Endpoint,
         data: Data,
         fileName: String,
-        mimeType: String
+        mimeType: String,
+        extraFields: [String: String] = [:]
     ) async throws -> T {
 
         var request = try endpoint.buildURLRequest()
@@ -159,6 +160,11 @@ actor NetworkClient {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()
+        for (name, value) in extraFields {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(value)\r\n".data(using: .utf8)!)
+        }
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)

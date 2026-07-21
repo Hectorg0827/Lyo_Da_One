@@ -158,6 +158,7 @@ enum Endpoints {
         case refresh(refreshToken: String)
         case logout
         case profile
+        case user(id: String)
         case updateProfile(name: String?, avatar: String?)
         case firebase(idToken: String)
 
@@ -168,6 +169,7 @@ enum Endpoints {
             case .refresh: return "/auth/refresh"
             case .logout: return "/auth/logout"
             case .profile: return "/auth/me"
+            case .user(let id): return "/auth/users/\(id)"
             case .updateProfile: return "/auth/profile"
             case .firebase: return "/auth/firebase"
             }
@@ -176,7 +178,7 @@ enum Endpoints {
         var method: HTTPMethod {
             switch self {
             case .login, .register, .refresh, .logout, .firebase: return .post
-            case .profile: return .get
+            case .profile, .user: return .get
             case .updateProfile: return .put
             }
         }
@@ -236,7 +238,7 @@ enum Endpoints {
             switch self {
             case .login, .register, .refresh, .firebase:
                 return false // These endpoints don't require auth token
-            case .logout, .profile, .updateProfile:
+            case .logout, .profile, .user, .updateProfile:
                 return true // These require an existing session
             }
         }
@@ -1493,9 +1495,9 @@ enum Endpoints {
 
         var path: String {
             switch self {
-            case .autocomplete: return "/search/autocomplete"
-            case .search: return "/search"
-            case .searchUsers: return "/search/users"
+            case .autocomplete: return "/api/v1/search/suggestions"
+            case .search: return "/api/v1/search"
+            case .searchUsers: return "/api/v1/search"
             case .getTrending: return "/search/trending"
             case .getRecentSearches: return "/search/recent"
             case .clearRecentSearches: return "/search/recent"
@@ -2047,6 +2049,8 @@ extension Endpoints {
 
     enum Uploads: Endpoint {
         case presignedURL(body: PresignedURLRequest)
+        /// Multipart upload of user media (reel videos, thumbnails, images).
+        case mediaUpload
         case uploadAvatar
         case deleteAvatar
         case usage
@@ -2057,23 +2061,25 @@ extension Endpoints {
         var path: String {
             switch self {
             case .presignedURL:
-                return "/storage/presigned-url"
+                return "/api/v1/storage/presigned-url"
+            case .mediaUpload:
+                return "/api/v1/media/upload"
             case .uploadAvatar, .deleteAvatar:
-                return "/storage/avatar"
+                return "/api/v1/storage/avatar"
             case .usage:
-                return "/storage/usage"
+                return "/api/v1/storage/usage"
             case .deleteFile(let blobName):
-                return "/storage/files/\(blobName)"
+                return "/api/v1/storage/files/\(blobName)"
             case .validate:
-                return "/storage/validate"
+                return "/api/v1/storage/validate"
             case .supportedTypes:
-                return "/storage/supported-types"
+                return "/api/v1/storage/supported-types"
             }
         }
 
         var method: HTTPMethod {
             switch self {
-            case .presignedURL, .uploadAvatar, .validate:
+            case .presignedURL, .mediaUpload, .uploadAvatar, .validate:
                 return .post
             case .deleteAvatar, .deleteFile:
                 return .delete
