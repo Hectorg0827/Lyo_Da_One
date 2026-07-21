@@ -163,6 +163,23 @@ data class MediaUploadResponse(
     val path: String? = null,
 )
 
+// ── Search ───────────────────────────────────────────────────────────────────
+
+data class SearchUserDto(
+    val id: Any? = null,
+    val username: String? = null,
+    val name: String? = null,
+    @SerializedName("avatar_url") val avatarUrl: String? = null,
+) {
+    val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
+}
+
+data class SearchResponse(
+    val query: String? = null,
+    val users: List<SearchUserDto>? = null,
+    val total: Int? = null,
+)
+
 data class ClipsResponse(
     val clips: List<ClipDto>? = null,
     val total: Int? = null,

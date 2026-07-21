@@ -75,6 +75,10 @@ struct CommunityView: View {
             CommunityPinDetailSheet(pin: pin)
                 .presentationDetents([.medium, .fraction(0.8)])
         }
+        .sheet(item: $viewModel.selectedPerson) { person in
+            CommunityPersonSheet(person: person)
+                .presentationDetents([.medium, .fraction(0.8)])
+        }
         .onAppear {
             viewModel.loadData()
         }
@@ -172,6 +176,42 @@ struct CommunityTopBar: View {
                 .padding(.horizontal)
             }
             .padding(.bottom, 12)
+
+            // Row 3: People results (other users) — from the backend search.
+            // Local event/group data doesn't include people, so this is the
+            // only surface that lets you find other members.
+            if !viewModel.people.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(viewModel.people) { person in
+                            Button {
+                                viewModel.selectedPerson = person
+                            } label: {
+                                HStack(spacing: 8) {
+                                    AvatarBubble(name: person.name ?? person.username ?? "Member",
+                                                 url: person.avatarURL, size: 30)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(person.name ?? "Member")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(.primary)
+                                        if let username = person.username, !username.isEmpty {
+                                            Text("@\(username)")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 10)
+                                .background(Color(.systemGray6))
+                                .clipShape(Capsule())
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 12)
+            }
         }
         .padding(.top, 10) // Status bar padding handled by safe area usually, but safe to add a bit
         .safeAreaInset(edge: .top) {
@@ -468,6 +508,76 @@ struct CommunityItemCard: View {
                 }
             }
         }
+    }
+}
+
+// Small circular avatar: remote image when available, colored initials otherwise.
+struct AvatarBubble: View {
+    let name: String
+    let url: String?
+    var size: CGFloat = 40
+
+    private var initials: String {
+        let parts = name.split(separator: " ")
+        let letters = parts.prefix(2).compactMap { $0.first }
+        return String(letters).uppercased()
+    }
+
+    var body: some View {
+        Group {
+            if let url, let parsed = URL(string: url), !url.isEmpty {
+                AsyncImage(url: parsed) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            DesignTokens.Colors.accent.opacity(0.2)
+            Text(initials.isEmpty ? "?" : initials)
+                .font(.system(size: size * 0.4, weight: .semibold))
+                .foregroundColor(DesignTokens.Colors.accent)
+        }
+    }
+}
+
+// Lightweight profile sheet for a person found via Community search.
+// iOS has no full other-user profile screen, so this mirrors the tap-through
+// behaviour of the web/Android People results with the details we have.
+struct CommunityPersonSheet: View {
+    let person: APISearchUser
+
+    var body: some View {
+        VStack(spacing: 20) {
+            AvatarBubble(name: person.name ?? person.username ?? "Member",
+                         url: person.avatarURL, size: 96)
+                .padding(.top, 40)
+
+            Text(person.name ?? "Member")
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+
+            if let username = person.username, !username.isEmpty {
+                Text("@\(username)")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(DesignTokens.Colors.background)
     }
 }
 

@@ -288,6 +288,14 @@ interface LyoApiService {
     @POST("notifications/read-all")
     suspend fun markAllNotificationsRead(): JsonObject
 
+    // ── Search (users, groups, events, posts) ──
+    @GET("api/v1/search")
+    suspend fun search(
+        @Query("q") q: String,
+        @Query("type") type: String = "all",
+        @Query("limit") limit: Int = 10,
+    ): SearchResponse
+
     // ── Discover ──
     @GET("discover/places")
     suspend fun places(

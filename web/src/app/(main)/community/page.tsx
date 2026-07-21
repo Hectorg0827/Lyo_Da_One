@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Calendar, LayoutList, Loader2, Map, Plus, Search, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import PostCard from '@/components/community/PostCard'
@@ -112,6 +112,18 @@ export default function CommunityPage() {
     ['context_updated'],
   )
 
+  // People search goes to the backend (/api/v1/search) — other users are not
+  // in the locally loaded events/groups data.
+  const [people, setPeople] = useState<Array<{ id: number; username: string; name: string; avatar_url: string | null }>>([])
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setPeople([]); return }
+    const timer = setTimeout(() => {
+      api.search.query(q, 'users', 6).then((result) => setPeople(result.users)).catch(() => setPeople([]))
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [query])
+
   const normalizedQuery = query.trim().toLowerCase()
   const filteredGroups = useMemo(
     () => groups.filter((group) => !normalizedQuery || `${group.name} ${group.description}`.toLowerCase().includes(normalizedQuery)),
@@ -202,6 +214,28 @@ export default function CommunityPage() {
               <button onClick={() => setViewMode('map')} disabled={eventFilter === 'group'} title={eventFilter === 'group' ? 'Groups do not have map coordinates' : undefined} className={cn('flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-30', viewMode === 'map' ? 'bg-white/10 text-white' : 'text-white/45')}><Map className="h-4 w-4" />Map</button>
             </div>
           </div>
+
+          {people.length > 0 && (
+            <section aria-label="People" className="rounded-2xl border border-white/10 bg-[var(--surface)] p-4">
+              <h2 className="mb-3 text-sm font-semibold text-white">People</h2>
+              <div className="flex flex-wrap gap-2">
+                {people.map((person) => (
+                  <button key={person.id} onClick={() => router.push(`/profile/${person.id}`)} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-lyo-500/50">
+                    <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-lyo-500 to-accent-purple text-xs font-bold text-white">
+                      {person.avatar_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={person.avatar_url} alt="" className="h-full w-full object-cover" />
+                        : (person.name[0] || 'M').toUpperCase()}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-white">{person.name}</span>
+                      <span className="block truncate text-xs text-white/40">@{person.username}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {(eventRequest.isLoading || groupRequest.isLoading) && <Loading label="Loading Community…" />}
           {(eventRequest.error || groupRequest.error) && <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">{eventRequest.error || groupRequest.error}</p>}

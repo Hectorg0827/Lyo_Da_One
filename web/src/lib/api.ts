@@ -556,6 +556,21 @@ export const api = {
     },
   },
 
+  // ── Search (users, groups, events, posts) ──
+  search: {
+    async query(q: string, type: 'all' | 'users' | 'groups' | 'events' | 'posts' = 'all', limit = 10) {
+      const params = new URLSearchParams({ q, type, limit: String(limit) });
+      return request<{
+        query: string;
+        users: Array<{ id: number; username: string; name: string; avatar_url: string | null }>;
+        groups: Record<string, unknown>[];
+        events: Record<string, unknown>[];
+        posts: Record<string, unknown>[];
+        total: number;
+      }>(`/api/v1/search?${params}`);
+    },
+  },
+
   // ── Stories ──
   stories: {
     async list() {

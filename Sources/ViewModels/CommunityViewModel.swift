@@ -53,6 +53,24 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
 // MARK: - API Models (Matching Endpoint.swift)
 // See Sources/Models/CommunityDTOs.swift for APIStudyGroup, APIEducationalEvent, etc.
 
+// People results from the cross-entity backend search (/api/v1/search).
+// Same payload the web and Android Community tabs consume.
+struct APISearchUser: Codable, Identifiable, Equatable {
+    let id: Int
+    let username: String?
+    let name: String?
+    let avatarURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, username, name
+        case avatarURL = "avatar_url"
+    }
+}
+
+struct APISearchResponse: Codable {
+    let users: [APISearchUser]?
+}
+
 // Beacon wrapper for map display (consolidated)
 struct CommunityBeacon: Identifiable {
     let id: String
@@ -73,8 +91,13 @@ struct CommunityBeacon: Identifiable {
 class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
     // UI State
     @Published var searchText: String = "" {
-        didSet { updateBeacons() }
+        didSet {
+            updateBeacons()
+            searchPeople()
+        }
     }
+    @Published var people: [APISearchUser] = []
+    @Published var selectedPerson: APISearchUser?
     @Published var selectedFilter: CommunityItemType = .all {
         didSet { updateBeacons() }
     }
@@ -120,6 +143,8 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
     
     // De-bouncer for map updates
     private var mapUpdateTask: Task<Void, Never>?
+    // De-bouncer for people search
+    private var peopleSearchTask: Task<Void, Never>?
     
     // Location Manager
     private let locationManager = CLLocationManager()
@@ -288,8 +313,32 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
         }
     }
     
+    // People aren't in the local event/group store — ask the backend search.
+    private func searchPeople() {
+        peopleSearchTask?.cancel()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            people = []
+            return
+        }
+        peopleSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000) // debounce
+            guard let self, !Task.isCancelled else { return }
+            do {
+                let response: APISearchResponse = try await self.network.request(
+                    Endpoints.Search.search(query: query, type: "users", limit: 6, offset: 0)
+                )
+                if !Task.isCancelled {
+                    self.people = response.users ?? []
+                }
+            } catch {
+                Log.social.warning("Community: people search failed – \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - Filter
-    
+
     func applyFilter(_ filter: CommunityFilter) {
         currentFilter = filter
         updateBeacons()

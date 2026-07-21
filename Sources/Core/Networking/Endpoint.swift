@@ -158,6 +158,7 @@ enum Endpoints {
         case refresh(refreshToken: String)
         case logout
         case profile
+        case user(id: String)
         case updateProfile(name: String?, avatar: String?)
         case firebase(idToken: String)
 
@@ -168,6 +169,7 @@ enum Endpoints {
             case .refresh: return "/auth/refresh"
             case .logout: return "/auth/logout"
             case .profile: return "/auth/me"
+            case .user(let id): return "/auth/users/\(id)"
             case .updateProfile: return "/auth/profile"
             case .firebase: return "/auth/firebase"
             }
@@ -176,7 +178,7 @@ enum Endpoints {
         var method: HTTPMethod {
             switch self {
             case .login, .register, .refresh, .logout, .firebase: return .post
-            case .profile: return .get
+            case .profile, .user: return .get
             case .updateProfile: return .put
             }
         }
@@ -236,7 +238,7 @@ enum Endpoints {
             switch self {
             case .login, .register, .refresh, .firebase:
                 return false // These endpoints don't require auth token
-            case .logout, .profile, .updateProfile:
+            case .logout, .profile, .user, .updateProfile:
                 return true // These require an existing session
             }
         }
@@ -1493,9 +1495,9 @@ enum Endpoints {
 
         var path: String {
             switch self {
-            case .autocomplete: return "/search/autocomplete"
-            case .search: return "/search"
-            case .searchUsers: return "/search/users"
+            case .autocomplete: return "/api/v1/search/suggestions"
+            case .search: return "/api/v1/search"
+            case .searchUsers: return "/api/v1/search"
             case .getTrending: return "/search/trending"
             case .getRecentSearches: return "/search/recent"
             case .clearRecentSearches: return "/search/recent"
