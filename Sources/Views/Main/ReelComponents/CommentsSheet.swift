@@ -103,7 +103,7 @@ struct CommentsSheet: View {
     private func loadComments() async {
         isLoading = true
         do {
-            comments = try await discoveryService.fetchComments(discoveryId: Int(item.id) ?? 0)
+            comments = try await discoveryService.fetchComments(discoveryId: item.id)
         } catch {
             print("Failed to load comments: \(error)")
             self.error = error.localizedDescription
@@ -119,7 +119,7 @@ struct CommentsSheet: View {
         newCommentText = "" // Clear input immediately
         
         do {
-            let newComment = try await discoveryService.postComment(discoveryId: Int(item.id) ?? 0, content: pendingComment)
+            let newComment = try await discoveryService.postComment(discoveryId: item.id, content: pendingComment)
             withAnimation {
                 comments.append(newComment)
             }

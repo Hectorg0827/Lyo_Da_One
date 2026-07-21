@@ -870,9 +870,73 @@ extension LyoAPIClient {
     func likeDiscovery(discoveryId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(discoveryId)/like")
     }
-    
+
     func unlikeDiscovery(discoveryId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(discoveryId)/like")
+    }
+
+    // MARK: - Clip Comments & Sharing (reels)
+
+    /// Backend clip-comment payload (camelCase keys from ClipComment.to_dict).
+    private struct ClipCommentDTO: Codable {
+        let id: String
+        let userId: Int
+        let authorName: String?
+        let authorAvatarURL: String?
+        let content: String
+        let createdAt: String?
+    }
+
+    private struct ClipCommentsListDTO: Codable {
+        let items: [ClipCommentDTO]
+    }
+
+    private static func parseISODate(_ raw: String?) -> Date {
+        guard let raw else { return Date() }
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        return withFractional.date(from: raw) ?? plain.date(from: raw) ?? Date()
+    }
+
+    private func mapClipComment(_ dto: ClipCommentDTO, clipId: String) -> Comment {
+        Comment(
+            id: dto.id,
+            postId: clipId,
+            author: UserDTO(
+                id: String(dto.userId),
+                name: dto.authorName?.isEmpty == false ? dto.authorName! : "Member",
+                email: nil,
+                avatarURL: dto.authorAvatarURL,
+                level: nil,
+                xp: nil
+            ),
+            content: dto.content,
+            likes: 0,
+            createdAt: Self.parseISODate(dto.createdAt)
+        )
+    }
+
+    func fetchClipComments(clipId: String) async throws -> [Comment] {
+        let response: ClipCommentsListDTO = try await request(
+            path: "/api/v1/clips/\(clipId)/comments?page=1&per_page=50"
+        )
+        return response.items.map { mapClipComment($0, clipId: clipId) }
+    }
+
+    func postClipComment(clipId: String, content: String) async throws -> Comment {
+        struct Body: Codable { let content: String }
+        let body = try jsonEncoder.encode(Body(content: content))
+        let dto: ClipCommentDTO = try await request(
+            method: "POST",
+            path: "/api/v1/clips/\(clipId)/comments",
+            content: body
+        )
+        return mapClipComment(dto, clipId: clipId)
+    }
+
+    func recordClipShare(clipId: String) async throws {
+        let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(clipId)/share")
     }
     
     func fetchDiscoveriesFeed(limit: Int = 20, offset: Int = 0) async throws -> DiscoveriesResponse {

@@ -503,6 +503,57 @@ export const api = {
     async view(clipId: string) {
       return request(`/api/v1/clips/${clipId}/view`, { method: 'POST' });
     },
+
+    async saved(page = 1, perPage = 20) {
+      return request<{ clips: Record<string, unknown>[]; total: number }>(
+        `/api/v1/clips/saved?page=${page}&per_page=${perPage}`
+      );
+    },
+
+    async share(clipId: string) {
+      return request<{ shareCount: number }>(`/api/v1/clips/${clipId}/share`, {
+        method: 'POST',
+      });
+    },
+
+    async comments(clipId: string, page = 1, perPage = 50) {
+      return request<{ items: Record<string, unknown>[]; total_count: number }>(
+        `/api/v1/clips/${clipId}/comments?page=${page}&per_page=${perPage}`
+      );
+    },
+
+    async createComment(clipId: string, content: string) {
+      return request<Record<string, unknown>>(`/api/v1/clips/${clipId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+    },
+
+    async deleteComment(clipId: string, commentId: string) {
+      return request(`/api/v1/clips/${clipId}/comments/${commentId}`, { method: 'DELETE' });
+    },
+  },
+
+  // ── Media upload (multipart; used for reel videos and post images) ──
+  media: {
+    async upload(file: File, folder = 'content') {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('folder', folder);
+      const headers: Record<string, string> = {};
+      const token = getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_URL}/api/v1/media/upload`, {
+        method: 'POST',
+        headers, // no Content-Type — the browser sets the multipart boundary
+        body: form,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: 'Upload failed' }));
+        throw new ApiError(body.detail || `HTTP ${res.status}`, res.status);
+      }
+      return res.json() as Promise<{ success: boolean; url: string; contentType: string; size: number }>;
+    },
   },
 
   // ── Stories ──

@@ -2047,6 +2047,8 @@ extension Endpoints {
 
     enum Uploads: Endpoint {
         case presignedURL(body: PresignedURLRequest)
+        /// Multipart upload of user media (reel videos, thumbnails, images).
+        case mediaUpload
         case uploadAvatar
         case deleteAvatar
         case usage
@@ -2057,23 +2059,25 @@ extension Endpoints {
         var path: String {
             switch self {
             case .presignedURL:
-                return "/storage/presigned-url"
+                return "/api/v1/storage/presigned-url"
+            case .mediaUpload:
+                return "/api/v1/media/upload"
             case .uploadAvatar, .deleteAvatar:
-                return "/storage/avatar"
+                return "/api/v1/storage/avatar"
             case .usage:
-                return "/storage/usage"
+                return "/api/v1/storage/usage"
             case .deleteFile(let blobName):
-                return "/storage/files/\(blobName)"
+                return "/api/v1/storage/files/\(blobName)"
             case .validate:
-                return "/storage/validate"
+                return "/api/v1/storage/validate"
             case .supportedTypes:
-                return "/storage/supported-types"
+                return "/api/v1/storage/supported-types"
             }
         }
 
         var method: HTTPMethod {
             switch self {
-            case .presignedURL, .uploadAvatar, .validate:
+            case .presignedURL, .mediaUpload, .uploadAvatar, .validate:
                 return .post
             case .deleteAvatar, .deleteFile:
                 return .delete

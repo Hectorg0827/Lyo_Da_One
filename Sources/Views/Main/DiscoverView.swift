@@ -75,6 +75,10 @@ struct DiscoverView: View {
         }
         .sheet(item: $itemToShare) { item in
             ActivityViewController(activityItems: viewModel.prepareShareItems(for: item))
+                .onAppear {
+                    // Count the share on the backend (same contract web/Android use)
+                    Task { await DiscoveryService.shared.recordShare(discoveryId: item.id) }
+                }
         }
         // Present the context sheet using the selected item so the closure always returns a View
         .sheet(item: $viewModel.selectedContextItem) { item in

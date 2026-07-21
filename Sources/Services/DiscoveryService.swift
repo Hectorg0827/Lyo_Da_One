@@ -131,19 +131,21 @@ class DiscoveryService: ObservableObject {
         }
     }
 
-    func fetchComments(discoveryId: Int) async throws -> [Comment] {
-        []
+    func fetchComments(discoveryId: String) async throws -> [Comment] {
+        try await apiClient.fetchClipComments(clipId: discoveryId)
     }
 
-    func postComment(discoveryId: Int, content: String) async throws -> Comment {
-        Comment(
-            id: UUID().uuidString,
-            postId: String(discoveryId),
-            author: UserDTO(id: "me", name: "You", email: nil, avatarURL: nil, level: nil, xp: nil),
-            content: content,
-            likes: 0,
-            createdAt: Date()
-        )
+    func postComment(discoveryId: String, content: String) async throws -> Comment {
+        try await apiClient.postClipComment(clipId: discoveryId, content: content)
+    }
+
+    /// Record a native-share of a clip (fire-and-forget from the share sheet).
+    func recordShare(discoveryId: String) async {
+        do {
+            try await apiClient.recordClipShare(clipId: discoveryId)
+        } catch {
+            print("⚠️ Failed to record clip share: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Upload Media

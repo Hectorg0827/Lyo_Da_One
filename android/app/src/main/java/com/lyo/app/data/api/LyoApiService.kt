@@ -2,12 +2,16 @@ package com.lyo.app.data.api
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -114,6 +118,45 @@ interface LyoApiService {
 
     @POST("api/v1/clips/{clipId}/view")
     suspend fun viewClip(@Path("clipId") clipId: String): JsonObject
+
+    @POST("api/v1/clips/{clipId}/share")
+    suspend fun shareClip(@Path("clipId") clipId: String): JsonObject
+
+    @GET("api/v1/clips/saved")
+    suspend fun savedClips(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+    ): ClipsResponse
+
+    @POST("api/v1/clips")
+    suspend fun createClip(@Body body: ClipCreateRequest): ClipCreateResponse
+
+    @GET("api/v1/clips/{clipId}/comments")
+    suspend fun clipComments(
+        @Path("clipId") clipId: String,
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 50,
+    ): ClipCommentsResponse
+
+    @POST("api/v1/clips/{clipId}/comments")
+    suspend fun createClipComment(
+        @Path("clipId") clipId: String,
+        @Body body: CommunityCommentRequest,
+    ): ClipCommentDto
+
+    @DELETE("api/v1/clips/{clipId}/comments/{commentId}")
+    suspend fun deleteClipComment(
+        @Path("clipId") clipId: String,
+        @Path("commentId") commentId: String,
+    ): Response<Unit>
+
+    // ── Media upload (multipart; reel videos + images) ──
+    @Multipart
+    @POST("api/v1/media/upload")
+    suspend fun uploadMedia(
+        @Part file: MultipartBody.Part,
+        @Part("folder") folder: RequestBody,
+    ): MediaUploadResponse
 
     // ── Stories ── (same /api/v1 paths as web api.ts)
     @GET("api/v1/stories")
