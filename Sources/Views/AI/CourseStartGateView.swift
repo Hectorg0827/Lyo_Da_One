@@ -1,652 +1,169 @@
-//
-//  CourseStartGateView.swift
-//  Lyo
-//
-//  Monetization gate shown between "Start Class" / "Resume" and the live classroom.
-//
-//  • Non-premium  → 10-second ad placeholder (swap TODO block for real AdMob interstitial)
-//  • Premium      → polished generative-AI loading animation with step timeline
-//
-//  After the gate resolves it calls `onProceed()` which triggers the real classroom.
-//
-
 import SwiftUI
 
-import Combine
-
+/// A short, truthful transition between selecting a course and presenting the
+/// classroom. This view does not simulate advertising, subscription benefits,
+/// curriculum generation, or progress that is not backed by a real service.
 struct CourseStartGateView: View {
     let courseId: String
     let courseTitle: String
     let onProceed: () -> Void
 
-    @StateObject private var createViewModel = CreateViewModel()
-
-    @StateObject private var monetization = MonetizationService.shared
-    @Environment(\.presentationMode) var presentationMode
-
-    // ── Ad-gate state ──────────────────────────────────────────────────
-    @State private var secondsRemaining: Int = 10
-    @State private var countdownTimer: Timer?
-    @State private var canSkip = false
-
-    // ── Premium animation state ────────────────────────────────────────
+    @Environment(\.dismiss) private var dismiss
+    @State private var didProceed = false
     @State private var orbPulse = false
-    @State private var particlePhase: Double = 0
-    @State private var stepIndex: Int = 0
-    @State private var stepsDone: [Bool] = [false, false, false, false]
 
-    private let premiumSteps: [(icon: String, label: String)] = [
-        ("sparkles",              "Planning your curriculum"),
-        ("books.vertical.fill",   "Building learning modules"),
-        ("brain.head.profile",    "Personalizing content for you"),
-        ("checkmark.seal.fill",   "Finalizing your course")
-    ]
-
-    private var teaserTags: [String] {
-        let lowercased = courseTitle.lowercased()
-        var tags: [String] = []
-
-        if lowercased.contains("swift") || lowercased.contains("ios") || lowercased.contains("code") {
-            tags.append("Hands-on project")
-            tags.append("Code walk-through")
-        }
-        if lowercased.contains("math") || lowercased.contains("physics") {
-            tags.append("Worked examples")
-            tags.append("Quick mastery checks")
-        }
-        if lowercased.contains("language") || lowercased.contains("english") || lowercased.contains("spanish") {
-            tags.append("Speaking practice")
-            tags.append("Recall drills")
-        }
-
-        tags.append("Adaptive pacing")
-        tags.append("Checkpoint quiz")
-        return Array(tags.prefix(3))
-    }
-
-    private var premiumProgress: Double {
-        Double(stepsDone.filter { $0 }.count) / Double(max(1, premiumSteps.count))
-    }
-
-    private var adProgress: Double {
-        max(createViewModel.progress, 1 - (Double(secondsRemaining) / 10.0))
-    }
-
-    private var activeStepLabel: String {
-        if let current = premiumSteps.indices.first(where: { !stepsDone[$0] }) {
-            return premiumSteps[current].label
-        }
-        return premiumSteps.last?.label ?? "Finalizing"
-    }
-
-    // ── Body ──────────────────────────────────────────────────────────
     var body: some View {
         ZStack {
-            // Shared dark background
-            Color(hex: "07080F").ignoresSafeArea()
-            LinearGradient(
-                colors: [Color(hex: "1a0d3a").opacity(0.72), Color.clear],
-                startPoint: .top,
-                endPoint: .bottom
-            ).ignoresSafeArea()
+            background
 
-            if monetization.isPremium {
-                premiumContent
-            } else {
-                adGateContent
-            }
-        }
-        .onAppear {
-            Log.ai.info("🎬 CourseStartGateView onAppear — isPremium: \(monetization.isPremium), courseId: \(courseId)")
-            if monetization.isPremium {
-                startPremiumAnimation()
-            } else {
-                startAdCountdown()
-            }
-        }
-        .onDisappear {
-            countdownTimer?.invalidate()
-        }
-    }
-
-    // MARK: - Ad Gate (Non-Premium) ─────────────────────────────────────
-
-    private var adGateContent: some View {
-        VStack(spacing: 0) {
-            // Top bar (unchanged)
-            HStack {
-                Text("Your course is being prepared…")
-                    .font(.caption.weight(.medium))
-                    .foregroundColor(.white.opacity(0.45))
+            VStack(spacing: 28) {
                 Spacer()
-                if canSkip {
-                    Button(action: onProceed) {
-                        Text("Skip  ›")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(Color(hex: "A78BFA"))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(hex: "A78BFA").opacity(0.15))
-                            .clipShape(Capsule())
-                    }
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "timer")
-                            .font(.caption2)
-                            .foregroundColor(.white.opacity(0.35))
-                        Text("Skip in \(secondsRemaining)s")
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundColor(.white.opacity(0.4))
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.07))
-                    .clipShape(Capsule())
+
+                classroomOrb
+
+                VStack(spacing: 10) {
+                    Text("Opening your classroom")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text(displayTitle)
+                        .font(.headline)
+                        .foregroundStyle(Color(hex: "A78BFA"))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+
+                    Text("Connecting your saved course context and learning tools.")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.58))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
                 }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 56)
-            .padding(.bottom, 16)
 
-            courseBlueprintCard(progress: adProgress, accent: Color(hex: "A855F7"))
-                .padding(.horizontal, 20)
-                .padding(.bottom, 18)
+                ProgressView()
+                    .tint(.white)
+                    .controlSize(.large)
+                    .accessibilityLabel("Opening classroom")
 
-            // Progress bar bound to ViewModel
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.1))
-                        .frame(height: 6)
-                    Capsule()
-                        .fill(
+                Button(action: proceed) {
+                    Label("Open now", systemImage: "arrow.right.circle.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 13)
+                        .background(
                             LinearGradient(
-                                colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
+                                colors: [Color(hex: "7C3AED"), Color(hex: "2563EB")],
                                 startPoint: .leading,
                                 endPoint: .trailing
-                            )
-                        )
-                        .frame(
-                            width: geo.size.width * CGFloat(adProgress),
-                            height: 6
-                        )
-                        .animation(.linear(duration: 0.5), value: createViewModel.progress)
-                }
-            }
-            .frame(height: 12)
-            .padding(.horizontal, 32)
-            .padding(.bottom, 12)
-
-            // Placeholder Ad Card (Interstitial Mock)
-            VStack(spacing: 16) {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(0.06))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-                    .frame(height: 260)
-                    .overlay(
-                        ZStack {
-                            // Branded gradient placeholder (Video style)
-                            LinearGradient(
-                                colors: [Color(hex: "0F172A"), Color(hex: "1E1B4B")],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            .opacity(0.8)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-
-                            VStack(spacing: 12) {
-                                // Ad Header
-                                HStack(spacing: 8) {
-                                    Text("Sponsored Video")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundColor(.white.opacity(0.6))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.12))
-                                        .clipShape(Capsule())
-                                    Spacer()
-                                    Button(action: {
-                                        presentationMode.wrappedValue.dismiss()
-                                    }) {
-                                        Image(systemName: "xmark")
-                                            .font(.caption.weight(.bold))
-                                            .foregroundColor(.white.opacity(0.4))
-                                            .padding(8)
-                                            .background(Color.white.opacity(0.1))
-                                            .clipShape(Circle())
-                                    }
-                                }
-
-                                Spacer()
-
-                                // Play Button Video style
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.white.opacity(0.2))
-                                        .frame(width: 64, height: 64)
-                                        .blur(radius: 8)
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .frame(width: 56, height: 56)
-                                    Image(systemName: "play.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(.white)
-                                        .offset(x: 2)
-                                }
-
-                                Text("Advertiser Video Placeholder")
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundColor(.white)
-
-                                Text("Enjoy this short video format while we build your curriculum.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.75))
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 24)
-
-                                Spacer()
-
-                                // CTA + Countdown
-                                HStack(spacing: 12) {
-                                    Button(action: { /* open advertiser link */ }) {
-                                        Text("Learn More")
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundColor(.black)
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 44)
-                                            .background(Color.white)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    }
-
-                                    Button(action: {
-                                        if canSkip { onProceed() }
-                                    }) {
-                                        Text(canSkip ? "Continue" : "Wait…")
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundColor(.white)
-                                            .frame(width: 120, height: 44)
-                                            .background(
-                                                LinearGradient(
-                                                    colors: [Color(hex: "A855F7"), Color(hex: "6366F1")],
-                                                    startPoint: .leading,
-                                                    endPoint: .trailing
-                                                ).opacity(canSkip ? 1.0 : 0.5)
-                                            )
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    }
-                                    .disabled(!canSkip)
-                                }
-                            }
-                            .padding(16)
-                        }
-                    )
-                    .padding(.horizontal, 20)
-            }
-            .padding(.top, 20)
-
-            Spacer()
-
-            VStack(spacing: 14) {
-                Text("Preparing: \(courseTitle)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.white.opacity(0.65))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Text("We’re packaging the first lesson, activity flow, and AI checkpoints so you can jump straight in.")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-                
-                Button(action: {
-                    Log.ai.info("🔒 User tapped upgrade from gate")
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "crown.fill")
-                            .font(.subheadline)
-                        Text("Upgrade to Premium — Remove Ads")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .foregroundColor(Color(hex: "F59E0B"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color(hex: "F59E0B").opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Color(hex: "F59E0B").opacity(0.35), lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(.horizontal, 20)
-            }
-            .padding(.bottom, 48)
-        }
-    }
-
-    // MARK: - Premium Loading Animation ────────────────────────────────
-
-    private var premiumContent: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            courseBlueprintCard(progress: premiumProgress, accent: Color(hex: "7C3AED"))
-                .padding(.horizontal, 24)
-                .padding(.bottom, 26)
-
-            // Animated orb cluster
-            ZStack {
-                // Pulsing glow rings
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color(hex: "7C3AED").opacity(0.45),
-                                    Color(hex: "6366F1").opacity(0.08)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
                             ),
-                            lineWidth: 1.5
-                        )
-                        .frame(
-                            width: 110 + CGFloat(i * 38),
-                            height: 110 + CGFloat(i * 38)
-                        )
-                        .scaleEffect(orbPulse ? 1.06 + Double(i) * 0.025 : 1.0)
-                        .opacity(orbPulse ? 0.65 : 0.18)
-                        .animation(
-                            .easeInOut(duration: 1.9)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(i) * 0.38),
-                            value: orbPulse
+                            in: Capsule()
                         )
                 }
+                .buttonStyle(.plain)
+                .disabled(didProceed)
 
-                // Orbiting particles
-                ForEach(0..<6, id: \.self) { i in
-                    Circle()
-                        .fill(
-                            Color(hex: i % 2 == 0 ? "A855F7" : "6366F1")
-                                .opacity(0.88)
-                        )
-                        .frame(width: 6, height: 6)
-                        .offset(x: 62)
-                        .rotationEffect(.degrees(particlePhase + Double(i) * 60))
-                        .animation(
-                            .linear(duration: 3.2).repeatForever(autoreverses: false),
-                            value: particlePhase
-                        )
-                }
-
-                // Core orb
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: "C084FC"),
-                                Color(hex: "6366F1"),
-                                Color(hex: "2D1B69")
-                            ],
-                            center: .center,
-                            startRadius: 4,
-                            endRadius: 44
-                        )
-                    )
-                    .frame(width: 88, height: 88)
-                    .shadow(color: Color(hex: "A855F7").opacity(0.6), radius: 20)
-                    .scaleEffect(orbPulse ? 1.06 : 0.94)
-                    .animation(
-                        .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                        value: orbPulse
-                    )
-                    .overlay(
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundColor(.white)
-                    )
-            }
-            .frame(width: 210, height: 210)
-
-            // Course info
-            VStack(spacing: 8) {
-                Text("Building Your Course")
-                    .font(.title2.weight(.bold))
-                    .foregroundColor(.white)
-                    .padding(.top, 12)
-
-                Text(courseTitle)
-                    .font(.subheadline)
-                    .foregroundColor(Color(hex: "A78BFA"))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 36)
-
-                Text(activeStepLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.white.opacity(0.66))
-            }
-
-            // Steps timeline
-            VStack(spacing: 18) {
-                ForEach(premiumSteps.indices, id: \.self) { i in
-                    HStack(spacing: 14) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    stepsDone[i]
-                                        ? Color(hex: "10B981").opacity(0.15)
-                                        : (stepIndex == i
-                                            ? Color(hex: "A855F7").opacity(0.15)
-                                            : Color.white.opacity(0.05))
-                                )
-                                .frame(width: 34, height: 34)
-
-                            if stepsDone[i] {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(Color(hex: "10B981"))
-                            } else if stepIndex == i {
-                                ProgressView()
-                                    .progressViewStyle(
-                                        CircularProgressViewStyle(tint: Color(hex: "A855F7"))
-                                    )
-                                    .scaleEffect(0.65)
-                            } else {
-                                Image(systemName: premiumSteps[i].icon)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.2))
-                            }
-                        }
-
-                        Text(premiumSteps[i].label)
-                            .font(.subheadline.weight(stepsDone[i] ? .semibold : .regular))
-                            .foregroundColor(
-                                stepsDone[i]
-                                    ? .white
-                                    : (stepIndex == i ? Color(hex: "A78BFA") : .white.opacity(0.28))
-                            )
-                            .animation(.easeInOut(duration: 0.3), value: stepIndex)
-
-                        Spacer()
-
-                        if stepsDone[i] {
-                            Text("Done")
-                                .font(.caption2.weight(.bold))
-                                .foregroundColor(Color(hex: "10B981"))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 4)
-                                .background(Color(hex: "10B981").opacity(0.12))
-                                .clipShape(Capsule())
-                        }
-                    }
-                    .padding(.horizontal, 36)
-                }
-            }
-            .padding(.top, 28)
-
-            HStack(spacing: 8) {
-                ForEach(teaserTags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption2.bold())
-                        .foregroundColor(.white.opacity(0.82))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.top, 22)
-
-            Spacer()
-        }
-    }
-
-    // MARK: - Logic ─────────────────────────────────────────────────────
-
-    private func startAdCountdown() {
-        Log.ai.info("🎬 CourseStartGateView: Starting 10s ad countdown")
-        secondsRemaining = 10
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { t in
-            if secondsRemaining > 0 {
-                secondsRemaining -= 1
-            } else {
-                t.invalidate()
-                Log.ai.info("🎬 CourseStartGateView: Ad countdown done — proceeding to classroom")
-                withAnimation { canSkip = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    onProceed()
-                }
-            }
-        }
-    }
-
-    private func startPremiumAnimation() {
-        stepIndex = 0
-        stepsDone = Array(repeating: false, count: premiumSteps.count)
-        orbPulse = true
-        withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
-            particlePhase = 360
-        }
-        // Advance step timeline — each step takes ~2 s
-        let stepDuration = 1.85
-        for i in premiumSteps.indices {
-            DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i)) {
-                withAnimation(.easeInOut(duration: 0.35)) { stepIndex = i }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(i) + stepDuration * 0.82) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { stepsDone[i] = true }
-            }
-        }
-        // Proceed once all steps are marked done (+ 0.6 s buffer)
-        let totalTime = stepDuration * Double(premiumSteps.count) + 0.6
-        DispatchQueue.main.asyncAfter(deadline: .now() + totalTime) {
-            onProceed()
-        }
-    }
-
-    private func courseBlueprintCard(progress: Double, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("AI Course Blueprint")
-                        .font(.caption.bold())
-                        .foregroundColor(.white.opacity(0.6))
-                        .textCase(.uppercase)
-                    Text(courseTitle)
-                        .font(.headline.weight(.semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                }
                 Spacer()
-                Image(systemName: monetization.isPremium ? "sparkles.rectangle.stack.fill" : "play.tv.fill")
-                    .font(.title3)
-                    .foregroundColor(accent)
-                    .padding(10)
-                    .background(accent.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Generation progress")
-                        .font(.caption.weight(.medium))
-                        .foregroundColor(.white.opacity(0.56))
-                    Spacer()
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption.bold())
-                        .foregroundColor(.white.opacity(0.74))
+                Button("Cancel") {
+                    guard !didProceed else { return }
+                    dismiss()
                 }
-
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.08))
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [accent, accent.opacity(0.55)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(20, geo.size.width * progress))
-                    }
-                }
-                .frame(height: 8)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.62))
+                .padding(.bottom, 34)
             }
-
-            HStack(spacing: 8) {
-                ForEach(teaserTags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption2.bold())
-                        .foregroundColor(.white.opacity(0.78))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(Capsule())
-                }
-            }
-
-            Text(monetization.isPremium ? "Premium unlocks an ad-free handoff into the live classroom." : "Your course is still being assembled while the sponsor spot plays.")
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.5))
+            .padding(.horizontal, 24)
         }
-        .padding(18)
-        .background(Color.white.opacity(0.05))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .preferredColorScheme(.dark)
+        .task {
+            guard !didProceed else { return }
+            // Give the full-screen cover one render pass before MainTabView
+            // dismisses it and presents the classroom destination.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            proceed()
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.35).repeatForever(autoreverses: true)) {
+                orbPulse = true
+            }
+            Log.ui.info("Course transition opened for courseId=\(courseId)")
+        }
+    }
+
+    private var displayTitle: String {
+        let trimmed = courseTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Your class" : trimmed
+    }
+
+    private var background: some View {
+        ZStack {
+            Color(hex: "060811")
+                .ignoresSafeArea()
+
+            RadialGradient(
+                colors: [Color(hex: "7C3AED").opacity(0.32), .clear],
+                center: .top,
+                startRadius: 20,
+                endRadius: 460
+            )
+            .ignoresSafeArea()
+
+            RadialGradient(
+                colors: [Color(hex: "2563EB").opacity(0.18), .clear],
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 380
+            )
+            .ignoresSafeArea()
+        }
+    }
+
+    private var classroomOrb: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(Color(hex: "A78BFA").opacity(0.26 - Double(index) * 0.055), lineWidth: 1.5)
+                    .frame(
+                        width: CGFloat(118 + index * 34),
+                        height: CGFloat(118 + index * 34)
+                    )
+                    .scaleEffect(orbPulse ? 1.05 + Double(index) * 0.015 : 0.96)
+            }
+
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hex: "8B5CF6"), Color(hex: "2563EB")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 92, height: 92)
+                .shadow(color: Color(hex: "7C3AED").opacity(0.55), radius: 30)
+
+            Image(systemName: "graduationcap.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(height: 205)
+        .accessibilityHidden(true)
+    }
+
+    @MainActor
+    private func proceed() {
+        guard !didProceed else { return }
+        didProceed = true
+        Log.ui.info("Course transition proceeding to classroom for courseId=\(courseId)")
+        onProceed()
     }
 }
 
-// MARK: - Preview
-
-#if DEBUG
-#Preview("Non-Premium") {
+#Preview {
     CourseStartGateView(
-        courseId: "demo-001",
-        courseTitle: "SwiftUI Mastery: Build Beautiful Apps"
-    ) {
-        print("Proceed to classroom")
-    }
+        courseId: "course-123",
+        courseTitle: "Introduction to Physics",
+        onProceed: {}
+    )
 }
-
-#Preview("Premium") {
-    CourseStartGateView(
-        courseId: "demo-002",
-        courseTitle: "Machine Learning for iOS Developers"
-    ) {
-        print("Proceed to classroom")
-    }
-    .onAppear {
-        // Simulate premium for preview
-    }
-}
-#endif
