@@ -34,6 +34,10 @@ targets:
           # here so we don't burn build time on dead code.
           - Views/Main/Classroom/LiveClassroomView.swift
           - ViewModels/LiveClassroomViewModel.swift
+          # Legacy Focus mixed real stack data with hardcoded profile metrics,
+          # repeated mock feed cards, and suggested courses. ProductionFocusView
+          # is the source of truth for the active Focus tab.
+          - Views/Main/FocusView.swift
       - path: PrivacyInfo.xcprivacy
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.lyo.app
