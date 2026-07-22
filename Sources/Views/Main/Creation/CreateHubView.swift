@@ -1,1089 +1,806 @@
-//
-//  CreateHubView.swift
-//  Lyo
-//
-//  Full-screen camera-first creation hub inspired by TikTok/Instagram
-//  Supports: Reel, Story, Post, Course, Event/Group creation
-//
-
-import SwiftUI
 import AVFoundation
+import AVKit
+import Combine
+import PhotosUI
+import SwiftUI
+import UniformTypeIdentifiers
 
+/// Production creation surface.
+///
+/// The active Create Hub now exposes only operations backed by a working local
+/// capture or server publishing path. The former placeholder camera, fake video
+/// preview, empty filters, and decorative editing controls are intentionally not
+/// part of this screen.
 struct CreateHubView: View {
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
     @StateObject private var viewModel: CreateViewModel
-    @State private var showModeDetail = false
+    @StateObject private var camera = CreateCameraController()
+
+    @State private var selectedPickerItem: PhotosPickerItem?
+    @State private var showMediaPicker = false
+    @State private var isLoadingSelection = false
+    @State private var isCapturingPhoto = false
+
     let onPublish: ((CreateMode) -> Void)?
 
     init(initialMode: CreateMode = .reel, onPublish: ((CreateMode) -> Void)? = nil) {
-        _viewModel = StateObject(wrappedValue: CreateViewModel(initialMode: initialMode))
+        let supportedInitialMode: CreateMode = initialMode == .live ? .reel : initialMode
+        _viewModel = StateObject(wrappedValue: CreateViewModel(initialMode: supportedInitialMode))
         self.onPublish = onPublish
     }
 
-    
     var body: some View {
         ZStack {
-            // Camera Preview or Canvas Background
-            if viewModel.selectedMode.requiresCamera {
-                CameraPreviewLayer(
-                    capturedImage: $viewModel.capturedImage,
-                    capturedVideoURL: $viewModel.capturedVideoURL,
-                    cameraPosition: $viewModel.cameraPosition,
-                    flashMode: $viewModel.flashMode
-                )
-                .ignoresSafeArea()
-            } else {
-                // Gradient background for non-camera modes (TikTok aesthetic)
-                LinearGradient(
-                    colors: [
-                        Color(hex: "0f172a"),
-                        viewModel.selectedMode.color.opacity(0.3)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .background(Color.black)
-                .ignoresSafeArea()
-            }
-            
-            // Mode Detail View (Inline) - The "Canvas"
-            modeDetailView
-                .zIndex(5)
+            background
 
-            // Error Overlay
-            if case .error(let errorMsg) = viewModel.state {
-                Color.black.opacity(0.7)
-                    .ignoresSafeArea()
-                    .zIndex(10)
-                VStack(spacing: 20) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.yellow)
-                    Text("Something went wrong")
-                        .font(.title2.bold())
-                        .foregroundColor(.white)
-                    Text(errorMsg)
-                        .font(.body)
-                        .foregroundColor(.white.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                    Button(action: { viewModel.state = .idle }) {
-                        Text("Dismiss")
-                            .font(.headline)
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 32)
-                            .padding(.vertical, 12)
-                            .background(Color.yellow)
-                            .cornerRadius(10)
-                    }
-                }
-                .padding(40)
-                .background(Color.black.opacity(0.85))
-                .cornerRadius(24)
-                .shadow(radius: 30)
-                .frame(maxWidth: 400)
-                .zIndex(11)
+            if viewModel.selectedMode.requiresCamera {
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.2), .black.opacity(0.92)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
             }
-            
-            // UI Overlay
+
             VStack(spacing: 0) {
-                // Top Controls
                 topBar
-                
-                // Camera/Gallery Toggle (if applicable)
-                if viewModel.selectedMode.requiresCamera && viewModel.state == .idle {
-                    toggleContainer
-                        .padding(.top, 20)
-                }
-                
-                Spacer()
-                
-                // Center Action Button (Shutter for Camera modes)
+
                 if viewModel.selectedMode.requiresCamera {
-                    if viewModel.state == .idle {
-                        captureButton
-                            .padding(.bottom, 60)
-                    } else if viewModel.state == .captured {
-                        shareCapturedMediaButton
-                            .padding(.bottom, 60)
-                    }
+                    cameraWorkspace
+                } else {
+                    editorWorkspace
                 }
-                
-                // Bottom Controls Island
-                bottomControls
+
+                CreateModePicker(
+                    selectedMode: $viewModel.selectedMode,
+                    onModeSelected: selectMode
+                )
+            }
+
+            if viewModel.state == .uploading {
+                uploadingOverlay
+            }
+
+            if case .error(let message) = viewModel.state {
+                errorOverlay(message: message)
             }
         }
         .preferredColorScheme(.dark)
-        .onChange(of: viewModel.state) { oldState, newState in
-            if newState == .complete {
+        .photosPicker(
+            isPresented: $showMediaPicker,
+            selection: $selectedPickerItem,
+            matching: pickerFilter
+        )
+        .onChange(of: selectedPickerItem) { _, item in
+            guard let item else { return }
+            Task { await loadSelectedMedia(item) }
+        }
+        .onReceive(camera.$capturedImage.compactMap { $0 }) { image in
+            isCapturingPhoto = false
+            viewModel.capturePhoto(image)
+        }
+        .onReceive(camera.$recordedVideoURL.compactMap { $0 }) { url in
+            viewModel.captureVideo(url)
+        }
+        .onReceive(camera.$recordingDuration) { duration in
+            viewModel.recordingDuration = duration
+        }
+        .onReceive(camera.$errorMessage.compactMap { $0 }) { message in
+            isCapturingPhoto = false
+            viewModel.state = .error(message)
+        }
+        .onChange(of: viewModel.state) { _, state in
+            if state == .complete {
                 onPublish?(viewModel.selectedMode)
                 dismiss()
             }
         }
-        // ...
-    }
-    
-    // MARK: - Toggle Container
-    
-    private var toggleContainer: some View {
-        HStack(spacing: 8) {
-            toggleButton(label: "📷 Camera", isActive: viewModel.isCameraSource) {
-                viewModel.isCameraSource = true
-            }
-            toggleButton(label: "🖼️ Gallery", isActive: !viewModel.isCameraSource) {
-                viewModel.isCameraSource = false
+        .onAppear {
+            if viewModel.selectedMode.requiresCamera {
+                camera.startSession()
             }
         }
-        .padding(4)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-        )
-    }
-    
-    private func toggleButton(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 13, weight: isActive ? .semibold : .medium))
-                .foregroundColor(isActive ? .white : .white.opacity(0.6))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isActive ? Color.white.opacity(0.3) : Color.clear)
-                .clipShape(Capsule())
+        .onDisappear {
+            camera.cleanup()
         }
     }
 
-    // MARK: - Top Bar
-    
-    private var topBar: some View {
-        HStack {
-            // Close Button
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color.white.opacity(0.1)))
-            }
-            
-            Spacer()
-            
-            // Mode Center Info
-            VStack(spacing: 2) {
-                Text("Create to Learn")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("\(viewModel.selectedMode.rawValue) Mode")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
-            .foregroundColor(.white)
-            
-            Spacer()
-            
-            // Settings/Camera Flip
-            Button {
-                if viewModel.selectedMode.requiresCamera {
-                    viewModel.toggleCamera()
-                }
-            } label: {
-                Image(systemName: viewModel.selectedMode.requiresCamera ? "arrow.triangle.2.circlepath.camera" : "gearshape")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color.white.opacity(0.1)))
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
-    }
-    
-    // MARK: - Share Captured Media
-    
-    private var shareCapturedMediaButton: some View {
-        HStack(spacing: 20) {
-            // Retake
-            Button {
-                viewModel.state = .idle
-                viewModel.capturedImage = nil
-                viewModel.capturedVideoURL = nil
-            } label: {
-                HStack {
-                    Image(systemName: "arrow.counterclockwise")
-                    Text("Retake")
-                }
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(Capsule().fill(.ultraThinMaterial))
-            }
-            
-            // Share
-            Button {
-                Task { await viewModel.publish() }
-            } label: {
-                HStack {
-                    Text("Share to \(viewModel.selectedMode.rawValue)")
-                    Image(systemName: "paperplane.fill")
-                }
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 12)
-                .background(
-                    LinearGradient(
-                        colors: [Color(hex: "42A5F5"), Color(hex: "1976D2")],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(Capsule())
-                .shadow(color: Color(hex: "42A5F5").opacity(0.4), radius: 15)
-            }
-        }
-    }
-    
-    // MARK: - Capture Button
-    
-    private var captureButton: some View {
-        Button {
-            if viewModel.selectedMode == .reel {
-                if viewModel.state == .recording {
-                    viewModel.stopRecording()
-                } else {
-                    viewModel.startRecording()
-                }
-            } else {
-                viewModel.state = .captured
-            }
-        } label: {
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.5), lineWidth: 4)
-                    .frame(width: 80, height: 80)
-                
-                if viewModel.selectedMode == .reel {
-                    // Reel: Solid Red with glow
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: viewModel.state == .recording ? 40 : 64, height: viewModel.state == .recording ? 40 : 64)
-                        .cornerRadius(viewModel.state == .recording ? 8 : 32)
-                        .shadow(color: .red.opacity(0.5), radius: 20)
-                } else {
-                    // Story: Blue Gradient
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: "42A5F5"), Color(hex: "1976D2")],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 64, height: 64)
-                }
-            }
-            .scaleEffect(viewModel.state == .recording ? 1.1 : 1.0)
-            .animation(.spring(), value: viewModel.state)
-        }
-    }
-    
-    // MARK: - Bottom Controls
-    
-    private var bottomControls: some View {
-        VStack(spacing: 0) {
-            // Mode Picker Island
-            CreateModePicker(
-                selectedMode: $viewModel.selectedMode,
-                onModeSelected: { mode in
-                    withAnimation {
-                        viewModel.selectMode(mode)
-                    }
-                }
-            )
-        }
-    }
-    
-    // MARK: - Mode Detail View (Inline)
-    
+    // MARK: - Background
+
     @ViewBuilder
-    private var modeDetailView: some View {
-        VStack(spacing: 0) {
-            switch viewModel.selectedMode {
-            case .story:
-                StoryModeView(viewModel: viewModel)
-            case .reel, .clip:
-                ReelModeView(viewModel: viewModel)
-            case .post:
-                PostModeView(viewModel: viewModel)
-            case .course:
-                CourseModeView(viewModel: viewModel)
-            case .event:
-                EventModeView(viewModel: viewModel)
-            case .live:
-                EventModeView(viewModel: viewModel)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    
-    // MARK: - Mode Detail Sheet
-    
-    @ViewBuilder
-    private var modeDetailSheet: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                switch viewModel.selectedMode {
-                case .reel, .story, .clip:
-                    MediaEditorView(viewModel: viewModel)
-                case .post:
-                    PostComposeView(viewModel: viewModel)
-                case .course:
-                    CourseGenerationView(viewModel: viewModel)
-                case .event:
-                    EventCreationView(viewModel: viewModel)
-                case .live:
-                    EventCreationView(viewModel: viewModel)
-                }
-            }
-            .navigationTitle(viewModel.selectedMode.rawValue)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        showModeDetail = false
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Publish") {
-                        Task {
-                            await viewModel.publish()
-                            if case .complete = viewModel.state {
-                                onPublish?(viewModel.selectedMode)
-                                dismiss()
-                            }
-                        }
-                    }
-                    .disabled(viewModel.state == .uploading)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Camera Preview Layer
-
-struct CameraPreviewLayer: View {
-    @Binding var capturedImage: UIImage?
-    @Binding var capturedVideoURL: URL?
-    @Binding var cameraPosition: AVCaptureDevice.Position
-    @Binding var flashMode: AVCaptureDevice.FlashMode
-    
-    var body: some View {
-        ZStack {
-            // Show captured media or live preview
-            if let image = capturedImage {
+    private var background: some View {
+        if viewModel.selectedMode.requiresCamera {
+            if let image = viewModel.capturedImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
                     .ignoresSafeArea()
-            } else if let _ = capturedVideoURL {
-                // Video preview would go here
-                Color.black
+            } else if let videoURL = viewModel.capturedVideoURL {
+                CreateCapturedVideoPreview(url: videoURL)
+                    .id(videoURL)
                     .ignoresSafeArea()
-                    .overlay(
-                        Text("Video Preview")
-                            .foregroundColor(.white)
-                    )
+            } else if camera.cameraPermissionGranted {
+                CameraPreview(session: camera.session)
+                    .ignoresSafeArea()
             } else {
-                // Live camera preview
-                Color.black
-                    .ignoresSafeArea()
-                    .overlay(
-                        VStack {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.3))
-                            Text("Camera Preview")
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                    )
+                cameraPermissionBackground
+            }
+        } else {
+            LinearGradient(
+                colors: [Color(hex: "07080F"), viewModel.selectedMode.color.opacity(0.34)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        }
+    }
+
+    private var cameraPermissionBackground: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 14) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 44, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text("Camera access is required")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text("Enable camera access to capture a Story or Clip, or choose existing media from your library.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Button("Open Settings") {
+                    guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(settingsURL)
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }
-}
 
-// MARK: - Media Editor View
+    // MARK: - Header
 
-struct MediaEditorView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            // Caption Input
-            TextField("Add a caption...", text: $viewModel.contentText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .foregroundColor(.white)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.ultraThinMaterial)
-                )
-                .padding(.horizontal)
-            
-            // Learn Layers Stack
-            if !viewModel.learnLayers.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Learn Layers")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    ForEach(viewModel.learnLayers) { layer in
-                        HStack {
-                            Image(systemName: layer.type.icon)
-                                .foregroundColor(layer.type.color)
-                            Text(layer.content)
-                                .foregroundColor(.white)
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(width: 42, height: 42)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .accessibilityLabel("Close Create Hub")
+
+            Spacer()
+
+            VStack(spacing: 2) {
+                Text("Create")
+                    .font(.headline.weight(.bold))
+                Text(viewModel.selectedMode.description)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+            }
+
+            Spacer()
+
+            if viewModel.selectedMode.requiresCamera,
+               viewModel.capturedImage == nil,
+               viewModel.capturedVideoURL == nil {
+                HStack(spacing: 8) {
+                    if camera.torchAvailable {
+                        Button {
+                            camera.toggleTorch()
+                        } label: {
+                            Image(systemName: camera.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .frame(width: 42, height: 42)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .disabled(camera.isRecording)
+                        .accessibilityLabel(camera.isTorchOn ? "Turn camera light off" : "Turn camera light on")
+                    }
+
+                    Button {
+                        camera.switchCamera()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .frame(width: 42, height: 42)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .disabled(camera.isRecording)
+                    .accessibilityLabel("Switch camera")
+                }
+            } else {
+                Color.clear.frame(width: 42, height: 42)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    // MARK: - Camera workflow
+
+    private var cameraWorkspace: some View {
+        VStack(spacing: 14) {
+            if camera.isRecording {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 9, height: 9)
+                    Text(camera.formattedDuration)
+                        .monospacedDigit()
+                        .font(.subheadline.weight(.bold))
+                    Text("/ 3:00")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+            }
+
+            Spacer(minLength: 8)
+
+            if hasCapturedMedia {
+                capturedMediaMetadata
+                    .padding(.horizontal, 16)
+            }
+
+            cameraActions
+                .padding(.horizontal, 22)
+                .padding(.bottom, 8)
+        }
+    }
+
+    @ViewBuilder
+    private var capturedMediaMetadata: some View {
+        if viewModel.selectedMode == .clip || viewModel.selectedMode == .reel {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Clip title", text: $viewModel.clipTitle)
+                    .textInputAutocapitalization(.sentences)
+                    .submitLabel(.done)
+                    .padding(12)
+                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+
+                TextField("Description (optional)", text: $viewModel.clipDescription, axis: .vertical)
+                    .lineLimit(2...4)
+                    .padding(12)
+                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+
+                Menu {
+                    Button("No subject") { viewModel.clipSubject = nil }
+                    ForEach(ClipSubject.allCases) { subject in
+                        Button(subject.rawValue) { viewModel.clipSubject = subject }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: viewModel.clipSubject?.icon ?? "square.grid.2x2")
+                        Text(viewModel.clipSubject?.rawValue ?? "Choose a subject")
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .padding(12)
+                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(16)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        } else {
+            HStack(spacing: 10) {
+                Image(systemName: viewModel.capturedImage == nil ? "video.fill" : "photo.fill")
+                    .foregroundStyle(viewModel.selectedMode.color)
+                Text("Ready to share your Story")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            .foregroundStyle(.white)
+            .padding(16)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    private var cameraActions: some View {
+        Group {
+            if hasCapturedMedia {
+                HStack(spacing: 12) {
+                    Button {
+                        retakeMedia()
+                    } label: {
+                        Label("Retake", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CreateSecondaryButtonStyle())
+
+                    Button {
+                        Task { await viewModel.publish() }
+                    } label: {
+                        Label("Publish", systemImage: "paperplane.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CreatePrimaryButtonStyle(color: viewModel.selectedMode.color))
+                    .disabled(!canPublishCapturedMedia)
+                }
+            } else {
+                HStack(alignment: .center) {
+                    Button {
+                        showMediaPicker = true
+                    } label: {
+                        VStack(spacing: 5) {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title3.weight(.semibold))
+                            Text("Library")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .frame(width: 72)
+                    }
+                    .disabled(camera.isRecording || isLoadingSelection)
+
+                    Spacer()
+
+                    Button {
+                        captureAction()
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .stroke(.white.opacity(0.9), lineWidth: 4)
+                                .frame(width: 84, height: 84)
+
+                            if isCapturingPhoto {
+                                ProgressView()
+                                    .tint(.white)
+                            } else if viewModel.selectedMode == .story {
+                                Circle()
+                                    .fill(.white)
+                                    .frame(width: 68, height: 68)
+                            } else {
+                                RoundedRectangle(cornerRadius: camera.isRecording ? 10 : 36)
+                                    .fill(.red)
+                                    .frame(
+                                        width: camera.isRecording ? 42 : 68,
+                                        height: camera.isRecording ? 42 : 68
+                                    )
+                                    .animation(.spring(response: 0.25), value: camera.isRecording)
+                            }
+                        }
+                    }
+                    .disabled(!camera.cameraPermissionGranted || isCapturingPhoto || isLoadingSelection)
+                    .accessibilityLabel(captureAccessibilityLabel)
+
+                    Spacer()
+
+                    VStack(spacing: 5) {
+                        Image(systemName: viewModel.selectedMode == .story ? "camera.fill" : "video.fill")
+                            .font(.title3.weight(.semibold))
+                        Text(viewModel.selectedMode == .story ? "Photo" : "Video")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .frame(width: 72)
+                    .foregroundStyle(.white.opacity(0.72))
+                }
+                .foregroundStyle(.white)
+            }
+        }
+    }
+
+    private func captureAction() {
+        if viewModel.selectedMode == .story {
+            isCapturingPhoto = true
+            camera.capturePhoto()
+            return
+        }
+
+        if camera.isRecording {
+            camera.stopRecording()
+            viewModel.stopRecording()
+        } else {
+            camera.startRecording()
+            viewModel.startRecording()
+        }
+    }
+
+    private func retakeMedia() {
+        camera.resetCapturedMedia()
+        viewModel.capturedImage = nil
+        viewModel.capturedVideoURL = nil
+        viewModel.state = .idle
+        viewModel.progress = 0
+        camera.startSession()
+    }
+
+    // MARK: - Non-camera editors
+
+    private var editorWorkspace: some View {
+        ScrollView(showsIndicators: false) {
+            Group {
+                switch viewModel.selectedMode {
+                case .post:
+                    postEditor
+                case .course:
+                    courseEditor
+                case .event:
+                    eventEditor
+                default:
+                    EmptyView()
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var postEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            editorTitle("Share a useful idea", subtitle: "Your post will be saved to the shared Community feed.")
+
+            TextEditor(text: $viewModel.contentText)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 190)
+                .padding(12)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(alignment: .bottomTrailing) {
+                    Text("\(viewModel.charCount)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.45))
+                        .padding(10)
+                }
+
+            Button {
+                showMediaPicker = true
+            } label: {
+                Label("Attach photo or video", systemImage: "paperclip")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(CreateSecondaryButtonStyle())
+
+            if !viewModel.attachedFiles.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(viewModel.attachedFiles, id: \.self) { fileURL in
+                        HStack(spacing: 10) {
+                            Image(systemName: fileURL.pathExtension.lowercased() == "mov" || fileURL.pathExtension.lowercased() == "mp4" ? "video.fill" : "photo.fill")
+                            Text(fileURL.lastPathComponent)
+                                .font(.caption)
+                                .lineLimit(1)
                             Spacer()
                             Button {
-                                viewModel.removeLearnLayer(layer.id)
+                                removeAttachment(fileURL)
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.white.opacity(0.5))
                             }
+                            .accessibilityLabel("Remove attachment")
                         }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(.ultraThinMaterial)
-                        )
+                        .padding(12)
+                        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-                .padding(.horizontal)
             }
-            
-            Spacer()
+
+            publishButton(title: "Publish Post", enabled: !trimmed(viewModel.contentText).isEmpty)
         }
-        .padding(.top, 20)
+        .createEditorCard()
     }
-}
 
-// MARK: - Post Compose View
+    private var courseEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            editorTitle("Build an AI course", subtitle: "LYO will generate the real curriculum through the course-generation service.")
 
-struct PostComposeView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            // Text Editor
-            TextEditor(text: $viewModel.contentText)
-                .frame(height: 200)
+            TextField("Course topic", text: $viewModel.courseTopic)
+                .padding(13)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Difficulty")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.65))
+
+                Picker("Difficulty", selection: $viewModel.courseLevel) {
+                    Text("Beginner").tag("beginner")
+                    Text("Intermediate").tag("intermediate")
+                    Text("Advanced").tag("advanced")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Text("No placeholder outline is shown. The modules displayed after publishing come from the generated server course.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.58))
+
+            publishButton(title: "Generate Course", enabled: !trimmed(viewModel.courseTopic).isEmpty)
+        }
+        .createEditorCard()
+    }
+
+    private var eventEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            editorTitle("Create a learning gathering", subtitle: "Create a real virtual event or study group in Community.")
+
+            Picker("Type", selection: $viewModel.isGroup) {
+                Text("Event").tag(false)
+                Text("Study Group").tag(true)
+            }
+            .pickerStyle(.segmented)
+
+            TextField(viewModel.isGroup ? "Group name" : "Event title", text: $viewModel.eventTitle)
+                .padding(13)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
+
+            TextEditor(text: $viewModel.eventDescription)
                 .scrollContentBackground(.hidden)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.ultraThinMaterial)
-                )
-                .foregroundColor(.white)
-                .padding(.horizontal)
-            
-            // Attach Files
-            Button {
-                // Show file picker
-            } label: {
-                HStack {
-                    Image(systemName: "paperclip")
-                    Text("Attach Files")
-                }
-                .foregroundColor(.white)
-                .padding()
+                .frame(minHeight: 110)
+                .padding(12)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
+
+            DatePicker(
+                "Starts",
+                selection: $viewModel.eventDate,
+                in: Date()...,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.compact)
+
+            Label("Virtual location", systemImage: "video.fill")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.white.opacity(0.62))
+
+            publishButton(
+                title: viewModel.isGroup ? "Create Study Group" : "Create Event",
+                enabled: !trimmed(viewModel.eventTitle).isEmpty
+            )
+        }
+        .createEditorCard()
+        .onAppear {
+            // The current API model supports a truthful virtual location. A typed
+            // address is not exposed until geocoding/coordinates are implemented.
+            viewModel.eventLocation = ""
+        }
+    }
+
+    private func editorTitle(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.title3.weight(.bold))
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.62))
+        }
+    }
+
+    private func publishButton(title: String, enabled: Bool) -> some View {
+        Button {
+            Task { await viewModel.publish() }
+        } label: {
+            Label(title, systemImage: "paperplane.fill")
                 .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.ultraThinMaterial)
-                )
-            }
-            .padding(.horizontal)
-            
-            Spacer()
         }
-        .padding(.top, 20)
+        .buttonStyle(CreatePrimaryButtonStyle(color: viewModel.selectedMode.color))
+        .disabled(!enabled)
+    }
+
+    // MARK: - Media library
+
+    private var pickerFilter: PHPickerFilter {
+        switch viewModel.selectedMode {
+        case .story, .post:
+            return .any(of: [.images, .videos])
+        case .clip, .reel:
+            return .videos
+        default:
+            return .any(of: [.images, .videos])
+        }
+    }
+
+    @MainActor
+    private func loadSelectedMedia(_ item: PhotosPickerItem) async {
+        isLoadingSelection = true
+        defer {
+            isLoadingSelection = false
+            selectedPickerItem = nil
+        }
+
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                throw CreateHubMediaError.unreadableSelection
+            }
+
+            let contentType = item.supportedContentTypes.first ?? .data
+            let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            let fileExtension = contentType.preferredFilenameExtension ?? (isVideo ? "mov" : "jpg")
+            let temporaryURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("lyo-library-\(UUID().uuidString)")
+                .appendingPathExtension(fileExtension)
+            try data.write(to: temporaryURL, options: .atomic)
+
+            if viewModel.selectedMode == .post {
+                viewModel.attachedFiles.append(temporaryURL)
+            } else if isVideo {
+                viewModel.captureVideo(temporaryURL)
+            } else if let image = UIImage(data: data) {
+                viewModel.capturePhoto(image)
+            } else {
+                throw CreateHubMediaError.unreadableSelection
+            }
+        } catch {
+            viewModel.state = .error(error.localizedDescription)
+        }
+    }
+
+    private func removeAttachment(_ fileURL: URL) {
+        viewModel.attachedFiles.removeAll { $0 == fileURL }
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    // MARK: - State helpers
+
+    private var hasCapturedMedia: Bool {
+        viewModel.capturedImage != nil || viewModel.capturedVideoURL != nil
+    }
+
+    private var canPublishCapturedMedia: Bool {
+        guard hasCapturedMedia else { return false }
+        if viewModel.selectedMode == .clip || viewModel.selectedMode == .reel {
+            return !trimmed(viewModel.clipTitle).isEmpty && viewModel.capturedVideoURL != nil
+        }
+        return true
+    }
+
+    private var captureAccessibilityLabel: String {
+        if viewModel.selectedMode == .story {
+            return "Take photo"
+        }
+        return camera.isRecording ? "Stop recording" : "Start recording"
+    }
+
+    private func selectMode(_ mode: CreateMode) {
+        guard mode != .live else { return }
+        if camera.isRecording {
+            camera.stopRecording()
+        }
+        camera.resetCapturedMedia()
+        viewModel.selectMode(mode)
+        if mode.requiresCamera {
+            camera.startSession()
+        } else {
+            camera.stopSession()
+        }
+    }
+
+    private func trimmed(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Overlays
+
+    private var uploadingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.72).ignoresSafeArea()
+            VStack(spacing: 16) {
+                ProgressView(value: viewModel.progress, total: 1)
+                    .progressViewStyle(.linear)
+                    .tint(viewModel.selectedMode.color)
+                    .frame(width: 220)
+                Text("Publishing \(viewModel.selectedMode.rawValue)…")
+                    .font(.headline)
+                Text("\(Int(viewModel.progress * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .padding(28)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
+        }
+        .foregroundStyle(.white)
+        .zIndex(20)
+    }
+
+    private func errorOverlay(message: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.76).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 38))
+                    .foregroundStyle(.yellow)
+                Text("Couldn’t complete that action")
+                    .font(.headline)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                Button("Back to Create") {
+                    viewModel.state = hasCapturedMedia ? .captured : .idle
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(28)
+            .frame(maxWidth: 340)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
+        }
+        .foregroundStyle(.white)
+        .zIndex(30)
     }
 }
 
-// MARK: - Course Generation View
+private struct CreateCapturedVideoPreview: View {
+    let url: URL
+    @State private var player: AVPlayer
 
-struct CourseGenerationView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
+    init(url: URL) {
+        self.url = url
+        _player = State(initialValue: AVPlayer(url: url))
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Topic Input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Course Topic")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    TextField("e.g., Python Programming", text: $viewModel.courseTopic)
-                        .textFieldStyle(.plain)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(.ultraThinMaterial)
-                        )
-                        .foregroundColor(.white)
-                }
-                .padding(.horizontal)
-                
-                // Level Picker
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Level")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    HStack(spacing: 12) {
-                        ForEach(["beginner", "intermediate", "advanced"], id: \.self) { level in
-                            Button {
-                                viewModel.courseLevel = level
-                            } label: {
-                                Text(level.capitalized)
-                                    .font(.subheadline)
-                                    .foregroundColor(viewModel.courseLevel == level ? .white : .white.opacity(0.6))
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        Capsule()
-                                        .fill(viewModel.courseLevel == level ? Color(hex: "10B981") : Color.white.opacity(0.1))
-                                    )
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Outcomes
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Learning Outcomes (Optional)")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    Text("AI will generate comprehensive outcomes based on your topic")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                .padding(.horizontal)
-                
-                Spacer()
+        VideoPlayer(player: player)
+            .background(Color.black)
+            .onAppear {
+                player.isMuted = false
+                player.play()
             }
-            .padding(.top, 20)
-        }
+            .onDisappear {
+                player.pause()
+            }
     }
 }
 
-// MARK: - Event Creation View
+private struct CreatePrimaryButtonStyle: ButtonStyle {
+    let color: Color
 
-struct EventCreationView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Type Toggle
-                HStack(spacing: 20) {
-                    Button {
-                        viewModel.isGroup = false
-                    } label: {
-                        VStack {
-                            Image(systemName: "calendar")
-                                .font(.title2)
-                            Text("Event")
-                                .font(.caption)
-                        }
-                        .foregroundColor(viewModel.isGroup ? .white.opacity(0.5) : .white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(viewModel.isGroup ? Color.white.opacity(0.1) : Color(hex: "EC4899"))
-                        )
-                    }
-                    
-                    Button {
-                        viewModel.isGroup = true
-                    } label: {
-                        VStack {
-                            Image(systemName: "person.3.fill")
-                                .font(.title2)
-                            Text("Group")
-                                .font(.caption)
-                        }
-                        .foregroundColor(viewModel.isGroup ? .white : .white.opacity(0.5))
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(viewModel.isGroup ? Color(hex: "EC4899") : Color.white.opacity(0.1))
-                        )
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Title
-                TextField("Title", text: $viewModel.eventTitle)
-                    .textFieldStyle(.plain)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
-                
-                // Description
-                TextEditor(text: $viewModel.eventDescription)
-                    .frame(height: 100)
-                    .scrollContentBackground(.hidden)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
-                
-                // Date Picker
-                DatePicker("Date", selection: $viewModel.eventDate, displayedComponents: [.date, .hourAndMinute])
-                    .datePickerStyle(.compact)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
-                
-                // Location
-                TextField("Location (optional)", text: $viewModel.eventLocation)
-                    .textFieldStyle(.plain)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
-                
-                Spacer()
-            }
-            .padding(.top, 20)
-        }
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(color.opacity(configuration.isPressed ? 0.68 : 1), in: RoundedRectangle(cornerRadius: 14))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
     }
 }
 
-// MARK: - Preview
+private struct CreateSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(configuration.isPressed ? 0.18 : 0.1), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+    }
+}
+
+private extension View {
+    func createEditorCard() -> some View {
+        self
+            .foregroundStyle(.white)
+            .padding(20)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
+    }
+}
+
+private enum CreateHubMediaError: LocalizedError {
+    case unreadableSelection
+
+    var errorDescription: String? {
+        "The selected photo or video could not be loaded."
+    }
+}
 
 #Preview {
     CreateHubView()
-}
-
-// MARK: - Pulsing Animation Modifier
-struct CreateHubPulseModifier: ViewModifier {
-    @State private var isPulsing = false
-    var delay: Double = 0
-    
-    func body(content: Content) -> some View {
-        content
-            .opacity(isPulsing ? 0.6 : 1.0)
-            .onAppear {
-                withAnimation(
-                    Animation.easeInOut(duration: 1.0)
-                        .repeatForever(autoreverses: true)
-                        .delay(delay)
-                ) {
-                    isPulsing = true
-                }
-            }
-    }
-}
-
-extension View {
-    func createHubPulse(delay: Double = 0) -> some View {
-        modifier(CreateHubPulseModifier(delay: delay))
-    }
-}
-
-// MARK: - Story Mode View
-struct StoryModeView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        VStack {
-            Spacer()
-            
-            // Filters Row
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(["Warm", "Cool", "B&W", "Vivid"], id: \.self) { filter in
-                        Button {
-                            // Apply filter
-                        } label: {
-                            Text(filter)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.2))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-            .padding(.bottom, 120) // Above shutter and picker
-        }
-    }
-}
-
-// MARK: - Reel Mode View
-struct ReelModeView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        HStack {
-            Spacer()
-            
-            // Vertical Toolbar
-            VStack(spacing: 16) {
-                toolbarButton(icon: "1x", action: {})
-                toolbarButton(icon: "timer", action: {})
-                toolbarButton(icon: "music.note", action: {})
-                toolbarButton(icon: "video.fill", action: {})
-            }
-            .padding(.trailing, 20)
-        }
-    }
-    
-    private func toolbarButton(icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 50, height: 50)
-                
-                if icon.contains(".") { // System image
-                    Image(systemName: icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
-                } else {
-                    Text(icon)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Post Mode View
-struct PostModeView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        VStack {
-            ZStack(alignment: .bottomTrailing) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Your Thoughts")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    
-                    TextEditor(text: $viewModel.contentText)
-                        .frame(height: 150)
-                        .scrollContentBackground(.hidden)
-                        .font(.system(size: 16))
-                        .foregroundColor(.primary)
-                    
-                    HStack(spacing: 8) {
-                        formatButton(label: "Bold")
-                        formatButton(label: "Link")
-                        formatButton(label: "Mention")
-                        formatButton(label: "Hashtag")
-                    }
-                }
-                .padding(24)
-                .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(UIColor.systemBackground).opacity(0.8))
-                        .background(.ultraThinMaterial)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-                
-                Text("\(viewModel.charCount) characters")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .padding(16)
-            }
-            .padding(.horizontal, 20)
-            .shadow(color: .black.opacity(0.15), radius: 30)
-            
-            Button {
-                Task { await viewModel.publish() }
-            } label: {
-                Text("Publish Post")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 14)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(hex: "A855F7"), Color(hex: "EC4899")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(Capsule())
-                    .shadow(color: Color(hex: "A855F7").opacity(0.3), radius: 15)
-            }
-            .padding(.top, 24)
-        }
-    }
-    
-    private func formatButton(label: String) -> some View {
-        Button {} label: {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.secondary.opacity(0.1))
-                .clipShape(Capsule())
-        }
-    }
-}
-
-// MARK: - Course Mode View
-struct CourseModeView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        VStack {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Course Title")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.7))
-                    
-                    TextField("Enter your course title...", text: $viewModel.courseTopic)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                }
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("📚 Course Outline")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        Spacer()
-                        
-                        Button {
-                            viewModel.toggleAIOutline()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("✨")
-                                Text(viewModel.isAIOutlineActive ? "Clear" : "AI Outline")
-                            }
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color(hex: "06B6D4"), Color(hex: "0891B2")],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Capsule())
-                        }
-                    }
-                    
-                    VStack(spacing: 12) {
-                        if viewModel.generatedModules.isEmpty {
-                            Text("Tap \"AI Outline\" to generate modules from your content")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.4))
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 24)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 2, dash: [5]))
-                                )
-                        } else {
-                            ForEach(Array(viewModel.generatedModules.enumerated()), id: \.offset) { index, module in
-                                HStack(spacing: 12) {
-                                    Circle()
-                                        .fill(Color(hex: "06B6D4"))
-                                        .frame(width: 6, height: 6)
-                                    
-                                    Text(module)
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.8))
-                                    
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color.white.opacity(0.05))
-                                .cornerRadius(12)
-                                .createHubPulse(delay: Double(index) * 0.2)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(32)
-            .background(.ultraThinMaterial)
-            .cornerRadius(24)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-            )
-            .padding(.horizontal, 20)
-            
-            Button {
-                Task { await viewModel.publish() }
-            } label: {
-                Text("Start Curriculum")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(hex: "06B6D4"), Color(hex: "0891B2")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(Capsule())
-                    .shadow(color: Color(hex: "06B6D4").opacity(0.4), radius: 20)
-            }
-            .padding(.top, 40)
-        }
-    }
-}
-
-// MARK: - Event Mode View
-struct EventModeView: View {
-    @ObservedObject var viewModel: CreateViewModel
-    
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 24) {
-                // Cover
-                ZStack {
-                    LinearGradient(
-                        colors: [Color(hex: "FBBF24"), Color(hex: "F97316")],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .frame(height: 160)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                    )
-                    
-                    Text("🎉")
-                        .font(.system(size: 40))
-                }
-                
-                VStack(alignment: .leading, spacing: 20) {
-                    eventField(label: "Event Title", placeholder: "Your amazing event...", text: $viewModel.eventTitle)
-                    
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("📅 Date")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.6))
-                            DatePicker("", selection: $viewModel.eventDate, displayedComponents: .date)
-                                .labelsHidden()
-                                .padding(8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("🕐 Time")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.6))
-                            DatePicker("", selection: $viewModel.eventDate, displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                                .padding(8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                    }
-                    
-                    eventField(label: "📍 Location", placeholder: "Event location...", text: $viewModel.eventLocation)
-                }
-                .padding(24)
-                .background(.ultraThinMaterial)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-                
-                Button {
-                    Task { await viewModel.publish() }
-                } label: {
-                    Text("Publish Invite")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(hex: "FBBF24"), Color(hex: "F97316")],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipShape(Capsule())
-                        .shadow(color: Color(hex: "F97316").opacity(0.4), radius: 20)
-                }
-                .padding(.vertical, 40)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 100)
-        }
-    }
-    
-    private func eventField(label: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.white.opacity(0.6))
-            
-            TextField(placeholder, text: text)
-                .textFieldStyle(.plain)
-                .foregroundColor(.white)
-                .padding()
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(8)
-        }
-    }
 }

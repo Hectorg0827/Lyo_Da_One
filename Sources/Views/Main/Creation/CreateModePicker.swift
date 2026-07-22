@@ -1,30 +1,25 @@
-//
-//  CreateModePicker.swift
-//  Lyo
-//
-//  Horizontal carousel mode picker for Create Hub
-//  Inspired by TikTok/Instagram Stories mode switching
-//
-
 import SwiftUI
 
 struct CreateModePicker: View {
     @Binding var selectedMode: CreateMode
     let onModeSelected: (CreateMode) -> Void
-    
+
+    private var supportedModes: [CreateMode] {
+        CreateMode.allCases.filter { $0 != .live }
+    }
+
     var body: some View {
         ZStack {
-            // Background Fade (TikTok style)
             LinearGradient(
                 colors: [Color.black.opacity(0), Color.black.opacity(0.9)],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .frame(height: 120)
-            
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(CreateMode.allCases) { mode in
+                    ForEach(supportedModes) { mode in
                         ModeButton(
                             mode: mode,
                             isSelected: selectedMode == mode
@@ -44,19 +39,17 @@ struct CreateModePicker: View {
     }
 }
 
-// MARK: - Mode Button
-
 struct ModeButton: View {
     let mode: CreateMode
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(mode.iconForMode)
                     .font(.system(size: 14))
-                
+
                 Text(mode.rawValue)
                     .font(.system(size: 13, weight: .bold))
             }
@@ -96,12 +89,10 @@ extension CreateMode {
     }
 }
 
-// MARK: - Preview
-
 #Preview {
     ZStack {
         Color.black.ignoresSafeArea()
-        
+
         VStack {
             Spacer()
             CreateModePicker(
