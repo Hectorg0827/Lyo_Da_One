@@ -4,22 +4,22 @@ import Combine
 // MARK: - Stack Store
 
 /// Manages the local UI stack of cards (courses, tutors, collabs, chats)
-/// This is the user's "brain drawer" - all their active items in one place
+/// This is the user's "brain drawer" - all their active items in one place.
 final class UIStackStore: ObservableObject {
     static let shared = UIStackStore()
-    
+
     @Published private(set) var items: [UIStackItem] = []
-    
+
     private let userDefaultsKey = "lyo_ui_stack_items"
     private let repository = LyoRepository.shared
-    
+
     private init() {
         loadFromDisk()
     }
-    
+
     // MARK: - Core Operations
-    
-    /// Add or update an item in the stack
+
+    /// Add or update an item in the stack.
     func upsert(_ item: UIStackItem) {
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items[index] = item
@@ -29,32 +29,31 @@ final class UIStackStore: ObservableObject {
         sortByRecency()
         saveToDisk()
     }
-    
-    /// Remove an item by ID
+
+    /// Remove an item by ID.
     func remove(id: String) {
         items.removeAll { $0.id == id }
         saveToDisk()
     }
-    
-    /// Clear all items
+
+    /// Clear all items.
     func removeAll() {
         items.removeAll()
         saveToDisk()
     }
-    
-    /// Get items filtered by type
+
+    /// Get items filtered by type.
     func items(ofType type: UIStackItemType) -> [UIStackItem] {
         items.filter { $0.type == type }
     }
 
     // MARK: - Spaced-Repetition Reviews
 
-    /// Asks the personalization engine whether spaced-repetition reviews are due
-    /// and, if so, surfaces the learner's recommended-focus skills as review
-    /// cards in the stack. Tapping one opens the classroom on that topic
-    /// (GENERATE: session). Silent on failure — reviews are an enhancement,
-    /// never a blocker.
+    /// Refreshes canonical server progress first, then asks the personalization
+    /// engine whether spaced-repetition reviews are due.
     func refreshDueReviews() async {
+        await refreshCourseProgressFromBackend()
+
         // Fetch the profile first — it also powers the weekly weakness quest,
         // which should refresh whether or not reviews are due.
         guard let profile = try? await PersonalizationService.shared.getMasteryProfile()
@@ -90,8 +89,8 @@ final class UIStackStore: ObservableObject {
     }
 
     // MARK: - Convenience Methods
-    
-    /// Add or update a course card
+
+    /// Add or update a course card.
     func upsertCourse(
         courseId: String,
         title: String,
@@ -102,22 +101,22 @@ final class UIStackStore: ObservableObject {
     ) {
         let existing = items.first { $0.type == .course && $0.courseId == courseId }
         let baseId = existing?.id ?? UUID().uuidString
-        
+
         let item = UIStackItem(
             id: baseId,
             type: .course,
             title: title,
             subtitle: subtitle,
             updatedAt: Date(),
-            progress: progress,
+            progress: progress ?? existing?.progress,
             courseId: courseId,
-            lessonCount: lessonCount,
-            completedLessons: completedLessons
+            lessonCount: lessonCount ?? existing?.lessonCount,
+            completedLessons: completedLessons ?? existing?.completedLessons
         )
         upsert(item)
     }
-    
-    /// Add or update a tutor card (linked to a specific lesson)
+
+    /// Add or update a tutor card (linked to a specific lesson).
     func upsertTutor(
         courseId: String,
         lessonId: String,
@@ -129,7 +128,7 @@ final class UIStackStore: ObservableObject {
             $0.type == .tutor && $0.courseId == courseId && $0.lessonId == lessonId
         }
         let baseId = existing?.id ?? UUID().uuidString
-        
+
         let item = UIStackItem(
             id: baseId,
             type: .tutor,
@@ -142,8 +141,8 @@ final class UIStackStore: ObservableObject {
         )
         upsert(item)
     }
-    
-    /// Add or update a collab room card
+
+    /// Add or update a collab room card.
     func upsertCollab(
         roomId: String,
         title: String,
@@ -154,7 +153,7 @@ final class UIStackStore: ObservableObject {
             $0.type == .collab && $0.collabRoomId == roomId
         }
         let baseId = existing?.id ?? UUID().uuidString
-        
+
         let item = UIStackItem(
             id: baseId,
             type: .collab,
@@ -166,8 +165,8 @@ final class UIStackStore: ObservableObject {
         )
         upsert(item)
     }
-    
-    /// Add or update a chat card
+
+    /// Add or update a chat card.
     func upsertChat(
         key: String,
         title: String,
@@ -178,7 +177,7 @@ final class UIStackStore: ObservableObject {
             $0.type == .chat && $0.chatKey == key
         }
         let baseId = existing?.id ?? UUID().uuidString
-        
+
         let item = UIStackItem(
             id: baseId,
             type: .chat,
@@ -190,15 +189,17 @@ final class UIStackStore: ObservableObject {
         )
         upsert(item)
     }
-    
-    /// Update progress for a course
+
+    /// Updates the local presentation immediately. Server writes must happen
+    /// through an explicit lesson-completion endpoint; a GET request is never
+    /// treated as a successful progress write.
     func updateCourseProgress(courseId: String, progress: Double, completedLessons: Int? = nil) {
         guard let index = items.firstIndex(where: { $0.type == .course && $0.courseId == courseId }) else {
             return
         }
-        
+
         var item = items[index]
-        item.progress = progress
+        item.progress = max(0, min(progress, 1))
         item.updatedAt = Date()
         if let completed = completedLessons {
             item.completedLessons = completed
@@ -206,32 +207,60 @@ final class UIStackStore: ObservableObject {
         items[index] = item
         sortByRecency()
         saveToDisk()
-        
-        // 🔥 BACKEND SYNC: Sync progress to backend for cross-device support
-        Task {
-            await syncCourseProgressToBackend(courseId: courseId, progress: progress)
+    }
+
+    // MARK: - Backend Hydration
+
+    /// Reconciles saved course cards with the canonical server progress model.
+    /// Generated/offline sessions are intentionally excluded because they do not
+    /// have a persistent backend course identifier yet.
+    func refreshCourseProgressFromBackend() async {
+        let courseIds = Array(Set(items.compactMap { item -> String? in
+            guard item.type == .course,
+                  let courseId = item.courseId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !courseId.isEmpty,
+                  !courseId.hasPrefix("GENERATE:") else {
+                return nil
+            }
+            return courseId
+        }))
+
+        for courseId in courseIds {
+            do {
+                let serverProgress = try await repository.getCourseProgress(courseId: courseId)
+                let normalizedProgress = serverProgress.progressPercent > 1
+                    ? serverProgress.progressPercent / 100
+                    : serverProgress.progressPercent
+
+                await MainActor.run {
+                    guard let index = items.firstIndex(where: {
+                        $0.type == .course && $0.courseId == courseId
+                    }) else { return }
+
+                    var item = items[index]
+                    item.progress = max(0, min(normalizedProgress, 1))
+                    item.lessonCount = serverProgress.totalLessons
+                    item.completedLessons = serverProgress.completedLessons
+                    if let lastAccessedAt = serverProgress.lastAccessedAt {
+                        item.updatedAt = lastAccessedAt
+                    }
+                    items[index] = item
+                    sortByRecency()
+                    saveToDisk()
+                }
+            } catch {
+                // Offline or unavailable progress must not erase the local state.
+                print("UIStackStore: Server progress unavailable for \(courseId): \(error.localizedDescription)")
+            }
         }
     }
-    
-    // MARK: - Backend Sync
-    
-    /// Sync course progress to backend (called automatically on updateCourseProgress)
-    private func syncCourseProgressToBackend(courseId: String, progress: Double) async {
-        do {
-            let _ = try await repository.getCourseProgress(courseId: courseId)
-            print("✅ UIStackStore: Synced course progress to backend (\(Int(progress * 100))%)")
-        } catch {
-            print("⚠️ UIStackStore: Failed to sync course progress: \(error.localizedDescription)")
-            // Don't block user - local tracking continues
-        }
-    }
-    
+
     // MARK: - Private Helpers
-    
+
     private func sortByRecency() {
         items.sort { $0.updatedAt > $1.updatedAt }
     }
-    
+
     private func saveToDisk() {
         do {
             let data = try JSONEncoder().encode(items)
@@ -240,12 +269,12 @@ final class UIStackStore: ObservableObject {
             print("UIStackStore: Failed to save to disk: \(error)")
         }
     }
-    
+
     private func loadFromDisk() {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else {
             return
         }
-        
+
         do {
             items = try JSONDecoder().decode([UIStackItem].self, from: data)
             sortByRecency()
