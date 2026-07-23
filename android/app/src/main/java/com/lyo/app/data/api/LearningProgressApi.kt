@@ -40,6 +40,7 @@ data class CourseProgressResponse(
     @SerializedName("user_id") val userId: Any? = null,
     @SerializedName("total_lessons") val totalLessons: Int = 0,
     @SerializedName("completed_lessons") val completedLessons: Int = 0,
+    @SerializedName("completed_lesson_ids") val completedLessonIds: List<Any> = emptyList(),
     @SerializedName("progress_percent") val progressPercent: Double = 0.0,
     @SerializedName("current_lesson_id") val currentLessonId: Any? = null,
     @SerializedName("last_accessed_at") val lastAccessedAt: String? = null,
@@ -53,4 +54,10 @@ data class CourseProgressResponse(
 
     val currentLessonIdString: String?
         get() = currentLessonId?.toString()?.removeSuffix(".0")?.takeIf { it.isNotBlank() }
+
+    val completedLessonIdStrings: Set<String>
+        get() = completedLessonIds
+            .map { it.toString().removeSuffix(".0") }
+            .filter { it.isNotBlank() }
+            .toSet()
 }
