@@ -29,6 +29,8 @@ const contracts = [
       'learning/users/me/courses',
       'markLessonComplete',
       'getCourseProgress',
+      'completed_lesson_ids',
+      'completedLessonIdStrings',
     ],
   },
   {
