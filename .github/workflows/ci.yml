@@ -61,6 +61,9 @@ jobs:
       - name: Verify Android Notifications reliability
         run: node scripts/verify-android-notifications-reliability.mjs
 
+      - name: Verify Android Stories reliability
+        run: node scripts/verify-android-stories-reliability.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
