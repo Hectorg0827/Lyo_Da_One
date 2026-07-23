@@ -14,14 +14,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -78,9 +78,9 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
     var course by remember(courseId) { mutableStateOf<CourseDto?>(null) }
     var courseError by remember(courseId) { mutableStateOf<String?>(null) }
     var progressError by remember(courseId) { mutableStateOf<String?>(null) }
-    var progress by remember(courseId) { mutableStateOf<CourseProgressDto?>(null) }
-    var completedLessonIds by remember(courseId) { mutableStateOf<Set<String>>(emptySet()) }
-    var activeLessonIndex by remember(courseId) { mutableStateOf(0) }
+    var serverProgress by remember(courseId) { mutableStateOf<CourseProgressDto?>(null) }
+    var completedIds by remember(courseId) { mutableStateOf<Set<String>>(emptySet()) }
+    var activeIndex by remember(courseId) { mutableStateOf(0) }
     var savingLessonId by remember(courseId) { mutableStateOf<String?>(null) }
     var actionError by remember(courseId) { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
@@ -92,9 +92,9 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
         course = null
         courseError = null
         progressError = null
-        progress = null
-        completedLessonIds = emptySet()
-        activeLessonIndex = 0
+        serverProgress = null
+        completedIds = emptySet()
+        activeIndex = 0
 
         try {
             val loadedCourse = ApiClient.api.course(courseId)
@@ -102,14 +102,13 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
             course = loadedCourse
 
             runCatching { LearningProgressClient.getCourseProgress(courseId) }
-                .onSuccess { serverProgress ->
-                    progress = serverProgress
-                    completedLessonIds = completionIdsFromProgress(loadedLessons, serverProgress)
-                    activeLessonIndex = resumeIndex(loadedLessons, serverProgress)
+                .onSuccess { progress ->
+                    serverProgress = progress
+                    completedIds = completionIdsFromProgress(loadedLessons, progress)
+                    activeIndex = resumeIndex(loadedLessons, progress)
                 }
                 .onFailure { error ->
-                    progressError = error.message ?: "Progress is temporarily unavailable."
-                    activeLessonIndex = 0
+                    progressError = error.message ?: "Saved progress is temporarily unavailable."
                 }
         } catch (error: Exception) {
             courseError = error.message ?: "Unable to load this course."
@@ -132,7 +131,7 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
             navigationIcon = {
                 IconButton(onClick = { nav.popBackStack() }) {
                     Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = TextPrimary,
                     )
@@ -170,13 +169,13 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
             )
 
             else -> {
-                val currentIndex = activeLessonIndex.coerceIn(0, lessons.lastIndex)
+                val currentIndex = activeIndex.coerceIn(0, lessons.lastIndex)
                 val activeLesson = lessons[currentIndex]
-                val activeLessonId = activeLesson.lesson.idStr
-                val isCompleted = activeLessonId.isNotBlank() && activeLessonId in completedLessonIds
-                val isLastLesson = currentIndex == lessons.lastIndex
-                val progressFraction = progress?.normalizedProgress
-                    ?: (completedLessonIds.size.toFloat() / lessons.size.toFloat()).coerceIn(0f, 1f)
+                val activeLessonId = activeLesson.lesson.idString
+                val activeCompleted = activeLessonId.isNotBlank() && activeLessonId in completedIds
+                val lastLesson = currentIndex == lessons.lastIndex
+                val progressValue = serverProgress?.normalizedProgress
+                    ?: (completedIds.size.toFloat() / lessons.size.toFloat()).coerceIn(0f, 1f)
 
                 LazyColumn(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp),
@@ -184,27 +183,19 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                     modifier = Modifier.weight(1f),
                 ) {
                     item {
-                        CourseHeader(
+                        CourseSummary(
                             course = course!!,
-                            completedLessons = completedLessonIds.size.coerceAtMost(lessons.size),
-                            totalLessons = lessons.size,
-                            progress = progressFraction,
+                            completed = completedIds.size.coerceAtMost(lessons.size),
+                            total = lessons.size,
+                            progress = progressValue,
                         )
                     }
 
                     progressError?.let { message ->
-                        item {
-                            StatusBanner(
-                                message = "Saved progress could not be loaded. $message",
-                                isError = false,
-                            )
-                        }
+                        item { StatusBanner("Saved progress could not be loaded. $message", false) }
                     }
-
                     actionError?.let { message ->
-                        item {
-                            StatusBanner(message = message, isError = true)
-                        }
+                        item { StatusBanner(message, true) }
                     }
 
                     item {
@@ -212,79 +203,77 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                             text = "Course outline",
                             style = MaterialTheme.typography.titleLarge,
                             color = TextPrimary,
-                            modifier = Modifier.padding(top = 4.dp),
                         )
                     }
 
-                    itemsIndexed(lessons) { index, item ->
-                        LessonOutlineRow(
+                    itemsIndexed(lessons) { index, lesson ->
+                        OutlineRow(
                             index = index,
-                            item = item,
+                            item = lesson,
                             selected = index == currentIndex,
-                            completed = item.lesson.idStr in completedLessonIds,
-                            onSelect = {
-                                activeLessonIndex = index
+                            completed = lesson.lesson.idString in completedIds,
+                            onClick = {
+                                activeIndex = index
                                 actionError = null
                             },
                         )
                     }
 
                     item {
-                        LessonContentCard(
+                        LessonCard(
                             item = activeLesson,
                             index = currentIndex,
-                            totalLessons = lessons.size,
+                            total = lessons.size,
                         )
                     }
                 }
 
-                LessonNavigationBar(
+                NavigationBar(
                     currentIndex = currentIndex,
-                    totalLessons = lessons.size,
-                    completed = isCompleted,
-                    isSaving = savingLessonId == activeLessonId,
+                    total = lessons.size,
+                    completed = activeCompleted,
+                    saving = savingLessonId == activeLessonId,
                     onPrevious = {
                         if (currentIndex > 0) {
-                            activeLessonIndex = currentIndex - 1
+                            activeIndex = currentIndex - 1
                             actionError = null
                         }
                     },
                     onPrimary = {
                         actionError = null
-                        if (isCompleted) {
-                            if (!isLastLesson) activeLessonIndex = currentIndex + 1
-                            return@LessonNavigationBar
-                        }
-                        if (activeLessonId.isBlank()) {
-                            actionError = "This lesson is missing a stable ID, so completion cannot be saved."
-                            return@LessonNavigationBar
-                        }
-                        if (savingLessonId != null) return@LessonNavigationBar
+                        when {
+                            activeCompleted && !lastLesson -> activeIndex = currentIndex + 1
+                            activeCompleted && lastLesson -> Unit
+                            activeLessonId.isBlank() -> {
+                                actionError = "This lesson is missing a stable ID, so completion cannot be saved."
+                            }
+                            savingLessonId == null -> {
+                                val previousIds = completedIds
+                                completedIds = completedIds + activeLessonId
+                                savingLessonId = activeLessonId
 
-                        val previousCompleted = completedLessonIds
-                        completedLessonIds = completedLessonIds + activeLessonId
-                        savingLessonId = activeLessonId
-
-                        scope.launch {
-                            try {
-                                LearningProgressClient.markLessonComplete(activeLessonId)
-                                runCatching { LearningProgressClient.getCourseProgress(courseId) }
-                                    .onSuccess { refreshed ->
-                                        progress = refreshed
-                                        completedLessonIds = completedLessonIds +
-                                            completionIdsFromProgress(lessons, refreshed)
-                                        progressError = null
+                                scope.launch {
+                                    try {
+                                        LearningProgressClient.markLessonComplete(activeLessonId)
+                                        runCatching { LearningProgressClient.getCourseProgress(courseId) }
+                                            .onSuccess { refreshed ->
+                                                serverProgress = refreshed
+                                                completedIds = completedIds +
+                                                    completionIdsFromProgress(lessons, refreshed)
+                                                progressError = null
+                                            }
+                                            .onFailure { error ->
+                                                progressError = error.message
+                                                    ?: "Progress will refresh when the course opens again."
+                                            }
+                                        if (!lastLesson) activeIndex = currentIndex + 1
+                                    } catch (error: Exception) {
+                                        completedIds = previousIds
+                                        actionError = error.message ?: "Unable to save lesson completion."
+                                    } finally {
+                                        savingLessonId = null
                                     }
-                                    .onFailure { refreshError ->
-                                        progressError = refreshError.message
-                                            ?: "Progress will refresh the next time the course opens."
-                                    }
-                                if (!isLastLesson) activeLessonIndex = currentIndex + 1
-                            } catch (error: Exception) {
-                                completedLessonIds = previousCompleted
-                                actionError = error.message ?: "Unable to save lesson completion."
-                            } finally {
-                                savingLessonId = null
+                                }
                             }
                         }
                     },
@@ -295,10 +284,10 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
 }
 
 @Composable
-private fun CourseHeader(
+private fun CourseSummary(
     course: CourseDto,
-    completedLessons: Int,
-    totalLessons: Int,
+    completed: Int,
+    total: Int,
     progress: Float,
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -308,9 +297,9 @@ private fun CourseHeader(
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary,
             )
-            if (!course.description.isNullOrBlank()) {
+            course.description?.takeIf { it.isNotBlank() }?.let { description ->
                 Text(
-                    text = course.description,
+                    text = description,
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 8.dp),
@@ -330,7 +319,7 @@ private fun CourseHeader(
                     .padding(top = 18.dp, bottom = 8.dp),
             ) {
                 Text(
-                    text = "$completedLessons of $totalLessons lessons complete",
+                    text = "$completed of $total lessons complete",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSecondary,
                 )
@@ -342,7 +331,7 @@ private fun CourseHeader(
                 )
             }
             LinearProgressIndicator(
-                progress = progress,
+                progress = { progress },
                 color = LyoPurple,
                 trackColor = Surface,
                 modifier = Modifier
@@ -355,12 +344,12 @@ private fun CourseHeader(
 }
 
 @Composable
-private fun LessonOutlineRow(
+private fun OutlineRow(
     index: Int,
     item: CourseLesson,
     selected: Boolean,
     completed: Boolean,
-    onSelect: () -> Unit,
+    onClick: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -373,7 +362,7 @@ private fun LessonOutlineRow(
                 color = if (selected) LyoPurple.copy(alpha = 0.55f) else BorderColor,
                 shape = RoundedCornerShape(16.dp),
             )
-            .clickable(onClick = onSelect)
+            .clickable(onClick = onClick)
             .padding(14.dp),
     ) {
         Box(
@@ -383,22 +372,20 @@ private fun LessonOutlineRow(
                 .clip(CircleShape)
                 .background(if (completed) LyoPurple else Background),
         ) {
-            if (completed) {
-                Icon(
-                    Icons.Default.CheckCircle,
+            when {
+                completed -> Icon(
+                    imageVector = Icons.Default.Check,
                     contentDescription = "Completed",
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(19.dp),
                 )
-            } else if (selected) {
-                Icon(
-                    Icons.Default.PlayArrow,
+                selected -> Icon(
+                    imageVector = Icons.Default.PlayArrow,
                     contentDescription = "Current lesson",
                     tint = LyoPurple,
                     modifier = Modifier.size(20.dp),
                 )
-            } else {
-                Text(
+                else -> Text(
                     text = "${index + 1}",
                     style = MaterialTheme.typography.labelLarge,
                     color = TextSecondary,
@@ -411,9 +398,9 @@ private fun LessonOutlineRow(
                 .weight(1f)
                 .padding(horizontal = 12.dp),
         ) {
-            item.moduleTitle?.takeIf { it.isNotBlank() }?.let { moduleTitle ->
+            item.moduleTitle?.takeIf { it.isNotBlank() }?.let { module ->
                 Text(
-                    text = moduleTitle,
+                    text = module,
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary,
                     maxLines = 1,
@@ -430,7 +417,7 @@ private fun LessonOutlineRow(
         }
 
         Icon(
-            Icons.Default.ChevronRight,
+            imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
             tint = if (selected) LyoPurple else TextSecondary,
         )
@@ -438,22 +425,18 @@ private fun LessonOutlineRow(
 }
 
 @Composable
-private fun LessonContentCard(
-    item: CourseLesson,
-    index: Int,
-    totalLessons: Int,
-) {
+private fun LessonCard(item: CourseLesson, index: Int, total: Int) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = "LESSON ${index + 1} OF $totalLessons",
+                text = "LESSON ${index + 1} OF $total",
                 style = MaterialTheme.typography.labelSmall,
                 color = LyoPurple,
                 fontWeight = FontWeight.Bold,
             )
-            item.moduleTitle?.takeIf { it.isNotBlank() }?.let { moduleTitle ->
+            item.moduleTitle?.takeIf { it.isNotBlank() }?.let { module ->
                 Text(
-                    text = moduleTitle,
+                    text = module,
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 8.dp),
@@ -465,11 +448,11 @@ private fun LessonContentCard(
                 color = TextPrimary,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            val content = item.lesson.content?.takeIf { it.isNotBlank() }
             Text(
-                text = item.lesson.content?.takeIf { it.isNotBlank() }
-                    ?: "This lesson does not have readable content yet.",
+                text = content ?: "This lesson does not have readable content yet.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (item.lesson.content.isNullOrBlank()) TextSecondary else TextPrimary,
+                color = if (content == null) TextSecondary else TextPrimary,
                 modifier = Modifier.padding(top = 18.dp),
             )
         }
@@ -477,51 +460,51 @@ private fun LessonContentCard(
 }
 
 @Composable
-private fun LessonNavigationBar(
+private fun NavigationBar(
     currentIndex: Int,
-    totalLessons: Int,
+    total: Int,
     completed: Boolean,
-    isSaving: Boolean,
+    saving: Boolean,
     onPrevious: () -> Unit,
     onPrimary: () -> Unit,
 ) {
-    val isLast = currentIndex == totalLessons - 1
+    val last = currentIndex == total - 1
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .background(Surface)
-            .border(width = 1.dp, color = BorderColor)
+            .border(1.dp, BorderColor)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         OutlinedButton(
             onClick = onPrevious,
-            enabled = currentIndex > 0 && !isSaving,
+            enabled = currentIndex > 0 && !saving,
             modifier = Modifier.weight(1f),
         ) {
             Text("Previous")
         }
         Button(
             onClick = onPrimary,
-            enabled = !isSaving && !(completed && isLast),
+            enabled = !saving && !(completed && last),
             colors = ButtonDefaults.buttonColors(containerColor = LyoPurple),
             modifier = Modifier.weight(1.5f),
         ) {
-            if (isSaving) {
+            if (saving) {
                 CircularProgressIndicator(
                     color = Color.White,
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(18.dp),
                 )
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("Saving")
             } else {
                 Text(
-                    when {
-                        completed && isLast -> "Course complete"
+                    text = when {
+                        completed && last -> "Course complete"
                         completed -> "Next lesson"
-                        isLast -> "Complete course"
+                        last -> "Complete course"
                         else -> "Complete & next"
                     },
                 )
@@ -562,39 +545,30 @@ private fun flattenLessons(course: CourseDto?): List<CourseLesson> {
     val moduleLessons = course.modules.orEmpty().flatMap { module ->
         module.lessons.orEmpty()
             .sortedBy { it.orderIndex ?: Int.MAX_VALUE }
-            .map { lesson -> CourseLesson(module.title, lesson) }
+            .map { CourseLesson(module.title, it) }
     }
     if (moduleLessons.isNotEmpty()) return moduleLessons
     return course.lessons.orEmpty()
         .sortedBy { it.orderIndex ?: Int.MAX_VALUE }
-        .map { lesson -> CourseLesson(null, lesson) }
+        .map { CourseLesson(null, it) }
 }
 
 private fun completionIdsFromProgress(
     lessons: List<CourseLesson>,
     progress: CourseProgressDto,
-): Set<String> {
-    // The canonical progress response currently exposes a completed count rather
-    // than every completion ID. Android's course player is linear, so the stable
-    // interpretation is that the first N ordered lessons are complete.
-    return lessons
-        .take(progress.completedLessons.coerceIn(0, lessons.size))
-        .map { it.lesson.idStr }
-        .filter { it.isNotBlank() }
-        .toSet()
-}
+): Set<String> = lessons
+    .take(progress.completedLessons.coerceIn(0, lessons.size))
+    .map { it.lesson.idString }
+    .filter { it.isNotBlank() }
+    .toSet()
 
-private fun resumeIndex(
-    lessons: List<CourseLesson>,
-    progress: CourseProgressDto,
-): Int {
+private fun resumeIndex(lessons: List<CourseLesson>, progress: CourseProgressDto): Int {
     if (lessons.isEmpty()) return 0
-    val currentLessonIndex = progress.currentLessonIdStr?.let { currentId ->
-        lessons.indexOfFirst { it.lesson.idStr == currentId }.takeIf { it >= 0 }
+    val current = progress.currentLessonIdStr?.let { id ->
+        lessons.indexOfFirst { it.lesson.idString == id }.takeIf { it >= 0 }
     }
-    return currentLessonIndex
-        ?: progress.completedLessons.coerceIn(0, lessons.lastIndex)
+    return current ?: progress.completedLessons.coerceIn(0, lessons.lastIndex)
 }
 
-private val LessonDto.idStr: String
+private val LessonDto.idString: String
     get() = id?.toString()?.removeSuffix(".0") ?: ""
