@@ -58,6 +58,9 @@ jobs:
       - name: Verify Android Discover integrity
         run: node scripts/verify-android-discover-integrity.mjs
 
+      - name: Verify Android Notifications reliability
+        run: node scripts/verify-android-notifications-reliability.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
