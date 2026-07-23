@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,11 +41,9 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
-import com.lyo.app.data.api.CourseDto
 import com.lyo.app.data.api.FollowRequest
 import com.lyo.app.data.api.PostDto
 import com.lyo.app.data.api.UserDto
-import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
@@ -61,9 +57,12 @@ import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import java.io.IOException
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
-private val ProfileTabs = listOf("Activity", "Courses", "Achievements", "Stats")
+private val OwnProfileTabs = listOf("Activity", "Achievements", "Stats")
+private val PublicProfileTabs = listOf("Activity")
 
 private data class AchievementUi(
     val title: String,
@@ -75,34 +74,111 @@ private data class AchievementUi(
 @Composable
 fun ProfileScreen(nav: NavHostController, userId: String? = null) {
     val isOwn = userId == null
+    val profileTabs = if (isOwn) OwnProfileTabs else PublicProfileTabs
     val scope = rememberCoroutineScope()
 
-    var otherUser by remember { mutableStateOf<UserDto?>(null) }
-    var selectedTab by remember { mutableStateOf("Activity") }
-    var posts by remember { mutableStateOf<List<PostDto>>(emptyList()) }
-    var courses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
-    var achievements by remember { mutableStateOf<List<AchievementUi>>(emptyList()) }
-    var overview by remember { mutableStateOf<JsonObject?>(null) }
-    var following by remember { mutableStateOf(false) }
+    var otherUser by remember(userId) { mutableStateOf<UserDto?>(null) }
+    var profileLoading by remember(userId) { mutableStateOf(!isOwn) }
+    var profileError by remember(userId) { mutableStateOf<String?>(null) }
+    var profileReload by remember(userId) { mutableStateOf(0) }
+
+    var selectedTab by remember(userId) { mutableStateOf("Activity") }
+    var posts by remember(userId) { mutableStateOf<List<PostDto>>(emptyList()) }
+    var activityLoading by remember(userId) { mutableStateOf(false) }
+    var activityLoaded by remember(userId) { mutableStateOf(false) }
+    var activityError by remember(userId) { mutableStateOf<String?>(null) }
+
+    var achievements by remember(userId) { mutableStateOf<List<AchievementUi>>(emptyList()) }
+    var achievementsLoading by remember(userId) { mutableStateOf(false) }
+    var achievementsLoaded by remember(userId) { mutableStateOf(false) }
+    var achievementsError by remember(userId) { mutableStateOf<String?>(null) }
+
+    var overview by remember(userId) { mutableStateOf<JsonObject?>(null) }
+    var statsLoading by remember(userId) { mutableStateOf(false) }
+    var statsLoaded by remember(userId) { mutableStateOf(false) }
+    var statsError by remember(userId) { mutableStateOf<String?>(null) }
+    var contentReload by remember(userId) { mutableStateOf(0) }
+
+    var following by remember(userId) { mutableStateOf(false) }
+    var followPending by remember(userId) { mutableStateOf(false) }
+    var followError by remember(userId) { mutableStateOf<String?>(null) }
 
     val user: UserDto? = if (isOwn) Session.user else otherUser
 
-    LaunchedEffect(userId) {
+    LaunchedEffect(userId, profileReload) {
+        selectedTab = "Activity"
+        following = false
+        followPending = false
+        followError = null
+
         if (!isOwn && userId != null) {
-            runCatching { ApiClient.api.getUser(userId) }.onSuccess { otherUser = it }
+            profileLoading = true
+            profileError = null
+            otherUser = null
+            runCatching { ApiClient.api.getUser(userId) }
+                .onSuccess { otherUser = it }
+                .onFailure { profileError = profileLoadMessage(it) }
+            profileLoading = false
         }
     }
 
-    LaunchedEffect(user?.id) {
+    LaunchedEffect(user?.id, contentReload) {
         val uid = user?.id ?: return@LaunchedEffect
+
+        activityLoading = true
+        activityLoaded = false
+        activityError = null
+        posts = emptyList()
         runCatching { ApiClient.api.userPosts(uid) }
             .onSuccess { posts = it.posts ?: emptyList() }
-        runCatching { ApiClient.api.courses(0, 10) }
-            .onSuccess { courses = it }
-        runCatching { ApiClient.api.achievements() }
-            .onSuccess { achievements = parseAchievements(it) }
-        runCatching { ApiClient.api.gamificationOverview() }
-            .onSuccess { overview = it }
+            .onFailure { activityError = contentLoadMessage(it, "activity") }
+        activityLoading = false
+        activityLoaded = true
+
+        if (isOwn) {
+            achievementsLoading = true
+            achievementsLoaded = false
+            achievementsError = null
+            achievements = emptyList()
+            runCatching { ApiClient.api.achievements() }
+                .onSuccess { achievements = parseAchievements(it) }
+                .onFailure { achievementsError = contentLoadMessage(it, "achievements") }
+            achievementsLoading = false
+            achievementsLoaded = true
+
+            statsLoading = true
+            statsLoaded = false
+            statsError = null
+            overview = null
+            runCatching { ApiClient.api.gamificationOverview() }
+                .onSuccess { overview = it }
+                .onFailure { statsError = contentLoadMessage(it, "stats") }
+            statsLoading = false
+            statsLoaded = true
+        } else {
+            achievements = emptyList()
+            achievementsLoading = false
+            achievementsLoaded = false
+            achievementsError = null
+            overview = null
+            statsLoading = false
+            statsLoaded = false
+            statsError = null
+        }
+    }
+
+    if (!isOwn && profileLoading) {
+        LoadingBox()
+        return
+    }
+
+    if (!isOwn && profileError != null) {
+        FullScreenError(
+            title = "Profile unavailable",
+            message = profileError ?: "The profile could not be loaded.",
+            onRetry = { profileReload += 1 },
+        )
+        return
     }
 
     if (user == null) {
@@ -117,7 +193,6 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             .fillMaxSize()
             .background(Background),
     ) {
-        // ── Header ──
         item {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -137,11 +212,13 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                         color = TextPrimary,
                         modifier = Modifier.padding(top = 10.dp),
                     )
-                    Text(
-                        text = "@${user.username ?: ""}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                    )
+                    user.username?.takeIf { it.isNotBlank() }?.let { username ->
+                        Text(
+                            text = "@$username",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                        )
+                    }
                     if (!user.bio.isNullOrBlank()) {
                         Text(
                             text = user.bio,
@@ -151,17 +228,15 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                         )
                     }
 
-                    // Counts
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(24.dp),
                         modifier = Modifier.padding(top = 14.dp),
                     ) {
                         CountStat(user.followersCount ?: 0, "Followers")
                         CountStat(user.followingCount ?: 0, "Following")
-                        CountStat(user.coursesCompleted ?: 0, "Courses")
+                        CountStat(user.coursesCompleted ?: 0, "Completed")
                     }
 
-                    // Gamification chips
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(top = 14.dp),
@@ -171,7 +246,6 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                         StatChip("Lv ${user.resolvedLevel}")
                     }
 
-                    // Action button
                     Spacer(Modifier.height(16.dp))
                     if (isOwn) {
                         Row(
@@ -195,34 +269,55 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                             )
                         }
                     } else {
+                        val followButtonBase = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .let { base ->
+                                if (following) base.background(Surface) else base.background(LyoBrandGradient)
+                            }
+
                         Box(
                             contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (following) Surface.copy(alpha = 0.9f)
-                                    else Color.Transparent
-                                )
-                                .let {
-                                    if (following) it else it.background(LyoBrandGradient)
-                                }
-                                .clickable {
+                            modifier = followButtonBase
+                                .clickable(enabled = !followPending) {
+                                    val target = userId?.toLongOrNull()
+                                    if (target == null) {
+                                        followError = "This profile does not have a valid follow identifier."
+                                        return@clickable
+                                    }
+
                                     scope.launch {
-                                        val target = userId?.toLongOrNull() ?: 0L
-                                        if (following) {
-                                            runCatching { ApiClient.api.unfollow(userId ?: "") }
+                                        followPending = true
+                                        followError = null
+                                        val result = if (following) {
+                                            runCatching { ApiClient.api.unfollow(userId) }
                                         } else {
                                             runCatching { ApiClient.api.follow(FollowRequest(target)) }
                                         }
-                                        following = !following
+                                        result
+                                            .onSuccess { following = !following }
+                                            .onFailure { followError = followActionMessage(it) }
+                                        followPending = false
                                     }
                                 }
                                 .padding(horizontal = 28.dp, vertical = 10.dp),
                         ) {
                             Text(
-                                text = if (following) "Following" else "Follow",
+                                text = when {
+                                    followPending -> "Saving…"
+                                    following -> "Following"
+                                    else -> "Follow"
+                                },
                                 style = MaterialTheme.typography.titleSmall,
-                                color = Color.White,
+                                color = if (following) TextPrimary else Color.White,
+                            )
+                        }
+
+                        followError?.let { message ->
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFFF7B7B),
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                         }
                     }
@@ -230,10 +325,9 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             }
         }
 
-        // ── Tabs ──
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(ProfileTabs) { tab ->
+                items(profileTabs) { tab ->
                     val active = selectedTab == tab
                     Text(
                         text = tab,
@@ -252,20 +346,32 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             }
         }
 
-        // ── Tab content ──
         when (selectedTab) {
             "Activity" -> {
-                if (posts.isEmpty()) {
-                    item { EmptyState("No activity yet", "Posts will appear here.") }
-                } else {
-                    items(posts) { post ->
-                        GlassCard(modifier = Modifier.fillMaxWidth()) {
+                when {
+                    activityLoading -> item { LoadingCard("Loading activity…") }
+                    activityError != null -> item {
+                        InlineErrorCard(
+                            title = "Activity unavailable",
+                            message = activityError ?: "Activity could not be loaded.",
+                            onRetry = { contentReload += 1 },
+                        )
+                    }
+                    activityLoaded && posts.isEmpty() -> item {
+                        EmptyState("No activity yet", "Published posts will appear here.")
+                    }
+                    else -> items(posts) { post ->
+                        GlassCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { nav.navigate(Routes.postDetail(post.idStr)) },
+                        ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
                                     text = post.content ?: "",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = TextPrimary,
-                                    maxLines = 2,
+                                    maxLines = 3,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
@@ -282,58 +388,30 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                 }
             }
 
-            "Courses" -> {
-                if (courses.isEmpty()) {
-                    item { EmptyState("No courses yet", "Completed courses will appear here.") }
-                } else {
-                    items(courses) { course ->
-                        GlassCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { nav.navigate(Routes.courseDetail(course.idStr)) },
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(12.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            CardGradients[
-                                                course.idStr.hashCode().mod(CardGradients.size)
-                                            ]
-                                        ),
-                                )
-                                Column(modifier = Modifier.padding(start = 12.dp)) {
-                                    Text(
-                                        text = course.title ?: "Untitled",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = TextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = course.subject ?: "General",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             "Achievements" -> {
-                if (achievements.isEmpty()) {
-                    item { EmptyState("No achievements yet", "Keep learning to unlock them!") }
-                } else {
-                    items(achievements.chunked(2)) { rowItems ->
+                when {
+                    !isOwn -> item {
+                        InlineErrorCard(
+                            title = "Private section",
+                            message = "Achievements are shown only on your own profile.",
+                            onRetry = null,
+                        )
+                    }
+                    achievementsLoading -> item { LoadingCard("Loading achievements…") }
+                    achievementsError != null -> item {
+                        InlineErrorCard(
+                            title = "Achievements unavailable",
+                            message = achievementsError ?: "Achievements could not be loaded.",
+                            onRetry = { contentReload += 1 },
+                        )
+                    }
+                    achievementsLoaded && achievements.isEmpty() -> item {
+                        EmptyState("No achievements yet", "Keep learning to unlock them.")
+                    }
+                    else -> items(achievements.chunked(2)) { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            rowItems.forEach { ach ->
-                                AchievementCard(ach, Modifier.weight(1f))
+                            rowItems.forEach { achievement ->
+                                AchievementCard(achievement, Modifier.weight(1f))
                             }
                             if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                         }
@@ -342,26 +420,43 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             }
 
             "Stats" -> {
-                item {
-                    val totalXp = extractInt(overview, "xp_summary", "total")
-                        ?: user.resolvedXp
-                    val weekXp = extractInt(overview, "xp_summary", "this_week") ?: 0
-                    val curStreak = extractInt(overview, "streaks", "current")
-                        ?: user.streak ?: 0
-                    val longStreak = extractInt(overview, "streaks", "longest") ?: curStreak
+                when {
+                    !isOwn -> item {
+                        InlineErrorCard(
+                            title = "Private section",
+                            message = "Detailed learning statistics are shown only on your own profile.",
+                            onRetry = null,
+                        )
+                    }
+                    statsLoading -> item { LoadingCard("Loading learning stats…") }
+                    statsError != null -> item {
+                        InlineErrorCard(
+                            title = "Stats unavailable",
+                            message = statsError ?: "Learning statistics could not be loaded.",
+                            onRetry = { contentReload += 1 },
+                        )
+                    }
+                    statsLoaded && overview != null -> item {
+                        val totalXp = extractInt(overview, "xp_summary", "total") ?: user.resolvedXp
+                        val weekXp = extractInt(overview, "xp_summary", "this_week") ?: 0
+                        val currentStreak = extractInt(overview, "streaks", "current")
+                            ?: user.streak ?: 0
+                        val longestStreak = extractInt(overview, "streaks", "longest")
+                            ?: currentStreak
 
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            StatTile("Total XP", "$totalXp", Modifier.weight(1f))
-                            StatTile("XP this week", "$weekXp", Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            StatTile("Current streak", "$curStreak days", Modifier.weight(1f))
-                            StatTile("Longest streak", "$longStreak days", Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            StatTile("Level", "${user.resolvedLevel}", Modifier.weight(1f))
-                            StatTile("Courses", "${user.coursesCompleted ?: 0}", Modifier.weight(1f))
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                StatTile("Total XP", "$totalXp", Modifier.weight(1f))
+                                StatTile("XP this week", "$weekXp", Modifier.weight(1f))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                StatTile("Current streak", "$currentStreak days", Modifier.weight(1f))
+                                StatTile("Longest streak", "$longestStreak days", Modifier.weight(1f))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                StatTile("Level", "${user.resolvedLevel}", Modifier.weight(1f))
+                                StatTile("Completed", "${user.coursesCompleted ?: 0}", Modifier.weight(1f))
+                            }
                         }
                     }
                 }
@@ -373,13 +468,13 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
 }
 
 private fun parseAchievements(arr: JsonArray): List<AchievementUi> =
-    arr.mapNotNull { el ->
+    arr.mapNotNull { element ->
         runCatching {
-            val obj = el.asJsonObject
+            val obj = element.asJsonObject
             AchievementUi(
                 title = obj.str("name") ?: obj.str("achievement_name") ?: "Achievement",
                 description = obj.str("description") ?: "",
-                xp = runCatching { obj.get("xp_reward")?.asInt }.getOrNull() ?: 100,
+                xp = runCatching { obj.get("xp_reward")?.asInt }.getOrNull() ?: 0,
                 unlocked = runCatching { obj.get("completed")?.asBoolean }.getOrNull()
                     ?: runCatching { obj.get("is_completed")?.asBoolean }.getOrNull()
                     ?: false,
@@ -394,6 +489,112 @@ private fun extractInt(obj: JsonObject?, section: String, key: String): Int? =
     runCatching {
         obj?.getAsJsonObject(section)?.get(key)?.takeIf { !it.isJsonNull }?.asInt
     }.getOrNull()
+
+private fun profileLoadMessage(error: Throwable): String = when (error) {
+    is HttpException -> when (error.code()) {
+        401, 403 -> "You are not authorized to view this profile."
+        404 -> "This profile no longer exists."
+        else -> "The profile request failed (${error.code()})."
+    }
+    is IOException -> "Check your connection and try again."
+    else -> error.localizedMessage ?: "The profile could not be loaded."
+}
+
+private fun contentLoadMessage(error: Throwable, content: String): String = when (error) {
+    is HttpException -> when (error.code()) {
+        401, 403 -> "You are not authorized to view this $content."
+        404 -> "No $content endpoint is available for this profile."
+        else -> "The $content request failed (${error.code()})."
+    }
+    is IOException -> "Check your connection and retry the $content request."
+    else -> error.localizedMessage ?: "The $content could not be loaded."
+}
+
+private fun followActionMessage(error: Throwable): String = when (error) {
+    is HttpException -> when (error.code()) {
+        401, 403 -> "Sign in again before changing this relationship."
+        404 -> "This profile is no longer available."
+        409 -> "The follow state changed elsewhere. Refresh the profile and retry."
+        else -> "The follow request failed (${error.code()})."
+    }
+    is IOException -> "Check your connection and try again."
+    else -> error.localizedMessage ?: "The follow request could not be completed."
+}
+
+@Composable
+private fun FullScreenError(
+    title: String,
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+            .padding(24.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            "Retry",
+            style = MaterialTheme.typography.titleSmall,
+            color = LyoPurple,
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .clickable(onClick = onRetry)
+                .padding(8.dp),
+        )
+    }
+}
+
+@Composable
+private fun InlineErrorCard(
+    title: String,
+    message: String,
+    onRetry: (() -> Unit)?,
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            onRetry?.let { retry ->
+                Text(
+                    "Retry",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = LyoPurple,
+                    modifier = Modifier
+                        .padding(top = 10.dp)
+                        .clickable(onClick = retry)
+                        .padding(vertical = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadingCard(message: String) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            modifier = Modifier.padding(18.dp),
+        )
+    }
+}
 
 @Composable
 private fun CountStat(count: Int, label: String) {
@@ -444,7 +645,7 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun AchievementCard(ach: AchievementUi, modifier: Modifier = Modifier) {
+private fun AchievementCard(achievement: AchievementUi, modifier: Modifier = Modifier) {
     GlassCard(modifier = modifier) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -458,11 +659,11 @@ private fun AchievementCard(ach: AchievementUi, modifier: Modifier = Modifier) {
                     .size(48.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .let {
-                        if (ach.unlocked) it.background(LyoBrandGradient)
+                        if (achievement.unlocked) it.background(LyoBrandGradient)
                         else it.background(Surface)
                     },
             ) {
-                if (ach.unlocked) {
+                if (achievement.unlocked) {
                     Text(text = "🏆")
                 } else {
                     Icon(
@@ -474,27 +675,31 @@ private fun AchievementCard(ach: AchievementUi, modifier: Modifier = Modifier) {
                 }
             }
             Text(
-                text = ach.title,
+                text = achievement.title,
                 style = MaterialTheme.typography.titleSmall,
-                color = if (ach.unlocked) TextPrimary else TextSecondary,
+                color = if (achievement.unlocked) TextPrimary else TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            Text(
-                text = ach.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            Text(
-                text = "+${ach.xp} XP",
-                style = MaterialTheme.typography.labelMedium,
-                color = LyoAmber,
-                modifier = Modifier.padding(top = 6.dp),
-            )
+            if (achievement.description.isNotBlank()) {
+                Text(
+                    text = achievement.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            if (achievement.xp > 0) {
+                Text(
+                    text = "+${achievement.xp} XP",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LyoAmber,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
     }
 }
