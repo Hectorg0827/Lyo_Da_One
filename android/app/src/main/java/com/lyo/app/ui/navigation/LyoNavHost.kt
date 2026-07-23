@@ -14,14 +14,17 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.lyo.app.data.RecentCourseStore
 import com.lyo.app.data.TokenManager
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
@@ -158,7 +161,12 @@ fun LyoApp() {
             composable(Routes.STORIES) { StoriesScreen(nav) }
             composable(Routes.COURSES) { CoursesScreen(nav) }
             composable(Routes.COURSE_DETAIL) { entry ->
-                CourseDetailScreen(nav, entry.arguments?.getString("courseId") ?: "")
+                val courseId = entry.arguments?.getString("courseId") ?: ""
+                val context = LocalContext.current
+                LaunchedEffect(courseId) {
+                    RecentCourseStore.save(context, courseId)
+                }
+                CourseDetailScreen(nav, courseId)
             }
             composable(Routes.DISCOVER) { DiscoverScreen(nav) }
             composable(Routes.PROFILE) { ProfileScreen(nav, userId = null) }
