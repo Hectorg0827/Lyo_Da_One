@@ -5,10 +5,10 @@ import com.google.gson.annotations.SerializedName
 import com.lyo.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** Canonical progress response shared with iOS and web. */
 data class CourseProgressDto(
@@ -40,10 +40,8 @@ data class LessonCompletionDto(
 )
 
 /**
- * Small authenticated client for learning progress endpoints.
- *
- * It reuses [ApiClient.okHttp], so bearer injection and the existing refresh-token
- * authenticator remain identical to every other Android API call.
+ * Authenticated client for canonical learning-progress endpoints.
+ * Reuses [ApiClient.okHttp] so bearer injection and token refresh stay consistent.
  */
 object LearningProgressClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -54,12 +52,7 @@ object LearningProgressClient {
             .addPathSegment(courseId)
             .addPathSegment("progress")
             .build()
-        execute(
-            Request.Builder()
-                .url(url)
-                .get()
-                .build(),
-        )
+        execute(Request.Builder().url(url).get().build())
     }
 
     suspend fun markLessonComplete(lessonId: String, score: Int? = null): LessonCompletionDto =
@@ -68,11 +61,15 @@ object LearningProgressClient {
                 addProperty("lesson_id", lessonId)
                 score?.let { addProperty("score", it) }
             }
-            val request = Request.Builder()
-                .url(BuildConfig.API_BASE_URL.toHttpUrl().newBuilder().addPathSegments("learning/completions").build())
-                .post(ApiClient.gson.toJson(payload).toRequestBody(jsonMediaType))
+            val url = BuildConfig.API_BASE_URL.toHttpUrl().newBuilder()
+                .addPathSegments("learning/completions")
                 .build()
-            execute(request)
+            execute(
+                Request.Builder()
+                    .url(url)
+                    .post(ApiClient.gson.toJson(payload).toRequestBody(jsonMediaType))
+                    .build(),
+            )
         }
 
     private inline fun <reified T> execute(request: Request): T {
@@ -81,17 +78,18 @@ object LearningProgressClient {
             if (!response.isSuccessful) {
                 val message = runCatching {
                     val payload = ApiClient.gson.fromJson(rawBody, JsonObject::class.java)
-                    payload.get("detail")?.asString
-                        ?: payload.get("message")?.asString
-                }.getOrNull()
-                    ?: when (response.code) {
-                        401 -> "Your session expired. Sign in again to save progress."
-                        else -> "Unable to save learning progress."
-                    }
+                    payload.get("detail")?.asString ?: payload.get("message")?.asString
+                }.getOrNull() ?: when (response.code) {
+                    401 -> "Your session expired. Sign in again to save progress."
+                    else -> "Unable to save learning progress."
+                }
                 throw LearningProgressException(response.code, message)
             }
             if (rawBody.isBlank()) {
-                throw LearningProgressException(response.code, "The learning service returned an empty response.")
+                throw LearningProgressException(
+                    response.code,
+                    "The learning service returned an empty response.",
+                )
             }
             return ApiClient.gson.fromJson(rawBody, T::class.java)
         }
@@ -100,5 +98,5 @@ object LearningProgressClient {
 
 class LearningProgressException(
     val statusCode: Int,
-    override val message: String,
+    message: String,
 ) : Exception(message)
