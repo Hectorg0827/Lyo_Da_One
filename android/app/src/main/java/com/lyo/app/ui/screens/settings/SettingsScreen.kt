@@ -1,5 +1,8 @@
 package com.lyo.app.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,17 +20,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,9 +44,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.lyo.app.BuildConfig
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.UpdateProfileRequest
@@ -58,38 +66,49 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(nav: NavHostController) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
-    // Account: inline display name editing
     var editingName by remember { mutableStateOf(false) }
-    var nameDraft by remember { mutableStateOf(Session.user?.displayName ?: "") }
+    var nameDraft by remember { mutableStateOf(Session.user?.displayName.orEmpty()) }
     var savingName by remember { mutableStateOf(false) }
-
-    // Notifications (local state)
-    var notifLikes by remember { mutableStateOf(true) }
-    var notifComments by remember { mutableStateOf(true) }
-    var notifFollows by remember { mutableStateOf(true) }
-    var notifAchievements by remember { mutableStateOf(true) }
-    var notifWeeklyDigest by remember { mutableStateOf(false) }
-
-    // Privacy (local state)
-    var publicProfile by remember { mutableStateOf(true) }
-    var onlineStatus by remember { mutableStateOf(true) }
+    var accountError by remember { mutableStateOf<String?>(null) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     fun saveDisplayName() {
         if (savingName) return
+
         val newName = nameDraft.trim()
         if (newName.isBlank()) {
-            editingName = false
+            accountError = "Display name cannot be empty."
             return
         }
+
         savingName = true
+        accountError = null
         scope.launch {
             runCatching {
                 ApiClient.api.updateProfile(UpdateProfileRequest(fullName = newName))
-            }.onSuccess { Session.updateUserLocally(it) }
+            }.onSuccess { updatedUser ->
+                Session.updateUserLocally(updatedUser)
+                editingName = false
+            }.onFailure { error ->
+                accountError = error.localizedMessage ?: "The display name could not be updated."
+            }
             savingName = false
-            editingName = false
         }
+    }
+
+    fun openNotificationSettings() {
+        val notificationIntent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        }
+        val fallbackIntent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}"),
+        )
+
+        runCatching { context.startActivity(notificationIntent) }
+            .onFailure { context.startActivity(fallbackIntent) }
     }
 
     Column(
@@ -100,12 +119,11 @@ fun SettingsScreen(nav: NavHostController) {
             .padding(16.dp),
     ) {
         Text(
-            "Settings",
+            text = "Settings",
             style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
         )
 
-        // ── Account ──
         SectionHeader("Account")
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -113,9 +131,13 @@ fun SettingsScreen(nav: NavHostController) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = nameDraft,
-                            onValueChange = { nameDraft = it },
+                            onValueChange = {
+                                nameDraft = it
+                                accountError = null
+                            },
                             label = { Text("Display name") },
                             singleLine = true,
+                            enabled = !savingName,
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = LyoPurple,
@@ -126,6 +148,7 @@ fun SettingsScreen(nav: NavHostController) {
                             ),
                             modifier = Modifier.weight(1f),
                         )
+
                         if (savingName) {
                             CircularProgressIndicator(
                                 color = LyoPurple,
@@ -135,20 +158,23 @@ fun SettingsScreen(nav: NavHostController) {
                                     .size(20.dp),
                             )
                         } else {
-                            IconButton(onClick = { saveDisplayName() }) {
+                            IconButton(onClick = ::saveDisplayName) {
                                 Icon(
                                     Icons.Filled.Check,
-                                    contentDescription = "Save",
+                                    contentDescription = "Save display name",
                                     tint = LyoGreen,
                                 )
                             }
-                            IconButton(onClick = {
-                                nameDraft = Session.user?.displayName ?: ""
-                                editingName = false
-                            }) {
+                            IconButton(
+                                onClick = {
+                                    nameDraft = Session.user?.displayName.orEmpty()
+                                    accountError = null
+                                    editingName = false
+                                },
+                            ) {
                                 Icon(
                                     Icons.Filled.Close,
-                                    contentDescription = "Cancel",
+                                    contentDescription = "Cancel editing",
                                     tint = TextSecondary,
                                 )
                             }
@@ -158,12 +184,12 @@ fun SettingsScreen(nav: NavHostController) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Display name",
+                                text = "Display name",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TextSecondary,
                             )
                             Text(
-                                Session.user?.displayName ?: "User",
+                                text = Session.user?.displayName ?: "User",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = TextPrimary,
                                 maxLines = 1,
@@ -171,10 +197,13 @@ fun SettingsScreen(nav: NavHostController) {
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                         }
-                        IconButton(onClick = {
-                            nameDraft = Session.user?.displayName ?: ""
-                            editingName = true
-                        }) {
+                        IconButton(
+                            onClick = {
+                                nameDraft = Session.user?.displayName.orEmpty()
+                                accountError = null
+                                editingName = true
+                            },
+                        ) {
                             Icon(
                                 Icons.Filled.Edit,
                                 contentDescription = "Edit display name",
@@ -182,6 +211,15 @@ fun SettingsScreen(nav: NavHostController) {
                             )
                         }
                     }
+                }
+
+                accountError?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
 
                 ReadOnlyRow(label = "Email", value = Session.user?.email ?: "—")
@@ -192,87 +230,32 @@ fun SettingsScreen(nav: NavHostController) {
             }
         }
 
-        // ── Notifications ──
         SectionHeader("Notifications")
-        GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                SwitchRow(
-                    label = "Likes",
-                    description = "When someone likes your posts or clips",
-                    checked = notifLikes,
-                    onCheckedChange = { notifLikes = it },
-                )
-                SwitchRow(
-                    label = "Comments",
-                    description = "When someone comments on your content",
-                    checked = notifComments,
-                    onCheckedChange = { notifComments = it },
-                )
-                SwitchRow(
-                    label = "New Followers",
-                    description = "When someone follows you",
-                    checked = notifFollows,
-                    onCheckedChange = { notifFollows = it },
-                )
-                SwitchRow(
-                    label = "Achievements",
-                    description = "When you unlock a new achievement",
-                    checked = notifAchievements,
-                    onCheckedChange = { notifAchievements = it },
-                )
-                SwitchRow(
-                    label = "Weekly Digest",
-                    description = "Summary of your learning week",
-                    checked = notifWeeklyDigest,
-                    onCheckedChange = { notifWeeklyDigest = it },
-                )
-            }
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = ::openNotificationSettings),
+        ) {
+            ActionRow(
+                icon = Icons.Filled.Notifications,
+                title = "Android notification settings",
+                description = "Control permission, sound, vibration, and alert visibility in the system settings that actually deliver notifications.",
+            )
         }
 
-        // ── Privacy ──
-        SectionHeader("Privacy")
-        GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                SwitchRow(
-                    label = "Public Profile",
-                    description = "Anyone can view your profile and content",
-                    checked = publicProfile,
-                    onCheckedChange = { publicProfile = it },
-                )
-                SwitchRow(
-                    label = "Online Status",
-                    description = "Show when you're active on LYO",
-                    checked = onlineStatus,
-                    onCheckedChange = { onlineStatus = it },
-                )
-            }
-        }
-
-        // ── About ──
         SectionHeader("About")
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            ) {
-                Text(
-                    "Version",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "1.0.0",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+            Column {
+                ActionRow(
+                    icon = Icons.Filled.Info,
+                    title = "Version",
+                    description = BuildConfig.VERSION_NAME,
+                    showChevron = false,
                 )
             }
         }
 
-        // ── Danger zone ──
-        SectionHeader("Danger Zone")
+        SectionHeader("Account session")
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -280,15 +263,10 @@ fun SettingsScreen(nav: NavHostController) {
                 .height(52.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(LyoRed.copy(alpha = 0.15f))
-                .clickable {
-                    scope.launch {
-                        Session.logout()
-                        nav.navigate(Routes.LOGIN) { popUpTo(0) }
-                    }
-                },
+                .clickable { showLogoutConfirmation = true },
         ) {
             Text(
-                "Log Out",
+                text = "Log Out",
                 color = LyoRed,
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -296,20 +274,44 @@ fun SettingsScreen(nav: NavHostController) {
 
         Spacer(Modifier.height(16.dp))
     }
-}
 
-// ── Private sub-composables ──────────────────────────────────────────────────
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { Text("Log out of LYO?") },
+            text = { Text("You will need to sign in again to access your account and synchronized learning progress.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutConfirmation = false
+                        scope.launch {
+                            Session.logout()
+                            nav.navigate(Routes.LOGIN) { popUpTo(0) }
+                        }
+                    },
+                ) {
+                    Text("Log Out", color = LyoRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
 
 @Composable
 private fun ReadOnlyRow(label: String, value: String) {
     Column(modifier = Modifier.padding(top = 14.dp)) {
         Text(
-            label,
+            text = label,
             style = MaterialTheme.typography.labelMedium,
             color = TextSecondary,
         )
         Text(
-            value,
+            text = value,
             style = MaterialTheme.typography.bodyLarge,
             color = TextPrimary,
             maxLines = 1,
@@ -320,41 +322,47 @@ private fun ReadOnlyRow(label: String, value: String) {
 }
 
 @Composable
-private fun SwitchRow(
-    label: String,
+private fun ActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
     description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+    showChevron: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(16.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = LyoPurple,
+            modifier = Modifier.size(24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        ) {
             Text(
-                label,
+                text = title,
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextPrimary,
             )
             Text(
-                description,
+                text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = LyoPurple,
-                checkedThumbColor = Color.White,
-                uncheckedTrackColor = Color.White.copy(alpha = 0.12f),
-                uncheckedThumbColor = TextSecondary,
-                uncheckedBorderColor = BorderColor,
-            ),
-        )
+        if (showChevron) {
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = TextSecondary,
+            )
+        }
     }
 }
