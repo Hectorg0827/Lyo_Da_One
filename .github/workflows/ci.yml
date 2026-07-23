@@ -52,6 +52,9 @@ jobs:
       - name: Verify Android Profile integrity
         run: node scripts/verify-android-profile-honesty.mjs
 
+      - name: Verify Android Messages reliability
+        run: node scripts/verify-android-messages-reliability.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
