@@ -85,4 +85,5 @@ object ApiClient {
         .build()
 
     val api: LyoApiService = retrofit.create(LyoApiService::class.java)
+    val learning: LearningApiService = retrofit.create(LearningApiService::class.java)
 }
