@@ -19,13 +19,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,40 +41,66 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.gson.JsonObject
+import com.lyo.app.data.RecentCourseStore
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.CourseDto
-import com.lyo.app.data.api.PostDto
 import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
-import com.lyo.app.ui.components.LyoAvatar
 import com.lyo.app.ui.components.SectionHeader
-import com.lyo.app.ui.components.formatTimeAgo
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.LyoAmber
 import com.lyo.app.ui.theme.LyoBlue
 import com.lyo.app.ui.theme.LyoGreen
-import com.lyo.app.ui.theme.LyoPink
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 
 @Composable
 fun HomeScreen(nav: NavHostController) {
+    val context = LocalContext.current
     var overview by remember { mutableStateOf<JsonObject?>(null) }
-    var courses by remember { mutableStateOf<List<CourseDto>?>(null) }
-    var posts by remember { mutableStateOf<List<PostDto>?>(null) }
+    var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
+    var recentCourseId by remember { mutableStateOf<String?>(null) }
+    var recentCourse by remember { mutableStateOf<CourseDto?>(null) }
+    var catalogError by remember { mutableStateOf<String?>(null) }
+    var recentCourseUnavailable by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        runCatching { ApiClient.api.gamificationOverview() }.onSuccess { overview = it }
-        runCatching { ApiClient.api.courses(0, 5) }.onSuccess { courses = it }
-        runCatching { ApiClient.api.publicFeed(1, 5) }.onSuccess { posts = it.posts }
+        val storedRecent = RecentCourseStore.load(context)
+        recentCourseId = storedRecent?.id
+
+        runCatching { ApiClient.api.gamificationOverview() }
+            .onSuccess { overview = it }
+
+        runCatching { ApiClient.api.courses(0, 5) }
+            .onSuccess {
+                featuredCourses = it
+                catalogError = null
+            }
+            .onFailure {
+                catalogError = it.localizedMessage ?: "The course catalog is unavailable."
+            }
+
+        if (storedRecent != null) {
+            runCatching { ApiClient.api.course(storedRecent.id) }
+                .onSuccess {
+                    recentCourse = it
+                    recentCourseUnavailable = false
+                }
+                .onFailure {
+                    recentCourseUnavailable = true
+                }
+        }
+
         loaded = true
     }
 
@@ -84,7 +109,6 @@ fun HomeScreen(nav: NavHostController) {
         return
     }
 
-    // Defensive extraction from the gamification overview JsonObject
     val streak = runCatching {
         overview?.getAsJsonObject("streaks")?.get("current")?.asInt
     }.getOrNull() ?: Session.user?.streak ?: 0
@@ -100,7 +124,6 @@ fun HomeScreen(nav: NavHostController) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        // ── Top bar ──
         item {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -138,7 +161,6 @@ fun HomeScreen(nav: NavHostController) {
             }
         }
 
-        // ── Stats row ──
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -168,107 +190,96 @@ fun HomeScreen(nav: NavHostController) {
             }
         }
 
-        // ── Continue learning ──
         item {
-            SectionHeader("Continue Learning")
-            val courseList = courses.orEmpty()
-            if (courseList.isEmpty()) {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { nav.navigate(Routes.COURSES) }
-                            .padding(24.dp),
-                    ) {
+            SectionHeader("Your Learning")
+            when {
+                recentCourse != null -> RecentCourseCard(
+                    title = recentCourse?.title ?: "Course",
+                    subtitle = "Recent on this device · account progress refreshes when opened",
+                    onClick = {
+                        recentCourseId?.let { nav.navigate(Routes.courseDetail(it)) }
+                    },
+                )
+                recentCourseId != null && recentCourseUnavailable -> RecentCourseCard(
+                    title = "Recent course",
+                    subtitle = "Course details are temporarily unavailable. Open it to retry.",
+                    onClick = {
+                        recentCourseId?.let { nav.navigate(Routes.courseDetail(it)) }
+                    },
+                )
+                else -> EmptyLearningCard(
+                    onClick = { nav.navigate(Routes.COURSES) },
+                )
+            }
+        }
+
+        item {
+            SectionHeader("Explore Courses")
+            when {
+                featuredCourses.isNotEmpty() -> {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        itemsIndexed(featuredCourses) { index, course ->
+                            CatalogCourseCard(
+                                course = course,
+                                gradient = CardGradients[index % CardGradients.size],
+                                onClick = { nav.navigate(Routes.courseDetail(course.idStr)) },
+                            )
+                        }
+                    }
+                }
+                catalogError != null -> GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Text(
-                            "Start learning",
+                            text = "Course catalog unavailable",
                             style = MaterialTheme.typography.titleMedium,
                             color = TextPrimary,
                         )
                         Text(
-                            "Browse courses and begin your journey",
+                            text = catalogError ?: "The course catalog could not be loaded.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
                 }
-            } else {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    itemsIndexed(courseList) { index, course ->
-                        CourseCard(
-                            course = course,
-                            gradient = CardGradients[index % CardGradients.size],
-                            onClick = { nav.navigate(Routes.courseDetail(course.idStr)) },
+                else -> GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { nav.navigate(Routes.COURSES) },
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "No published courses",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary,
+                        )
+                        Text(
+                            text = "Open Courses to check for newly published learning content.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 4.dp),
                         )
                     }
                 }
             }
         }
 
-        // ── Quick actions ──
         item {
-            SectionHeader("Quick Actions")
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    QuickActionCard(
-                        icon = Icons.Filled.MenuBook,
-                        label = "Courses",
-                        tint = LyoPurple,
-                        onClick = { nav.navigate(Routes.COURSES) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionCard(
-                        icon = Icons.Filled.Explore,
-                        label = "Discover",
-                        tint = LyoBlue,
-                        onClick = { nav.navigate(Routes.DISCOVER) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    QuickActionCard(
-                        icon = Icons.Filled.AutoStories,
-                        label = "Stories",
-                        tint = LyoPink,
-                        onClick = { nav.navigate(Routes.STORIES) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionCard(
-                        icon = Icons.Filled.Groups,
-                        label = "Groups",
-                        tint = LyoGreen,
-                        onClick = { nav.navigate(Routes.GROUPS) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-
-        // ── Community activity ──
-        item {
-            SectionHeader("Community Activity")
-        }
-        val postList = posts.orEmpty()
-        if (postList.isEmpty()) {
-            item {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "No community activity yet",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(24.dp),
-                    )
-                }
-            }
-        } else {
-            itemsIndexed(postList) { _, post ->
-                PostCard(
-                    post = post,
-                    onClick = { nav.navigate(Routes.postDetail(post.idStr)) },
+            SectionHeader("Learning Actions")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionCard(
+                    icon = Icons.Filled.MenuBook,
+                    label = "Browse Courses",
+                    tint = LyoPurple,
+                    onClick = { nav.navigate(Routes.COURSES) },
+                    modifier = Modifier.weight(1f),
+                )
+                QuickActionCard(
+                    icon = Icons.Filled.SmartToy,
+                    label = "Ask Lyo",
+                    tint = LyoBlue,
+                    onClick = { nav.navigate(Routes.CHAT) },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -276,8 +287,6 @@ fun HomeScreen(nav: NavHostController) {
         item { Spacer(Modifier.height(8.dp)) }
     }
 }
-
-// ── Private sub-composables ──────────────────────────────────────────────────
 
 @Composable
 private fun StatCard(
@@ -296,13 +305,13 @@ private fun StatCard(
         ) {
             Text(emoji, style = MaterialTheme.typography.headlineSmall)
             Text(
-                value,
+                text = value,
                 style = MaterialTheme.typography.headlineMedium,
                 color = accent,
                 modifier = Modifier.padding(top = 6.dp),
             )
             Text(
-                label,
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = TextSecondary,
                 maxLines = 1,
@@ -314,7 +323,87 @@ private fun StatCard(
 }
 
 @Composable
-private fun CourseCard(
+private fun RecentCourseCard(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(18.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(LyoPurple.copy(alpha = 0.18f)),
+            ) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = LyoPurple,
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 14.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyLearningCard(onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+        ) {
+            Text(
+                text = "No recent course on this device",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+            )
+            Text(
+                text = "Open a real course from Explore. Focus will remember the course ID and refresh account progress when you return.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 5.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CatalogCourseCard(
     course: CourseDto,
     gradient: Brush,
     onClick: () -> Unit,
@@ -333,14 +422,14 @@ private fun CourseCard(
         )
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                course.title ?: "Untitled Course",
+                text = course.title ?: "Untitled Course",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                course.subject ?: "General",
+                text = course.subject ?: "General",
                 style = MaterialTheme.typography.labelMedium,
                 color = TextSecondary,
                 maxLines = 1,
@@ -363,71 +452,11 @@ private fun QuickActionCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
             Text(
-                label,
+                text = label,
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 modifier = Modifier.padding(top = 8.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun PostCard(
-    post: PostDto,
-    onClick: () -> Unit,
-) {
-    val authorName = post.authorName ?: post.authorUsername ?: "User"
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LyoAvatar(name = authorName, avatarUrl = post.authorAvatar, size = 36)
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 10.dp),
-                ) {
-                    Text(
-                        authorName,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        formatTimeAgo(post.createdAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                    )
-                }
-            }
-            post.content?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            Row(modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    "❤ ${post.likeCount ?: 0}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary,
-                )
-                Text(
-                    "💬 ${post.commentCount ?: 0}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(start = 16.dp),
-                )
-            }
         }
     }
 }
