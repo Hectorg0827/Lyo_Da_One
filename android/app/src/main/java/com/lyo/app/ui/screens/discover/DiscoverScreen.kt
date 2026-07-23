@@ -56,9 +56,10 @@ import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoAmber
 import com.lyo.app.ui.theme.LyoPurple
-import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import java.io.IOException
+import retrofit2.HttpException
 
 private val Tabs = listOf("All", "Places", "Events", "Online")
 
@@ -69,16 +70,29 @@ fun DiscoverScreen(nav: NavHostController) {
     var places by remember { mutableStateOf<List<PlaceDto>>(emptyList()) }
     var events by remember { mutableStateOf<List<EventDto>>(emptyList()) }
     var classes by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
-    var loaded by remember { mutableStateOf(false) }
+    var placesError by remember { mutableStateOf<String?>(null) }
+    var eventsError by remember { mutableStateOf<String?>(null) }
+    var classesError by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var reloadVersion by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadVersion) {
+        loading = true
+        placesError = null
+        eventsError = null
+        classesError = null
+
         runCatching { ApiClient.api.places(1, 20) }
-            .onSuccess { places = it.places ?: emptyList() }
+            .onSuccess { places = it.places.orEmpty() }
+            .onFailure { placesError = discoverError(it, "places") }
         runCatching { ApiClient.api.events() }
             .onSuccess { events = it }
+            .onFailure { eventsError = discoverError(it, "events") }
         runCatching { ApiClient.api.courses(0, 10) }
             .onSuccess { classes = it }
-        loaded = true
+            .onFailure { classesError = discoverError(it, "online classes") }
+
+        loading = false
     }
 
     Column(
@@ -103,11 +117,11 @@ fun DiscoverScreen(nav: NavHostController) {
             ),
         )
 
-        Row(
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 16.dp),
         ) {
-            Tabs.forEach { tab ->
+            items(Tabs) { tab ->
                 FilterChip(
                     selected = activeTab == tab,
                     onClick = { activeTab = tab },
@@ -121,7 +135,7 @@ fun DiscoverScreen(nav: NavHostController) {
             }
         }
 
-        if (!loaded) {
+        if (loading) {
             LoadingBox()
             return
         }
@@ -129,82 +143,132 @@ fun DiscoverScreen(nav: NavHostController) {
         val showPlaces = activeTab == "All" || activeTab == "Places"
         val showEvents = activeTab == "All" || activeTab == "Events"
         val showOnline = activeTab == "All" || activeTab == "Online"
+        val ratedPlaces = places
+            .filter { it.rating != null }
+            .sortedByDescending { it.rating }
+            .take(5)
+        val hasVisibleData =
+            (showPlaces && places.isNotEmpty()) ||
+                (showEvents && events.isNotEmpty()) ||
+                (showOnline && classes.isNotEmpty())
+        val hasVisibleError =
+            (showPlaces && placesError != null) ||
+                (showEvents && eventsError != null) ||
+                (showOnline && classesError != null)
 
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (showPlaces && places.isNotEmpty()) {
-                item {
-                    Text(
-                        "Educational Places",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
-                    )
-                }
-                item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(places) { place -> PlaceCard(place) }
+            if (showPlaces) {
+                placesError?.let { message ->
+                    item {
+                        DiscoverErrorCard(
+                            title = "Places unavailable",
+                            message = message,
+                            onRetry = { reloadVersion += 1 },
+                        )
                     }
                 }
-                item {
-                    Text(
-                        "Top Rated",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                items(places.sortedByDescending { it.rating ?: 0.0 }.take(5)) { place ->
-                    PlaceListRow(place)
-                }
-            }
 
-            if (showEvents && events.isNotEmpty()) {
-                item {
-                    Text(
-                        "Events",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                items(events) { event -> EventRow(event) }
-            }
-
-            if (showOnline && classes.isNotEmpty()) {
-                item {
-                    Text(
-                        "Online Classes",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                items(classes) { course ->
-                    GlassCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { nav.navigate(Routes.courseDetail(course.idStr)) },
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = course.title ?: "Untitled",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = TextPrimary,
-                            )
-                            Text(
-                                text = course.subject ?: "General",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
-                            )
+                if (places.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Educational Places",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = TextPrimary,
+                        )
+                    }
+                    item {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(places) { place -> PlaceCard(place) }
                         }
                     }
+                    if (ratedPlaces.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Top Rated",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = TextPrimary,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        items(ratedPlaces) { place -> PlaceListRow(place) }
+                    }
+                } else if (activeTab == "Places" && placesError == null) {
+                    item {
+                        EmptyState(
+                            title = "No places yet",
+                            subtitle = "Published educational places will appear here.",
+                        )
+                    }
                 }
             }
 
-            if (places.isEmpty() && events.isEmpty() && classes.isEmpty()) {
+            if (showEvents) {
+                eventsError?.let { message ->
+                    item {
+                        DiscoverErrorCard(
+                            title = "Events unavailable",
+                            message = message,
+                            onRetry = { reloadVersion += 1 },
+                        )
+                    }
+                }
+
+                if (events.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Events",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = TextPrimary,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    items(events) { event -> EventRow(event) }
+                } else if (activeTab == "Events" && eventsError == null) {
+                    item {
+                        EmptyState(
+                            title = "No events yet",
+                            subtitle = "Published learning events will appear here.",
+                        )
+                    }
+                }
+            }
+
+            if (showOnline) {
+                classesError?.let { message ->
+                    item {
+                        DiscoverErrorCard(
+                            title = "Online classes unavailable",
+                            message = message,
+                            onRetry = { reloadVersion += 1 },
+                        )
+                    }
+                }
+
+                if (classes.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Online Classes",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = TextPrimary,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    items(classes) { course -> OnlineCourseRow(course, nav) }
+                } else if (activeTab == "Online" && classesError == null) {
+                    item {
+                        EmptyState(
+                            title = "No online classes yet",
+                            subtitle = "Published courses will appear here.",
+                        )
+                    }
+                }
+            }
+
+            if (activeTab == "All" && !hasVisibleData && !hasVisibleError) {
                 item {
                     EmptyState(
                         title = "Nothing to discover yet",
@@ -214,6 +278,44 @@ fun DiscoverScreen(nav: NavHostController) {
             }
 
             item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+private fun discoverError(error: Throwable, source: String): String = when (error) {
+    is HttpException -> when (error.code()) {
+        401, 403 -> "You are not authorized to load $source."
+        404 -> "The $source service is not available."
+        else -> "The $source request failed (${error.code()})."
+    }
+    is IOException -> "Check your connection and retry $source."
+    else -> error.localizedMessage ?: "The $source could not be loaded."
+}
+
+@Composable
+private fun DiscoverErrorCard(
+    title: String,
+    message: String,
+    onRetry: () -> Unit,
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                "Retry",
+                style = MaterialTheme.typography.titleSmall,
+                color = LyoPurple,
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .clickable(onClick = onRetry)
+                    .padding(vertical = 4.dp),
+            )
         }
     }
 }
@@ -252,29 +354,49 @@ private fun PlaceCard(place: PlaceDto) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 4.dp),
-            ) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = LyoAmber,
-                    modifier = Modifier.size(14.dp),
-                )
+            PlaceMetadata(place)
+            place.address?.takeIf { it.isNotBlank() }?.let { address ->
                 Text(
-                    text = " ${place.rating ?: 0.0}  ·  ${place.category ?: ""}",
+                    text = address,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PlaceMetadata(place: PlaceDto) {
+    val category = place.category?.takeIf { it.isNotBlank() }
+    val rating = place.rating
+    if (rating == null && category == null) return
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        if (rating != null) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = null,
+                tint = LyoAmber,
+                modifier = Modifier.size(14.dp),
+            )
             Text(
-                text = place.address ?: "",
+                text = " $rating",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        category?.let {
+            Text(
+                text = if (rating != null) "  ·  $it" else it,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
             )
         }
     }
@@ -307,26 +429,30 @@ private fun PlaceListRow(place: PlaceDto) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = place.description ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                place.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = LyoAmber,
-                    modifier = Modifier.size(14.dp),
-                )
-                Text(
-                    text = " ${place.rating ?: 0.0}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TextPrimary,
-                )
+            place.rating?.let { rating ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = LyoAmber,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = " $rating",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextPrimary,
+                    )
+                }
             }
         }
     }
@@ -341,26 +467,51 @@ private fun EventRow(event: EventDto) {
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
             )
-            val meta = listOfNotNull(
+            val metadata = listOfNotNull(
                 event.startTime?.take(10),
-                event.location,
+                event.location?.takeIf { it.isNotBlank() },
             ).joinToString("  ·  ")
-            if (meta.isNotBlank()) {
+            if (metadata.isNotBlank()) {
                 Text(
-                    text = meta,
+                    text = metadata,
                     style = MaterialTheme.typography.bodySmall,
                     color = LyoPurple,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            if (!event.description.isNullOrBlank()) {
+            event.description?.takeIf { it.isNotBlank() }?.let { description ->
                 Text(
-                    text = event.description,
+                    text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnlineCourseRow(course: CourseDto, nav: NavHostController) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { nav.navigate(Routes.courseDetail(course.idStr)) },
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = course.title ?: "Untitled course",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+            )
+            course.subject?.takeIf { it.isNotBlank() }?.let { subject ->
+                Text(
+                    text = subject,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
