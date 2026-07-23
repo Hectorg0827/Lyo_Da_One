@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,18 +65,19 @@ import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import java.io.IOException
 import kotlin.math.max
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
-/** The participant to show for a conversation (not the signed-in user). */
-private fun otherParticipant(conv: ConversationDto): ParticipantDto? {
+private fun otherParticipant(conversation: ConversationDto): ParticipantDto? {
     val myId = Session.user?.id
-    return conv.participants?.firstOrNull { it.idStr != myId }
-        ?: conv.participants?.firstOrNull()
+    return conversation.participants?.firstOrNull { it.idStr != myId }
+        ?: conversation.participants?.firstOrNull()
 }
 
-private fun conversationTitle(conv: ConversationDto): String =
-    conv.name ?: otherParticipant(conv)?.name ?: "Conversation"
+private fun conversationTitle(conversation: ConversationDto): String =
+    conversation.name ?: otherParticipant(conversation)?.name ?: "Conversation"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,42 +85,86 @@ fun MessagesScreen(nav: NavHostController) {
     val scope = rememberCoroutineScope()
 
     var conversations by remember { mutableStateOf<List<ConversationDto>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
+    var conversationsLoading by remember { mutableStateOf(true) }
+    var conversationsLoaded by remember { mutableStateOf(false) }
+    var conversationError by remember { mutableStateOf<String?>(null) }
+    var conversationReload by remember { mutableStateOf(0) }
     var search by remember { mutableStateOf("") }
-    var activeConv by remember { mutableStateOf<ConversationDto?>(null) }
+    var activeConversation by remember { mutableStateOf<ConversationDto?>(null) }
 
     var messages by remember { mutableStateOf<List<MessageDto>>(emptyList()) }
     var messagesLoading by remember { mutableStateOf(false) }
+    var messagesLoaded by remember { mutableStateOf(false) }
+    var messagesError by remember { mutableStateOf<String?>(null) }
+    var messagesReload by remember { mutableStateOf(0) }
     var draft by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    var sendError by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(conversationReload) {
+        conversationsLoading = true
+        conversationsLoaded = false
+        conversationError = null
         runCatching { ApiClient.api.conversations() }
-            .onSuccess { conversations = it.conversations.orEmpty() }
-        loading = false
+            .onSuccess {
+                conversations = it.conversations.orEmpty()
+                conversationsLoaded = true
+            }
+            .onFailure {
+                conversationError = messagingError(it, "load conversations")
+                conversationsLoaded = true
+            }
+        conversationsLoading = false
     }
 
-    // Live cross-device sync: when this account sends/receives a message on
-    // another platform (iOS/web), refresh without leaving the screen.
     LaunchedEffect(Unit) {
         SyncClient.events.collect { event ->
             if (event.eventType in setOf("message_sent", "message_received", "context_updated")) {
                 runCatching { ApiClient.api.conversations() }
-                    .onSuccess { conversations = it.conversations.orEmpty() }
-                activeConv?.let { conv ->
-                    runCatching { ApiClient.api.messages(conv.idStr) }
-                        .onSuccess { messages = it.messages.orEmpty() }
+                    .onSuccess {
+                        conversations = it.conversations.orEmpty()
+                        conversationError = null
+                    }
+                    .onFailure {
+                        if (conversations.isEmpty()) {
+                            conversationError = messagingError(it, "refresh conversations")
+                        }
+                    }
+
+                activeConversation?.let { conversation ->
+                    runCatching { ApiClient.api.messages(conversation.idStr) }
+                        .onSuccess {
+                            messages = it.messages.orEmpty()
+                            messagesError = null
+                            messagesLoaded = true
+                        }
+                        .onFailure {
+                            if (messages.isEmpty()) {
+                                messagesError = messagingError(it, "refresh messages")
+                            }
+                        }
                 }
             }
         }
     }
 
-    LaunchedEffect(activeConv) {
-        val conv = activeConv ?: return@LaunchedEffect
+    LaunchedEffect(activeConversation?.idStr, messagesReload) {
+        val conversation = activeConversation ?: return@LaunchedEffect
         messagesLoading = true
+        messagesLoaded = false
+        messagesError = null
+        sendError = null
         messages = emptyList()
-        runCatching { ApiClient.api.messages(conv.idStr) }
-            .onSuccess { messages = it.messages.orEmpty() }
+        runCatching { ApiClient.api.messages(conversation.idStr) }
+            .onSuccess {
+                messages = it.messages.orEmpty()
+                messagesLoaded = true
+            }
+            .onFailure {
+                messagesError = messagingError(it, "load messages")
+                messagesLoaded = true
+            }
         messagesLoading = false
     }
 
@@ -128,11 +174,16 @@ fun MessagesScreen(nav: NavHostController) {
         }
     }
 
-    BackHandler(enabled = activeConv != null) { activeConv = null }
+    BackHandler(enabled = activeConversation != null) {
+        activeConversation = null
+        messages = emptyList()
+        messagesError = null
+        sendError = null
+        draft = ""
+    }
 
-    val conv = activeConv
-    if (conv == null) {
-        // ── Conversation list mode ──
+    val conversation = activeConversation
+    if (conversation == null) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -177,37 +228,57 @@ fun MessagesScreen(nav: NavHostController) {
             )
 
             when {
-                loading -> LoadingBox()
-                conversations.isEmpty() -> EmptyState(
+                conversationsLoading -> LoadingBox()
+                conversationError != null && conversations.isEmpty() -> MessageRequestError(
+                    title = "Messages unavailable",
+                    message = conversationError ?: "Conversations could not be loaded.",
+                    onRetry = { conversationReload += 1 },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                conversationsLoaded && conversations.isEmpty() -> EmptyState(
                     title = "No messages yet",
-                    subtitle = "Start a conversation from a user's profile",
+                    subtitle = "Start a conversation from a user's profile.",
                 )
                 else -> {
-                    val filtered = conversations.filter {
-                        search.isBlank() ||
-                            conversationTitle(it).contains(search, ignoreCase = true)
+                    conversationError?.let { message ->
+                        MessageRequestError(
+                            title = "Refresh failed",
+                            message = message,
+                            onRetry = { conversationReload += 1 },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
                     }
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(filtered) { c ->
-                            ConversationRow(
-                                conv = c,
-                                onClick = {
-                                    activeConv = c
-                                    scope.launch {
-                                        runCatching {
-                                            ApiClient.api.markConversationRead(c.idStr)
+
+                    val filtered = conversations.filter {
+                        search.isBlank() || conversationTitle(it).contains(search, ignoreCase = true)
+                    }
+                    if (filtered.isEmpty()) {
+                        EmptyState(
+                            title = "No matching conversations",
+                            subtitle = "Try a different name.",
+                        )
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(filtered) { item ->
+                                ConversationRow(
+                                    conversation = item,
+                                    onClick = {
+                                        activeConversation = item
+                                        scope.launch {
+                                            runCatching {
+                                                ApiClient.api.markConversationRead(item.idStr)
+                                            }
                                         }
-                                    }
-                                },
-                            )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     } else {
-        // ── Chat mode ──
-        val other = otherParticipant(conv)
+        val other = otherParticipant(conversation)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -221,7 +292,15 @@ fun MessagesScreen(nav: NavHostController) {
                     .background(Surface)
                     .padding(horizontal = 8.dp, vertical = 10.dp),
             ) {
-                IconButton(onClick = { activeConv = null }) {
+                IconButton(
+                    onClick = {
+                        activeConversation = null
+                        messages = emptyList()
+                        messagesError = null
+                        sendError = null
+                        draft = ""
+                    },
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
@@ -229,12 +308,12 @@ fun MessagesScreen(nav: NavHostController) {
                     )
                 }
                 LyoAvatar(
-                    name = conversationTitle(conv),
+                    name = conversationTitle(conversation),
                     avatarUrl = other?.avatarUrl,
                     size = 36,
                 )
                 Text(
-                    text = conversationTitle(conv),
+                    text = conversationTitle(conversation),
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
                     maxLines = 1,
@@ -243,21 +322,50 @@ fun MessagesScreen(nav: NavHostController) {
                 )
             }
 
-            if (messagesLoading) {
-                Box(modifier = Modifier.weight(1f)) { LoadingBox() }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                ) {
-                    items(messages) { msg ->
-                        DirectMessageBubble(msg)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                when {
+                    messagesLoading -> LoadingBox()
+                    messagesError != null && messages.isEmpty() -> MessageRequestError(
+                        title = "Conversation unavailable",
+                        message = messagesError ?: "Messages could not be loaded.",
+                        onRetry = { messagesReload += 1 },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    messagesLoaded && messages.isEmpty() -> EmptyState(
+                        title = "No messages yet",
+                        subtitle = "Send the first message in this conversation.",
+                    )
+                    else -> LazyColumn(
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(16.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(messages, key = { message ->
+                            message.idStr.ifBlank {
+                                "${message.senderIdStr}:${message.createdAt}:${message.content}"
+                            }
+                        }) { message ->
+                            DirectMessageBubble(message)
+                        }
                     }
                 }
+            }
+
+            sendError?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFF7B7B),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Surface)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                )
             }
 
             Row(
@@ -269,10 +377,14 @@ fun MessagesScreen(nav: NavHostController) {
             ) {
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { draft = it },
+                    onValueChange = {
+                        draft = it
+                        if (sendError != null) sendError = null
+                    },
                     placeholder = { Text("Message…", color = TextSecondary) },
                     shape = RoundedCornerShape(24.dp),
                     maxLines = 4,
+                    enabled = !sending,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = LyoPurple,
                         unfocusedBorderColor = BorderColor,
@@ -285,38 +397,107 @@ fun MessagesScreen(nav: NavHostController) {
                 IconButton(
                     onClick = {
                         val text = draft.trim()
-                        if (text.isEmpty()) return@IconButton
-                        draft = ""
+                        if (text.isEmpty() || sending) return@IconButton
+
                         scope.launch {
+                            sending = true
+                            sendError = null
                             runCatching {
-                                ApiClient.api.sendMessage(conv.idStr, SendMessageRequest(text))
+                                ApiClient.api.sendMessage(
+                                    conversation.idStr,
+                                    SendMessageRequest(text),
+                                )
+                            }.onSuccess { sentMessage ->
+                                messages = (messages + sentMessage).distinctBy { message ->
+                                    message.idStr.ifBlank {
+                                        "${message.senderIdStr}:${message.createdAt}:${message.content}"
+                                    }
+                                }
+                                messagesLoaded = true
+                                draft = ""
+                                runCatching { ApiClient.api.conversations() }
+                                    .onSuccess { conversations = it.conversations.orEmpty() }
+                            }.onFailure {
+                                sendError = messagingError(it, "send message")
                             }
-                            runCatching { ApiClient.api.messages(conv.idStr) }
-                                .onSuccess { messages = it.messages.orEmpty() }
+                            sending = false
                         }
                     },
-                    enabled = draft.isNotBlank(),
+                    enabled = draft.isNotBlank() && !sending,
                     modifier = Modifier
                         .padding(start = 8.dp)
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(LyoPurple),
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = Color.White,
-                    )
+                    if (sending) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = Color.White,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+private fun messagingError(error: Throwable, operation: String): String = when (error) {
+    is HttpException -> when (error.code()) {
+        401, 403 -> "Your session cannot $operation. Sign in again and retry."
+        404 -> "The requested conversation is no longer available."
+        409 -> "The conversation changed on another device. Refresh and retry."
+        else -> "Unable to $operation (${error.code()})."
+    }
+    is IOException -> "Check your connection and try to $operation again."
+    else -> error.localizedMessage ?: "Unable to $operation."
+}
+
 @Composable
-private fun ConversationRow(conv: ConversationDto, onClick: () -> Unit) {
-    val other = otherParticipant(conv)
-    val unread = conv.unreadCount ?: 0
+private fun MessageRequestError(
+    title: String,
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier.padding(20.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Text(
+            "Retry",
+            style = MaterialTheme.typography.titleSmall,
+            color = LyoPurple,
+            modifier = Modifier
+                .padding(top = 10.dp)
+                .clickable(onClick = onRetry)
+                .padding(6.dp),
+        )
+    }
+}
+
+@Composable
+private fun ConversationRow(
+    conversation: ConversationDto,
+    onClick: () -> Unit,
+) {
+    val other = otherParticipant(conversation)
+    val unread = conversation.unreadCount ?: 0
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -325,7 +506,7 @@ private fun ConversationRow(conv: ConversationDto, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         LyoAvatar(
-            name = conversationTitle(conv),
+            name = conversationTitle(conversation),
             avatarUrl = other?.avatarUrl,
             size = 48,
         )
@@ -335,14 +516,14 @@ private fun ConversationRow(conv: ConversationDto, onClick: () -> Unit) {
                 .padding(horizontal = 12.dp),
         ) {
             Text(
-                text = conversationTitle(conv),
+                text = conversationTitle(conversation),
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = conv.lastMessage?.content ?: "No messages yet",
+                text = conversation.lastMessage?.content ?: "No messages yet",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 maxLines = 1,
@@ -352,7 +533,7 @@ private fun ConversationRow(conv: ConversationDto, onClick: () -> Unit) {
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = formatTimeAgo(conv.updatedAt),
+                text = formatTimeAgo(conversation.updatedAt),
                 style = MaterialTheme.typography.labelMedium,
                 color = TextSecondary,
             )
@@ -377,8 +558,8 @@ private fun ConversationRow(conv: ConversationDto, onClick: () -> Unit) {
 }
 
 @Composable
-private fun DirectMessageBubble(msg: MessageDto) {
-    val isMine = msg.senderIdStr == (Session.user?.id ?: "")
+private fun DirectMessageBubble(message: MessageDto) {
+    val isMine = message.senderIdStr == (Session.user?.id ?: "")
     Row(
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
         modifier = Modifier.fillMaxWidth(),
@@ -398,7 +579,7 @@ private fun DirectMessageBubble(msg: MessageDto) {
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(
-                text = msg.content ?: "",
+                text = message.content ?: "",
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (isMine) Color.White else TextPrimary,
             )
