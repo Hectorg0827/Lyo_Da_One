@@ -2,11 +2,11 @@ package com.lyo.app.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -30,6 +30,9 @@ import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.CommunityScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.PostDetailScreen
+import com.lyo.app.ui.screens.create.CreateClipScreen
+import com.lyo.app.ui.screens.create.CreatePostScreen
+import com.lyo.app.ui.screens.create.CreateScreen
 import com.lyo.app.ui.screens.courses.CourseDetailScreen
 import com.lyo.app.ui.screens.courses.CoursesScreen
 import com.lyo.app.ui.screens.discover.DiscoverScreen
@@ -53,6 +56,9 @@ object Routes {
     const val POST_DETAIL = "community/{postId}"
     const val GROUPS = "groups"
     const val CLIPS = "clips"
+    const val CREATE = "create"
+    const val CREATE_CLIP = "create/clip"
+    const val CREATE_POST = "create/post"
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
@@ -70,11 +76,15 @@ object Routes {
 
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
+/**
+ * Mirrors the iOS product hierarchy: Focus, Clips, Create, Community, Profile.
+ * Chat remains a contextual destination opened from Create and other learning surfaces.
+ */
 private val bottomItems = listOf(
-    BottomItem(Routes.HOME, "Home", Icons.Filled.Home),
-    BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
-    BottomItem(Routes.CHAT, "Lyo AI", Icons.Filled.SmartToy),
+    BottomItem(Routes.HOME, "Focus", Icons.Filled.Home),
     BottomItem(Routes.CLIPS, "Clips", Icons.Filled.PlayCircle),
+    BottomItem(Routes.CREATE, "Create", Icons.Filled.Add),
+    BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
     BottomItem(Routes.PROFILE, "Profile", Icons.Filled.Person),
 )
 
@@ -133,6 +143,9 @@ fun LyoApp() {
             }
             composable(Routes.GROUPS) { GroupsScreen(nav) }
             composable(Routes.CLIPS) { ClipsScreen(nav) }
+            composable(Routes.CREATE) { CreateScreen(nav) }
+            composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }
+            composable(Routes.CREATE_POST) { CreatePostScreen(nav) }
             composable(Routes.STORIES) { StoriesScreen(nav) }
             composable(Routes.COURSES) { CoursesScreen(nav) }
             composable(Routes.COURSE_DETAIL) { entry ->
