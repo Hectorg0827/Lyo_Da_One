@@ -279,8 +279,9 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                             contentAlignment = Alignment.Center,
                             modifier = followButtonBase
                                 .clickable(enabled = !followPending) {
-                                    val target = userId?.toLongOrNull()
-                                    if (target == null) {
+                                    val targetUserId = userId
+                                    val target = targetUserId?.toLongOrNull()
+                                    if (targetUserId == null || target == null) {
                                         followError = "This profile does not have a valid follow identifier."
                                         return@clickable
                                     }
@@ -289,7 +290,7 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                                         followPending = true
                                         followError = null
                                         val result = if (following) {
-                                            runCatching { ApiClient.api.unfollow(userId) }
+                                            runCatching { ApiClient.api.unfollow(targetUserId) }
                                         } else {
                                             runCatching { ApiClient.api.follow(FollowRequest(target)) }
                                         }
