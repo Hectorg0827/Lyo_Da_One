@@ -124,7 +124,9 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
         runCatching { ApiClient.learning.courseProgress(courseId) }
             .onSuccess { progress ->
                 canonicalProgress = progress
-                completedCount = progress.completedLessons.coerceIn(0, max(progress.totalLessons, flattenedLessons.size))
+                completedLessonIds = reconcileCompletedLessonIds(flattenedLessons, progress)
+                completedCount = max(progress.completedLessons, completedLessonIds.size)
+                    .coerceIn(0, max(progress.totalLessons, flattenedLessons.size))
                 displayedProgressPercent = progress.normalizedPercent
                 val resumeLessonId = progress.currentLessonIdString
                 val resumeIndex = flattenedLessons.indexOfFirst { it.lessonId == resumeLessonId }
@@ -299,7 +301,15 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
 
                                         if (refreshedProgress != null) {
                                             canonicalProgress = refreshedProgress
-                                            completedCount = refreshedProgress.completedLessons
+                                            completedLessonIds = reconcileCompletedLessonIds(
+                                                lessons,
+                                                refreshedProgress,
+                                                completedLessonIds,
+                                            )
+                                            completedCount = max(
+                                                refreshedProgress.completedLessons,
+                                                completedLessonIds.size,
+                                            )
                                             displayedProgressPercent = refreshedProgress.normalizedPercent
                                             progressWarning = null
                                         } else {
@@ -715,6 +725,28 @@ private fun flattenLessons(course: CourseDto): List<CourseLessonItem> {
     return course.lessons.orEmpty()
         .sortedBy { it.orderIndex ?: Int.MAX_VALUE }
         .map { lesson -> CourseLessonItem(null, lesson) }
+}
+
+private fun reconcileCompletedLessonIds(
+    lessons: List<CourseLessonItem>,
+    progress: CourseProgressResponse,
+    existingIds: Set<String> = emptySet(),
+): Set<String> {
+    val knownIds = lessons.map { it.lessonId }.filter { it.isNotBlank() }.toSet()
+    val canonicalIds = progress.completedLessonIdStrings.intersect(knownIds)
+
+    // Canonical IDs are authoritative whenever the backend returns them. The
+    // ordered-prefix fallback preserves compatibility with older deployments.
+    if (canonicalIds.isNotEmpty() || progress.completedLessons == 0) {
+        return canonicalIds
+    }
+
+    val orderedFallback = lessons
+        .take(progress.completedLessons.coerceIn(0, lessons.size))
+        .map { it.lessonId }
+        .filter { it.isNotBlank() }
+        .toSet()
+    return (existingIds + orderedFallback).intersect(knownIds)
 }
 
 private fun readableLessonContent(raw: String?): List<String> {

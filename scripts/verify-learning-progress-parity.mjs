@@ -32,9 +32,12 @@ for (const [source, label] of [
 
 requireText(web, 'markLessonComplete', 'web lesson player contract');
 requireText(web, 'getCourseProgress', 'web progress hydration contract');
+requireText(androidApi, 'completed_lesson_ids', 'Android canonical completed lesson IDs');
+requireText(androidApi, 'completedLessonIdStrings', 'Android completion ID normalization');
 requireText(androidPlayer, 'ApiClient.learning.markLessonComplete', 'Android lesson completion write');
 requireText(androidPlayer, 'ApiClient.learning.courseProgress', 'Android progress hydration');
 requireText(androidPlayer, 'previousCompletedIds', 'Android optimistic rollback');
+requireText(androidPlayer, 'reconcileCompletedLessonIds', 'Android canonical completion reconciliation');
 requireText(iosStore, 'refreshCourseProgressFromBackend', 'iOS progress hydration');
 requireText(iosStore, 'repository.getCourseProgress', 'iOS canonical progress read');
 rejectText(iosStore, 'Synced course progress to backend', 'iOS false progress write');
