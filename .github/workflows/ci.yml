@@ -37,6 +37,9 @@ jobs:
       - name: Verify canonical chat continuity contract
         run: node scripts/verify-chat-continuity.mjs
 
+      - name: Verify canonical learning continuity contract
+        run: node scripts/verify-learning-continuity.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
