@@ -2,11 +2,11 @@ package com.lyo.app.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -32,6 +32,7 @@ import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.PostDetailScreen
 import com.lyo.app.ui.screens.courses.CourseDetailScreen
 import com.lyo.app.ui.screens.courses.CoursesScreen
+import com.lyo.app.ui.screens.create.CreateScreen
 import com.lyo.app.ui.screens.discover.DiscoverScreen
 import com.lyo.app.ui.screens.home.HomeScreen
 import com.lyo.app.ui.screens.messages.MessagesScreen
@@ -49,6 +50,7 @@ object Routes {
     const val SIGNUP = "signup"
     const val HOME = "home"
     const val CHAT = "chat"
+    const val CREATE = "create"
     const val COMMUNITY = "community"
     const val POST_DETAIL = "community/{postId}"
     const val GROUPS = "groups"
@@ -70,11 +72,16 @@ object Routes {
 
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
+/**
+ * Primary navigation mirrors the iOS product hierarchy. Chat and Classroom are
+ * contextual destinations opened from Focus, Create, courses, notifications,
+ * and deep links rather than permanent tabs.
+ */
 private val bottomItems = listOf(
-    BottomItem(Routes.HOME, "Home", Icons.Filled.Home),
-    BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
-    BottomItem(Routes.CHAT, "Lyo AI", Icons.Filled.SmartToy),
+    BottomItem(Routes.HOME, "Focus", Icons.Filled.Home),
     BottomItem(Routes.CLIPS, "Clips", Icons.Filled.PlayCircle),
+    BottomItem(Routes.CREATE, "Create", Icons.Filled.Add),
+    BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
     BottomItem(Routes.PROFILE, "Profile", Icons.Filled.Person),
 )
 
@@ -127,6 +134,7 @@ fun LyoApp() {
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
             composable(Routes.CHAT) { ChatScreen(nav) }
+            composable(Routes.CREATE) { CreateScreen(nav) }
             composable(Routes.COMMUNITY) { CommunityScreen(nav) }
             composable(Routes.POST_DETAIL) { entry ->
                 PostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")
