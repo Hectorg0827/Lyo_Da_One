@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
@@ -36,7 +35,6 @@ import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoBlue
-import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoPink
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
@@ -53,31 +51,24 @@ private data class CreateAction(
 private val createActions = listOf(
     CreateAction(
         title = "Create a clip",
-        subtitle = "Choose a video, add the lesson context, and publish it to Clips.",
+        subtitle = "Choose a video, preview it, add its learning context, and publish it.",
         icon = Icons.Filled.PlayCircle,
         accent = LyoPink,
         route = Routes.CREATE_CLIP,
     ),
     CreateAction(
         title = "Write a community post",
-        subtitle = "Share a question, insight, study tip, or learning update.",
+        subtitle = "Publish a question, insight, study tip, or learning update.",
         icon = Icons.Filled.Add,
         accent = LyoPurple,
         route = Routes.CREATE_POST,
     ),
     CreateAction(
-        title = "Create an event or study group",
-        subtitle = "Open a supported community event or group workflow.",
-        icon = Icons.Filled.People,
-        accent = LyoGreen,
-        route = Routes.CREATE_COMMUNITY,
-    ),
-    CreateAction(
-        title = "Build a course with Lyo",
-        subtitle = "Start a real AI conversation with a course-building prompt ready to edit.",
+        title = "Plan a course with Lyo",
+        subtitle = "Open the real Lyo AI conversation and ask it to design your course.",
         icon = Icons.Filled.SmartToy,
         accent = LyoBlue,
-        route = Routes.CREATE_COURSE,
+        route = Routes.CHAT,
     ),
 )
 
@@ -98,7 +89,7 @@ fun CreateScreen(nav: NavHostController) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Choose a production workflow. Every option below is connected to a real service.",
+                text = "Choose a production workflow. Every visible action is connected to a real service.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 6.dp),
@@ -162,7 +153,7 @@ fun CreateScreen(nav: NavHostController) {
 
         item {
             Text(
-                text = "Story publishing is not shown here yet because Android currently has a story viewer but no production story-upload contract. It will be added when that API is implemented.",
+                text = "Story, event, group, and full Android course-publishing controls are intentionally omitted until each workflow has a complete production contract. Existing event and group creation remains available from Community.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp),
