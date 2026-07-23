@@ -31,6 +31,7 @@ import com.lyo.app.ui.screens.community.CommunityScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.PostDetailScreen
 import com.lyo.app.ui.screens.create.CreateClipScreen
+import com.lyo.app.ui.screens.create.CreateCommunityItemScreen
 import com.lyo.app.ui.screens.create.CreatePostScreen
 import com.lyo.app.ui.screens.create.CreateScreen
 import com.lyo.app.ui.screens.courses.CourseDetailScreen
@@ -59,6 +60,8 @@ object Routes {
     const val CREATE = "create"
     const val CREATE_CLIP = "create/clip"
     const val CREATE_POST = "create/post"
+    const val CREATE_GROUP = "create/group"
+    const val CREATE_EVENT = "create/event"
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
@@ -146,6 +149,12 @@ fun LyoApp() {
             composable(Routes.CREATE) { CreateScreen(nav) }
             composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }
             composable(Routes.CREATE_POST) { CreatePostScreen(nav) }
+            composable(Routes.CREATE_GROUP) {
+                CreateCommunityItemScreen(nav = nav, createGroup = true)
+            }
+            composable(Routes.CREATE_EVENT) {
+                CreateCommunityItemScreen(nav = nav, createGroup = false)
+            }
             composable(Routes.STORIES) { StoriesScreen(nav) }
             composable(Routes.COURSES) { CoursesScreen(nav) }
             composable(Routes.COURSE_DETAIL) { entry ->
