@@ -16,8 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +38,7 @@ import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoBlue
+import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoPink
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
@@ -64,8 +68,29 @@ private val createActions = listOf(
         route = Routes.CREATE_POST,
     ),
     CreateAction(
-        title = "Plan a course with Lyo",
-        subtitle = "Open the real Lyo AI conversation and ask it to design your course.",
+        title = "Create a study group",
+        subtitle = "Open a public group or a private group that requires approval.",
+        icon = Icons.Filled.Groups,
+        accent = LyoGreen,
+        route = Routes.CREATE_GROUP,
+    ),
+    CreateAction(
+        title = "Create a learning event",
+        subtitle = "Schedule an online or in-person Community event with real attendance limits.",
+        icon = Icons.Filled.Event,
+        accent = LyoBlue,
+        route = Routes.CREATE_EVENT,
+    ),
+    CreateAction(
+        title = "Generate an AI course",
+        subtitle = "Use the existing course generator to choose a topic, difficulty, and duration.",
+        icon = Icons.Filled.School,
+        accent = LyoPurple,
+        route = Routes.COURSES,
+    ),
+    CreateAction(
+        title = "Plan content with Lyo",
+        subtitle = "Open the real Lyo AI conversation before deciding what to publish.",
         icon = Icons.Filled.SmartToy,
         accent = LyoBlue,
         route = Routes.CHAT,
@@ -153,7 +178,7 @@ fun CreateScreen(nav: NavHostController) {
 
         item {
             Text(
-                text = "Story, event, group, and full Android course-publishing controls are intentionally omitted until each workflow has a complete production contract. Existing event and group creation remains available from Community.",
+                text = "Story publishing remains omitted until Android has a complete media-capture and story-upload contract.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp),
