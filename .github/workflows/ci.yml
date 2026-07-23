@@ -46,6 +46,9 @@ jobs:
       - name: Verify Android Settings honesty
         run: node scripts/verify-android-settings-honesty.mjs
 
+      - name: Verify Android Focus honesty
+        run: node scripts/verify-android-focus-honesty.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
