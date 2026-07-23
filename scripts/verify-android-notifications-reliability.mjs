@@ -51,7 +51,7 @@ if (allRequest < 0 || allSuccess < allRequest || allMutation < allSuccess) {
 }
 
 for (const forbidden of [
-  'visible.isEmpty() -> EmptyState(',
+  '\n            visible.isEmpty() -> EmptyState(',
   'runCatching { ApiClient.api.markAllNotificationsRead() }\n                                refetch()',
   'notifications = notifications.map {\n                                    if (it.idStr == notification.idStr) it.copy(isRead = true)',
 ]) {
