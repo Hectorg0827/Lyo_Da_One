@@ -61,7 +61,6 @@ import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
-import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
@@ -70,16 +69,16 @@ import com.lyo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
-private val CourseEmojis = listOf("📚", "🧠", "🎨", "🐍", "🎵", "⚛️")
 private const val MODE_OVERVIEW = "overview"
 private const val MODE_PLAYER = "player"
+private val courseEmojis = listOf("📚", "🧠", "🎨", "🐍", "🎵", "⚛️")
 
 private data class CourseLessonItem(
     val moduleTitle: String?,
     val lesson: LessonDto,
 ) {
     val lessonId: String?
-        get() = lesson.id?.toString()?.removeSuffix(".0")?.takeIf { it.isNotBlank() }
+        get() = lesson.id?.toString()?.removeSuffix(".0")?.takeIf(String::isNotBlank)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,21 +86,21 @@ private data class CourseLessonItem(
 fun CourseDetailScreen(nav: NavHostController, courseId: String) {
     var course by remember(courseId) { mutableStateOf<CourseDto?>(null) }
     var progress by remember(courseId) { mutableStateOf<CourseProgressDto?>(null) }
+    var loading by remember(courseId) { mutableStateOf(true) }
     var loadError by remember(courseId) { mutableStateOf<String?>(null) }
     var progressWarning by remember(courseId) { mutableStateOf<String?>(null) }
     var actionError by remember(courseId) { mutableStateOf<String?>(null) }
-    var isLoading by remember(courseId) { mutableStateOf(true) }
-    var reloadNonce by remember(courseId) { mutableStateOf(0) }
-    var screenMode by rememberSaveable(courseId) { mutableStateOf(MODE_OVERVIEW) }
-    var activeLessonIndex by rememberSaveable(courseId) { mutableStateOf(0) }
-    var locallyCompletedLessonIds by remember(courseId) { mutableStateOf(emptySet<String>()) }
+    var reloadKey by remember(courseId) { mutableStateOf(0) }
+    var mode by rememberSaveable(courseId) { mutableStateOf(MODE_OVERVIEW) }
+    var activeIndex by rememberSaveable(courseId) { mutableStateOf(0) }
+    var localCompletedIds by remember(courseId) { mutableStateOf(emptySet<String>()) }
     var savingLessonId by remember(courseId) { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
     val lessons = remember(course) { course?.flattenLessons().orEmpty() }
 
-    LaunchedEffect(courseId, reloadNonce) {
-        isLoading = true
+    LaunchedEffect(courseId, reloadKey) {
+        loading = true
         loadError = null
         progressWarning = null
         actionError = null
@@ -109,31 +108,31 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
         val loadedCourse = runCatching { ApiClient.api.course(courseId) }
             .getOrElse { error ->
                 loadError = error.learningMessage("Unable to load this course.")
-                isLoading = false
+                loading = false
                 return@LaunchedEffect
             }
-
         course = loadedCourse
-        val loadedLessons = loadedCourse.flattenLessons()
 
+        val loadedLessons = loadedCourse.flattenLessons()
         runCatching { ApiClient.learning.courseProgress(courseId) }
             .onSuccess { serverProgress ->
                 progress = serverProgress
-                val currentLessonIndex = serverProgress.currentLessonIdString?.let { currentId ->
+                val currentIndex = serverProgress.currentLessonIdString?.let { currentId ->
                     loadedLessons.indexOfFirst { it.lessonId == currentId }.takeIf { it >= 0 }
                 }
-                activeLessonIndex = (
-                    currentLessonIndex
-                        ?: serverProgress.completedLessons.coerceAtMost((loadedLessons.size - 1).coerceAtLeast(0))
+                activeIndex = (
+                    currentIndex
+                        ?: serverProgress.completedLessons.coerceAtMost(
+                            (loadedLessons.size - 1).coerceAtLeast(0),
+                        )
                     ).coerceAtLeast(0)
             }
             .onFailure { error ->
                 progressWarning = error.learningMessage(
-                    "Saved progress is unavailable. You can still open the course, but resume state may be incomplete.",
+                    "Saved progress is unavailable. You can still open the course.",
                 )
             }
-
-        isLoading = false
+        loading = false
     }
 
     Column(
@@ -144,23 +143,19 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
         TopAppBar(
             title = {
                 Text(
-                    if (screenMode == MODE_PLAYER) "Classroom" else course?.title ?: "Course",
+                    text = if (mode == MODE_PLAYER) "Classroom" else course?.title ?: "Course",
                     maxLines = 1,
                 )
             },
             navigationIcon = {
                 IconButton(
                     onClick = {
-                        if (screenMode == MODE_PLAYER) {
-                            screenMode = MODE_OVERVIEW
-                        } else {
-                            nav.popBackStack()
-                        }
+                        if (mode == MODE_PLAYER) mode = MODE_OVERVIEW else nav.popBackStack()
                     },
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (screenMode == MODE_PLAYER) "Back to course" else "Back",
+                        contentDescription = if (mode == MODE_PLAYER) "Back to course" else "Back",
                         tint = TextPrimary,
                     )
                 }
@@ -172,115 +167,102 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
         )
 
         when {
-            isLoading -> LoadingBox()
-
-            loadError != null -> LoadFailure(
-                message = loadError!!,
-                onRetry = { reloadNonce += 1 },
-            )
-
-            course == null -> LoadFailure(
-                message = "Course data is unavailable.",
-                onRetry = { reloadNonce += 1 },
-            )
-
-            screenMode == MODE_PLAYER -> CoursePlayer(
-                course = course!!,
-                lessons = lessons,
-                progress = progress,
-                activeLessonIndex = activeLessonIndex.coerceIn(
-                    0,
-                    (lessons.size - 1).coerceAtLeast(0),
-                ),
-                locallyCompletedLessonIds = locallyCompletedLessonIds,
-                savingLessonId = savingLessonId,
-                actionError = actionError,
-                progressWarning = progressWarning,
-                onSelectLesson = { index ->
-                    activeLessonIndex = index
-                    actionError = null
-                },
-                onPrevious = {
-                    if (activeLessonIndex > 0) {
-                        activeLessonIndex -= 1
-                        actionError = null
-                    }
-                },
-                onCompleteOrAdvance = { index, item ->
-                    val alreadyCompleted = isLessonCompleted(
-                        index = index,
-                        item = item,
-                        serverCompletedCount = progress?.completedLessons ?: 0,
-                        locallyCompletedLessonIds = locallyCompletedLessonIds,
-                    )
-
-                    if (alreadyCompleted) {
-                        if (index < lessons.lastIndex) {
-                            activeLessonIndex = index + 1
-                        } else {
-                            screenMode = MODE_OVERVIEW
-                        }
-                        actionError = null
-                    } else {
-                        val lessonId = item.lessonId
-                        if (lessonId == null) {
-                            actionError = "This lesson does not have a persistent ID, so completion cannot be saved."
-                        } else if (TokenManager.accessToken == null) {
-                            actionError = "Sign in to save lesson progress across devices."
-                        } else if (savingLessonId == null) {
-                            val previousLocal = locallyCompletedLessonIds
-                            locallyCompletedLessonIds = previousLocal + lessonId
-                            savingLessonId = lessonId
+            loading -> LoadingBox()
+            loadError != null -> LoadFailure(loadError!!) { reloadKey += 1 }
+            course == null -> LoadFailure("Course data is unavailable.") { reloadKey += 1 }
+            mode == MODE_PLAYER -> {
+                CoursePlayer(
+                    course = course!!,
+                    lessons = lessons,
+                    progress = progress,
+                    activeIndex = activeIndex.coerceIn(0, (lessons.size - 1).coerceAtLeast(0)),
+                    localCompletedIds = localCompletedIds,
+                    savingLessonId = savingLessonId,
+                    actionError = actionError,
+                    progressWarning = progressWarning,
+                    onSelectLesson = { index ->
+                        if (savingLessonId == null) {
+                            activeIndex = index
                             actionError = null
+                        }
+                    },
+                    onPrevious = {
+                        if (activeIndex > 0 && savingLessonId == null) {
+                            activeIndex -= 1
+                            actionError = null
+                        }
+                    },
+                    onPrimaryAction = { index, lessonItem ->
+                        val completed = lessonCompleted(
+                            index,
+                            lessonItem,
+                            progress?.completedLessons ?: 0,
+                            localCompletedIds,
+                        )
+                        if (completed) {
+                            if (index < lessons.lastIndex) activeIndex = index + 1 else mode = MODE_OVERVIEW
+                            actionError = null
+                            return@CoursePlayer
+                        }
 
-                            scope.launch {
-                                runCatching {
-                                    ApiClient.learning.markLessonComplete(
-                                        LessonCompletionRequest(lessonId = lessonId),
-                                    )
-                                }.onSuccess {
-                                    runCatching { ApiClient.learning.courseProgress(courseId) }
-                                        .onSuccess { refreshed ->
-                                            progress = refreshed
-                                            progressWarning = null
-                                        }
-                                        .onFailure {
-                                            progressWarning =
-                                                "Completion was saved, but the latest course total could not be refreshed."
-                                        }
+                        val lessonId = lessonItem.lessonId
+                        when {
+                            lessonId == null -> {
+                                actionError = "This lesson does not have a persistent ID, so completion cannot be saved."
+                            }
+                            TokenManager.accessToken == null -> {
+                                actionError = "Sign in to save lesson progress across devices."
+                            }
+                            savingLessonId != null -> Unit
+                            else -> {
+                                val previousLocal = localCompletedIds
+                                localCompletedIds = previousLocal + lessonId
+                                savingLessonId = lessonId
+                                actionError = null
 
-                                    if (index < lessons.lastIndex) {
-                                        activeLessonIndex = index + 1
+                                scope.launch {
+                                    runCatching {
+                                        ApiClient.learning.markLessonComplete(
+                                            LessonCompletionRequest(lessonId = lessonId),
+                                        )
+                                    }.onSuccess {
+                                        runCatching { ApiClient.learning.courseProgress(courseId) }
+                                            .onSuccess { refreshed ->
+                                                progress = refreshed
+                                                progressWarning = null
+                                            }
+                                            .onFailure {
+                                                progressWarning =
+                                                    "Completion was saved, but the latest course total could not be refreshed."
+                                            }
+                                        if (index < lessons.lastIndex) activeIndex = index + 1
+                                    }.onFailure { error ->
+                                        localCompletedIds = previousLocal
+                                        actionError = error.learningMessage("Unable to save lesson completion.")
                                     }
-                                }.onFailure { error ->
-                                    locallyCompletedLessonIds = previousLocal
-                                    actionError = error.learningMessage("Unable to save lesson completion.")
+                                    savingLessonId = null
                                 }
-                                savingLessonId = null
                             }
                         }
-                    }
-                },
-                onBackToOverview = { screenMode = MODE_OVERVIEW },
-            )
-
-            else -> CourseOverview(
-                course = course!!,
-                lessons = lessons,
-                progress = progress,
-                locallyCompletedLessonIds = locallyCompletedLessonIds,
-                progressWarning = progressWarning,
-                onStart = {
-                    if (lessons.isNotEmpty()) {
-                        screenMode = MODE_PLAYER
-                    }
-                },
-                onSelectLesson = { index ->
-                    activeLessonIndex = index
-                    screenMode = MODE_PLAYER
-                    actionError = null
-                },
-            )
+                    },
+                    onBackToOverview = { mode = MODE_OVERVIEW },
+                )
+            }
+            else -> {
+                CourseOverview(
+                    course = course!!,
+                    lessons = lessons,
+                    progress = progress,
+                    localCompletedIds = localCompletedIds,
+                    progressWarning = progressWarning,
+                    onStart = { if (lessons.isNotEmpty()) mode = MODE_PLAYER },
+                    onSelectLesson = { index ->
+                        activeIndex = index
+                        mode = MODE_PLAYER
+                        actionError = null
+                    },
+                )
+            }
         }
     }
 }
@@ -290,21 +272,17 @@ private fun CourseOverview(
     course: CourseDto,
     lessons: List<CourseLessonItem>,
     progress: CourseProgressDto?,
-    locallyCompletedLessonIds: Set<String>,
+    localCompletedIds: Set<String>,
     progressWarning: String?,
     onStart: () -> Unit,
     onSelectLesson: (Int) -> Unit,
 ) {
-    val completedCount = resolvedCompletedCount(
-        lessons = lessons,
-        serverCompletedCount = progress?.completedLessons ?: 0,
-        locallyCompletedLessonIds = locallyCompletedLessonIds,
+    val completedCount = completedCount(
+        lessons,
+        progress?.completedLessons ?: 0,
+        localCompletedIds,
     )
-    val progressPercent = resolvedProgressPercent(
-        totalLessons = lessons.size,
-        completedCount = completedCount,
-        serverProgress = progress,
-    )
+    val percent = progressPercent(lessons.size, completedCount, progress)
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -321,7 +299,7 @@ private fun CourseOverview(
                     .background(CardGradients[course.idStr.hashCode().mod(CardGradients.size)]),
             ) {
                 Text(
-                    text = CourseEmojis[course.idStr.hashCode().mod(CourseEmojis.size)],
+                    text = courseEmojis[course.idStr.hashCode().mod(courseEmojis.size)],
                     fontSize = 56.sp,
                 )
             }
@@ -334,9 +312,9 @@ private fun CourseOverview(
                     style = MaterialTheme.typography.headlineMedium,
                     color = TextPrimary,
                 )
-                if (!course.description.isNullOrBlank()) {
+                course.description?.takeIf(String::isNotBlank)?.let { description ->
                     Text(
-                        text = course.description,
+                        text = description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 6.dp),
@@ -352,49 +330,23 @@ private fun CourseOverview(
             }
         }
 
-        if (progressWarning != null) {
-            item { InlineMessage(progressWarning, warning = true) }
-        }
+        if (progressWarning != null) item { InlineMessage(progressWarning, warning = true) }
 
-        if (lessons.isNotEmpty()) {
+        if (lessons.isEmpty()) {
             item {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (progressPercent > 0) "Course progress" else "Ready to begin",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = TextPrimary,
-                                )
-                                Text(
-                                    text = "$completedCount of ${lessons.size} lessons complete",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                            Text(
-                                text = "$progressPercent%",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = LyoPurple,
-                            )
-                        }
-                        LinearProgressIndicator(
-                            progress = progressPercent / 100f,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp)
-                                .height(7.dp)
-                                .clip(CircleShape),
-                        )
-                    }
-                }
+                EmptyState(
+                    title = "No lessons available",
+                    subtitle = "This course does not currently contain playable lesson content.",
+                )
             }
-
+        } else {
+            item {
+                ProgressCard(
+                    completedCount = completedCount,
+                    totalLessons = lessons.size,
+                    percent = percent,
+                )
+            }
             item {
                 Button(
                     onClick = onStart,
@@ -406,13 +358,12 @@ private fun CourseOverview(
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Text(
-                        text = if (progressPercent > 0) "Resume Learning" else "Start Learning",
+                        text = if (percent > 0) "Resume Learning" else "Start Learning",
                         modifier = Modifier.padding(start = 8.dp),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
             }
-
             item {
                 Text(
                     text = "Lessons",
@@ -421,30 +372,21 @@ private fun CourseOverview(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-
-            itemsIndexed(lessons) { index, item ->
-                LessonListRow(
+            itemsIndexed(lessons) { index, lessonItem ->
+                LessonRow(
                     index = index,
-                    item = item,
-                    completed = isLessonCompleted(
-                        index = index,
-                        item = item,
-                        serverCompletedCount = progress?.completedLessons ?: 0,
-                        locallyCompletedLessonIds = locallyCompletedLessonIds,
+                    lessonItem = lessonItem,
+                    completed = lessonCompleted(
+                        index,
+                        lessonItem,
+                        progress?.completedLessons ?: 0,
+                        localCompletedIds,
                     ),
-                    current = progress?.currentLessonIdString == item.lessonId,
+                    current = progress?.currentLessonIdString == lessonItem.lessonId,
                     onClick = { onSelectLesson(index) },
                 )
             }
-        } else {
-            item {
-                EmptyState(
-                    title = "No lessons available",
-                    subtitle = "This course does not currently contain playable lesson content.",
-                )
-            }
         }
-
         item { Spacer(Modifier.height(24.dp)) }
     }
 }
@@ -454,60 +396,52 @@ private fun CoursePlayer(
     course: CourseDto,
     lessons: List<CourseLessonItem>,
     progress: CourseProgressDto?,
-    activeLessonIndex: Int,
-    locallyCompletedLessonIds: Set<String>,
+    activeIndex: Int,
+    localCompletedIds: Set<String>,
     savingLessonId: String?,
     actionError: String?,
     progressWarning: String?,
     onSelectLesson: (Int) -> Unit,
     onPrevious: () -> Unit,
-    onCompleteOrAdvance: (Int, CourseLessonItem) -> Unit,
+    onPrimaryAction: (Int, CourseLessonItem) -> Unit,
     onBackToOverview: () -> Unit,
 ) {
     if (lessons.isEmpty()) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(24.dp),
         ) {
             EmptyState(
                 title = "No playable lessons",
-                subtitle = "Return to the course overview and try again when lesson content is available.",
+                subtitle = "Return to the course overview and try again later.",
             )
-            OutlinedButton(onClick = onBackToOverview) {
-                Text("Back to course")
-            }
+            OutlinedButton(onClick = onBackToOverview) { Text("Back to course") }
         }
         return
     }
 
-    val item = lessons[activeLessonIndex]
-    val completed = isLessonCompleted(
-        index = activeLessonIndex,
-        item = item,
-        serverCompletedCount = progress?.completedLessons ?: 0,
-        locallyCompletedLessonIds = locallyCompletedLessonIds,
+    val activeLesson = lessons[activeIndex]
+    val isCompleted = lessonCompleted(
+        activeIndex,
+        activeLesson,
+        progress?.completedLessons ?: 0,
+        localCompletedIds,
     )
-    val completedCount = resolvedCompletedCount(
-        lessons = lessons,
-        serverCompletedCount = progress?.completedLessons ?: 0,
-        locallyCompletedLessonIds = locallyCompletedLessonIds,
+    val completed = completedCount(
+        lessons,
+        progress?.completedLessons ?: 0,
+        localCompletedIds,
     )
-    val progressPercent = resolvedProgressPercent(
-        totalLessons = lessons.size,
-        completedCount = completedCount,
-        serverProgress = progress,
-    )
-    val isLast = activeLessonIndex == lessons.lastIndex
-    val isSaving = savingLessonId == item.lessonId
+    val percent = progressPercent(lessons.size, completed, progress)
+    val isLast = activeIndex == lessons.lastIndex
+    val isSaving = savingLessonId == activeLesson.lessonId
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = course.title ?: "Course",
                     style = MaterialTheme.typography.labelLarge,
@@ -515,14 +449,10 @@ private fun CoursePlayer(
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                 )
-                Text(
-                    text = "$progressPercent%",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = LyoPurple,
-                )
+                Text("$percent%", color = LyoPurple, fontWeight = FontWeight.Bold)
             }
             LinearProgressIndicator(
-                progress = progressPercent / 100f,
+                progress = percent / 100f,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
@@ -530,7 +460,7 @@ private fun CoursePlayer(
                     .clip(CircleShape),
             )
             Text(
-                text = "Lesson ${activeLessonIndex + 1} of ${lessons.size}",
+                text = "Lesson ${activeIndex + 1} of ${lessons.size}",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 8.dp),
@@ -539,14 +469,14 @@ private fun CoursePlayer(
 
         if (progressWarning != null) {
             InlineMessage(
-                message = progressWarning,
+                progressWarning,
                 warning = true,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
         if (actionError != null) {
             InlineMessage(
-                message = actionError,
+                actionError,
                 warning = false,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
@@ -557,7 +487,7 @@ private fun CoursePlayer(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.weight(1f),
         ) {
-            item.moduleTitle?.takeIf { it.isNotBlank() }?.let { moduleTitle ->
+            activeLesson.moduleTitle?.takeIf(String::isNotBlank)?.let { moduleTitle ->
                 item {
                     Text(
                         text = moduleTitle.uppercase(),
@@ -566,34 +496,31 @@ private fun CoursePlayer(
                     )
                 }
             }
-
             item {
                 Text(
-                    text = item.lesson.title ?: "Lesson ${activeLessonIndex + 1}",
+                    text = activeLesson.lesson.title ?: "Lesson ${activeIndex + 1}",
                     style = MaterialTheme.typography.headlineMedium,
                     color = TextPrimary,
                 )
             }
-
             item {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    val content = item.lesson.content?.trim().orEmpty()
-                    if (content.isNotEmpty()) {
-                        Text(
-                            text = content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextPrimary,
-                            modifier = Modifier.padding(18.dp),
-                        )
-                    } else {
-                        Column(modifier = Modifier.padding(18.dp)) {
+                    val content = activeLesson.lesson.content?.trim().orEmpty()
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        if (content.isNotEmpty()) {
+                            Text(
+                                text = content,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextPrimary,
+                            )
+                        } else {
                             Text(
                                 text = "Lesson content unavailable",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TextPrimary,
                             )
                             Text(
-                                text = "This lesson record exists, but the backend did not provide instructional content.",
+                                text = "The backend returned this lesson without instructional content.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSecondary,
                                 modifier = Modifier.padding(top = 6.dp),
@@ -602,27 +529,25 @@ private fun CoursePlayer(
                     }
                 }
             }
-
             item {
                 Text(
                     text = "Course outline",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
-
-            itemsIndexed(lessons) { index, outlineItem ->
-                LessonListRow(
+            itemsIndexed(lessons) { index, outlineLesson ->
+                LessonRow(
                     index = index,
-                    item = outlineItem,
-                    completed = isLessonCompleted(
-                        index = index,
-                        item = outlineItem,
-                        serverCompletedCount = progress?.completedLessons ?: 0,
-                        locallyCompletedLessonIds = locallyCompletedLessonIds,
+                    lessonItem = outlineLesson,
+                    completed = lessonCompleted(
+                        index,
+                        outlineLesson,
+                        progress?.completedLessons ?: 0,
+                        localCompletedIds,
                     ),
-                    current = index == activeLessonIndex,
+                    current = index == activeIndex,
                     onClick = { onSelectLesson(index) },
                 )
             }
@@ -630,7 +555,6 @@ private fun CoursePlayer(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Surface)
@@ -638,16 +562,15 @@ private fun CoursePlayer(
         ) {
             OutlinedButton(
                 onClick = onPrevious,
-                enabled = activeLessonIndex > 0 && savingLessonId == null,
+                enabled = activeIndex > 0 && savingLessonId == null,
                 modifier = Modifier.weight(0.38f),
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                 Text("Previous", modifier = Modifier.padding(start = 4.dp))
             }
-
             Button(
-                onClick = { onCompleteOrAdvance(activeLessonIndex, item) },
-                enabled = savingLessonId == null || isSaving,
+                onClick = { onPrimaryAction(activeIndex, activeLesson) },
+                enabled = savingLessonId == null,
                 modifier = Modifier.weight(0.62f),
                 colors = ButtonDefaults.buttonColors(containerColor = LyoPurple),
             ) {
@@ -660,8 +583,8 @@ private fun CoursePlayer(
                         )
                         Text("Saving…", modifier = Modifier.padding(start = 8.dp))
                     }
-                    completed && isLast -> Text("Back to course")
-                    completed -> {
+                    isCompleted && isLast -> Text("Back to course")
+                    isCompleted -> {
                         Text("Next lesson")
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowForward,
@@ -685,9 +608,40 @@ private fun CoursePlayer(
 }
 
 @Composable
-private fun LessonListRow(
+private fun ProgressCard(completedCount: Int, totalLessons: Int, percent: Int) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (percent > 0) "Course progress" else "Ready to begin",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                    )
+                    Text(
+                        text = "$completedCount of $totalLessons lessons complete",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
+                Text("$percent%", color = LyoPurple, fontWeight = FontWeight.Bold)
+            }
+            LinearProgressIndicator(
+                progress = percent / 100f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .height(7.dp)
+                    .clip(CircleShape),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LessonRow(
     index: Int,
-    item: CourseLessonItem,
+    lessonItem: CourseLessonItem,
     completed: Boolean,
     current: Boolean,
     onClick: () -> Unit,
@@ -734,7 +688,7 @@ private fun LessonListRow(
                     .weight(1f)
                     .padding(start = 12.dp),
             ) {
-                item.moduleTitle?.takeIf { it.isNotBlank() }?.let { moduleTitle ->
+                lessonItem.moduleTitle?.takeIf(String::isNotBlank)?.let { moduleTitle ->
                     Text(
                         text = moduleTitle,
                         style = MaterialTheme.typography.labelSmall,
@@ -743,7 +697,7 @@ private fun LessonListRow(
                     )
                 }
                 Text(
-                    text = item.lesson.title ?: "Lesson ${index + 1}",
+                    text = lessonItem.lesson.title ?: "Lesson ${index + 1}",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
                     maxLines = 2,
@@ -753,8 +707,8 @@ private fun LessonListRow(
                 Text(
                     text = "CURRENT",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
                     color = LyoPurple,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
@@ -794,10 +748,7 @@ private fun InlineMessage(
 }
 
 @Composable
-private fun LoadFailure(
-    message: String,
-    onRetry: () -> Unit,
-) {
+private fun LoadFailure(message: String, onRetry: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -805,10 +756,7 @@ private fun LoadFailure(
             .fillMaxSize()
             .padding(24.dp),
     ) {
-        EmptyState(
-            title = "Unable to open course",
-            subtitle = message,
-        )
+        EmptyState(title = "Unable to open course", subtitle = message)
         Button(
             onClick = onRetry,
             modifier = Modifier.padding(top = 16.dp),
@@ -825,49 +773,49 @@ private fun CourseDto.flattenLessons(): List<CourseLessonItem> {
             CourseLessonItem(moduleTitle = module.title, lesson = lesson)
         }
     }
-    return moduleLessons.takeIf { it.isNotEmpty() }
-        ?: lessons.orEmpty().map { lesson -> CourseLessonItem(moduleTitle = null, lesson = lesson) }
+    return moduleLessons.takeIf(List<CourseLessonItem>::isNotEmpty)
+        ?: lessons.orEmpty().map { CourseLessonItem(moduleTitle = null, lesson = it) }
 }
 
-private fun isLessonCompleted(
+private fun lessonCompleted(
     index: Int,
-    item: CourseLessonItem,
+    lessonItem: CourseLessonItem,
     serverCompletedCount: Int,
-    locallyCompletedLessonIds: Set<String>,
+    localCompletedIds: Set<String>,
 ): Boolean {
-    // The backend progress model currently exposes a sequential completed count,
-    // not completed lesson IDs. Course order is therefore the canonical resume order.
+    // The canonical progress response currently exposes a sequential count rather
+    // than completed lesson IDs, so course order is the server-backed resume order.
     return index < serverCompletedCount.coerceAtLeast(0) ||
-        item.lessonId?.let(locallyCompletedLessonIds::contains) == true
+        lessonItem.lessonId?.let(localCompletedIds::contains) == true
 }
 
-private fun resolvedCompletedCount(
+private fun completedCount(
     lessons: List<CourseLessonItem>,
     serverCompletedCount: Int,
-    locallyCompletedLessonIds: Set<String>,
+    localCompletedIds: Set<String>,
 ): Int {
-    val localOnly = lessons.count { item ->
-        item.lessonId?.let(locallyCompletedLessonIds::contains) == true
+    val localCount = lessons.count { lesson ->
+        lesson.lessonId?.let(localCompletedIds::contains) == true
     }
-    return maxOf(serverCompletedCount, localOnly).coerceIn(0, lessons.size)
+    return maxOf(serverCompletedCount, localCount).coerceIn(0, lessons.size)
 }
 
-private fun resolvedProgressPercent(
+private fun progressPercent(
     totalLessons: Int,
     completedCount: Int,
     serverProgress: CourseProgressDto?,
 ): Int {
     if (totalLessons <= 0) return 0
-    val localPercent = ((completedCount.toDouble() / totalLessons.toDouble()) * 100.0).toInt()
+    val localPercent = ((completedCount.toDouble() / totalLessons) * 100).toInt()
     return maxOf(serverProgress?.normalizedPercent ?: 0, localPercent).coerceIn(0, 100)
 }
 
 private fun Throwable.learningMessage(fallback: String): String = when (this) {
     is HttpException -> when (code()) {
-        401 -> "Your session expired. Sign in again to continue saving progress."
-        403 -> "This account does not have access to update this course."
+        401 -> "Your session expired. Sign in again to save progress."
+        403 -> "This account cannot update this course."
         404 -> "The requested learning record was not found."
-        else -> message().takeIf { it.isNotBlank() } ?: fallback
+        else -> message().takeIf(String::isNotBlank) ?: fallback
     }
-    else -> localizedMessage?.takeIf { it.isNotBlank() } ?: fallback
+    else -> localizedMessage?.takeIf(String::isNotBlank) ?: fallback
 }
