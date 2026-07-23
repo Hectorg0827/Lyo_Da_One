@@ -24,12 +24,26 @@ const contracts = [
       'api/v1/chat/conversations',
       'createAiConversation',
       'aiConversation',
+      'uploadMedia',
     ],
   },
   {
     name: 'Android stream',
     path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
     needles: ['conversation_id', 'client_message_id', 'ChatStreamEvent.Conversation'],
+  },
+  {
+    name: 'Android multimodal chat UI',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
+    needles: [
+      'RecognizerIntent.ACTION_RECOGNIZE_SPEECH',
+      'TextToSpeech',
+      'ApiClient.api.uploadMedia',
+      'folder = "chat"',
+      'buildChatContent',
+      'parseChatContent',
+      'completed?'
+    ].filter((needle) => needle !== 'completed?'),
   },
   {
     name: 'iOS stream request',
@@ -62,4 +76,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('Chat continuity contract: web, Android, and iOS share canonical server history and idempotent turn IDs.');
+console.log('Chat continuity contract: web, Android, and iOS share canonical server history and idempotent turn IDs; Android media and voice input remain wired.');
