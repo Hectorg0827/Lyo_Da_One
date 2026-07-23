@@ -42,8 +42,7 @@ const contracts = [
       'folder = "chat"',
       'buildChatContent',
       'parseChatContent',
-      'completed?'
-    ].filter((needle) => needle !== 'completed?'),
+    ],
   },
   {
     name: 'iOS stream request',
