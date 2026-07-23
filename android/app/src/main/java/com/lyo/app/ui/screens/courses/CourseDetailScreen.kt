@@ -556,11 +556,25 @@ private fun flattenLessons(course: CourseDto?): List<CourseLesson> {
 private fun completionIdsFromProgress(
     lessons: List<CourseLesson>,
     progress: CourseProgressDto,
-): Set<String> = lessons
-    .take(progress.completedLessons.coerceIn(0, lessons.size))
-    .map { it.lesson.idString }
-    .filter { it.isNotBlank() }
-    .toSet()
+): Set<String> {
+    val knownLessonIds = lessons
+        .map { it.lesson.idString }
+        .filter { it.isNotBlank() }
+        .toSet()
+    val canonicalIds = progress.completedLessonIdStrings.intersect(knownLessonIds)
+
+    // New backends return exact completion IDs. The ordered-count fallback is
+    // retained only for deployments that predate the canonical ID field.
+    if (canonicalIds.isNotEmpty() || progress.completedLessons == 0) {
+        return canonicalIds
+    }
+
+    return lessons
+        .take(progress.completedLessons.coerceIn(0, lessons.size))
+        .map { it.lesson.idString }
+        .filter { it.isNotBlank() }
+        .toSet()
+}
 
 private fun resumeIndex(lessons: List<CourseLesson>, progress: CourseProgressDto): Int {
     if (lessons.isEmpty()) return 0
