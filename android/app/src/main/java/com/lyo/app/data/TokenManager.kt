@@ -27,10 +27,15 @@ object TokenManager {
         get() = prefs.getString(KEY_REFRESH, null)
         set(value) = prefs.edit().putString(KEY_REFRESH, value).apply()
 
+    /** Replace the complete token pair so an older refresh token cannot leak into a new session. */
     fun setTokens(access: String, refresh: String?) {
-        val editor = prefs.edit().putString(KEY_ACCESS, access)
-        if (refresh != null) editor.putString(KEY_REFRESH, refresh)
-        editor.apply()
+        prefs.edit()
+            .putString(KEY_ACCESS, access)
+            .apply {
+                if (refresh == null) remove(KEY_REFRESH)
+                else putString(KEY_REFRESH, refresh)
+            }
+            .apply()
     }
 
     fun clear() {
