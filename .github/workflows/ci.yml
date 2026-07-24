@@ -73,6 +73,9 @@ jobs:
       - name: Verify Android Community reliability
         run: node scripts/verify-android-community-reliability.mjs
 
+      - name: Verify Android post detail reliability
+        run: node scripts/verify-android-post-detail-reliability.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
