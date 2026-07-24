@@ -2,7 +2,6 @@ package com.lyo.app.ui.screens.community
 
 import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -257,10 +256,11 @@ fun ReliablePostDetailScreen(nav: NavHostController, postId: String) {
                     CommunityCommentRequest(draft),
                 )
             }.onSuccess { created ->
+                val priorCount = post?.commentCount ?: comments.size
                 comments = listOf(created) + comments
                 commentsLoaded = true
                 commentText = ""
-                post = post?.copy(commentCount = (post?.commentCount ?: comments.size - 1) + 1)
+                post = post?.copy(commentCount = priorCount + 1)
             }.onFailure {
                 commentActionError = postDetailFailureMessage(it, "post this comment")
             }
@@ -382,10 +382,10 @@ fun ReliablePostDetailScreen(nav: NavHostController, postId: String) {
                             LoadingBox(modifier = Modifier.height(160.dp))
                         }
                         commentsError != null && comments.isEmpty() && !commentsLoaded -> item {
-                            InlineSourceError(
-                                title = "Comments could not be loaded",
-                                message = commentsError.orEmpty(),
-                                onRetry = { commentsReload++ },
+                            PostDetailInlineSourceError(
+                                "Comments could not be loaded",
+                                commentsError.orEmpty(),
+                                { commentsReload++ },
                             )
                         }
                         commentsLoaded && comments.isEmpty() -> item {
@@ -397,10 +397,10 @@ fun ReliablePostDetailScreen(nav: NavHostController, postId: String) {
                         else -> {
                             commentsError?.let { message ->
                                 item {
-                                    InlineSourceError(
-                                        title = "Comments may be out of date",
-                                        message = message,
-                                        onRetry = { commentsReload++ },
+                                    PostDetailInlineSourceError(
+                                        "Comments may be out of date",
+                                        message,
+                                        { commentsReload++ },
                                     )
                                 }
                             }
