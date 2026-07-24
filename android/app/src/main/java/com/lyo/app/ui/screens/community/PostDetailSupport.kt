@@ -13,7 +13,7 @@ import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 
-internal val InlineSourceError: @Composable (
+internal val PostDetailInlineSourceError: @Composable (
     title: String,
     message: String,
     onRetry: () -> Unit,
