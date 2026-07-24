@@ -64,6 +64,9 @@ jobs:
       - name: Verify Android Stories reliability
         run: node scripts/verify-android-stories-reliability.mjs
 
+      - name: Verify Android auth session integrity
+        run: node scripts/verify-android-auth-session-integrity.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14

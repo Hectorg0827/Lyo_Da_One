@@ -1,5 +1,6 @@
 package com.lyo.app.ui.screens.auth
 
+import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +47,10 @@ import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 @Composable
 fun SignupScreen(nav: NavHostController) {
@@ -59,9 +64,21 @@ fun SignupScreen(nav: NavHostController) {
 
     fun submit() {
         if (loading) return
+
+        val normalizedName = displayName.trim()
+        val normalizedEmail = email.trim()
         when {
-            displayName.isBlank() || email.isBlank() || password.isBlank() -> {
+            normalizedName.isBlank() || normalizedEmail.isBlank() ||
+                password.isBlank() || confirmPassword.isBlank() -> {
                 error = "Please fill in all fields."
+                return
+            }
+            normalizedName.length < 2 -> {
+                error = "Enter a display name with at least 2 characters."
+                return
+            }
+            !Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches() -> {
+                error = "Enter a valid email address."
                 return
             }
             password.length < 8 -> {
@@ -73,14 +90,17 @@ fun SignupScreen(nav: NavHostController) {
                 return
             }
         }
+
         error = null
         loading = true
         scope.launch {
             try {
-                Session.signup(email.trim(), password, displayName.trim())
+                Session.signup(normalizedEmail, password, normalizedName)
                 nav.navigate(Routes.HOME) { popUpTo(0) }
-            } catch (e: Exception) {
-                error = "Could not create your account. Please try again."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error = signupFailureMessage(failure)
             } finally {
                 loading = false
             }
@@ -116,9 +136,9 @@ fun SignupScreen(nav: NavHostController) {
 
         Spacer(Modifier.height(28.dp))
 
-        error?.let {
+        error?.let { message ->
             Text(
-                text = it,
+                text = message,
                 color = LyoRed,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -130,32 +150,48 @@ fun SignupScreen(nav: NavHostController) {
 
         SignupField(
             value = displayName,
-            onValueChange = { displayName = it },
+            onValueChange = {
+                displayName = it
+                error = null
+            },
             label = "Display name",
             keyboardType = KeyboardType.Text,
+            enabled = !loading,
         )
         Spacer(Modifier.height(14.dp))
         SignupField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = {
+                email = it
+                error = null
+            },
             label = "Email",
             keyboardType = KeyboardType.Email,
+            enabled = !loading,
         )
         Spacer(Modifier.height(14.dp))
         SignupField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = {
+                password = it
+                error = null
+            },
             label = "Password (min 8 characters)",
             keyboardType = KeyboardType.Password,
             isPassword = true,
+            enabled = !loading,
         )
         Spacer(Modifier.height(14.dp))
         SignupField(
             value = confirmPassword,
-            onValueChange = { confirmPassword = it },
+            onValueChange = {
+                confirmPassword = it
+                error = null
+            },
             label = "Confirm password",
             keyboardType = KeyboardType.Password,
             isPassword = true,
+            enabled = !loading,
         )
 
         Spacer(Modifier.height(24.dp))
@@ -192,7 +228,7 @@ fun SignupScreen(nav: NavHostController) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .clickable { nav.navigate(Routes.LOGIN) }
+                .clickable(enabled = !loading) { nav.navigate(Routes.LOGIN) }
                 .padding(8.dp),
         )
     }
@@ -205,15 +241,17 @@ private fun SignupField(
     label: String,
     keyboardType: KeyboardType,
     isPassword: Boolean = false,
+    enabled: Boolean = true,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         singleLine = true,
+        enabled = enabled,
         visualTransformation =
             if (isPassword) PasswordVisualTransformation()
-            else androidx.compose.ui.text.input.VisualTransformation.None,
+            else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
@@ -225,4 +263,15 @@ private fun SignupField(
         ),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+private fun signupFailureMessage(error: Throwable): String = when (error) {
+    is HttpException -> when (error.code()) {
+        400, 409, 422 -> "That email or account information cannot be used. Review it and try again."
+        429 -> "Too many signup attempts. Wait a moment and try again."
+        in 500..599 -> "LYO's account service is unavailable. Try again shortly."
+        else -> "Account creation failed (${error.code()}). Please try again."
+    }
+    is IOException -> "Check your connection and try creating the account again."
+    else -> error.localizedMessage ?: "Account creation could not be completed."
 }

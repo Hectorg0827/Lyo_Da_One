@@ -1,5 +1,8 @@
 package com.lyo.app.ui.navigation
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -7,25 +10,33 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lyo.app.data.RecentCourseStore
-import com.lyo.app.data.TokenManager
+import com.lyo.app.data.Session
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
@@ -49,7 +60,9 @@ import com.lyo.app.ui.screens.stories.StoriesScreen
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
+import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
 
 object Routes {
     const val LOGIN = "login"
@@ -96,6 +109,18 @@ private val bottomItems = listOf(
 
 @Composable
 fun LyoApp() {
+    when {
+        Session.isLoading -> SessionLoadingScreen()
+        Session.hydrationError != null -> SessionRecoveryScreen(
+            message = Session.hydrationError
+                ?: "LYO could not verify your saved session.",
+        )
+        else -> LyoNavHost()
+    }
+}
+
+@Composable
+private fun LyoNavHost() {
     val nav: NavHostController = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -136,7 +161,7 @@ fun LyoApp() {
     ) { padding ->
         NavHost(
             navController = nav,
-            startDestination = if (TokenManager.hasToken) Routes.HOME else Routes.LOGIN,
+            startDestination = if (Session.isAuthenticated) Routes.HOME else Routes.LOGIN,
             modifier = Modifier.padding(padding),
         ) {
             composable(Routes.LOGIN) { LoginScreen(nav) }
@@ -176,6 +201,61 @@ fun LyoApp() {
             composable(Routes.MESSAGES) { MessagesScreen(nav) }
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(nav) }
             composable(Routes.SETTINGS) { SettingsScreen(nav) }
+        }
+    }
+}
+
+@Composable
+private fun SessionLoadingScreen() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+    ) {
+        CircularProgressIndicator(color = LyoPurple)
+        Text(
+            text = "Verifying your LYO session…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun SessionRecoveryScreen(message: String) {
+    val scope = rememberCoroutineScope()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+    ) {
+        Text(
+            text = "Session verification failed",
+            style = MaterialTheme.typography.headlineSmall,
+            color = TextPrimary,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Button(
+            onClick = { scope.launch { Session.hydrate() } },
+            modifier = Modifier.padding(top = 20.dp),
+        ) {
+            Text("Retry")
+        }
+        TextButton(onClick = { scope.launch { Session.logout() } }) {
+            Text("Sign out")
         }
     }
 }
