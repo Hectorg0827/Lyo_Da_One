@@ -70,6 +70,9 @@ jobs:
       - name: Verify Android Clips reliability
         run: node scripts/verify-android-clips-reliability.mjs
 
+      - name: Verify Android Community reliability
+        run: node scripts/verify-android-community-reliability.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14

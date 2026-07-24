@@ -41,9 +41,9 @@ import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
-import com.lyo.app.ui.screens.community.CommunityScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.PostDetailScreen
+import com.lyo.app.ui.screens.community.ReliableCommunityScreen
 import com.lyo.app.ui.screens.create.CreateClipScreen
 import com.lyo.app.ui.screens.create.CreateCommunityItemScreen
 import com.lyo.app.ui.screens.create.CreatePostScreen
@@ -168,7 +168,7 @@ private fun LyoNavHost() {
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
             composable(Routes.CHAT) { ChatScreen(nav) }
-            composable(Routes.COMMUNITY) { CommunityScreen(nav) }
+            composable(Routes.COMMUNITY) { ReliableCommunityScreen(nav) }
             composable(Routes.POST_DETAIL) { entry ->
                 PostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")
             }
