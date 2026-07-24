@@ -73,6 +73,9 @@ jobs:
       - name: Verify Android Community reliability
         run: node scripts/verify-android-community-reliability.mjs
 
+      - name: Verify Android post detail reliability
+        run: node scripts/verify-android-post-detail-reliability.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
@@ -151,8 +154,26 @@ jobs:
           gradle-version: "8.7"
 
       - name: Build debug APK
+        id: android-build
+        continue-on-error: true
         working-directory: android
-        run: gradle assembleDebug --no-daemon
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon 2>&1 | tee android-build.log
+
+      - name: Upload Android compiler diagnostics
+        if: steps.android-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-diagnostics
+          path: android/android-build.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce Android build result
+        if: steps.android-build.outcome == 'failure'
+        run: exit 1
 
   web:
     name: Typecheck & Build (Web)
