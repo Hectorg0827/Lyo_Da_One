@@ -13,12 +13,11 @@ import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 
-@Composable
-internal fun InlineSourceError(
+internal val InlineSourceError: @Composable (
     title: String,
     message: String,
     onRetry: () -> Unit,
-) {
+) -> Unit = { title, message, onRetry ->
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
