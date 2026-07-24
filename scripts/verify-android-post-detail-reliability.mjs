@@ -30,8 +30,11 @@ for (const [source, text] of required) {
 for (const forbidden of ['.getOrNull()', 'liked = !wasLiked', 'bookmarked = !wasBookmarked', 'https://lyoapp.com/']) {
   if (detail.includes(forbidden)) throw new Error(`Forbidden unreliable post-detail pattern: ${forbidden}`);
 }
-if (navigation.includes('PostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")')) {
-  throw new Error('Legacy post detail is still active.');
+if (navigation.includes('import com.lyo.app.ui.screens.community.PostDetailScreen')) {
+  throw new Error('Legacy post detail import is still active.');
+}
+if (navigation.includes('\n                PostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")')) {
+  throw new Error('Legacy post detail route is still active.');
 }
 
 function assertMutationAfterSuccess(requestText, successText, mutationText, label) {
