@@ -27,7 +27,7 @@ for (const [source, expected, label] of [
   [community, 'var postsLoaded by remember { mutableStateOf(false) }', 'confirmed post load state'],
   [community, 'var groupsLoaded by remember { mutableStateOf(false) }', 'confirmed group load state'],
   [community, 'var eventsLoaded by remember { mutableStateOf(false) }', 'confirmed event load state'],
-  [community, 'postsError != null && posts.isEmpty() && !loaded', 'post error before empty state'],
+  [community, 'error != null && posts.isEmpty() && !loaded', 'post error before empty state'],
   [community, 'loaded && posts.isEmpty()', 'confirmed post empty state'],
   [community, 'val response = ApiClient.api.toggleCommunityPostLike(id)', 'post like request'],
   [community, 'val confirmedLiked = response.liked', 'confirmed like state'],
