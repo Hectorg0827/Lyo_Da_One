@@ -151,26 +151,48 @@ fun ClipsScreen(nav: NavHostController) {
         loading = false
     }
 
-    fun likeClip(id: String) {
-        if (id.isBlank() || id in likedIds || id in pendingLikeIds) return
+    fun toggleLike(id: String) {
+        if (id.isBlank() || id in pendingLikeIds) return
         pendingLikeIds = pendingLikeIds + id
         interactionError = null
         scope.launch {
-            runCatching { ApiClient.api.likeClip(id) }
-                .onSuccess { likedIds = likedIds + id }
-                .onFailure { interactionError = clipFailureMessage(it, "like this clip") }
+            runCatching {
+                val response = ApiClient.api.likeClip(id)
+                val confirmedLiked = response.get("isLiked")?.asBoolean
+                    ?: throw IllegalStateException("The like response did not include its confirmed state")
+                val confirmedCount = response.get("likeCount")?.asInt
+                confirmedLiked to confirmedCount
+            }.onSuccess { (confirmedLiked, confirmedCount) ->
+                likedIds = if (confirmedLiked) likedIds + id else likedIds - id
+                if (confirmedCount != null) {
+                    clips = clips.map { clip ->
+                        if (clip.idStr == id) clip.copy(likeCount = confirmedCount) else clip
+                    }
+                }
+            }.onFailure {
+                interactionError = clipFailureMessage(it, "update this like")
+            }
             pendingLikeIds = pendingLikeIds - id
         }
     }
 
-    fun saveClip(id: String) {
-        if (id.isBlank() || id in savedIds || id in pendingSaveIds) return
+    fun toggleSave(id: String) {
+        if (id.isBlank() || id in pendingSaveIds) return
         pendingSaveIds = pendingSaveIds + id
         interactionError = null
         scope.launch {
-            runCatching { ApiClient.api.saveClip(id) }
-                .onSuccess { savedIds = savedIds + id }
-                .onFailure { interactionError = clipFailureMessage(it, "save this clip") }
+            runCatching {
+                val response = ApiClient.api.saveClip(id)
+                if (response.get("success")?.asBoolean == false) {
+                    throw IllegalStateException("The save request was not accepted")
+                }
+                response.get("isSaved")?.asBoolean
+                    ?: throw IllegalStateException("The save response did not include its confirmed state")
+            }.onSuccess { confirmedSaved ->
+                savedIds = if (confirmedSaved) savedIds + id else savedIds - id
+            }.onFailure {
+                interactionError = clipFailureMessage(it, "update this saved clip")
+            }
             pendingSaveIds = pendingSaveIds - id
         }
     }
@@ -180,14 +202,23 @@ fun ClipsScreen(nav: NavHostController) {
         pendingViewIds = pendingViewIds + id
         failedViewIds = failedViewIds - id
         scope.launch {
-            runCatching { ApiClient.api.viewClip(id) }
-                .onSuccess {
-                    viewedIds = viewedIds + id
-                    failedViewIds = failedViewIds - id
+            runCatching {
+                val response = ApiClient.api.viewClip(id)
+                if (response.get("success")?.asBoolean != true) {
+                    throw IllegalStateException("The view was not recorded")
                 }
-                .onFailure {
-                    failedViewIds = failedViewIds + id
+                response.get("viewCount")?.asInt
+            }.onSuccess { confirmedCount ->
+                viewedIds = viewedIds + id
+                failedViewIds = failedViewIds - id
+                if (confirmedCount != null) {
+                    clips = clips.map { clip ->
+                        if (clip.idStr == id) clip.copy(viewCount = confirmedCount) else clip
+                    }
                 }
+            }.onFailure {
+                failedViewIds = failedViewIds + id
+            }
             pendingViewIds = pendingViewIds - id
         }
     }
@@ -233,10 +264,9 @@ fun ClipsScreen(nav: NavHostController) {
                         likePending = id in pendingLikeIds,
                         savePending = id in pendingSaveIds,
                         viewSyncFailed = id in failedViewIds,
-                        likeCount = (clip.likeCount ?: 0) +
-                            (if (id in likedIds && clip.isLiked != true) 1 else 0),
-                        onLike = { likeClip(id) },
-                        onSave = { saveClip(id) },
+                        likeCount = clip.likeCount ?: 0,
+                        onLike = { toggleLike(id) },
+                        onSave = { toggleSave(id) },
                         onRetryView = { syncView(id) },
                         onComments = { commentsClipId = id },
                         onShare = {
@@ -249,10 +279,14 @@ fun ClipsScreen(nav: NavHostController) {
                             }
                             context.startActivity(Intent.createChooser(send, "Share clip"))
                             scope.launch {
-                                runCatching { ApiClient.api.shareClip(id) }
-                                    .onFailure {
-                                        interactionError = "The clip was shared, but LYO could not sync the share count."
+                                runCatching {
+                                    val response = ApiClient.api.shareClip(id)
+                                    if (response.get("success")?.asBoolean != true) {
+                                        throw IllegalStateException("The share count was not recorded")
                                     }
+                                }.onFailure {
+                                    interactionError = "The clip was shared, but LYO could not sync the share count."
+                                }
                             }
                         },
                     )
@@ -363,7 +397,7 @@ private fun PublishClipDialog(videoUri: Uri, onDismiss: () -> Unit, onPublished:
                     folder = "clips".toRequestBody("text/plain".toMediaType()),
                 )
                 val url = uploaded.url ?: throw IllegalStateException("The upload did not return a media URL")
-                ApiClient.api.createClip(
+                val created = ApiClient.api.createClip(
                     ClipCreateRequest(
                         title = normalizedTitle,
                         videoUrl = url,
@@ -373,6 +407,9 @@ private fun PublishClipDialog(videoUri: Uri, onDismiss: () -> Unit, onPublished:
                         },
                     ),
                 )
+                if (created.success != true || created.clip == null) {
+                    throw IllegalStateException("The clip was not confirmed by the server")
+                }
             }.onSuccess {
                 onPublished()
             }.onFailure {
@@ -787,7 +824,7 @@ private fun ClipPage(
                 .padding(end = 10.dp, bottom = 32.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onLike, enabled = !liked && !likePending) {
+                IconButton(onClick = onLike, enabled = !likePending) {
                     if (likePending) {
                         CircularProgressIndicator(
                             color = Color.White,
@@ -797,7 +834,7 @@ private fun ClipPage(
                     } else {
                         Icon(
                             if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Like",
+                            contentDescription = if (liked) "Unlike" else "Like",
                             tint = if (liked) LyoPink else Color.White,
                             modifier = Modifier.size(30.dp),
                         )
@@ -832,7 +869,7 @@ private fun ClipPage(
                 Text("Share", style = MaterialTheme.typography.labelMedium, color = Color.White)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onSave, enabled = !saved && !savePending) {
+                IconButton(onClick = onSave, enabled = !savePending) {
                     if (savePending) {
                         CircularProgressIndicator(
                             color = Color.White,
@@ -842,7 +879,7 @@ private fun ClipPage(
                     } else {
                         Icon(
                             if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = "Save",
+                            contentDescription = if (saved) "Remove saved clip" else "Save",
                             tint = Color.White,
                             modifier = Modifier.size(28.dp),
                         )
