@@ -1,5 +1,6 @@
 package com.lyo.app.ui.screens.auth
 
+import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,7 +52,10 @@ import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 @Composable
 fun LoginScreen(nav: NavHostController) {
@@ -64,18 +68,29 @@ fun LoginScreen(nav: NavHostController) {
 
     fun submit() {
         if (loading) return
-        if (email.isBlank() || password.isBlank()) {
-            error = "Please fill in all fields."
-            return
+
+        val normalizedEmail = email.trim()
+        when {
+            normalizedEmail.isBlank() || password.isBlank() -> {
+                error = "Please fill in all fields."
+                return
+            }
+            !Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches() -> {
+                error = "Enter a valid email address."
+                return
+            }
         }
+
         error = null
         loading = true
         scope.launch {
             try {
-                Session.login(email.trim(), password)
+                Session.login(normalizedEmail, password)
                 nav.navigate(Routes.HOME) { popUpTo(0) }
-            } catch (e: Exception) {
-                error = "Invalid email or password."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error = loginFailureMessage(failure)
             } finally {
                 loading = false
             }
@@ -90,7 +105,6 @@ fun LoginScreen(nav: NavHostController) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 32.dp),
     ) {
-        // LYO wordmark
         Text(
             text = "LYO",
             fontSize = 52.sp,
@@ -112,9 +126,9 @@ fun LoginScreen(nav: NavHostController) {
 
         Spacer(Modifier.height(32.dp))
 
-        error?.let {
+        error?.let { message ->
             Text(
-                text = it,
+                text = message,
                 color = LyoRed,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -126,10 +140,14 @@ fun LoginScreen(nav: NavHostController) {
 
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = {
+                email = it
+                error = null
+            },
             label = { Text("Email") },
             placeholder = { Text("you@example.com") },
             singleLine = true,
+            enabled = !loading,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -146,14 +164,21 @@ fun LoginScreen(nav: NavHostController) {
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = {
+                password = it
+                error = null
+            },
             label = { Text("Password") },
             singleLine = true,
+            enabled = !loading,
             visualTransformation =
                 if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
-                IconButton(onClick = { showPassword = !showPassword }) {
+                IconButton(
+                    enabled = !loading,
+                    onClick = { showPassword = !showPassword },
+                ) {
                     Icon(
                         imageVector =
                             if (showPassword) Icons.Filled.VisibilityOff
@@ -209,8 +234,20 @@ fun LoginScreen(nav: NavHostController) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .clickable { nav.navigate(Routes.SIGNUP) }
+                .clickable(enabled = !loading) { nav.navigate(Routes.SIGNUP) }
                 .padding(8.dp),
         )
     }
+}
+
+private fun loginFailureMessage(error: Throwable): String = when (error) {
+    is HttpException -> when (error.code()) {
+        400, 401 -> "Invalid email or password."
+        403 -> "This account cannot sign in. Contact support if you believe this is an error."
+        429 -> "Too many login attempts. Wait a moment and try again."
+        in 500..599 -> "LYO's sign-in service is unavailable. Try again shortly."
+        else -> "Sign in failed (${error.code()}). Please try again."
+    }
+    is IOException -> "Check your connection and try signing in again."
+    else -> error.localizedMessage ?: "Sign in could not be completed."
 }
