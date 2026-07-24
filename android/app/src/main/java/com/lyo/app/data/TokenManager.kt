@@ -29,7 +29,11 @@ object TokenManager {
 
     fun setTokens(access: String, refresh: String?) {
         val editor = prefs.edit().putString(KEY_ACCESS, access)
-        if (refresh != null) editor.putString(KEY_REFRESH, refresh)
+        if (refresh != null) {
+            editor.putString(KEY_REFRESH, refresh)
+        } else {
+            editor.remove(KEY_REFRESH)
+        }
         editor.apply()
     }
 
