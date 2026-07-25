@@ -89,7 +89,7 @@ export default function CreateCommunityItemModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section role="dialog" aria-modal="true" aria-labelledby="create-item-title" className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-[var(--surface)] shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="create-item-title" className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/12 bg-[#0d0f18]/95 backdrop-blur-2xl shadow-2xl">
         <header className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <h2 id="create-item-title" className="text-lg font-semibold text-white">Create in Community</h2>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-5 w-5" /></button>

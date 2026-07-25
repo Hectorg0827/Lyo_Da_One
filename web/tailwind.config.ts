@@ -22,17 +22,26 @@ const config: Config = {
         },
         accent: {
           purple: '#8b5cf6', // brand.secondary
+          violet: '#a855f7', // iOS glow accent (course card / mascot FAB)
           magenta: '#d946ef', // brand.accentMagenta
           gold: '#d9b24c', // brand.accentGold
           pink: '#ec4899',
-          orange: '#f97316',
+          orange: '#ff8c00', // iOS mascot/greeting orange
           teal: '#14b8a6',
           green: '#10b981', // semantic.success
         },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['Cal Sans', 'Inter', 'system-ui', 'sans-serif'],
+        // iOS `.rounded` (SF Pro Rounded); ui-rounded on Apple, Nunito elsewhere
+        display: ['ui-rounded', 'SF Pro Rounded', 'var(--font-nunito)', 'Inter', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        // DesignTokens.Shadows.glow / accentGlow
+        'glow-accent': '0 0 12px rgba(99, 102, 241, 0.4)',
+        'glow-purple': '0 0 20px rgba(139, 92, 246, 0.5)',
+        'glow-violet': '0 0 18px rgba(168, 85, 247, 0.55)',
+        'glow-orange': '0 0 20px rgba(255, 140, 0, 0.5)',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

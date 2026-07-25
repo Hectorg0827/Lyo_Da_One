@@ -55,7 +55,7 @@ export function SkeletonCard({ className }: SkeletonCardProps) {
   return (
     <div
       className={cn(
-        'bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4',
+        'glass-card p-4',
         className,
       )}
       aria-busy="true"

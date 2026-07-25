@@ -52,7 +52,7 @@ export function Sidebar() {
       animate={{ width: collapsed ? 72 : 240 }}
       transition={{ type: 'spring', stiffness: 400, damping: 40 }}
       className={cn(
-        'hidden md:flex flex-col h-screen bg-[var(--surface)] border-r border-white/5',
+        'hidden md:flex flex-col h-screen bg-[#0d0f18]/60 backdrop-blur-2xl border-r border-white/[0.06]',
         'overflow-hidden shrink-0 relative z-20',
       )}
     >
@@ -68,7 +68,7 @@ export function Sidebar() {
               transition={{ duration: 0.15 }}
               className="flex flex-col leading-none"
             >
-              <span className="text-xl font-black bg-gradient-to-r from-[#6c63ff] to-[#8b5cf6] bg-clip-text text-transparent">
+              <span className="text-xl font-black bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
                 LYO
               </span>
               <span className="text-[10px] font-semibold text-[var(--text-secondary)] tracking-wider uppercase">
@@ -82,7 +82,7 @@ export function Sidebar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#6c63ff] to-[#8b5cf6] flex items-center justify-center shadow-lg shadow-[#6c63ff]/20"
+              className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shadow-lg shadow-[#6366f1]/20"
             >
               <span className="text-white text-xs font-black">L</span>
             </motion.div>
@@ -112,22 +112,22 @@ export function Sidebar() {
               href={href}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6c63ff]/60',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
                 isActive
-                  ? 'bg-[#6c63ff]/10 text-[#8b83ff] border-l-2 border-[#6c63ff] pl-[10px]'
+                  ? 'bg-[#6366f1]/10 text-[#a78bfa] border-l-2 border-[#6366f1] pl-[10px]'
                   : 'text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)]',
-                isAI && !isActive && 'hover:text-[#8b83ff]',
+                isAI && !isActive && 'hover:text-[#a78bfa]',
               )}
               title={collapsed ? label : undefined}
             >
               <span className={cn('shrink-0', isAI && 'relative')}>
                 {isAI && !collapsed ? (
                   <span className="relative">
-                    <span className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#6c63ff] to-[#8b5cf6] opacity-20 blur-[2px]" />
+                    <span className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] opacity-20 blur-[2px]" />
                     <Icon
                       className={cn(
                         'w-5 h-5 relative',
-                        isActive ? 'text-[#8b83ff]' : 'text-[var(--text-secondary)] group-hover:text-[#8b83ff]',
+                        isActive ? 'text-[#a78bfa]' : 'text-[var(--text-secondary)] group-hover:text-[#a78bfa]',
                       )}
                     />
                   </span>
@@ -145,7 +145,7 @@ export function Sidebar() {
                     transition={{ duration: 0.15 }}
                     className={cn(
                       'text-sm font-medium whitespace-nowrap overflow-hidden',
-                      isAI && 'bg-gradient-to-r from-[#6c63ff] to-[#8b5cf6] bg-clip-text',
+                      isAI && 'bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text',
                       isAI ? 'text-transparent' : '',
                     )}
                   >

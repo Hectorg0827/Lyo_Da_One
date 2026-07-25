@@ -326,7 +326,7 @@ export default function PostDetailPage() {
   // ── Loading state ──
   if (postLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-screen bg-[#050810] flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-lyo-400 animate-spin" />
         <span className="ml-3 text-white/50">Loading post...</span>
       </div>
@@ -336,7 +336,7 @@ export default function PostDetailPage() {
   // ── Error state ──
   if (postError || !post) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-[#050810] flex flex-col items-center justify-center gap-4">
         <p className="text-red-400">{postError || 'Post not found'}</p>
         <button
           onClick={() => router.back()}
@@ -356,7 +356,7 @@ export default function PostDetailPage() {
     .slice(0, 2);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
+    <div className="min-h-screen bg-[#050810]">
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Back button */}
         <motion.button

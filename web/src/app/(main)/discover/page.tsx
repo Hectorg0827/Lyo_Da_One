@@ -397,7 +397,7 @@ export default function DiscoverPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <h1 className="text-3xl font-black gradient-text mb-1">Discover</h1>
+          <h1 className="font-rounded text-3xl font-black gradient-text mb-1">Discover</h1>
           <p className="text-secondary text-sm">Find places, events, and classes near you</p>
         </motion.div>
 

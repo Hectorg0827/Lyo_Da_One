@@ -162,21 +162,21 @@ export default function CoursesPage() {
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex items-center justify-between mb-8"
+          className="flex items-center justify-between gap-3 mb-8"
         >
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">My Courses</h1>
+          <div className="min-w-0">
+            <h1 className="font-rounded text-3xl font-bold text-white tracking-tight">My Courses</h1>
             <p className="text-white/40 text-sm mt-1">
               {inProgressCount} in progress
               &nbsp;&middot;&nbsp;
               {completedCount} completed
             </p>
           </div>
-          <Link href="/chat">
+          <Link href="/chat" className="shrink-0">
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-lyo-600 to-lyo-500 text-white text-sm font-semibold shadow-lg shadow-lyo-600/25 hover:shadow-lyo-500/40 transition-shadow"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-lyo-600 to-lyo-500 text-white text-sm font-semibold shadow-lg shadow-lyo-600/25 hover:shadow-lyo-500/40 transition-shadow whitespace-nowrap"
             >
               <Sparkles className="w-4 h-4" />
               Create with AI

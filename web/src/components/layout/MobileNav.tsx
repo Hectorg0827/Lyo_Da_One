@@ -4,110 +4,120 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Home, BookOpen, Sparkles, Users, User } from 'lucide-react';
+import { Target, Compass, Users, SquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 
-const navItems = [
-  { href: '/', icon: Home, label: 'Home' },
-  { href: '/courses', icon: BookOpen, label: 'Courses' },
-  { href: '/chat', icon: Sparkles, label: 'LYO AI', isCenter: true },
+// Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
+// the center mascot FAB — target/Focus, compass/Discover · people/Community,
+// plus/Create. Icon-only ghost tabs with a dot indicator, mascot floats in
+// the middle with a breathing glow.
+const leftItems = [
+  { href: '/', icon: Target, label: 'Focus' },
+  { href: '/discover', icon: Compass, label: 'Discover' },
+];
+
+const rightItems = [
   { href: '/community', icon: Users, label: 'Community' },
-  { href: '/profile', icon: User, label: 'Profile' },
-] as { href: string; icon: typeof Home; label: string; isCenter?: boolean }[];
+  { href: '/courses', icon: SquarePlus, label: 'Create' },
+];
+
+function GhostTab({
+  href,
+  icon: Icon,
+  label,
+  isActive,
+}: {
+  href: string;
+  icon: typeof Target;
+  label: string;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      key={href}
+      href={href}
+      aria-label={label}
+      aria-current={isActive ? 'page' : undefined}
+      className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
+    >
+      <Icon
+        className={cn(
+          'w-6 h-6 text-white transition-all duration-200',
+          isActive
+            ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
+            : 'opacity-50',
+        )}
+      />
+      <span
+        className={cn(
+          'w-1 h-1 rounded-full bg-white transition-opacity duration-200',
+          isActive ? 'opacity-100' : 'opacity-0',
+        )}
+      />
+    </Link>
+  );
+}
 
 export function MobileNav() {
   const pathname = usePathname();
+  const isChat = pathname.startsWith('/chat');
+
+  const isItemActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   return (
     <nav
       className={cn(
         'md:hidden fixed bottom-0 left-0 right-0 z-50',
-        'bg-black/80 backdrop-blur-xl border-t border-white/10',
+        'bg-[#0d0f18]/75 backdrop-blur-2xl',
+        'border-t border-white/10',
+        'pb-[env(safe-area-inset-bottom)]',
       )}
       aria-label="Mobile navigation"
     >
-      <div className="flex items-end justify-around px-2 h-16">
-        {navItems.map(({ href, icon: Icon, label, isCenter }) => {
-          const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+      <div className="flex items-center justify-between h-20 px-6">
+        <div className="flex items-center gap-2">
+          {leftItems.map((item) => (
+            <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
+          ))}
+        </div>
 
-          if (isCenter) {
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-label={label}
-                aria-current={isActive ? 'page' : undefined}
-                className="flex flex-col items-center justify-center -mt-5"
+        {/* Center mascot FAB — floats above the bar in a glow, breathing.
+            Lyo "lives" here when not in chat and flies to the chat header
+            on tap (shared layoutId). */}
+        <Link
+          href="/chat"
+          aria-label="LYO AI"
+          aria-current={isChat ? 'page' : undefined}
+          className="relative flex items-center justify-center -mt-10"
+        >
+          <span className="absolute w-28 h-28 rounded-full mascot-fab-glow pointer-events-none" />
+          <div
+            className={cn(
+              'relative w-[70px] h-[70px] rounded-full flex items-center justify-center',
+              'animate-breathe transition-transform duration-200 active:scale-95',
+              'drop-shadow-[0_5px_10px_rgba(167,139,250,0.6)]',
+            )}
+          >
+            {!isChat && (
+              <motion.div
+                layoutId={LYO_MASCOT_LAYOUT_ID}
+                transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
+                className="flex items-center justify-center"
               >
-                <div
-                  className={cn(
-                    'w-14 h-14 rounded-2xl flex items-center justify-center',
-                    'bg-gradient-to-br from-[#6c63ff] to-[#8b5cf6]',
-                    'shadow-lg shadow-[#6c63ff]/40',
-                    'transition-all duration-200',
-                    isActive
-                      ? 'scale-105 shadow-xl shadow-[#6c63ff]/50'
-                      : 'hover:scale-105 active:scale-95',
-                  )}
-                >
-                  {/* Lyo "lives" here when not in chat — flies to the chat
-                      header on tap (shared layoutId), and back on the way out. */}
-                  {!isActive && (
-                    <motion.div
-                      layoutId={LYO_MASCOT_LAYOUT_ID}
-                      transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
-                      className="flex items-center justify-center"
-                    >
-                      <MascotAvatar idle size={34} />
-                    </motion.div>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    'text-[10px] font-semibold mt-1',
-                    isActive ? 'text-lyo-400' : 'text-gray-500',
-                  )}
-                >
-                  {label}
-                </span>
-              </Link>
-            );
-          }
+                <MascotAvatar idle size={64} />
+              </motion.div>
+            )}
+          </div>
+        </Link>
 
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-label={label}
-              aria-current={isActive ? 'page' : undefined}
-              className="flex flex-col items-center justify-center gap-1 flex-1 py-2 transition-colors"
-            >
-              <div
-                className={cn(
-                  'relative flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-200',
-                  isActive ? 'bg-[#6c63ff]/15' : 'bg-transparent',
-                )}
-              >
-                <Icon
-                  className={cn(
-                    'w-5 h-5 transition-colors',
-                    isActive ? 'text-lyo-400' : 'text-gray-500',
-                  )}
-                />
-              </div>
-              <span
-                className={cn(
-                  'text-[10px] font-medium',
-                  isActive ? 'text-lyo-400' : 'text-gray-500',
-                )}
-              >
-                {label}
-              </span>
-            </Link>
-          );
-        })}
+        <div className="flex items-center gap-2">
+          {rightItems.map((item) => (
+            <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
+          ))}
+        </div>
       </div>
     </nav>
   );

@@ -41,14 +41,14 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
             className={cn(
               'relative flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap',
               'transition-colors duration-200 shrink-0',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6c63ff]/60 focus-visible:ring-inset',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60 focus-visible:ring-inset',
               isActive
                 ? 'text-[var(--text-primary)]'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
             )}
           >
             {tab.icon && (
-              <span className={cn('w-4 h-4', isActive ? 'text-[#6c63ff]' : 'text-current')}>
+              <span className={cn('w-4 h-4', isActive ? 'text-[#6366f1]' : 'text-current')}>
                 {tab.icon}
               </span>
             )}
@@ -58,7 +58,7 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
             {isActive && (
               <motion.span
                 layoutId="tab-indicator"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6c63ff] to-[#8b5cf6] rounded-full"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] rounded-full"
                 transition={{ type: 'spring', stiffness: 500, damping: 40 }}
               />
             )}

@@ -39,7 +39,7 @@ export function TopBar() {
     <header
       className={cn(
         'sticky top-0 z-30 h-16 flex items-center gap-4 px-4 md:px-6',
-        'bg-black/60 backdrop-blur-md border-b border-white/5',
+        'bg-[#0d0f18]/60 backdrop-blur-2xl border-b border-white/[0.06]',
         'shrink-0',
       )}
     >
@@ -64,7 +64,7 @@ export function TopBar() {
               'w-full pl-9 pr-4 py-2 text-sm rounded-xl',
               'bg-[var(--surface-2)] border border-[var(--border)]',
               'text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]',
-              'focus:outline-none focus:ring-2 focus:ring-[#6c63ff]/60 focus:border-[#6c63ff]',
+              'focus:outline-none focus:ring-2 focus:ring-[#6366f1]/60 focus:border-[#6366f1]',
               'transition-all duration-200',
             )}
             aria-label="Search courses, clips, and topics"
@@ -97,7 +97,7 @@ export function TopBar() {
           <MessageSquare className="w-5 h-5" />
           {/* Count badge */}
           <span
-            className="absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-[#6c63ff] text-white text-[9px] font-bold leading-none"
+            className="absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-[#6366f1] text-white text-[9px] font-bold leading-none"
             aria-hidden="true"
           >
             2
@@ -108,7 +108,7 @@ export function TopBar() {
         <div className="relative ml-1" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen((o) => !o)}
-            className="rounded-full ring-2 ring-transparent hover:ring-[#6c63ff]/50 transition-all focus-visible:outline-none focus-visible:ring-[#6c63ff]/60"
+            className="rounded-full ring-2 ring-transparent hover:ring-[#6366f1]/50 transition-all focus-visible:outline-none focus-visible:ring-[#6366f1]/60"
             aria-label="Open profile menu"
             aria-expanded={dropdownOpen}
             aria-haspopup="menu"
@@ -126,7 +126,7 @@ export function TopBar() {
               role="menu"
               className={cn(
                 'absolute right-0 mt-2 w-48 py-1 rounded-xl',
-                'bg-[var(--surface)] border border-white/10',
+                'bg-[#0d0f18]/95 backdrop-blur-2xl border border-white/12',
                 'shadow-xl shadow-black/40',
                 'z-50',
               )}

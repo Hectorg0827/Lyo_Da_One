@@ -60,7 +60,7 @@ export default function CreatePostModal({ onClose, onSubmit }: CreatePostModalPr
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-post-title"
-        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-[var(--surface)] shadow-2xl"
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/12 bg-[#0d0f18]/95 backdrop-blur-2xl shadow-2xl"
       >
         <header className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <h2 id="create-post-title" className="text-lg font-semibold text-white">Create post</h2>

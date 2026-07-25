@@ -57,7 +57,7 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
       <div
         className="h-52 w-full relative overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, #6c63ff 0%, #8b5cf6 40%, #ec4899 80%, #f59e0b 100%)',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #ec4899 80%, #f59e0b 100%)',
         }}
       >
         {/* Decorative blobs */}
@@ -71,7 +71,7 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
         />
         <div
           className="absolute top-4 left-8 w-20 h-20 rounded-full blur-2xl opacity-30"
-          style={{ background: 'radial-gradient(circle, rgba(108,99,255,0.9), transparent)' }}
+          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.9), transparent)' }}
         />
 
         {/* Badges in cover */}
@@ -112,8 +112,8 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
             <div
               className="w-24 h-24 rounded-2xl p-[3px]"
               style={{
-                background: 'linear-gradient(135deg, #6c63ff, #ec4899)',
-                boxShadow: '0 8px 32px rgba(108,99,255,0.5)',
+                background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+                boxShadow: '0 8px 32px rgba(99,102,241,0.5)',
               }}
             >
               <div className="w-full h-full rounded-[14px] overflow-hidden" style={{ background: 'var(--surface-2)' }}>
@@ -122,7 +122,7 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
                 ) : (
                   <div
                     className="w-full h-full flex items-center justify-center text-3xl font-black text-white"
-                    style={{ background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)' }}
+                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
                   >
                     {user.displayName.charAt(0).toUpperCase()}
                   </div>
@@ -154,7 +154,7 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
                 )}
                 style={
                   !isFollowing
-                    ? { background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)', boxShadow: '0 4px 20px rgba(108,99,255,0.4)' }
+                    ? { background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 20px rgba(99,102,241,0.4)' }
                     : {}
                 }
               >
@@ -200,8 +200,8 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
           <div
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
             style={{
-              background: 'linear-gradient(135deg, rgba(108,99,255,0.25), rgba(139,92,246,0.15))',
-              border: '1px solid rgba(108,99,255,0.35)',
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.15))',
+              border: '1px solid rgba(99,102,241,0.35)',
               color: '#a78bfa',
             }}
           >
@@ -247,7 +247,7 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
           <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
             <motion.div
               className="h-full rounded-full"
-              style={{ background: 'linear-gradient(90deg, #6c63ff, #a78bfa)' }}
+              style={{ background: 'linear-gradient(90deg, #6366f1, #a78bfa)' }}
               initial={{ width: 0 }}
               animate={{ width: `${xpProgress}%` }}
               transition={{ duration: 1, ease: 'easeOut', delay: 0.5 }}
@@ -285,9 +285,9 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
                 key={interest}
                 className="text-xs px-3 py-1 rounded-full font-medium cursor-pointer hover:opacity-80 transition-opacity"
                 style={{
-                  background: 'rgba(108,99,255,0.12)',
-                  color: '#8b83ff',
-                  border: '1px solid rgba(108,99,255,0.22)',
+                  background: 'rgba(99,102,241,0.12)',
+                  color: '#a78bfa',
+                  border: '1px solid rgba(99,102,241,0.22)',
                 }}
               >
                 {interest}

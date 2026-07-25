@@ -20,12 +20,20 @@
   --lyo-300: #a78bfa;
   --accent-magenta: #d946ef;
   --accent-gold: #d9b24c;
+  --accent-orange: #ff8c00;
+  --accent-violet: #a855f7;
   --surface-highlight: #343847;
   --text-tertiary: rgba(255, 255, 255, 0.5);
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
   --info: #3b82f6;
+  /* iOS FocusView premium background layers */
+  --bg-deep-1: #050810;
+  --bg-deep-2: #0a1020;
+  --bg-deep-3: #0d0f18;
+  /* iOS `.rounded` display type (SF Pro Rounded on Apple, Nunito elsewhere) */
+  --font-display: ui-rounded, 'SF Pro Rounded', var(--font-nunito, 'Nunito'), var(--font-inter, 'Inter'), system-ui, sans-serif;
 }
 
 /* ============================================================
@@ -45,7 +53,14 @@
   }
 
   body {
-    background-color: var(--background);
+    /* Mirrors iOS FocusView.premiumBackground: deep near-black vertical
+       gradient + violet aurora (top-right) + cyan aurora (bottom-left). */
+    background-color: var(--bg-deep-1);
+    background-image:
+      radial-gradient(ellipse 60% 45% at 92% -4%, rgba(124, 58, 237, 0.22), transparent 70%),
+      radial-gradient(ellipse 55% 40% at 4% 104%, rgba(14, 165, 233, 0.12), transparent 70%),
+      linear-gradient(to bottom, var(--bg-deep-1) 0%, var(--bg-deep-2) 55%, var(--bg-deep-3) 100%);
+    background-attachment: fixed;
     color: var(--text-primary);
     font-family: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
     line-height: 1.6;
@@ -175,21 +190,24 @@
    Component Utilities
    ============================================================ */
 @layer components {
-  /* Glass Morphism */
+  /* Glass Morphism — mirrors iOS FocusFeedCardView glass spec:
+     white 6%→2.5% fill, white 12%→4% hairline, soft drop shadow. */
   .glass-card {
-    background: rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
+    background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 22px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
   }
 
   .glass-card-strong {
-    background: rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 16px;
+    background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.045));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 22px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
   }
 
   /* Gradient Text */
@@ -293,6 +311,143 @@
   .animate-fade-in {
     animation: fade-in 0.4s ease-out forwards;
   }
+
+  /* ── iOS parity utilities ─────────────────────────────────── */
+
+  /* Rounded display type (iOS `.rounded` design) */
+  .font-rounded {
+    font-family: var(--font-display);
+  }
+
+  /* "Hello, there!" white→orange headline (LyoOverlayView greeting) */
+  .hello-gradient-text {
+    background: linear-gradient(90deg, #ffffff 0%, var(--accent-orange) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Soft white headline gradient (FocusView greeting/name) */
+  .headline-gradient-text {
+    background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.85) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Purple in-progress course card (FocusCourseCardView) */
+  .ios-card-gradient {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(99, 102, 241, 0.95) 100%);
+  }
+
+  /* White action pill with purple text ("Resume") */
+  .ios-pill-filled {
+    background: linear-gradient(to bottom, #ffffff 0%, #f0f9ff 100%);
+    color: #8b5cf6;
+    border-radius: 20px;
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Translucent action pill ("Details") */
+  .ios-pill-ghost {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
+  }
+
+  /* Orange radial glow behind the mascot (LyoOverlayView avatarLayer) */
+  .mascot-glow {
+    background: radial-gradient(circle, rgba(255, 140, 0, 0.5) 0%, rgba(255, 140, 0, 0.1) 55%, transparent 72%);
+    filter: blur(25px);
+  }
+
+  /* Purple radial glow for the tab-bar mascot FAB (LivingMascotFAB) */
+  .mascot-fab-glow {
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.6) 0%, transparent 70%);
+  }
+
+  /* Breathing scale loop (mascot / FAB idle) */
+  .animate-breathe {
+    animation: breathe 3s ease-in-out infinite;
+  }
+
+  /* Slow float for the chat mascot centerpiece */
+  .animate-mascot-float {
+    animation: mascot-float 2.5s ease-in-out infinite;
+  }
+}
+
+/* iOS breathing + float loops */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes mascot-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Rotating angular-gradient border for the chat input island
+   (HybridInputBar). Uses a registered custom property so the
+   conic gradient angle can animate. */
+@property --island-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes island-border-spin {
+  to {
+    --island-angle: 360deg;
+  }
+}
+
+.input-island {
+  position: relative;
+  border-radius: 24px;
+  background: #000000;
+}
+
+.input-island::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--island-angle),
+    var(--island-border-a, rgba(255, 255, 255, 0.2)),
+    var(--island-border-b, rgba(255, 255, 255, 0.1)),
+    var(--island-border-c, rgba(255, 255, 255, 0.2)),
+    var(--island-border-a, rgba(255, 255, 255, 0.2))
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: island-border-spin 3s linear infinite;
+  pointer-events: none;
+}
+
+.input-island--thinking {
+  --island-border-a: #6366f1;
+  --island-border-b: #8b5cf6;
+  --island-border-c: #ec4899;
+}
+
+.input-island--responding {
+  --island-border-a: #10b981;
+  --island-border-b: #34d399;
+  --island-border-c: #6ee7b7;
 }
 
 /* ============================================================

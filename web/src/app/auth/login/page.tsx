@@ -37,7 +37,7 @@ function AuthInput({
     <div className="space-y-1.5">
       <label className="text-xs font-semibold uppercase tracking-wider text-secondary">{label}</label>
       <div
-        className="flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-200 focus-within:ring-1 focus-within:ring-[#6c63ff]/60"
+        className="flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-200 focus-within:ring-1 focus-within:ring-[#6366f1]/60"
         style={{
           background: 'rgba(255,255,255,0.05)',
           border: '1px solid rgba(255,255,255,0.1)',
@@ -88,16 +88,16 @@ export default function LoginPage() {
     <div
       className="flex min-h-screen items-center justify-center p-4"
       style={{
-        background: 'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(108,99,255,0.25) 0%, rgba(10,10,15,1) 60%)',
+        background: 'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(99,102,241,0.25) 0%, rgba(10,10,15,1) 60%)',
       }}
     >
       <div
         className="pointer-events-none fixed left-1/4 top-0 h-96 w-96 rounded-full opacity-20 blur-[120px]"
-        style={{ background: 'radial-gradient(circle, #6c63ff, #8b5cf6)' }}
+        style={{ background: 'radial-gradient(circle, #6366f1, #8b5cf6)' }}
       />
       <div
         className="pointer-events-none fixed bottom-0 right-1/4 h-80 w-80 rounded-full opacity-15 blur-[100px]"
-        style={{ background: 'radial-gradient(circle, #ec4899, #6c63ff)' }}
+        style={{ background: 'radial-gradient(circle, #ec4899, #6366f1)' }}
       />
 
       <motion.div
@@ -119,7 +119,7 @@ export default function LoginPage() {
             <div className="relative">
               <div
                 className="orb-gradient h-20 w-20 animate-float rounded-full"
-                style={{ boxShadow: '0 0 40px rgba(108,99,255,0.5)' }}
+                style={{ boxShadow: '0 0 40px rgba(99,102,241,0.5)' }}
               />
               <div className="orb-gradient absolute inset-0 rounded-full opacity-50 blur-xl" />
             </div>
@@ -179,7 +179,7 @@ export default function LoginPage() {
               type="submit"
               disabled={isLoading}
               className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all duration-200 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%)' }}
+              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -199,7 +199,7 @@ export default function LoginPage() {
             New to LYO?{' '}
             <Link
               href="/auth/signup"
-              className="font-semibold text-[#8b83ff] transition-colors duration-150 hover:text-[#6c63ff]"
+              className="font-semibold text-[#a78bfa] transition-colors duration-150 hover:text-[#6366f1]"
             >
               Sign up
             </Link>

@@ -3,19 +3,20 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '@/stores/chat-store';
+import { useAuthStore } from '@/stores/auth-store';
 import MessageBubble from './MessageBubble';
 import ChatInputBar from './ChatInputBar';
 import SuggestionChips from './SuggestionChips';
 import MascotAvatar from './MascotAvatar';
 
-// ─── LYO Mascot hero (matches iOS welcome screen) ────────────────────────────
+// ─── LYO Mascot hero (matches iOS LyoOverlayView avatarLayer) ────────────────
 function LYOOrb() {
   return (
-    <div className="relative w-24 h-24 mx-auto">
-      {/* Soft brand glow behind the mascot */}
-      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-lyo-400 via-accent-purple to-accent-pink opacity-20 animate-pulse-slow blur-xl scale-150" />
-      <div className="relative w-24 h-24 animate-float flex items-center justify-center">
-        <MascotAvatar size={96} />
+    <div className="relative flex items-center justify-center mt-10">
+      {/* Orange radial glow behind the mascot */}
+      <div className="absolute w-[280px] h-[280px] rounded-full mascot-glow pointer-events-none" />
+      <div className="relative animate-mascot-float flex items-center justify-center">
+        <MascotAvatar size={200} />
       </div>
     </div>
   );
@@ -66,23 +67,26 @@ function GenerationProgressBar({ progress }: { progress: number }) {
   );
 }
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
+// ─── Empty state (matches iOS LyoOverlayView greeting) ───────────────────────
 function EmptyState() {
+  const user = useAuthStore((s) => s.user);
+  const firstName = user?.displayName?.trim().split(' ')[0] || 'there';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="flex flex-col items-center justify-center flex-1 px-4 py-12 text-center"
+      className="flex flex-col items-center justify-center h-full min-h-full px-4 py-8 text-center"
     >
-      <LYOOrb />
-      <h1 className="mt-8 text-3xl font-bold text-white tracking-tight">
-        Hi, I&apos;m LYO
+      <h1 className="font-rounded text-[32px] font-bold leading-tight">
+        <span className="hello-gradient-text">Hello, {firstName}!</span>
       </h1>
-      <p className="mt-2 text-white/50 max-w-sm text-base leading-relaxed">
-        Your AI-powered learning companion. Ask me anything — I&apos;ll create
-        personalized courses, quizzes, and flashcards just for you.
+      <p className="mt-2 text-lg font-medium text-white/80">
+        Ready to embark on a learning journey?
       </p>
+      <LYOOrb />
+      <div className="flex-1 min-h-6" />
       <SuggestionChips />
     </motion.div>
   );

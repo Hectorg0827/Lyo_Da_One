@@ -11,13 +11,12 @@ interface CardProps {
   onClick?: () => void;
 }
 
+// `default` and `glass` both use the iOS glass spec (white 6%→2.5% fill,
+// white 12%→4% hairline) so cards read the same on the premium background.
 const variantClasses: Record<CardVariant, string> = {
-  default:
-    'bg-[var(--surface)] border border-[var(--border)]',
-  glass:
-    'backdrop-blur-md bg-white/5 border border-white/10',
-  outlined:
-    'bg-transparent border border-[var(--border)]',
+  default: 'glass-card',
+  glass: 'glass-card',
+  outlined: 'bg-transparent border border-white/10',
 };
 
 export function Card({ variant = 'default', hover = false, className, children, onClick }: CardProps) {
@@ -25,14 +24,12 @@ export function Card({ variant = 'default', hover = false, className, children, 
     <div
       onClick={onClick}
       className={cn(
-        'rounded-2xl transition-all duration-200',
+        'transition-all duration-200',
         variantClasses[variant],
         hover && [
           'cursor-pointer',
           'hover:scale-[1.015] hover:shadow-xl hover:shadow-black/30',
-          variant === 'default' && 'hover:border-[#3a3a50] hover:bg-[#131320]',
-          variant === 'glass' && 'hover:bg-white/8 hover:border-white/15',
-          variant === 'outlined' && 'hover:border-[#3a3a50] hover:bg-white/3',
+          variant === 'outlined' ? 'hover:border-white/20' : 'hover:border-white/20',
         ],
         onClick && !hover && 'cursor-pointer',
         className,

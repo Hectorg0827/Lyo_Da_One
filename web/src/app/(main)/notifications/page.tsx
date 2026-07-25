@@ -52,8 +52,8 @@ function NotifIcon({ type }: { type: AppNotification['type'] }) {
     },
     comment: {
       icon: <MessageCircle size={14} />,
-      color: '#6c63ff',
-      bg: 'rgba(108,99,255,0.15)',
+      color: '#6366f1',
+      bg: 'rgba(99,102,241,0.15)',
     },
     follow: {
       icon: <UserPlus size={14} />,
@@ -103,12 +103,12 @@ function NotifIcon({ type }: { type: AppNotification['type'] }) {
   );
 }
 
-const AVATAR_COLORS = ['#6c63ff', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6', '#a78bfa'];
+const AVATAR_COLORS = ['#6366f1', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6', '#a78bfa'];
 
 function ActorAvatar({ actor }: { actor: AppNotification['actor'] }) {
   if (!actor) {
     return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6c63ff] to-[#8b5cf6] text-xs font-bold text-white">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-xs font-bold text-white">
         LYO
       </div>
     );
@@ -180,11 +180,11 @@ function NotifItem({
       onClick={() => onOpen(notification)}
       className={cn(
         'relative flex w-full cursor-pointer items-start gap-3 px-4 py-4 text-left transition-colors duration-150 hover:bg-white/[0.03]',
-        !notification.isRead && 'bg-[#6c63ff]/[0.04]',
+        !notification.isRead && 'bg-[#6366f1]/[0.04]',
       )}
     >
       {!notification.isRead && (
-        <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-[#6c63ff]" />
+        <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-[#6366f1]" />
       )}
 
       <div className="relative shrink-0">
@@ -299,7 +299,7 @@ export default function NotificationsPage() {
     <div className="mx-auto max-w-2xl space-y-5 px-4 py-6 sm:px-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-black text-primary">Notifications</h1>
+          <h1 className="font-rounded text-xl font-black text-primary">Notifications</h1>
           {unreadCount > 0 && <p className="mt-0.5 text-xs text-secondary">{unreadCount} unread</p>}
         </div>
         {unreadCount > 0 && !isLoading && (
@@ -307,7 +307,7 @@ export default function NotificationsPage() {
             type="button"
             onClick={markAllRead}
             disabled={markingAll}
-            className="flex items-center gap-1.5 text-xs font-semibold text-secondary transition-colors duration-150 hover:text-[#8b83ff] disabled:opacity-50"
+            className="flex items-center gap-1.5 text-xs font-semibold text-secondary transition-colors duration-150 hover:text-[#a78bfa] disabled:opacity-50"
           >
             {markingAll ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />}
             Mark all read
@@ -325,7 +325,7 @@ export default function NotificationsPage() {
               'flex-1 rounded-lg px-2 py-2 text-xs font-semibold transition-all duration-200',
               activeTab === tab ? 'text-white shadow-sm' : 'text-secondary hover:text-primary',
             )}
-            style={activeTab === tab ? { background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)' } : {}}
+            style={activeTab === tab ? { background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' } : {}}
           >
             {tab}
           </button>

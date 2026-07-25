@@ -40,7 +40,7 @@ export default function CommunityEventMap({ events }: { events: MappableCommunit
   })
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-white/10 bg-[var(--surface)]">
+    <section className="glass-card overflow-hidden">
       <iframe
         key={selected.id}
         title={`Map for ${selected.title}`}

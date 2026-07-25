@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Paperclip, Mic, X, FileText, Loader2 } from 'lucide-react';
+import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -171,7 +171,7 @@ export default function ChatInputBar() {
   const canSend = (value.trim().length > 0 || !!attachment) && !isGenerating && !uploading;
 
   return (
-    <div className="relative px-3 py-3 md:px-6 md:py-4 border-t border-white/5 bg-black/20 backdrop-blur-md">
+    <div className="relative px-3 py-3 md:px-6 md:py-4">
       {/* Pending attachment chip */}
       <AnimatePresence>
         {attachment && (
@@ -199,35 +199,15 @@ export default function ChatInputBar() {
         )}
       </AnimatePresence>
 
+      {/* Input island — mirrors iOS HybridInputBar: black rounded-24 card,
+          rotating angular-gradient border tinted by AI state, text field on
+          top, controls row below (+ / Chat pill · mic / send). */}
       <div
         className={cn(
-          'flex items-end gap-2 rounded-2xl border px-3 py-2.5 transition-all duration-200',
-          'bg-white/5 backdrop-blur-sm',
-          listening
-            ? 'border-red-400/50 shadow-[0_0_0_1px_rgba(248,113,113,0.2)]'
-            : value.length > 0
-              ? 'border-lyo-500/40 shadow-[0_0_0_1px_rgba(92,124,250,0.1)]'
-              : 'border-white/10'
+          'input-island px-4 pt-3 pb-2.5 max-w-3xl mx-auto',
+          isGenerating && 'input-island--thinking'
         )}
       >
-        {/* Attachment */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,.pdf,.txt,.md,.csv"
-          className="hidden"
-          onChange={handleFilePicked}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="p-1.5 rounded-lg text-white/30 hover:text-white/70 hover:bg-white/10 transition-all duration-200 shrink-0 mb-0.5 disabled:opacity-50"
-          title="Attach an image or document"
-        >
-          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
-        </button>
-
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -235,20 +215,46 @@ export default function ChatInputBar() {
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder={
-            isGenerating ? 'LYO is thinking…' : listening ? 'Listening…' : 'Ask LYO anything…'
+            isGenerating ? 'Lyo is thinking…' : listening ? 'Listening…' : 'Message Lyo...'
           }
           disabled={isGenerating}
           rows={1}
           className={cn(
-            'flex-1 resize-none bg-transparent text-sm text-white placeholder-white/30',
+            'w-full resize-none bg-transparent text-base text-white placeholder-white/35',
             'focus:outline-none leading-6 py-0.5 max-h-36 scrollbar-thin scrollbar-thumb-white/10',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
           style={{ lineHeight: `${LINE_HEIGHT}px` }}
         />
 
-        {/* Right controls */}
-        <div className="flex items-end gap-1.5 shrink-0 mb-0.5">
+        {/* Controls row */}
+        <div className="flex items-center gap-2 mt-2">
+          {/* Attachment ("+") */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.txt,.md,.csv"
+            className="hidden"
+            onChange={handleFilePicked}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/90 hover:bg-white/15 transition-all duration-200 shrink-0 disabled:opacity-50"
+            title="Attach an image or document"
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-[18px] h-[18px]" strokeWidth={1.5} />}
+          </button>
+
+          {/* Mode pill */}
+          <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold select-none">
+            <MessageCircle className="w-3.5 h-3.5 fill-current" />
+            Chat
+          </span>
+
+          <div className="flex-1" />
+
           {/* Character count */}
           <AnimatePresence>
             {showCount && (
@@ -257,7 +263,7 @@ export default function ChatInputBar() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
                 className={cn(
-                  'text-[11px] font-mono self-end mb-0.5',
+                  'text-[11px] font-mono',
                   charCount > MAX_CHARS * 0.95 ? 'text-red-400' : 'text-white/30'
                 )}
               >
@@ -272,38 +278,38 @@ export default function ChatInputBar() {
               type="button"
               onClick={toggleDictation}
               className={cn(
-                'p-1.5 rounded-lg transition-all duration-200',
+                'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
                 listening
-                  ? 'text-red-400 bg-red-400/15 animate-pulse'
-                  : 'text-white/30 hover:text-white/70 hover:bg-white/10'
+                  ? 'text-accent-orange bg-accent-orange/15 animate-pulse'
+                  : 'text-white/90 hover:bg-white/10'
               )}
               title={listening ? 'Stop dictating' : 'Dictate your message'}
             >
-              <Mic className="w-4 h-4" />
+              <Mic className="w-[18px] h-[18px]" />
             </button>
           )}
 
-          {/* Send */}
+          {/* Send — white circle, dark arrow (iOS) */}
           <motion.button
             type="button"
             onClick={handleSubmit}
             disabled={!canSend}
             whileTap={canSend ? { scale: 0.9 } : {}}
             className={cn(
-              'p-2 rounded-xl transition-all duration-200',
+              'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
               canSend
-                ? 'bg-gradient-to-br from-lyo-500 to-accent-purple text-white shadow-lg shadow-lyo-900/40 hover:opacity-90'
-                : 'bg-white/5 text-white/20 cursor-not-allowed'
+                ? 'bg-white text-black shadow-lg shadow-black/30 hover:opacity-90'
+                : 'bg-white/10 text-white/25 cursor-not-allowed'
             )}
             title="Send message"
           >
-            <ArrowUp className="w-4 h-4" />
+            <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
           </motion.button>
         </div>
       </div>
 
-      {/* Hint */}
-      <p className="text-center text-[11px] text-white/20 mt-2">
+      {/* Hint (desktop only) */}
+      <p className="hidden md:block text-center text-[11px] text-white/20 mt-2">
         LYO can make mistakes. Press{' '}
         <kbd className="px-1 py-0.5 rounded bg-white/10 font-mono text-[10px]">Enter</kbd> to send,{' '}
         <kbd className="px-1 py-0.5 rounded bg-white/10 font-mono text-[10px]">Shift+Enter</kbd> for newline.

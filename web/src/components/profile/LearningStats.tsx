@@ -22,10 +22,10 @@ const calendarData = generateCalendarData();
 
 const activityColors = [
   'rgba(255,255,255,0.06)', // none
-  'rgba(108,99,255,0.25)',  // low
-  'rgba(108,99,255,0.45)',  // medium
-  'rgba(108,99,255,0.7)',   // high
-  '#6c63ff',                // max
+  'rgba(99,102,241,0.25)',  // low
+  'rgba(99,102,241,0.45)',  // medium
+  'rgba(99,102,241,0.7)',   // high
+  '#6366f1',                // max
 ];
 
 // ── Achievements mock ────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ export default function LearningStatsPanel({ stats }: LearningStatsProps) {
           icon={Clock}
           label="Hours Learned"
           value={stats.totalHoursLearned}
-          color="#6c63ff"
+          color="#6366f1"
           sub="total"
         />
         <StatCard
@@ -160,7 +160,7 @@ export default function LearningStatsPanel({ stats }: LearningStatsProps) {
         <div className="space-y-3">
           {stats.topTopics.map((topic, i) => {
             const pct = Math.round((topic.hours / maxTopicHours) * 100);
-            const colors = ['#6c63ff', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899'];
+            const colors = ['#6366f1', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899'];
             const color = colors[i % colors.length];
             return (
               <div key={topic.topic} className="space-y-1">
@@ -200,15 +200,15 @@ export default function LearningStatsPanel({ stats }: LearningStatsProps) {
                 ach.unlocked ? 'hover:scale-105 cursor-pointer' : 'opacity-40 cursor-not-allowed'
               )}
               style={{
-                background: ach.unlocked ? 'rgba(108,99,255,0.1)' : 'rgba(255,255,255,0.04)',
-                border: ach.unlocked ? '1px solid rgba(108,99,255,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                background: ach.unlocked ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.04)',
+                border: ach.unlocked ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(255,255,255,0.06)',
               }}
             >
               <div
                 className="w-10 h-10 rounded-full flex items-center justify-center text-xl relative"
                 style={
                   ach.unlocked
-                    ? { background: 'linear-gradient(135deg, #6c63ff, #a78bfa)' }
+                    ? { background: 'linear-gradient(135deg, #6366f1, #a78bfa)' }
                     : { background: 'rgba(255,255,255,0.08)' }
                 }
               >

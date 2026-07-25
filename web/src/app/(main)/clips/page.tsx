@@ -173,7 +173,7 @@ function ClipCommentsDrawer({ clip, onClose }: { clip: Clip; onClose: () => void
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'tween', duration: 0.2 }}
-      className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col border-l border-white/10 bg-[#0a0a0f]"
+      className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col border-l border-white/10 bg-[#050810]"
     >
       <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <h2 className="text-sm font-semibold text-white">Comments ({comments.length})</h2>
@@ -511,7 +511,7 @@ export default function ClipsPage() {
     <div className="min-h-screen p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Clips</h1>
+          <h1 className="font-rounded text-2xl font-bold text-white">Clips</h1>
           <p className="text-sm text-gray-400">Short educational videos from the community</p>
         </div>
         <div className="flex items-center gap-3">

@@ -15,7 +15,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    'bg-gradient-to-r from-[#6c63ff] to-[#8b5cf6] text-white shadow-lg shadow-[#6c63ff]/25 hover:shadow-[#6c63ff]/40 hover:brightness-110 active:brightness-95',
+    'bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white shadow-lg shadow-[#6366f1]/25 hover:shadow-[#6366f1]/40 hover:brightness-110 active:brightness-95',
   secondary:
     'bg-[var(--surface-2)] text-[var(--text-primary)] border border-[var(--border)] hover:bg-[#222232] hover:border-[#3a3a50] active:bg-[var(--surface-2)]',
   ghost:
@@ -81,7 +81,7 @@ export function Button({
       disabled={isDisabled}
       className={cn(
         'inline-flex items-center justify-center font-medium transition-all duration-200 cursor-pointer select-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6c63ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]',
         variantClasses[variant],
         sizeClasses[size],
         isDisabled && 'opacity-50 cursor-not-allowed pointer-events-none',

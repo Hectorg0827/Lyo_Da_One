@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Flame,
   Clock,
   BookOpen,
   Zap,
@@ -19,6 +18,9 @@ import {
   Target,
   TrendingUp,
   Layers,
+  Share,
+  MoreHorizontal,
+  List,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
@@ -37,7 +39,7 @@ const dailyChallenges = [
     progress: 1,
     requirement: 2,
     icon: BookOpen,
-    color: '#6c63ff',
+    color: '#6366f1',
   },
   {
     id: '2',
@@ -62,16 +64,16 @@ const dailyChallenges = [
 ];
 
 // Color palette for dynamically mapped courses
-const courseColors = ['#6c63ff', '#ec4899', '#22c55e', '#f59e0b', '#3b82f6'];
+const courseColors = ['#6366f1', '#ec4899', '#22c55e', '#f59e0b', '#3b82f6'];
 const courseEmojis = ['📚', '🧠', '🎨', '🐍', '🎵', '⚛️'];
 const gradientPairs = [
-  'from-[#6c63ff] to-[#8b5cf6]',
+  'from-[#6366f1] to-[#8b5cf6]',
   'from-[#ec4899] to-[#f43f5e]',
   'from-[#3b82f6] to-[#06b6d4]',
   'from-[#f59e0b] to-[#ef4444]',
   'from-[#22c55e] to-[#14b8a6]',
 ];
-const activityColors = ['#6c63ff', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
+const activityColors = ['#6366f1', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -80,14 +82,6 @@ function getGreeting() {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
-}
-
-function formatDate() {
-  return new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
 }
 
 function formatTimeAgoShort(dateStr: string): string {
@@ -135,12 +129,14 @@ function SectionHeader({
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
         {Icon && <Icon size={18} className="text-secondary" />}
-        <h2 className="text-base font-bold text-primary">{title}</h2>
+        <h2 className="font-rounded text-xl font-bold leading-tight">
+          <span className="headline-gradient-text">{title}</span>
+        </h2>
       </div>
       {href && (
         <Link
           href={href}
-          className="flex items-center gap-1 text-xs font-medium text-secondary hover:text-primary transition-colors duration-200"
+          className="flex items-center gap-1 text-[13px] font-semibold text-[#A9B7FF] hover:text-white transition-colors duration-200"
         >
           See all <ChevronRight size={14} />
         </Link>
@@ -151,7 +147,7 @@ function SectionHeader({
 
 function ProgressBar({
   value,
-  color = '#6c63ff',
+  color = '#6366f1',
   height = 4,
 }: {
   value: number;
@@ -221,7 +217,7 @@ export default function HomePage() {
       value: String((userLevel?.total_hours as number) || user?.xp ? Math.round((user?.xp || 0) / 100) : 0),
       sub: 'total',
       icon: Clock,
-      color: '#6c63ff',
+      color: '#6366f1',
       trend: '',
     },
     {
@@ -308,84 +304,93 @@ export default function HomePage() {
       initial="hidden"
       animate={mounted ? 'visible' : 'hidden'}
     >
-      {/* ── Greeting ──────────────────────────────────────────── */}
-      <motion.div variants={itemVariants} className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-secondary mb-1">{mounted ? formatDate() : ''}</p>
-          <h1 className="text-2xl sm:text-3xl font-black text-primary leading-tight">
-            {getGreeting()},{' '}
-            <span className="gradient-text">{firstName}</span> 👋
-          </h1>
-          <p className="text-sm text-secondary mt-1">
-            You&apos;re on a roll — {currentStreak}-day streak and counting!
-          </p>
-        </div>
-        {/* Quick streak badge */}
-        <div
-          className="glass-card px-4 py-2.5 flex items-center gap-2 shrink-0"
-          style={{ borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.08)' }}
-        >
-          <Flame size={20} className="text-orange-400" />
-          <div className="text-right">
-            <p className="text-lg font-black text-orange-400 leading-none">{currentStreak}</p>
-            <p className="text-[10px] text-secondary">day streak</p>
-          </div>
-        </div>
+      {/* ── Greeting (matches iOS FocusView greetingSection) ──── */}
+      <motion.div variants={itemVariants}>
+        <p className="font-rounded text-sm font-medium text-white/75">{getGreeting()}</p>
+        <h1 className="font-rounded text-4xl font-bold leading-tight drop-shadow-[0_4px_12px_rgba(168,85,247,0.25)]">
+          <span className="headline-gradient-text">{firstName}</span>
+        </h1>
+        <p className="text-sm font-medium text-white/65 mt-1.5">
+          You&apos;re one lesson away from {currentStreak > 0 ? `a ${currentStreak + 1}-day streak` : 'starting a streak'}.
+        </p>
       </motion.div>
 
-      {/* ── Streak hero card ──────────────────────────────────── */}
-      <motion.div
-        variants={itemVariants}
-        className="relative overflow-hidden rounded-2xl p-5 sm:p-6"
-        style={{
-          background: 'linear-gradient(135deg, rgba(245,158,11,0.18) 0%, rgba(239,68,68,0.12) 60%, rgba(17,17,24,0.4) 100%)',
-          border: '1px solid rgba(245,158,11,0.25)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        {/* Background orb */}
-        <div
-          className="absolute -right-8 -top-8 w-40 h-40 rounded-full blur-3xl pointer-events-none opacity-30"
-          style={{ background: 'radial-gradient(circle, #f59e0b, #ef4444)' }}
-        />
-        <div className="relative flex items-center gap-4">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shrink-0"
-            style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)' }}
-          >
-            <Flame size={28} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black text-white">{currentStreak}</span>
-              <span className="text-base font-semibold text-orange-300">day streak</span>
-            </div>
-            <p className="text-sm text-orange-200/80 mt-0.5">
-              Keep it up! You&apos;re in the top 8% of learners this week 🏆
-            </p>
-          </div>
-          <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
-            <span className="text-xs text-orange-300/70">Best streak</span>
-            <span className="text-sm font-bold text-orange-300">{bestStreak} days</span>
-          </div>
-        </div>
-        {/* Day dots */}
-        <div className="mt-4 flex gap-1.5">
-          {Array.from({ length: 14 }).map((_, i) => {
-            const isActive = i < (currentStreak);
-            return (
+      {/* ── Hero course card (matches iOS FocusCourseCardView) ── */}
+      <motion.div variants={itemVariants}>
+        {(() => {
+          const hero = inProgressCourses[0];
+          const heroHref = hero ? `/courses/${hero.id}` : '/discover';
+          return (
+            <div className="relative overflow-hidden rounded-[32px] ios-card-gradient p-6 sm:p-8 flex flex-col min-h-[380px] sm:min-h-[420px] shadow-[0_8px_20px_rgba(0,0,0,0.3)] border border-white/20">
+              {/* Glass glare */}
               <div
-                key={i}
-                className="flex-1 h-1.5 rounded-full transition-all duration-300"
-                style={{
-                  background: isActive
-                    ? 'linear-gradient(90deg,#f59e0b,#ef4444)'
-                    : 'rgba(255,255,255,0.1)',
-                }}
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.15) 0%, transparent 45%)' }}
               />
-            );
-          })}
-        </div>
+              {/* Blurred orb accent */}
+              <div className="absolute -right-8 -top-8 w-44 h-44 rounded-full bg-white/15 blur-[40px] pointer-events-none" />
+
+              {/* Top buttons */}
+              <div className="relative flex items-center justify-between mb-5">
+                <button
+                  className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white"
+                  aria-label="Share course"
+                >
+                  <Share size={16} />
+                </button>
+                <button
+                  className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white"
+                  aria-label="Course options"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+              </div>
+
+              <p className="relative text-xs font-bold tracking-[0.2em] text-white/60 uppercase">
+                {hero ? 'In Progress' : 'Start New'}
+              </p>
+              <h2 className="relative font-rounded text-[32px] font-extrabold text-white leading-tight mt-2 max-w-[260px]">
+                {hero ? hero.title : 'Begin your learning journey'}
+              </h2>
+
+              <div className="flex-1" />
+
+              {/* Progress */}
+              {hero && (
+                <div className="relative space-y-2 mb-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[15px] text-white/80">Progress</span>
+                    <span className="text-[15px] font-bold text-white">{hero.progress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-white/20 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-white transition-all duration-700"
+                      style={{ width: `${Math.min(100, Math.max(0, hero.progress))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action pills */}
+              <div className="relative flex gap-3">
+                <Link
+                  href={heroHref}
+                  className="ios-pill-filled flex-1 flex items-center justify-center gap-2 py-4 font-rounded text-base font-bold transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Play size={16} className="fill-current" />
+                  {hero ? 'Resume' : 'Explore'}
+                </Link>
+                <Link
+                  href={heroHref}
+                  className="ios-pill-ghost flex-1 flex items-center justify-center gap-2 py-4 font-rounded text-base font-bold transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <List size={16} />
+                  Details
+                </Link>
+              </div>
+            </div>
+          );
+        })()}
       </motion.div>
 
       {/* ── Quick Actions ─────────────────────────────────────── */}
@@ -395,7 +400,7 @@ export default function HomePage() {
           <Link
             href="/chat"
             className="group relative overflow-hidden rounded-xl p-4 flex flex-col gap-2 transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
           >
             <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
             <Brain size={22} className="text-white relative z-10" />
@@ -408,7 +413,7 @@ export default function HomePage() {
             href="/discover"
             className="glass-card group p-4 flex flex-col gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:bg-white/[0.07]"
           >
-            <Layers size={22} className="text-[#6c63ff]" />
+            <Layers size={22} className="text-[#6366f1]" />
             <div>
               <p className="text-sm font-bold text-primary leading-tight">Browse</p>
               <p className="text-[11px] text-secondary">Courses</p>
@@ -606,13 +611,13 @@ export default function HomePage() {
                             ? 'rgba(34,197,94,0.15)'
                             : course.difficulty === 'advanced' || course.difficulty === 'Advanced'
                             ? 'rgba(239,68,68,0.15)'
-                            : 'rgba(108,99,255,0.15)',
+                            : 'rgba(99,102,241,0.15)',
                         color:
                           course.difficulty === 'beginner' || course.difficulty === 'Beginner'
                             ? '#22c55e'
                             : course.difficulty === 'advanced' || course.difficulty === 'Advanced'
                             ? '#ef4444'
-                            : '#8b83ff',
+                            : '#a78bfa',
                       }}
                     >
                       {course.difficulty}
@@ -627,7 +632,7 @@ export default function HomePage() {
 
       {/* ── Recent Community Activity ─────────────────────────── */}
       <motion.div variants={itemVariants}>
-        <SectionHeader title="Community Activity" href="/community" icon={Users} />
+        <SectionHeader title="Today in your world" href="/community" icon={Users} />
         {communityActivity.length === 0 ? (
           <div className="glass-card p-6 flex flex-col items-center gap-2 text-center">
             <Users size={28} className="text-secondary" />
@@ -657,7 +662,7 @@ export default function HomePage() {
                   <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-red-400 transition-colors duration-150">
                     <Heart size={13} /> {post.likes}
                   </button>
-                  <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-[#6c63ff] transition-colors duration-150">
+                  <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-[#6366f1] transition-colors duration-150">
                     <MessageCircle size={13} /> {post.comments}
                   </button>
                 </div>

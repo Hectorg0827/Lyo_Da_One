@@ -288,7 +288,7 @@ export default function GroupsPage() {
     <div className="min-h-screen p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Groups</h1>
+          <h1 className="font-rounded text-2xl font-bold text-white">Groups</h1>
           <p className="text-sm text-gray-400">Find your learning community</p>
         </div>
         <button

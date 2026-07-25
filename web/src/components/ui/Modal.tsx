@@ -71,7 +71,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
               className={cn(
                 'relative w-full',
                 sizeClasses[size],
-                'bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl',
+                'bg-[#0d0f18]/95 backdrop-blur-2xl border border-white/12 rounded-2xl shadow-2xl',
                 'flex flex-col max-h-[90vh]',
               )}
               onClick={(e) => e.stopPropagation()}

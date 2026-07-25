@@ -81,7 +81,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
     <button
       onClick={() => onChange(!value)}
       className="relative inline-flex w-11 h-6 items-center rounded-full transition-all duration-300 shrink-0"
-      style={{ background: value ? '#6c63ff' : 'rgba(255,255,255,0.12)' }}
+      style={{ background: value ? '#6366f1' : 'rgba(255,255,255,0.12)' }}
     >
       <span
         className="inline-block w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300"
@@ -158,7 +158,7 @@ function EditableField({
             type={type}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-full bg-transparent text-sm text-primary outline-none border-b border-[#6c63ff] pb-0.5"
+            className="w-full bg-transparent text-sm text-primary outline-none border-b border-[#6366f1] pb-0.5"
             onKeyDown={(e) => {
               if (e.key === 'Enter') save();
               if (e.key === 'Escape') cancel();
@@ -205,7 +205,7 @@ function InterestTag({ label, active, onClick }: { label: string; active: boolea
       )}
       style={
         active
-          ? { background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)' }
+          ? { background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }
           : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }
       }
     >
@@ -287,12 +287,12 @@ export default function SettingsPage() {
       >
         {/* Page header */}
         <motion.div variants={itemVariants}>
-          <h1 className="text-xl font-black text-primary">Settings</h1>
+          <h1 className="font-rounded text-xl font-black text-primary">Settings</h1>
           <p className="text-sm text-secondary mt-0.5">Manage your account and preferences</p>
         </motion.div>
 
         {/* ── Account ──────────────────────────────────────── */}
-        <SectionCard title="Account" icon={User} iconColor="#6c63ff">
+        <SectionCard title="Account" icon={User} iconColor="#6366f1">
           <EditableField
             label="Display Name"
             value={displayName}
@@ -359,7 +359,7 @@ export default function SettingsPage() {
             <p className="text-sm font-medium text-primary mb-3">Preferred Difficulty</p>
             <div className="flex gap-2">
               {(['beginner', 'intermediate', 'advanced'] as const).map((d) => {
-                const colors = { beginner: '#22c55e', intermediate: '#6c63ff', advanced: '#ef4444' };
+                const colors = { beginner: '#22c55e', intermediate: '#6366f1', advanced: '#ef4444' };
                 const isActive = difficulty === d;
                 return (
                   <button
@@ -383,7 +383,7 @@ export default function SettingsPage() {
           <div className="px-5 py-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-medium text-primary">Daily Learning Goal</p>
-              <span className="text-sm font-bold" style={{ color: '#6c63ff' }}>{dailyGoal} min</span>
+              <span className="text-sm font-bold" style={{ color: '#6366f1' }}>{dailyGoal} min</span>
             </div>
             <input
               type="range"
@@ -392,7 +392,7 @@ export default function SettingsPage() {
               step={5}
               value={dailyGoal}
               onChange={(e) => setDailyGoal(Number(e.target.value))}
-              className="w-full accent-[#6c63ff]"
+              className="w-full accent-[#6366f1]"
             />
             <div className="flex justify-between text-[10px] text-secondary mt-1">
               <span>5 min</span>

@@ -174,7 +174,7 @@ export default function CommunityPage() {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <div><h1 className="text-2xl font-semibold text-white md:text-3xl">Community</h1><p className="mt-1 text-sm text-white/45">One shared community on every device.</p></div>
+        <div><h1 className="font-rounded text-2xl font-semibold text-white md:text-3xl">Community</h1><p className="mt-1 text-sm text-white/45">One shared community on every device.</p></div>
         <button onClick={() => tab === 'Posts' ? setShowCreatePost(true) : setShowCreateItem(true)} className="flex items-center gap-2 rounded-xl bg-lyo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-lyo-500/20 hover:bg-lyo-400">
           <Plus className="h-4 w-4" />{tab === 'Posts' ? 'Create post' : 'Create event or group'}
         </button>
@@ -194,11 +194,11 @@ export default function CommunityPage() {
           </main>
 
           <aside className="space-y-4 xl:sticky xl:top-2">
-            <section className="rounded-2xl border border-white/10 bg-[var(--surface)] p-4">
+            <section className="glass-card p-4">
               <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold text-white">Upcoming events</h2><button onClick={() => setTab('Events')} className="text-xs text-lyo-300 hover:text-white">View all</button></div>
               <div className="space-y-3">{events.slice(0, 3).map((event) => eventCard(event, true))}{!eventRequest.isLoading && events.length === 0 && <p className="py-5 text-center text-sm text-white/35">No upcoming events.</p>}</div>
             </section>
-            <section className="rounded-2xl border border-white/10 bg-[var(--surface)] p-4">
+            <section className="glass-card p-4">
               <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold text-white">Study groups</h2><button onClick={() => { setTab('Events'); setEventFilter('group'); setViewMode('list') }} className="text-xs text-lyo-300 hover:text-white">View all</button></div>
               <div className="space-y-2">{groups.slice(0, 4).map((group) => <div key={group.id} className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 p-3"><span className="text-lg">{group.icon}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{group.name}</p><p className="text-xs text-white/40">{formatNumber(group.memberCount)} members</p></div></div>)}{!groupRequest.isLoading && groups.length === 0 && <p className="py-5 text-center text-sm text-white/35">No study groups yet.</p>}</div>
             </section>
@@ -206,7 +206,7 @@ export default function CommunityPage() {
         </div>
       ) : (
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[var(--surface)] p-3 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-3 glass-card p-3 lg:flex-row lg:items-center">
             <label className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search events and groups" className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-white/30 focus:border-lyo-500 focus:outline-none" /></label>
             <div className="grid grid-cols-3 gap-1 rounded-xl bg-white/5 p-1">{(['all', 'event', 'group'] as const).map((filter) => <button key={filter} onClick={() => { setEventFilter(filter); if (filter === 'group') setViewMode('list') }} className={cn('rounded-lg px-3 py-2 text-xs font-medium capitalize transition', eventFilter === filter ? 'bg-lyo-500 text-white' : 'text-white/50 hover:text-white')}>{filter === 'all' ? 'All' : filter === 'event' ? 'Events' : 'Groups'}</button>)}</div>
             <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/5 p-1">

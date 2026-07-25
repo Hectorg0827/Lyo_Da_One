@@ -6,7 +6,9 @@
       "secondary": "#8B5CF6",
       "secondaryLight": "#A78BFA",
       "accentMagenta": "#D946EF",
-      "accentGold": "#D9B24C"
+      "accentGold": "#D9B24C",
+      "accentOrange": "#FF8C00",
+      "accentViolet": "#A855F7"
     },
     "semantic": {
       "success": "#10B981",
@@ -18,7 +20,10 @@
       "background": "#0B1230",
       "surface": "#0E173D",
       "surfaceElevated": "#2A2D3A",
-      "surfaceHighlight": "#343847"
+      "surfaceHighlight": "#343847",
+      "backgroundDeep": ["#050810", "#0A1020", "#0D0F18"],
+      "backgroundAuroraViolet": "#7C3AED38",
+      "backgroundAuroraCyan": "#0EA5E91F"
     },
     "text": {
       "primary": "#FFFFFF",
@@ -32,7 +37,9 @@
     "gradients": {
       "accent": ["#8B5CF6", "#D946EF"],
       "card": ["#4A59A4", "#632E53"],
+      "courseCard": ["#8B5CF6E6", "#6366F1F2"],
       "userMessage": ["#8B5CF6", "#6366F1"],
+      "helloGreeting": ["#FFFFFF", "#FF8C00"],
       "mesh": ["#1A1D2EF2", "#16213EF2"]
     }
   },

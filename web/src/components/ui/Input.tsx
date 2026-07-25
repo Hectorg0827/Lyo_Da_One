@@ -8,7 +8,7 @@ const baseInputClasses = [
   'w-full bg-[var(--surface-2)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]',
   'border border-[var(--border)] rounded-xl',
   'transition-all duration-200',
-  'focus:outline-none focus:ring-2 focus:ring-[#6c63ff]/60 focus:border-[#6c63ff]',
+  'focus:outline-none focus:ring-2 focus:ring-[#6366f1]/60 focus:border-[#6366f1]',
   'disabled:opacity-50 disabled:cursor-not-allowed',
 ].join(' ');
 

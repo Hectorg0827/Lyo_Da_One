@@ -15,7 +15,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   default:
     'bg-[var(--surface-2)] text-[var(--text-secondary)] border border-[var(--border)]',
   primary:
-    'bg-[#6c63ff]/20 text-[#8b83ff] border border-[#6c63ff]/30',
+    'bg-[#6366f1]/20 text-[#a78bfa] border border-[#6366f1]/30',
   success:
     'bg-green-500/15 text-green-400 border border-green-500/25',
   warning:

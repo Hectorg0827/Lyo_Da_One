@@ -10,7 +10,7 @@ import { useSyncEvents } from '@/hooks/use-sync';
 import { api } from '@/lib/api';
 import type { Conversation, DirectMessage, User } from '@/types';
 
-const AVATAR_COLORS = ['#6c63ff', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
+const AVATAR_COLORS = ['#6366f1', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
 
 function avatarColor(id: string) {
   return AVATAR_COLORS[id.charCodeAt(id.length - 1) % AVATAR_COLORS.length];
@@ -33,7 +33,7 @@ function ConvItem({
       onClick={onClick}
       className={cn(
         'w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-150 hover:bg-white/[0.04]',
-        isActive && 'bg-[#6c63ff]/10'
+        isActive && 'bg-[#6366f1]/10'
       )}
     >
       <div
@@ -56,7 +56,7 @@ function ConvItem({
           {conv.unreadCount > 0 && (
             <span
               className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded-full shrink-0"
-              style={{ background: '#6c63ff', minWidth: 18, textAlign: 'center' }}
+              style={{ background: '#6366f1', minWidth: 18, textAlign: 'center' }}
             >
               {conv.unreadCount}
             </span>
@@ -81,7 +81,7 @@ function MsgBubble({ msg, isOwn }: { msg: DirectMessage; isOwn: boolean }) {
         )}
         style={
           isOwn
-            ? { background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)' }
+            ? { background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }
             : { background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.08)' }
         }
       >
@@ -335,7 +335,7 @@ export default function MessagesPage() {
                     onClick={sendMessage}
                     disabled={!inputText.trim()}
                     className="w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 disabled:opacity-40 hover:opacity-90 active:scale-95"
-                    style={{ background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)' }}
+                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
                   >
                     <Send size={14} className="text-white" />
                   </button>
@@ -351,9 +351,9 @@ export default function MessagesPage() {
             >
               <div
                 className="w-20 h-20 rounded-3xl flex items-center justify-center"
-                style={{ background: 'rgba(108,99,255,0.12)', border: '1px solid rgba(108,99,255,0.2)' }}
+                style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)' }}
               >
-                <MessageSquare size={36} style={{ color: '#6c63ff' }} />
+                <MessageSquare size={36} style={{ color: '#6366f1' }} />
               </div>
               <div className="text-center">
                 <p className="text-base font-bold text-primary">Your messages</p>

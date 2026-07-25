@@ -175,7 +175,7 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
   const nextButtonDisabled = isCompleting || (isLast && activeLessonCompleted);
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[#0a0a0f] text-white">
+    <div className="flex h-full w-full overflow-hidden bg-[#050810] text-white">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex flex-shrink-0 items-center gap-4 border-b border-white/10 bg-white/3 px-4 py-3 backdrop-blur-sm">
           <button

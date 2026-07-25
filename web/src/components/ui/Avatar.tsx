@@ -27,9 +27,9 @@ function getInitials(name: string): string {
 
 function getGradient(name: string): string {
   const gradients = [
-    'from-[#6c63ff] to-[#8b5cf6]',
+    'from-[#6366f1] to-[#8b5cf6]',
     'from-[#ec4899] to-[#8b5cf6]',
-    'from-[#3b82f6] to-[#6c63ff]',
+    'from-[#3b82f6] to-[#6366f1]',
     'from-[#10b981] to-[#3b82f6]',
     'from-[#f59e0b] to-[#ef4444]',
     'from-[#8b5cf6] to-[#ec4899]',

@@ -42,7 +42,7 @@ function AuthInput({
     <div className="space-y-1.5">
       <label className="text-xs font-semibold text-secondary uppercase tracking-wider">{label}</label>
       <div
-        className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 focus-within:ring-1 focus-within:ring-[#6c63ff]/60"
+        className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 focus-within:ring-1 focus-within:ring-[#6366f1]/60"
         style={{
           background: 'rgba(255,255,255,0.05)',
           border: '1px solid rgba(255,255,255,0.1)',
@@ -109,7 +109,7 @@ function getPasswordStrength(pw: string): { label: string; color: string; width:
   if (pw.length < 8) return { label: 'Too short', color: '#ef4444', width: '25%' };
   if (pw.length < 10) return { label: 'Weak', color: '#f59e0b', width: '50%' };
   if (/[A-Z]/.test(pw) && /[0-9]/.test(pw)) return { label: 'Strong', color: '#22c55e', width: '100%' };
-  return { label: 'Fair', color: '#6c63ff', width: '75%' };
+  return { label: 'Fair', color: '#6366f1', width: '75%' };
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ export default function SignupPage() {
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{
-        background: 'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(108,99,255,0.25) 0%, rgba(10,10,15,1) 60%)',
+        background: 'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(99,102,241,0.25) 0%, rgba(10,10,15,1) 60%)',
       }}
     >
       {/* Background orbs */}
@@ -169,7 +169,7 @@ export default function SignupPage() {
       />
       <div
         className="fixed bottom-0 left-1/4 w-80 h-80 rounded-full blur-[100px] pointer-events-none opacity-15"
-        style={{ background: 'radial-gradient(circle, #6c63ff, #3b82f6)' }}
+        style={{ background: 'radial-gradient(circle, #6366f1, #3b82f6)' }}
       />
 
       <motion.div
@@ -270,15 +270,15 @@ export default function SignupPage() {
               className="flex items-start gap-2.5 text-left w-full"
             >
               {agreedToTerms ? (
-                <CheckSquare size={17} className="shrink-0 mt-0.5" style={{ color: '#6c63ff' }} />
+                <CheckSquare size={17} className="shrink-0 mt-0.5" style={{ color: '#6366f1' }} />
               ) : (
                 <Square size={17} className="shrink-0 mt-0.5 text-secondary" />
               )}
               <span className="text-xs text-secondary leading-relaxed">
                 I agree to LYO&apos;s{' '}
-                <span className="text-[#8b83ff] hover:underline cursor-pointer">Terms of Service</span>
+                <span className="text-[#a78bfa] hover:underline cursor-pointer">Terms of Service</span>
                 {' '}and{' '}
-                <span className="text-[#8b83ff] hover:underline cursor-pointer">Privacy Policy</span>
+                <span className="text-[#a78bfa] hover:underline cursor-pointer">Privacy Policy</span>
               </span>
             </button>
 
@@ -286,7 +286,7 @@ export default function SignupPage() {
               type="submit"
               disabled={isLoading}
               className="w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all duration-200 hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ background: 'linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%)' }}
+              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -328,7 +328,7 @@ export default function SignupPage() {
             Already have an account?{' '}
             <Link
               href="/auth/login"
-              className="font-semibold text-[#8b83ff] hover:text-[#6c63ff] transition-colors duration-150"
+              className="font-semibold text-[#a78bfa] hover:text-[#6366f1] transition-colors duration-150"
             >
               Log in
             </Link>

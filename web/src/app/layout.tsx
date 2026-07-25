@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Nunito } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
 import AuthProvider from '@/components/providers/AuthProvider';
 import './globals.css';
@@ -7,6 +7,15 @@ import './globals.css';
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
+  display: 'swap',
+});
+
+// Web stand-in for iOS `.rounded` (SF Pro Rounded) display type. Apple
+// browsers get the real thing via `ui-rounded`; everyone else gets Nunito.
+const nunito = Nunito({
+  subsets: ['latin'],
+  weight: ['500', '600', '700', '800', '900'],
+  variable: '--font-nunito',
   display: 'swap',
 });
 
@@ -43,10 +52,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`dark ${inter.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`dark ${inter.variable} ${nunito.variable}`} suppressHydrationWarning>
       <body
         className="antialiased min-h-screen"
-        style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
+        style={{ color: 'var(--text-primary)' }}
       >
         <AuthProvider>
           <div className="dark">

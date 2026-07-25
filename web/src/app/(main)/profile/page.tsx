@@ -42,7 +42,7 @@ const clipGradients = [
 ];
 const clipEmojis = ['⚡', '🎨', '🐍', '⚛️', '🗄️', '📐'];
 const activityIcons = [MessageCircle, BookOpen, Play, Trophy, CheckCircle];
-const activityColorPalette = ['#6c63ff', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
+const activityColorPalette = ['#6366f1', '#22c55e', '#ec4899', '#f59e0b', '#3b82f6'];
 
 const tabs = [
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -198,7 +198,7 @@ export default function ProfilePage() {
               )}
               style={
                 activeTab === tab.id
-                  ? { background: 'linear-gradient(135deg, #6c63ff, #8b5cf6)' }
+                  ? { background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }
                   : {}
               }
             >
@@ -322,7 +322,7 @@ export default function ProfilePage() {
               )}
               style={
                 ach.unlocked
-                  ? { borderColor: 'rgba(108,99,255,0.3)' }
+                  ? { borderColor: 'rgba(99,102,241,0.3)' }
                   : {}
               }
             >
@@ -330,7 +330,7 @@ export default function ProfilePage() {
                 className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl"
                 style={
                   ach.unlocked
-                    ? { background: 'linear-gradient(135deg, #6c63ff, #a78bfa)' }
+                    ? { background: 'linear-gradient(135deg, #6366f1, #a78bfa)' }
                     : { background: 'rgba(255,255,255,0.08)' }
                 }
               >

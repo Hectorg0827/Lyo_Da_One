@@ -14,7 +14,7 @@ export default function ChatPage() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-[#0a0a0f]">
+    <div className="relative flex h-full w-full overflow-hidden">
       {/* Ambient gradient background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-lyo-600/10 blur-3xl" />
@@ -32,7 +32,7 @@ export default function ChatPage() {
               animate={{ width: 256, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className="relative overflow-hidden shrink-0 h-screen"
+              className="relative overflow-hidden shrink-0 h-full"
             >
               <ChatSidebar className="h-full" />
             </motion.div>
@@ -70,7 +70,7 @@ export default function ChatPage() {
       </AnimatePresence>
 
       {/* ── Main content ─────────────────────────────────────────── */}
-      <div className="relative flex-1 flex flex-col min-w-0 h-screen">
+      <div className="relative flex-1 flex flex-col min-w-0 h-full">
         {/* Top bar */}
         <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-black/10 backdrop-blur-md">
           {/* Desktop sidebar toggle */}
@@ -116,8 +116,8 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Chat interface */}
-        <div className={cn('flex-1 min-h-0')}>
+        {/* Chat interface — bottom padding clears the fixed mobile tab bar */}
+        <div className={cn('flex-1 min-h-0 pb-20 md:pb-0')}>
           <ChatInterface />
         </div>
       </div>
