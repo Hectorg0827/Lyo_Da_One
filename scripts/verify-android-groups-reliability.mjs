@@ -46,7 +46,7 @@ for (const forbidden of [
   'joinedIds = joinedIds - id',
   'joinedIds = joinedIds + id',
   '.onFailure { joinedIds =',
-  'groups.isEmpty() -> EmptyState(',
+  '\n            groups.isEmpty() -> EmptyState(',
 ]) {
   rejectText(forbidden, 'Android Study Groups reliability');
 }
