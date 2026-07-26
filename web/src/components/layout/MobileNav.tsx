@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Target, Compass, Users, SquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import MascotAvatar from '@/components/chat/MascotAvatar';
+import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 
 // Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
@@ -18,10 +19,7 @@ const leftItems = [
   { href: '/discover', icon: Compass, label: 'Discover' },
 ];
 
-const rightItems = [
-  { href: '/community', icon: Users, label: 'Community' },
-  { href: '/courses', icon: SquarePlus, label: 'Create' },
-];
+const rightItems = [{ href: '/community', icon: Users, label: 'Community' }];
 
 function GhostTab({
   href,
@@ -63,6 +61,7 @@ function GhostTab({
 export function MobileNav() {
   const pathname = usePathname();
   const isChat = pathname.startsWith('/chat');
+  const [createOpen, setCreateOpen] = useState(false);
 
   const isItemActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -117,8 +116,32 @@ export function MobileNav() {
           {rightItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
+
+          {/* Create — opens the creation sheet, mirroring the iOS plus tab */}
+          <button
+            onClick={() => setCreateOpen(true)}
+            aria-label="Create"
+            className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
+          >
+            <SquarePlus
+              className={cn(
+                'w-6 h-6 text-white transition-all duration-200',
+                createOpen
+                  ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
+                  : 'opacity-50'
+              )}
+            />
+            <span
+              className={cn(
+                'w-1 h-1 rounded-full bg-white transition-opacity duration-200',
+                createOpen ? 'opacity-100' : 'opacity-0'
+              )}
+            />
+          </button>
         </div>
       </div>
+
+      <CreateSheet isOpen={createOpen} onClose={() => setCreateOpen(false)} />
     </nav>
   );
 }
