@@ -75,6 +75,14 @@ const gradientPairs = [
 ];
 const activityColors = ['#6366f1', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
 
+// iOS FocusView.DiscoverStrip — pill chips injected into the feed
+const discoverChips = [
+  { label: 'People', color: '#a855f7', href: '/community' },
+  { label: 'Content', color: '#22d3ee', href: '/clips' },
+  { label: 'Courses', color: '#f59e0b', href: '/courses' },
+  { label: 'Search', color: '#6366f1', href: '/discover' },
+];
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function getGreeting() {
@@ -633,6 +641,25 @@ export default function HomePage() {
       {/* ── Recent Community Activity ─────────────────────────── */}
       <motion.div variants={itemVariants}>
         <SectionHeader title="Today in your world" href="/community" icon={Users} />
+
+        {/* Discover strip (iOS FocusView.DiscoverStrip) */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
+          {discoverChips.map((chip) => (
+            <Link
+              key={chip.label}
+              href={chip.href}
+              className="shrink-0 px-4 py-1.5 rounded-full text-[13px] font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              style={{
+                backgroundColor: `${chip.color}26`,
+                border: `1px solid ${chip.color}40`,
+                color: chip.color,
+              }}
+            >
+              {chip.label}
+            </Link>
+          ))}
+        </div>
+
         {communityActivity.length === 0 ? (
           <div className="glass-card p-6 flex flex-col items-center gap-2 text-center">
             <Users size={28} className="text-secondary" />
@@ -643,26 +670,42 @@ export default function HomePage() {
             {communityActivity.map((post) => (
               <div key={post.id} className="glass-card p-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <MiniAvatar initials={post.initials} color={post.color} size={38} />
+                  {/* Accent ring around the avatar (iOS FocusFeedCardView) */}
+                  <span
+                    className="rounded-full p-[2px] shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${post.color}, ${post.color}40)` }}
+                  >
+                    <MiniAvatar initials={post.initials} color={post.color} size={38} />
+                  </span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-bold text-primary">{post.author}</span>
-                      <span className="text-[11px] text-secondary">{post.action}</span>
-                      <span className="text-[11px] text-secondary ml-auto">{post.timeAgo}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-rounded text-[15px] font-semibold text-white">
+                        {post.author}
+                      </span>
+                      <span
+                        className="font-rounded text-[11px] font-bold uppercase tracking-[0.6px] px-2 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: `${post.color}26`,
+                          border: `1px solid ${post.color}40`,
+                          color: post.color,
+                        }}
+                      >
+                        {post.type}
+                      </span>
+                      <span className="text-xs font-medium text-white/50 ml-auto">
+                        {post.timeAgo}
+                      </span>
                     </div>
-                    <p className="text-sm text-secondary leading-relaxed mt-1 line-clamp-3">
+                    <p className="text-sm text-white/70 leading-relaxed mt-1.5 line-clamp-3">
                       {post.content}
                     </p>
                   </div>
                 </div>
-                <div
-                  className="flex items-center gap-4 pt-1"
-                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-                >
-                  <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-red-400 transition-colors duration-150">
+                <div className="flex items-center gap-4 pt-1 border-t border-white/[0.06]">
+                  <button className="flex items-center gap-1.5 text-[11px] text-white/50 hover:text-red-400 transition-colors duration-150">
                     <Heart size={13} /> {post.likes}
                   </button>
-                  <button className="flex items-center gap-1.5 text-[11px] text-secondary hover:text-[#6366f1] transition-colors duration-150">
+                  <button className="flex items-center gap-1.5 text-[11px] text-white/50 hover:text-lyo-300 transition-colors duration-150">
                     <MessageCircle size={13} /> {post.comments}
                   </button>
                 </div>
