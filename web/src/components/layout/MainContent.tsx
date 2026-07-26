@@ -3,11 +3,14 @@
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-// Chat owns its own full-bleed layout (iOS overlay parity), so it opts out of
-// the shell's page padding and max-width.
+// Chat, classroom and the Discover reel own their own full-bleed layouts
+// (iOS overlay / DiscoverView parity), so they opt out of the shell's page
+// padding and max-width.
+const IMMERSIVE_ROUTES = ['/chat', '/classroom', '/discover'];
+
 export default function MainContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isImmersive = pathname.startsWith('/chat') || pathname.startsWith('/classroom');
+  const isImmersive = IMMERSIVE_ROUTES.some((r) => pathname.startsWith(r));
 
   if (isImmersive) {
     return <main className="flex-1 min-h-0 overflow-hidden">{children}</main>;
