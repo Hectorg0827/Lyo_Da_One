@@ -97,13 +97,6 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
     }
   };
 
-  const initials = post.author.displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
   return (
     <motion.article
       layout
@@ -116,37 +109,45 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         className
       )}
     >
-      {/* Header */}
+      {/* Header — iOS CommunityFeedPostCard: 44px letter avatar in an
+          indigo tint, 15pt name over a 12pt relative timestamp. */}
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           {/* Avatar */}
           <div className="relative shrink-0">
             {post.author.avatar ? (
               <img
                 src={post.author.avatar}
                 alt={post.author.displayName}
-                className="w-10 h-10 rounded-full object-cover border border-white/10"
+                className="w-11 h-11 rounded-full object-cover"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-lyo-500 to-accent-purple flex items-center justify-center text-white text-sm font-bold border border-white/10">
-                {initials}
+              <div
+                className="w-11 h-11 rounded-full flex items-center justify-center text-[17px] font-semibold"
+                style={{ backgroundColor: 'rgba(99,102,241,0.2)', color: '#6366f1' }}
+              >
+                {post.author.displayName.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
 
           {/* Author info */}
-          <div>
-            <span className="text-sm font-semibold leading-none text-white">{post.author.displayName}</span>
-            <span className="text-xs text-white/40 mt-0.5 block">
-              {formatTimeAgo(post.createdAt)}
+          <div className="flex flex-col gap-[2px]">
+            <span className="text-[15px] font-semibold leading-none text-white">
+              {post.author.displayName}
             </span>
+            <span className="text-xs text-white/50">{formatTimeAgo(post.createdAt)}</span>
           </div>
         </div>
 
         {/* Post type badge */}
         {post.type !== 'post' && (
-          <span className={cn('flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium', typeConfig.color)}>
-            <TypeIcon className="h-3 w-3" />{typeConfig.label}
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-xl px-2 py-1 text-[11px] font-medium"
+            style={{ backgroundColor: 'rgba(99,102,241,0.1)', color: '#a78bfa' }}
+          >
+            <TypeIcon className="h-3 w-3" />
+            {typeConfig.label}
           </span>
         )}
       </div>
@@ -199,7 +200,8 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
           {post.tags.map((tag) => (
             <span
               key={tag}
-              className="rounded-full border border-lyo-500/20 bg-lyo-500/10 px-2 py-0.5 text-xs text-lyo-400"
+              className="rounded-xl px-2 py-1 text-xs"
+              style={{ backgroundColor: 'rgba(99,102,241,0.1)', color: '#6366f1' }}
             >
               #{tag}
             </span>
@@ -207,85 +209,82 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         </div>
       )}
 
-      {/* Action bar */}
-      <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.06]">
-        <div className="flex items-center gap-1">
-          {/* Like */}
-          <motion.button
-            whileTap={{ scale: 0.85 }}
-            onClick={handleLike}
-            disabled={actionBusy === 'like'}
-            className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
-              isLiked
-                ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20'
-                : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-            )}
-          >
-            <motion.div
-              animate={isLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Heart
-                className={cn('w-4 h-4 transition-all', isLiked && 'fill-current')}
-              />
-            </motion.div>
-            <span>{formatNumber(likeCount)}</span>
-          </motion.button>
-
-          {/* Comment */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onClick?.();
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-white/50 hover:text-white/80 hover:bg-white/5 transition-all duration-200"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>{formatNumber(post.comments)}</span>
-          </button>
-
-          {/* Share */}
-          <div className="relative">
-            <button
-              onClick={handleShare}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-white/50 hover:text-white/80 hover:bg-white/5 transition-all duration-200"
-            >
-              <Share2 className="w-4 h-4" />
-            </button>
-            <AnimatePresence>
-              {showShareToast && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-white/10 backdrop-blur-md rounded-lg text-xs text-white whitespace-nowrap border border-white/10 pointer-events-none"
-                >
-                  Link copied!
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Bookmark */}
+      {/* Action bar — iOS uses four equal-width cells at 15pt. Only the
+          glyph takes the active tint; counts stay secondary throughout. */}
+      <div className="flex items-stretch mt-4 pt-1 border-t border-white/[0.06] text-[15px]">
+        {/* Like */}
         <motion.button
-          whileTap={{ scale: 0.85 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={handleLike}
+          disabled={actionBusy === 'like'}
+          aria-label={isLiked ? 'Unlike post' : 'Like post'}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-white/50 hover:bg-white/5 transition-colors duration-200"
+        >
+          <motion.span
+            animate={isLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}
+            transition={{ duration: 0.3 }}
+            className="flex"
+          >
+            <Heart
+              className={cn('w-[18px] h-[18px]', isLiked && 'fill-current text-red-500')}
+            />
+          </motion.span>
+          <span>{formatNumber(likeCount)}</span>
+        </motion.button>
+
+        {/* Comment */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick?.();
+          }}
+          aria-label="View comments"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-white/50 hover:bg-white/5 transition-colors duration-200"
+        >
+          <MessageCircle className="w-[18px] h-[18px]" />
+          <span>{formatNumber(post.comments)}</span>
+        </button>
+
+        {/* Bookmark — no count on iOS */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={handleBookmark}
           disabled={actionBusy === 'bookmark'}
+          aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark post'}
           className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
-            isBookmarked
-              ? 'text-lyo-400 bg-lyo-500/10 hover:bg-lyo-500/20'
-              : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+            'flex-1 flex items-center justify-center py-2 rounded-lg hover:bg-white/5 transition-colors duration-200',
+            isBookmarked ? 'text-lyo-500' : 'text-white/50'
           )}
         >
           {isBookmarked ? (
-            <BookmarkCheck className="w-4 h-4 fill-current" />
+            <BookmarkCheck className="w-[18px] h-[18px] fill-current" />
           ) : (
-            <Bookmark className="w-4 h-4" />
+            <Bookmark className="w-[18px] h-[18px]" />
           )}
         </motion.button>
+
+        {/* Share — no count on iOS */}
+        <div className="flex-1 relative flex">
+          <button
+            onClick={handleShare}
+            aria-label="Share post"
+            className="flex-1 flex items-center justify-center py-2 rounded-lg text-white/50 hover:bg-white/5 transition-colors duration-200"
+          >
+            <Share2 className="w-[18px] h-[18px]" />
+          </button>
+          <AnimatePresence>
+            {showShareToast && (
+              <motion.div
+                initial={{ opacity: 0, y: 4, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-white/10 backdrop-blur-md rounded-lg text-xs text-white whitespace-nowrap border border-white/10 pointer-events-none"
+              >
+                Link copied!
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </motion.article>
   );
