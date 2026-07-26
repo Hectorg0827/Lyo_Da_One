@@ -75,7 +75,7 @@ function StatCard({
         <Icon size={20} style={{ color }} />
       </div>
       <div>
-        <p className="text-2xl font-black text-primary leading-none">{value}</p>
+        <p className="font-rounded text-[22px] font-bold text-primary leading-none">{value}</p>
         {sub && <p className="text-xs text-secondary mt-0.5">{sub}</p>}
       </div>
       <p className="text-xs font-medium text-secondary">{label}</p>
@@ -129,7 +129,7 @@ export default function LearningStatsPanel({ stats }: LearningStatsProps) {
 
       {/* Streak Calendar */}
       <motion.div variants={itemVariants} className="glass-card p-5">
-        <h3 className="text-sm font-bold text-primary mb-1">Activity Calendar</h3>
+        <h3 className="font-rounded text-[17px] font-bold text-primary mb-1">Activity Calendar</h3>
         <p className="text-xs text-secondary mb-4">Last 28 days</p>
         <div className="grid grid-cols-7 gap-1.5">
           {calendarData.map((day) => (
@@ -154,24 +154,31 @@ export default function LearningStatsPanel({ stats }: LearningStatsProps) {
         </div>
       </motion.div>
 
-      {/* Top Topics — Bar Chart */}
+      {/* Skill mastery — iOS MasteryProfileView.SkillRow: 15pt name, bold
+          secondary percentage, h8 capsule track with a blue→cyan fill. */}
       <motion.div variants={itemVariants} className="glass-card p-5">
-        <h3 className="text-sm font-bold text-primary mb-4">Top Topics</h3>
-        <div className="space-y-3">
+        <h3 className="font-rounded text-[17px] font-bold text-primary mb-4">Skill Mastery</h3>
+        {stats.topTopics.length === 0 && (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <Target size={24} className="text-secondary" />
+            <p className="text-sm text-secondary">
+              Finish a few lessons and your strongest skills will show up here.
+            </p>
+          </div>
+        )}
+        <div className="space-y-4">
           {stats.topTopics.map((topic, i) => {
             const pct = Math.round((topic.hours / maxTopicHours) * 100);
-            const colors = ['#6366f1', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899'];
-            const color = colors[i % colors.length];
             return (
               <div key={topic.topic} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-primary">{topic.topic}</span>
-                  <span className="text-secondary">{topic.hours}h</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[15px] text-primary">{topic.topic}</span>
+                  <span className="text-xs font-bold text-secondary">{pct}%</span>
                 </div>
-                <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-2 w-full rounded-full overflow-hidden bg-white/20">
                   <motion.div
                     className="h-full rounded-full"
-                    style={{ background: color }}
+                    style={{ background: 'linear-gradient(90deg, #007aff, #32ade6)' }}
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
                     transition={{ duration: 0.8, ease: 'easeOut', delay: i * 0.1 }}
@@ -186,7 +193,7 @@ export default function LearningStatsPanel({ stats }: LearningStatsProps) {
       {/* Recent Achievements */}
       <motion.div variants={itemVariants} className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-primary">Recent Achievements</h3>
+          <h3 className="font-rounded text-[17px] font-bold text-primary">Recent Achievements</h3>
           <button className="text-xs text-secondary hover:text-primary transition-colors flex items-center gap-1">
             <Trophy size={12} /> View all
           </button>

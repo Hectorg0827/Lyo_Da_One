@@ -181,8 +181,12 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
           transition={{ delay: 0.15 }}
           className="mb-4"
         >
-          <h1 className="text-2xl font-black leading-tight gradient-text">{user.displayName}</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>@{user.username}</p>
+          <h1 className="font-rounded text-[28px] font-bold leading-tight">
+            <span className="headline-gradient-text">{user.displayName}</span>
+          </h1>
+          <p className="text-[15px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            @{user.username}
+          </p>
           {user.bio && (
             <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               {user.bio}
@@ -225,8 +229,12 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
               className="flex-1 py-3.5 flex flex-col items-center hover:bg-white/5 transition-colors duration-200"
               style={{ borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
             >
-              <span className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>{stat.value}</span>
-              <span className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>{stat.label}</span>
+              <span className="font-rounded text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                {stat.value}
+              </span>
+              <span className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                {stat.label}
+              </span>
             </button>
           ))}
         </motion.div>
@@ -244,7 +252,8 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
               {xpInLevel.toLocaleString()} / {XP_PER_LEVEL.toLocaleString()} XP
             </span>
           </div>
-          <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          {/* iOS MasteryProfileView bar: h8 capsule track at white/20 */}
+          <div className="h-2 w-full rounded-full overflow-hidden bg-white/20">
             <motion.div
               className="h-full rounded-full"
               style={{ background: 'linear-gradient(90deg, #6366f1, #a78bfa)' }}
