@@ -20,6 +20,7 @@ struct ActiveLessonView: View {
     var onAskLyo: (LessonStep) -> Void = { _ in }
     var onExplainEasier: (LessonStep) -> Void = { _ in }
     var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Void = { _, _ in }
+    var onTransferSubmit: (SDUIComponent, String) -> Void = { _, _ in }
     var onBack: () -> Void = {}
     var onMenu: () -> Void = {}
     var onMic: () -> Void = {}
@@ -51,6 +52,7 @@ struct ActiveLessonView: View {
             case comparison(ConceptComparisonModel)
             case lessonBlock(LiveLessonBlock)
             case classroomQuiz(SDUIComponent)
+            case classroomInput(SDUIComponent)
         }
 
         struct KeyTerm {
@@ -73,6 +75,7 @@ struct ActiveLessonView: View {
 
     @State private var currentIndex: Int = 0
     @State private var quizSelections: [String: String] = [:]
+    @State private var submittedTransferIds: Set<String> = []
     @State private var reflectionText: String = ""
     @State private var showLessonMap = false
     @State private var showLyoLens = false
@@ -96,6 +99,9 @@ struct ActiveLessonView: View {
         if case .classroomQuiz = step.supporting {
             return true
         }
+        if case .classroomInput = step.supporting {
+            return true
+        }
         return false
     }
 
@@ -103,6 +109,9 @@ struct ActiveLessonView: View {
         guard let step = currentStep else { return true }
         if case .classroomQuiz(let component) = step.supporting {
             return quizSelections[component.id] != nil
+        }
+        if case .classroomInput(let component) = step.supporting {
+            return submittedTransferIds.contains(component.id)
         }
         return true
     }
@@ -172,7 +181,10 @@ struct ActiveLessonView: View {
                             onOptionSelected: { component, option in
                                 quizSelections[component.id] = option.id
                                 onQuizAnswer(component, option)
-                                unlockAndAdvanceSoftly(step)
+                            },
+                            onTransferSubmit: { component, response in
+                                submittedTransferIds.insert(component.id)
+                                onTransferSubmit(component, response)
                             }
                         )
                         .offset(x: shakeOffset)
@@ -318,15 +330,6 @@ struct ActiveLessonView: View {
             if currentIndex > 0 {
                 currentIndex -= 1
                 isBoardTappedToComplete = false
-            }
-        }
-    }
-
-    private func unlockAndAdvanceSoftly(_ step: LessonStep) {
-        // Auto advance after short delay if appropriate, or let user swipe
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            if let current = currentStep, current.id == step.id {
-                goToNextScene()
             }
         }
     }
@@ -510,6 +513,7 @@ struct LyoBoardView: View {
     @Binding var reflectionText: String
     @Binding var isTappedToComplete: Bool
     var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Void
+    var onTransferSubmit: (SDUIComponent, String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -527,6 +531,9 @@ struct LyoBoardView: View {
             switch step.supporting {
             case .classroomQuiz(let component):
                 quizContent(component)
+
+            case .classroomInput(let component):
+                transferContent(component)
 
             case .comparison(let model):
                 comparisonContent(model)
@@ -601,6 +608,58 @@ struct LyoBoardView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private func transferContent(_ component: SDUIComponent) -> some View {
+        let minimum = max(component.minWords ?? 6, 1)
+        let wordCount = reflectionText
+            .split(whereSeparator: \.isWhitespace)
+            .count
+        let isSpanish = component.languageCode?.lowercased().hasPrefix("es") == true
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(isSpanish ? "Comprobación de aplicación" : "Application Check")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.accent)
+
+            Text(component.question ?? component.content)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textPrimary)
+
+            TextEditor(text: $reflectionText)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textPrimary)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 90)
+                .padding(10)
+                .background(
+                    Color.white.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+
+            HStack {
+                Text(
+                    isSpanish
+                        ? "\(wordCount)/\(minimum) palabras como mínimo"
+                        : "\(wordCount)/\(minimum) words minimum"
+                )
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ClassroomTokens.textTertiary)
+                Spacer()
+                Button(isSpanish ? "Enviar" : "Submit") {
+                    let response = reflectionText.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    onTransferSubmit(component, response)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(ClassroomTokens.accent)
+                .disabled(wordCount < minimum)
             }
         }
     }

@@ -86,7 +86,13 @@ class AudioPlaybackService: ObservableObject {
     
     /// Request TTS audio from backend
     private func requestTTS(text: String, voice: TTSVoice) async throws -> Data {
-        let endpoint = Endpoints.TTS.generate(text: text, voice: voice, speed: 1.0, withTimings: false)
+        let endpoint = Endpoints.TTS.generate(
+            text: text,
+            voice: voice,
+            speed: 1.0,
+            withTimings: false,
+            language: "auto"
+        )
         return try await NetworkClient.shared.requestRawData(endpoint)
     }
     

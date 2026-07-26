@@ -4,8 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { BookOpenCheck, CheckCircle2, FileText, ImageIcon, Send, XCircle } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, FileText, ImageIcon, Mic, Send, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  createBrowserSpeechRecognition,
+  type BrowserSpeechRecognition,
+} from '@/lib/browser-speech';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 
@@ -192,16 +196,59 @@ function QuizView({
 }
 
 function TransferView({
-  el,
+  el, onInputStart,
   onSubmit,
 }: {
   el: Extract<BoardElement, { kind: 'transfer' }>;
   onSubmit: (elementId: string, response: string) => void;
+  onInputStart: () => void;
 }) {
   const [response, setResponse] = useState(el.response || '');
+  const [listening, setListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const dictationBaseRef = useRef('');
   const minWords = el.input.min_words ?? 6;
   const wordCount = response.trim().split(/\s+/).filter(Boolean).length;
   const ready = wordCount >= minWords && !el.submitted;
+
+  useEffect(() => {
+    setSpeechSupported(createBrowserSpeechRecognition() !== null);
+    return () => recognitionRef.current?.stop();
+  }, []);
+
+  const toggleDictation = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = createBrowserSpeechRecognition();
+    if (!recognition) return;
+    onInputStart();
+    recognitionRef.current = recognition;
+    dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
+    recognition.lang = el.input.language_code === 'auto'
+      ? navigator.language || 'en-US'
+      : el.input.language_code || navigator.language || 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index][0].transcript;
+      }
+      setResponse((dictationBaseRef.current + transcript).slice(0, 1200));
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
   return (
     <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
@@ -215,7 +262,11 @@ function TransferView({
         value={response}
         disabled={el.submitted}
         maxLength={Math.max(200, (el.input.max_words ?? 120) * 10)}
-        onChange={(event) => setResponse(event.target.value)}
+        onFocus={onInputStart}
+        onChange={(event) => {
+          onInputStart();
+          setResponse(event.target.value);
+        }}
         placeholder={el.input.placeholder || 'Explain your reasoning…'}
         className="w-full min-h-28 resize-y rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
@@ -223,15 +274,32 @@ function TransferView({
         <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
           {wordCount}/{minWords} minimum words
         </span>
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={() => onSubmit(el.id, response)}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Send className="h-4 w-4" />
-          {el.submitted ? 'Submitted' : 'Submit application'}
-        </button>
+        <div className="flex items-center gap-2">
+          {speechSupported && !el.submitted && (
+            <button
+              type="button"
+              onClick={toggleDictation}
+              aria-label={listening ? 'Stop dictation' : 'Dictate your application'}
+              className={cn(
+                'rounded-lg border p-2 transition-colors',
+                listening
+                  ? 'border-red-400/50 bg-red-500/15 text-red-200'
+                  : 'border-white/15 bg-white/5 text-white/65 hover:text-white',
+              )}
+            >
+              <Mic className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={!ready}
+            onClick={() => onSubmit(el.id, response)}
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Send className="h-4 w-4" />
+            {el.submitted ? 'Submitted' : 'Submit application'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -240,11 +308,12 @@ function TransferView({
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
-  el, onQuizAnswer, onTransferSubmit, reducedMotion = false,
+  el, onQuizAnswer, onTransferSubmit, onLearnerInputStart, reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
   onTransferSubmit: (elementId: string, response: string) => void;
+  onLearnerInputStart: () => void;
   reducedMotion?: boolean;
 }) {
   return (
@@ -339,7 +408,13 @@ export function BoardElementView({
 
       {el.kind === 'quiz' && <QuizView el={el} onAnswer={onQuizAnswer} />}
 
-      {el.kind === 'transfer' && <TransferView el={el} onSubmit={onTransferSubmit} />}
+      {el.kind === 'transfer' && (
+        <TransferView
+          el={el}
+          onSubmit={onTransferSubmit}
+          onInputStart={onLearnerInputStart}
+        />
+      )}
 
       {el.kind === 'summary' && (
         <section className="space-y-3 rounded-xl border border-green-400/20 bg-green-500/10 p-4">

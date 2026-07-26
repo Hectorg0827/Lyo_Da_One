@@ -9,6 +9,7 @@ export interface ClassroomContractConnection {
   mode?: ClassroomMode;
   durationMinutes?: number;
   reducedMotion?: boolean;
+  language?: string;
 }
 
 export const CLASSROOM_MODES: readonly ClassroomMode[];

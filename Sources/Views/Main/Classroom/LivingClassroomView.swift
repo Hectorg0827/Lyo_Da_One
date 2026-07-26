@@ -414,6 +414,13 @@ struct LivingClassroomView: View {
                     ]
                 )
             },
+            onTransferSubmit: { component, response in
+                service.sendUserAction(
+                    actionIntent: component.actionIntent ?? "submit_transfer",
+                    componentId: component.id,
+                    actionData: ["response": response]
+                )
+            },
             onBack: { dismiss() },
             onMenu: { withAnimation { showDrawer.toggle() } },
             onMic: { openAskOverlay(for: nil) },
@@ -2654,6 +2661,7 @@ struct WhiteboardComponentRenderer: View {
     let component: SDUIComponent
     @Binding var quizSelections: [String: String]
     var onAction: ((String, String, [String: Any]?) -> Void)?
+    @State private var transferResponse = ""
 
     private let textDark = Color(hexString: "1F2937")
     private let textMedium = Color(hexString: "4B5563")
@@ -2671,8 +2679,62 @@ struct WhiteboardComponentRenderer: View {
         case .textBlock: textBlockView
         case .codeBlock: codeBlockView
         case .progressBar: progressBarView
+        case .exampleBlock: exampleBlockView
+        case .inputField: inputFieldView
         case .lessonBlock: lessonBlockView
         default: fallbackView
+        }
+    }
+
+    private var exampleBlockView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(component.title ?? "Worked example")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(accentBlue)
+            Text(component.content)
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(textDark)
+        }
+        .padding(14)
+        .background(cardBg, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var inputFieldView: some View {
+        let minimum = max(component.minWords ?? 6, 1)
+        let wordCount = transferResponse.split(whereSeparator: \.isWhitespace).count
+        let isSpanish = component.languageCode?.lowercased().hasPrefix("es") == true
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(component.question ?? component.content)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(textDark)
+            TextEditor(text: $transferResponse)
+                .font(.system(size: 14, weight: .medium))
+                .frame(minHeight: 90)
+                .padding(8)
+                .background(Color.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+            HStack {
+                Text(
+                    isSpanish
+                        ? "\(wordCount)/\(minimum) palabras"
+                        : "\(wordCount)/\(minimum) words"
+                )
+                    .font(.caption)
+                    .foregroundStyle(textLight)
+                Spacer()
+                Button(isSpanish ? "Enviar" : "Submit") {
+                    onAction?(
+                        component.actionIntent ?? "submit_transfer",
+                        component.id,
+                        ["response": transferResponse]
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(wordCount < minimum)
+            }
         }
     }
 

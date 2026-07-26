@@ -49,7 +49,11 @@ class LivingClassroomService: ObservableObject {
     // MARK: Voice tutoring
     /// When on, teacher messages are spoken aloud as they reveal, making the
     /// lesson a listen-along. Persisted across sessions.
-    @Published var voiceModeEnabled: Bool = UserDefaults.standard.bool(forKey: "classroom_voice_mode") {
+    @Published var voiceModeEnabled: Bool = {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "classroom_voice_mode") != nil else { return true }
+        return defaults.bool(forKey: "classroom_voice_mode")
+    }() {
         didSet {
             UserDefaults.standard.set(voiceModeEnabled, forKey: "classroom_voice_mode")
             if !voiceModeEnabled { TextToSpeechService.shared.stop() }
@@ -66,7 +70,10 @@ class LivingClassroomService: ObservableObject {
         else { return }
         let trimmed = component.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.hasPrefix("["), !trimmed.hasPrefix("{") else { return }
-        TextToSpeechService.shared.enqueue(trimmed)
+        TextToSpeechService.shared.enqueue(
+            trimmed,
+            language: component.languageCode ?? "auto"
+        )
     }
 
     /// Barge-in: the learner started talking — stop talking over them.
@@ -87,9 +94,6 @@ class LivingClassroomService: ObservableObject {
     private var didReceiveBackendScene: Bool = false
     /// Watchdog that switches to the on-device engine if the backend stalls.
     private var stallTask: Task<Void, Never>?
-    /// Marks the can-continue state after a scene's staggered reveal finishes.
-    private var revealTask: Task<Void, Never>?
-
     /// How long to wait for the backend to deliver the *first* scene before the
     /// on-device engine takes over.
     private let firstSceneTimeout: TimeInterval = 8.0
@@ -113,7 +117,7 @@ class LivingClassroomService: ObservableObject {
     ///   - sessionId: The classroom session / course identifier.
     ///   - topic: Human-readable lesson topic used by the on-device engine if the
     ///     backend is unavailable or stalls. Defaults to the sessionId.
-    func connect(sessionId: String, topic: String? = nil) {
+    func connect(sessionId: String, topic: String? = nil, language: String = "auto") {
         self.topic = (topic?.isEmpty == false ? topic! : sessionId)
 
         guard webSocketTask == nil, !isConnecting else {
@@ -187,12 +191,15 @@ class LivingClassroomService: ObservableObject {
                 let encodedTopic =
                     resolvedTopic.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
                     ?? resolvedTopic
+                let encodedLanguage =
+                    language.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+                    ?? language
 
                 // Backend WebSocket auth requires token as query param (not header)
                 guard
                     let url = URL(
                         string:
-                            "\(wsBaseString)/api/v1/classroom/ws/connect?session_id=\(encodedSessionId)&token=\(encodedToken)&topic=\(encodedTopic)"
+                            "\(wsBaseString)/api/v1/classroom/ws/connect?session_id=\(encodedSessionId)&token=\(encodedToken)&topic=\(encodedTopic)&language=\(encodedLanguage)"
                     )
                 else {
                     self.logger.error("Invalid WebSocket URL")
@@ -231,8 +238,6 @@ class LivingClassroomService: ObservableObject {
     func disconnect() {
         stallTask?.cancel()
         stallTask = nil
-        revealTask?.cancel()
-        revealTask = nil
         cancelHesitationWatch()
         consecutiveWrongAnswers = 0
         lastInterventionAt = nil
@@ -270,6 +275,9 @@ class LivingClassroomService: ObservableObject {
     /// adapt to the learner (and so it works even with no backend).
     func sendUserAction(actionIntent: String, componentId: String, actionData: [String: Any]? = nil)
     {
+        // Any learner action owns the floor immediately and invalidates speech
+        // from the previous scene.
+        bargeIn()
         captureLearnerInteraction(
             actionIntent: actionIntent, componentId: componentId, actionData: actionData)
 
@@ -689,6 +697,8 @@ class LivingClassroomService: ObservableObject {
         stallTask = nil
         didReceiveBackendScene = didReceiveBackendScene || !usingLocalEngine
 
+        // A new scene invalidates any queued or playing narration.
+        TextToSpeechService.shared.stop()
         self.sceneRevision += 1
         self.sceneStartedAt = Date()
         cancelHesitationWatch()  // a new scene invalidates any pending watch
@@ -703,7 +713,7 @@ class LivingClassroomService: ObservableObject {
             components.insert(
                 SDUIComponent(
                     id: "memory-greeting",
-                    type: .teacherMessage,
+                    type: .textBlock,
                     content: greeting,
                     animation: "fade_in",
                     emotion: "warm"
@@ -723,23 +733,6 @@ class LivingClassroomService: ObservableObject {
 
         // Auto-reveal the first chunk (staggered, teacher-paced)
         revealNextComponent()
-        // Once the staggered reveal completes, allow the learner to continue.
-        scheduleCanContinue(after: scene)
-    }
-
-    /// Computes when the last component will have appeared and flips `canContinue`.
-    private func scheduleCanContinue(after scene: SDUIScene) {
-        revealTask?.cancel()
-        let maxDelayMs = scene.components.map { $0.delayMs }.max() ?? 0
-        let totalDelay = TimeInterval(maxDelayMs) / 1000.0 + 0.6
-        revealTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(totalDelay * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard let self else { return }
-                if !self.lessonComplete { self.canContinue = true }
-            }
-        }
     }
 
     private func renderComponent(_ component: SDUIComponent) {
@@ -782,33 +775,27 @@ class LivingClassroomService: ObservableObject {
         // Voice tutoring: read teacher messages aloud as they reveal.
         narrateIfEnabled(component)
 
-        // A checkpoint just appeared — watch for hesitation (long silence
-        // usually means the learner is stuck, not thinking). Our own
-        // intervention cards are exempt.
-        if component.type == .quizCard, component.actionIntent != "intervention_choice" {
-            startHesitationWatch(for: component)
+        if component.type == .ctaButton {
+            canContinue = true
+        } else if component.type == .quizCard || component.type == .inputField {
+            canContinue = false
+            // A real learner checkpoint is a hard boundary. The next component
+            // cannot appear until their answer produces a new server scene.
+            return
         }
 
-        // Simulate teacher pacing: Auto-reveal the next component after a reading delay,
-        // UNLESS the next component requires explicit user interaction.
+        // Reveal the complete teaching beat, including its checkpoint. Once an
+        // interactive component is visible, no timer advances the lesson.
         if !componentQueue.isEmpty {
             let nextComponent = componentQueue[0]
+            let charCount = max(component.content.count, 20)
+            let delay = component.type == .teacherMessage
+                ? min(max(Double(charCount) * 0.035, 0.8), 2.0)
+                : 0.35
 
-            let requiresPause = nextComponent.type == .studentPrompt
-                             || nextComponent.type == .quizCard
-                             || nextComponent.type == .ctaButton
-
-            if !requiresPause {
-                // Calculate realistic reading delay (approx 50ms per character)
-                let charCount = max(component.content.count, 40)
-                let delay = Double(charCount) * 0.05
-                let cappedDelay = min(max(delay, 1.0), 5.0)
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + cappedDelay) {
-                    // Only auto-reveal if the user hasn't manually tapped ahead
-                    if self.hasQueuedComponents && self.componentQueue.first?.id == nextComponent.id {
-                        self.revealNextComponent()
-                    }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                if self.hasQueuedComponents && self.componentQueue.first?.id == nextComponent.id {
+                    self.revealNextComponent()
                 }
             }
         }
@@ -816,9 +803,7 @@ class LivingClassroomService: ObservableObject {
 
     private func completeSceneRender() {
         logger.info("Completed rendering scene")
-        // Backend signaled the scene is done — let the learner advance.
         isGenerating = false
-        if !lessonComplete { canContinue = true }
     }
 
     private func makeLocalFallbackScene(topic: String, sceneIndex: Int) -> SDUIScene {
@@ -832,27 +817,19 @@ class LivingClassroomService: ObservableObject {
         switch phase {
         case 0:
             messages = [
-                "Let's start for real. \(cleanTopic) is not about memorizing harder; it is about choosing the right kind of effort at the right time.",
-                "The first move is attention. Before you study, decide what you are trying to understand, then remove one distraction that would split your focus.",
-                "The second move is active recall. After a short study pass, close the notes and pull the idea back from memory in your own words. That retrieval is where learning gets stronger."
+                "Start with one useful move for \(cleanTopic): decide exactly what you are trying to understand, then remove one distraction. Clear attention gives the idea a fair chance to stick."
             ]
         case 1:
             messages = [
-                "Now let's make it practical. Strong learners use short cycles: learn, test, correct, then repeat.",
-                "If something feels familiar while you read it, that is not proof you know it. Proof comes when you can explain it without looking.",
-                "A useful rule is simple: if you cannot teach the idea in one minute, you have found the next thing to practice."
+                "Use a short cycle: learn, test, correct, repeat. Familiarity while reading is not proof of understanding; explaining the idea without looking gives you real evidence."
             ]
         case 2:
             messages = [
-                "Here is the common trap: rereading feels productive because it is comfortable, but it often hides weak memory.",
-                "Better practice feels slightly harder. Mix old and new ideas, answer questions, and let mistakes show you where to focus next.",
-                "This is called desirable difficulty: the work is challenging enough to build memory, but not so hard that you cannot recover."
+                "The common trap is comfortable rereading, which can hide weak memory. Better practice feels slightly harder: retrieve the idea, notice the miss, and correct only the weak part."
             ]
         default:
             messages = [
-                "Let's lock this in. For \(cleanTopic), your study system should have three parts: focus, recall, and feedback.",
-                "Focus helps the idea enter clearly. Recall makes the memory stronger. Feedback shows what needs another pass.",
-                "Next, I can turn this into a quick classroom challenge so you can prove what you remember."
+                "For \(cleanTopic), keep three parts together: focus lets the idea enter clearly, recall strengthens it, and feedback identifies what needs another pass. The board challenge will test that connection."
             ]
         }
 

@@ -60,6 +60,7 @@ export interface Course {
   tags: string[];
   modules: CourseModule[];
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  language?: string;
   estimatedDuration: number; // minutes
   enrolledCount: number;
   rating: number;
