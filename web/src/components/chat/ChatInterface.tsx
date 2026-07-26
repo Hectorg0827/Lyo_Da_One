@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '@/stores/chat-store';
 import { useAuthStore } from '@/stores/auth-store';
@@ -10,28 +10,54 @@ import SuggestionChips from './SuggestionChips';
 import MascotAvatar from './MascotAvatar';
 
 // ─── LYO Mascot hero (matches iOS LyoOverlayView avatarLayer) ────────────────
+// iOS renders this at 200pt on a full-screen overlay; the web chat sits under
+// a top bar and above the tab bar, so the mascot scales down on short screens.
 function LYOOrb() {
   return (
-    <div className="relative flex items-center justify-center mt-10">
+    <div className="relative flex items-center justify-center mt-4 sm:mt-10">
       {/* Orange radial glow behind the mascot */}
-      <div className="absolute w-[280px] h-[280px] rounded-full mascot-glow pointer-events-none" />
-      <div className="relative animate-mascot-float flex items-center justify-center">
+      <div className="absolute w-[190px] h-[190px] sm:w-[280px] sm:h-[280px] rounded-full mascot-glow pointer-events-none" />
+      <div
+        className="relative animate-mascot-float flex items-center justify-center
+          [&_img]:w-[135px] [&_img]:h-[135px] sm:[&_img]:w-[200px] sm:[&_img]:h-[200px]"
+      >
         <MascotAvatar size={200} />
       </div>
     </div>
   );
 }
 
-// ─── Thinking animation (matches iOS reading mascot) ─────────────────────────
+// ─── Thinking animation ───────────────────────────────────────────────────────
+// Mirrors iOS LyoUnifiedThinkingIndicator: cycling mascot reading frames, a
+// label that rotates through phases with its own tint, and three pulsing dots.
+const THINKING_PHASES = [
+  { label: 'Thinking…', color: '#6366f1' },
+  { label: 'Analyzing…', color: '#8b5cf6' },
+  { label: 'Processing…', color: '#ec4899' },
+];
+
 function ThinkingIndicator() {
+  const [phase, setPhase] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(
+      () => setPhase((p) => (p + 1) % THINKING_PHASES.length),
+      2000
+    );
+    return () => clearInterval(id);
+  }, []);
+
+  const { label, color } = THINKING_PHASES[phase];
+
   return (
     <div className="flex items-end gap-3 w-full">
       <MascotAvatar thinking size={32} />
-      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white/5 border border-white/10 backdrop-blur-sm flex items-center gap-1.5">
+      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-black/40 border border-white/10 backdrop-blur-sm flex items-center gap-1.5">
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className="w-1.5 h-1.5 rounded-full bg-lyo-400"
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: color }}
             animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
             transition={{
               duration: 0.9,
@@ -41,7 +67,19 @@ function ThinkingIndicator() {
             }}
           />
         ))}
-        <span className="ml-2 text-sm text-white/40">Lyo is thinking…</span>
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={label}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.25 }}
+            className="ml-2 text-sm font-medium"
+            style={{ color }}
+          >
+            {label}
+          </motion.span>
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -77,16 +115,16 @@ function EmptyState() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="flex flex-col items-center justify-center h-full min-h-full px-4 py-8 text-center"
+      className="flex flex-col items-center justify-center h-full min-h-full px-4 py-4 sm:py-8 text-center"
     >
-      <h1 className="font-rounded text-[32px] font-bold leading-tight">
+      <h1 className="font-rounded text-[26px] sm:text-[32px] font-bold leading-tight">
         <span className="hello-gradient-text">Hello, {firstName}!</span>
       </h1>
-      <p className="mt-2 text-lg font-medium text-white/80">
+      <p className="mt-2 text-base sm:text-lg font-medium text-white/80">
         Ready to embark on a learning journey?
       </p>
       <LYOOrb />
-      <div className="flex-1 min-h-6" />
+      <div className="flex-1 min-h-4" />
       <SuggestionChips />
     </motion.div>
   );
