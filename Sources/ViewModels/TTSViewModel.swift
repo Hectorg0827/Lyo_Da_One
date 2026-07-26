@@ -64,7 +64,8 @@ class TTSViewModel: NSObject, ObservableObject {
                 text: text,
                 voice: selectedVoice,
                 speed: Double(playbackSpeed),
-                withTimings: true
+                withTimings: true,
+                language: "auto"
             )
 
             currentTTSResult = result
