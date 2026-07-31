@@ -86,7 +86,7 @@ function ClassroomStage() {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, canContinue, continueLabel,
     progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
-    connect, disconnect, answerPrompt, answerQuiz, answerTransfer, askQuestion, signal,
+    connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, askQuestion, signal,
     requestHint, continueLesson, toggleSound, toggleVoice, setSpeechRate, viewBoard,
   } = useClassroomStore();
 
@@ -285,6 +285,8 @@ function ClassroomStage() {
                 el={el}
                 onQuizAnswer={answerQuiz}
                 onTransferSubmit={answerTransfer}
+                onSkipQuestion={skipQuestion}
+                onAskHelp={() => requestHint('nudge')}
                 reducedMotion={animationsOff}
               />
             ))}

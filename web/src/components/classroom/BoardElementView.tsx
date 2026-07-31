@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { BookOpenCheck, CheckCircle2, FileText, ImageIcon, Send, XCircle } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, FileText, HelpCircle, ImageIcon, Send, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
@@ -136,12 +136,15 @@ function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; l
 }
 
 function QuizView({
-  el, onAnswer,
+  el, onAnswer, onSkip, onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'quiz' }>;
   onAnswer: (elementId: string, option: QuizOption) => void;
+  onSkip: (elementId: string) => void;
+  onAskHelp: () => void;
 }) {
   const quiz = el.quiz;
+  const locked = !!el.answered || !!el.skipped;
   return (
     <div className="space-y-3">
       <p className="text-[11px] font-black tracking-widest text-accent-gold uppercase">📝 On the board — checkpoint</p>
@@ -152,15 +155,15 @@ function QuizView({
           return (
             <button
               key={opt.id}
-              disabled={!!el.answered}
+              disabled={locked}
               onClick={() => onAnswer(el.id, opt)}
               className={cn(
                 'flex items-center justify-between px-4 py-3 rounded-xl text-sm text-left border transition-all',
                 chosen && el.wasCorrect === true && 'bg-green-500/15 border-green-500/40 text-white',
                 chosen && el.wasCorrect === false && 'bg-red-500/15 border-red-500/40 text-white',
                 chosen && el.wasCorrect === undefined && 'bg-lyo-500/15 border-lyo-400/40 text-white',
-                !el.answered && 'bg-white/5 border-white/15 text-white/85 hover:bg-lyo-500/15 hover:border-lyo-500/40',
-                !chosen && el.answered && 'bg-white/[0.03] border-white/5 text-white/30',
+                !locked && 'bg-white/5 border-white/15 text-white/85 hover:bg-lyo-500/15 hover:border-lyo-500/40',
+                !chosen && locked && 'bg-white/[0.03] border-white/5 text-white/30',
               )}
             >
               <span>{opt.label}</span>
@@ -174,6 +177,28 @@ function QuizView({
           );
         })}
       </div>
+      {!el.answered && !el.skipped && (
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => onSkip(el.id)}
+            className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
+          >
+            I don&apos;t know — skip
+          </button>
+          <span className="text-white/20">·</span>
+          <button
+            type="button"
+            onClick={onAskHelp}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+          >
+            <HelpCircle className="w-3.5 h-3.5" /> Ask for help
+          </button>
+        </div>
+      )}
+      {el.skipped && (
+        <p className="text-sm text-white/40 italic">Skipped — you can come back to this later.</p>
+      )}
       {el.feedback && (
         <p
           className={cn(
@@ -194,14 +219,19 @@ function QuizView({
 function TransferView({
   el,
   onSubmit,
+  onSkip,
+  onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'transfer' }>;
   onSubmit: (elementId: string, response: string) => void;
+  onSkip: (elementId: string) => void;
+  onAskHelp: () => void;
 }) {
   const [response, setResponse] = useState(el.response || '');
   const minWords = el.input.min_words ?? 6;
   const wordCount = response.trim().split(/\s+/).filter(Boolean).length;
-  const ready = wordCount >= minWords && !el.submitted;
+  const locked = !!el.submitted || !!el.skipped;
+  const ready = wordCount >= minWords && !locked;
   return (
     <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
@@ -213,26 +243,50 @@ function TransferView({
       <textarea
         id={`transfer-${el.id}`}
         value={response}
-        disabled={el.submitted}
+        disabled={locked}
         maxLength={Math.max(200, (el.input.max_words ?? 120) * 10)}
         onChange={(event) => setResponse(event.target.value)}
         placeholder={el.input.placeholder || 'Explain your reasoning…'}
         className="w-full min-h-28 resize-y rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
-      <div className="flex items-center justify-between gap-3">
-        <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
-          {wordCount}/{minWords} minimum words
-        </span>
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={() => onSubmit(el.id, response)}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Send className="h-4 w-4" />
-          {el.submitted ? 'Submitted' : 'Submit application'}
-        </button>
-      </div>
+      {el.skipped ? (
+        <p className="text-sm text-white/40 italic">Skipped — you can come back to this later.</p>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
+              {wordCount}/{minWords} minimum words
+            </span>
+            {!el.submitted && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSkip(el.id)}
+                  className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
+                >
+                  I don&apos;t know — skip
+                </button>
+                <button
+                  type="button"
+                  onClick={onAskHelp}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" /> Ask for help
+                </button>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={!ready}
+            onClick={() => onSubmit(el.id, response)}
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Send className="h-4 w-4" />
+            {el.submitted ? 'Submitted' : 'Submit application'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -240,11 +294,13 @@ function TransferView({
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
-  el, onQuizAnswer, onTransferSubmit, reducedMotion = false,
+  el, onQuizAnswer, onTransferSubmit, onSkipQuestion, onAskHelp, reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
   onTransferSubmit: (elementId: string, response: string) => void;
+  onSkipQuestion: (elementId: string) => void;
+  onAskHelp: () => void;
   reducedMotion?: boolean;
 }) {
   return (
@@ -337,9 +393,13 @@ export function BoardElementView({
         />
       )}
 
-      {el.kind === 'quiz' && <QuizView el={el} onAnswer={onQuizAnswer} />}
+      {el.kind === 'quiz' && (
+        <QuizView el={el} onAnswer={onQuizAnswer} onSkip={onSkipQuestion} onAskHelp={onAskHelp} />
+      )}
 
-      {el.kind === 'transfer' && <TransferView el={el} onSubmit={onTransferSubmit} />}
+      {el.kind === 'transfer' && (
+        <TransferView el={el} onSubmit={onTransferSubmit} onSkip={onSkipQuestion} onAskHelp={onAskHelp} />
+      )}
 
       {el.kind === 'summary' && (
         <section className="space-y-3 rounded-xl border border-green-400/20 bg-green-500/10 p-4">

@@ -97,8 +97,8 @@ export type BoardElement =
   | { id: string; kind: 'bullets'; items: string[] }
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
-  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string }
-  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
+  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
   | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string };
@@ -160,6 +160,7 @@ interface ClassroomStore {
   answerPrompt: (option: string) => void;
   answerQuiz: (elementId: string, option: QuizOption) => void;
   answerTransfer: (elementId: string, response: string) => void;
+  skipQuestion: (elementId: string) => void;
   askQuestion: (text: string) => void;
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
@@ -204,6 +205,50 @@ function stopSpeech() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
+}
+
+// Script-based signals are unambiguous; check these first.
+const SCRIPT_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
+  { code: 'zh', test: /[一-鿿]/ },
+  { code: 'ja', test: /[぀-ヿ]/ },
+  { code: 'ko', test: /[가-힯]/ },
+  { code: 'ar', test: /[؀-ۿ]/ },
+  { code: 'ru', test: /[Ѐ-ӿ]/ },
+  { code: 'hi', test: /[ऀ-ॿ]/ },
+];
+
+// Latin-script languages need diacritics/function-word hints since the
+// alphabet alone doesn't distinguish them.
+const LATIN_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
+  { code: 'es', test: /[¿¡ñ]|\b(el|la|los|las|que|para|con|una|uno|es|por|cómo|qué|cuál|más|así)\b/i },
+  { code: 'pt', test: /[ãõ]|\b(não|com|para|uma|isso|então|você|está)\b/i },
+  { code: 'fr', test: /[çœ]|\b(le|la|les|des|est|une|avec|pour|qui|où|être)\b/i },
+  { code: 'de', test: /[äöüß]|\b(der|die|das|und|nicht|mit|für|eine)\b/i },
+  { code: 'it', test: /\b(il|lo|gli|che|per|con|una|è|questo|come)\b/i },
+];
+
+/**
+ * Best-effort guess at the spoken-language code for `text`, so narration is
+ * read in a matching voice instead of always defaulting to English. Returns
+ * null (meaning: let the browser's default voice handle it) when the text is
+ * too short or shows no language-specific signal.
+ */
+function detectSpeechLanguage(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length < 8) return null;
+  for (const { code, test } of SCRIPT_LANGUAGE_HINTS) {
+    if (test.test(trimmed)) return code;
+  }
+  for (const { code, test } of LATIN_LANGUAGE_HINTS) {
+    if (test.test(trimmed)) return code;
+  }
+  return null;
+}
+
+/** Picks an installed SpeechSynthesis voice matching a language code, if any. */
+function findVoiceForLanguage(code: string): SpeechSynthesisVoice | undefined {
+  return window.speechSynthesis.getVoices()
+    .find((voice) => voice.lang.toLowerCase().startsWith(code));
 }
 
 /** Classify a board "write"/"draw" payload into the right visual. */
@@ -281,6 +326,21 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const profile = VOICE_PROFILE[speaker] ?? VOICE_PROFILE.Teacher;
       utterance.pitch = profile.pitch;
       utterance.rate = profile.rate * get().speechRate;
+
+      // Match the voice to the language actually being spoken instead of
+      // always defaulting to English — a Spanish (or any other language)
+      // course should be narrated in a matching voice.
+      const langCode = detectSpeechLanguage(text);
+      if (langCode) {
+        const voice = findVoiceForLanguage(langCode);
+        if (voice) {
+          utterance.voice = voice;
+          utterance.lang = voice.lang;
+        } else {
+          utterance.lang = langCode;
+        }
+      }
+
       let finished = false;
       const done = () => { if (!finished) { finished = true; onDone(); } };
       utterance.onend = done;
@@ -716,6 +776,28 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
         response: trimmed,
       });
+    },
+
+    skipQuestion: (elementId: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || (el.kind !== 'quiz' && el.kind !== 'transfer')) return;
+      if ((el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted) || el.skipped) return;
+
+      // Unblock locally rather than waiting on the backend to recognize
+      // skip_question — a learner who says "I don't know" must never be
+      // stuck on a card they can't get past.
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && (item.kind === 'quiz' || item.kind === 'transfer')
+            ? { ...item, skipped: true }
+            : item),
+        canContinue: true,
+        continueLabel: 'Continue',
+        waitingForScene: false,
+      }));
+      pushTranscript('You', "Skipped — I don't know this one");
+      const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
+      sendAction('skip_question', componentId, { reason: 'unsure' });
     },
 
     askQuestion: (text: string) => {
