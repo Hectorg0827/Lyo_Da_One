@@ -299,16 +299,10 @@ struct ReteachOverlay: View {
     // MARK: - Actions
 
     private func tryAgain() {
-        // dismissReteach() clears currentQuickCheck, so capture it first —
-        // otherwise "Try Again" silently drops the learner with nothing on
-        // screen instead of returning them to the question.
-        let check = viewModel.currentQuickCheck
-        viewModel.dismissReteach()
-
-        if check != nil {
-            viewModel.currentQuickCheck = check
-            viewModel.state = .quickCheck
-        }
+        // Deliberately not dismissReteach(): that clears currentQuickCheck and
+        // auto-advances the lesson, which would drop the learner on the next
+        // slide while showing the previous slide's question.
+        viewModel.retryCheck()
     }
 
     private func gotIt() {

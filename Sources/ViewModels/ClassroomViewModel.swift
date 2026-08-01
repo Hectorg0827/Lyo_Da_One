@@ -36,6 +36,10 @@ class ClassroomViewModel: NSObject, ObservableObject {
     private let repository = LyoRepository.shared
     /// Stores the requested session ID so retry works even if initial load fails
     private var lastRequestedSessionId: String?
+    /// Identifies the in-flight help request so a response that arrives after
+    /// the learner closed the panel (or moved to another check) is discarded
+    /// instead of overwriting whatever they're looking at now.
+    private var helpRequestToken: UUID?
     
     override init() {
         super.init()
@@ -339,6 +343,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
         showReteach = false
         reteachContent = nil
         isRequestingHelp = false
+        helpRequestToken = nil
         currentQuickCheck = nil
         state = .ready
 
@@ -346,6 +351,19 @@ class ClassroomViewModel: NSObject, ObservableObject {
         if settings.autoAdvanceAfterNarration {
             nextSlide()
         }
+    }
+
+    /// Returns from the reteach panel to the check the learner was working on.
+    /// Deliberately does not go through `dismissReteach()`, which advances the
+    /// lesson when `autoAdvanceAfterNarration` is set — "Try Again" must
+    /// re-present the same question on the same slide.
+    func retryCheck() {
+        guard currentQuickCheck != nil else { return }
+        showReteach = false
+        reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
+        state = .quickCheck
     }
 
     /// Explicitly skips the current check. Unlike a wrong answer, this does
@@ -368,6 +386,8 @@ class ClassroomViewModel: NSObject, ObservableObject {
     /// text (which is only ever the same canned copy for a given question).
     func requestHelp() {
         guard let check = currentQuickCheck else { return }
+        let token = UUID()
+        helpRequestToken = token
         isRequestingHelp = true
         reteachContent = nil
         showReteach = true
@@ -375,9 +395,10 @@ class ClassroomViewModel: NSObject, ObservableObject {
 
         Task { @MainActor in
             let prompt = "I'm stuck on this classroom question and don't understand it: \"\(check.question)\". Can you explain it a different way, with a simple analogy?"
+            let content: ReteachContent
             do {
-                let response = try await LyoRepository.shared.sendLyoMessage(message: prompt)
-                reteachContent = ReteachContent(
+                let response = try await repository.sendLyoMessage(message: prompt)
+                content = ReteachContent(
                     explanation: response.message.content,
                     analogy: nil,
                     diagram: nil,
@@ -387,14 +408,20 @@ class ClassroomViewModel: NSObject, ObservableObject {
                 Log.classroom.error("requestHelp failed: \(error.localizedDescription)")
                 // Fall back to the question's own canned explanation rather
                 // than leaving the help panel empty.
-                reteachContent = check.reteachContent ?? ReteachContent(
+                content = check.reteachContent ?? ReteachContent(
                     explanation: check.explanation,
                     analogy: nil,
                     diagram: nil,
                     alternativeApproach: nil
                 )
             }
+
+            // The learner may have closed the panel or moved to another check
+            // while this was in flight — in that case the response is stale.
+            guard helpRequestToken == token else { return }
+            reteachContent = content
             isRequestingHelp = false
+            helpRequestToken = nil
         }
     }
     

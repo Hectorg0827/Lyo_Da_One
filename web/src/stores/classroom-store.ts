@@ -161,6 +161,7 @@ interface ClassroomStore {
   answerQuiz: (elementId: string, option: QuizOption) => void;
   answerTransfer: (elementId: string, response: string) => void;
   skipQuestion: (elementId: string) => void;
+  unskipQuestion: (elementId: string) => void;
   askQuestion: (text: string) => void;
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
@@ -207,25 +208,44 @@ function stopSpeech() {
   }
 }
 
-// Script-based signals are unambiguous; check these first.
+// Non-Latin scripts are decisive, but only in this order: Japanese prose mixes
+// kana with kanji, and Korean can carry hanja, so those language-specific
+// scripts must be checked before the CJK ideographs they share with Chinese.
 const SCRIPT_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
-  { code: 'zh', test: /[一-鿿]/ },
-  { code: 'ja', test: /[぀-ヿ]/ },
-  { code: 'ko', test: /[가-힯]/ },
+  { code: 'ja', test: /[぀-ヿ]/ },   // hiragana + katakana
+  { code: 'ko', test: /[가-힯]/ },   // hangul syllables
   { code: 'ar', test: /[؀-ۿ]/ },
   { code: 'ru', test: /[Ѐ-ӿ]/ },
   { code: 'hi', test: /[ऀ-ॿ]/ },
+  { code: 'zh', test: /[一-鿿]/ },   // shared ideographs — last resort
 ];
 
-// Latin-script languages need diacritics/function-word hints since the
-// alphabet alone doesn't distinguish them.
-const LATIN_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
-  { code: 'es', test: /[¿¡ñ]|\b(el|la|los|las|que|para|con|una|uno|es|por|cómo|qué|cuál|más|así)\b/i },
-  { code: 'pt', test: /[ãõ]|\b(não|com|para|uma|isso|então|você|está)\b/i },
-  { code: 'fr', test: /[çœ]|\b(le|la|les|des|est|une|avec|pour|qui|où|être)\b/i },
-  { code: 'de', test: /[äöüß]|\b(der|die|das|und|nicht|mit|für|eine)\b/i },
-  { code: 'it', test: /\b(il|lo|gli|che|per|con|una|è|questo|come)\b/i },
+// Latin-script languages share an alphabet and much of their function-word
+// vocabulary ("la" is French and Spanish, "para" is Spanish and Portuguese),
+// so no single hint is decisive. Score every candidate across the whole sample
+// and take the strongest rather than returning on the first pattern that hits.
+const LATIN_LANGUAGE_HINTS: { code: string; unique?: RegExp; words: RegExp }[] = [
+  { code: 'es', unique: /[¿¡ñ]/g, words: /\b(el|los|las|que|para|con|una|uno|por|cómo|qué|cuál|más|así|pero|también|está)\b/gi },
+  { code: 'pt', unique: /[ãõ]/g, words: /\b(não|com|para|uma|isso|então|você|está|são|também|mais)\b/gi },
+  { code: 'fr', unique: /[œùêîôë]/g, words: /\b(le|la|les|des|est|une|avec|pour|qui|où|dans|nous|être|cette)\b/gi },
+  { code: 'de', unique: /[äöüß]/g, words: /\b(der|die|das|und|nicht|mit|für|eine|ist|auch|sich|wird)\b/gi },
+  { code: 'it', words: /\b(il|lo|gli|che|per|con|una|è|questo|come|sono|anche|della)\b/gi },
 ];
+
+// A language-exclusive character is far stronger evidence than a function word
+// that several languages share.
+const UNIQUE_CHAR_WEIGHT = 3;
+// Below this, the evidence is as likely to be an English coincidence as a real
+// signal — fall back to the browser's default voice instead of guessing.
+const MIN_LANGUAGE_SCORE = 2;
+
+function scoreLatinLanguage(text: string, hint: { unique?: RegExp; words: RegExp }): number {
+  const uniqueHits = hint.unique ? (text.match(hint.unique)?.length ?? 0) : 0;
+  const distinctWords = new Set(
+    (text.match(hint.words) ?? []).map((word) => word.toLowerCase()),
+  ).size;
+  return uniqueHits * UNIQUE_CHAR_WEIGHT + distinctWords;
+}
 
 /**
  * Best-effort guess at the spoken-language code for `text`, so narration is
@@ -236,13 +256,17 @@ const LATIN_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
 function detectSpeechLanguage(text: string): string | null {
   const trimmed = text.trim();
   if (trimmed.length < 8) return null;
+
   for (const { code, test } of SCRIPT_LANGUAGE_HINTS) {
     if (test.test(trimmed)) return code;
   }
-  for (const { code, test } of LATIN_LANGUAGE_HINTS) {
-    if (test.test(trimmed)) return code;
+
+  let best: { code: string; score: number } | null = null;
+  for (const hint of LATIN_LANGUAGE_HINTS) {
+    const score = scoreLatinLanguage(trimmed, hint);
+    if (score > (best?.score ?? 0)) best = { code: hint.code, score };
   }
-  return null;
+  return best && best.score >= MIN_LANGUAGE_SCORE ? best.code : null;
 }
 
 /** Picks an installed SpeechSynthesis voice matching a language code, if any. */
@@ -798,6 +822,22 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       pushTranscript('You', "Skipped — I don't know this one");
       const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
       sendAction('skip_question', componentId, { reason: 'unsure' });
+    },
+
+    unskipQuestion: (elementId: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || (el.kind !== 'quiz' && el.kind !== 'transfer') || !el.skipped) return;
+
+      // Purely local: re-opening the card is not itself a lesson signal — the
+      // answer the learner then submits is, and that goes through the normal
+      // submit path.
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && (item.kind === 'quiz' || item.kind === 'transfer')
+            ? { ...item, skipped: false }
+            : item),
+      }));
+      pushTranscript('You', 'Went back to a skipped question');
     },
 
     askQuestion: (text: string) => {

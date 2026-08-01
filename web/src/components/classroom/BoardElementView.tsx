@@ -136,11 +136,12 @@ function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; l
 }
 
 function QuizView({
-  el, onAnswer, onSkip, onAskHelp,
+  el, onAnswer, onSkip, onUnskip, onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'quiz' }>;
   onAnswer: (elementId: string, option: QuizOption) => void;
   onSkip: (elementId: string) => void;
+  onUnskip: (elementId: string) => void;
   onAskHelp: () => void;
 }) {
   const quiz = el.quiz;
@@ -197,7 +198,16 @@ function QuizView({
         </div>
       )}
       {el.skipped && (
-        <p className="text-sm text-white/40 italic">Skipped — you can come back to this later.</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-white/40 italic">Skipped.</p>
+          <button
+            type="button"
+            onClick={() => onUnskip(el.id)}
+            className="text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+          >
+            Try this now
+          </button>
+        </div>
       )}
       {el.feedback && (
         <p
@@ -220,11 +230,13 @@ function TransferView({
   el,
   onSubmit,
   onSkip,
+  onUnskip,
   onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'transfer' }>;
   onSubmit: (elementId: string, response: string) => void;
   onSkip: (elementId: string) => void;
+  onUnskip: (elementId: string) => void;
   onAskHelp: () => void;
 }) {
   const [response, setResponse] = useState(el.response || '');
@@ -250,7 +262,16 @@ function TransferView({
         className="w-full min-h-28 resize-y rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
       {el.skipped ? (
-        <p className="text-sm text-white/40 italic">Skipped — you can come back to this later.</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-white/40 italic">Skipped.</p>
+          <button
+            type="button"
+            onClick={() => onUnskip(el.id)}
+            className="text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+          >
+            Try this now
+          </button>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -294,12 +315,14 @@ function TransferView({
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
-  el, onQuizAnswer, onTransferSubmit, onSkipQuestion, onAskHelp, reducedMotion = false,
+  el, onQuizAnswer, onTransferSubmit, onSkipQuestion, onUnskipQuestion, onAskHelp,
+  reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
   onTransferSubmit: (elementId: string, response: string) => void;
   onSkipQuestion: (elementId: string) => void;
+  onUnskipQuestion: (elementId: string) => void;
   onAskHelp: () => void;
   reducedMotion?: boolean;
 }) {
@@ -394,11 +417,23 @@ export function BoardElementView({
       )}
 
       {el.kind === 'quiz' && (
-        <QuizView el={el} onAnswer={onQuizAnswer} onSkip={onSkipQuestion} onAskHelp={onAskHelp} />
+        <QuizView
+          el={el}
+          onAnswer={onQuizAnswer}
+          onSkip={onSkipQuestion}
+          onUnskip={onUnskipQuestion}
+          onAskHelp={onAskHelp}
+        />
       )}
 
       {el.kind === 'transfer' && (
-        <TransferView el={el} onSubmit={onTransferSubmit} onSkip={onSkipQuestion} onAskHelp={onAskHelp} />
+        <TransferView
+          el={el}
+          onSubmit={onTransferSubmit}
+          onSkip={onSkipQuestion}
+          onUnskip={onUnskipQuestion}
+          onAskHelp={onAskHelp}
+        />
       )}
 
       {el.kind === 'summary' && (
