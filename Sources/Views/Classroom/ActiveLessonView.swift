@@ -492,7 +492,7 @@ struct ClassroomStageView: View {
                 ClassmateAvatarStage(name: "Maya", imageName: "student_genius", activeSpeaker: activeSpeaker, status: "curious")
                 ClassmateAvatarStage(name: "Sam", imageName: "student_clever", activeSpeaker: activeSpeaker, status: "thinking")
                 ClassmateAvatarStage(name: "Rio", imageName: "student_funny", activeSpeaker: activeSpeaker, status: "grinning")
-                ClassmateAvatarStage(name: "Zack", imageName: "student_dumb", activeSpeaker: activeSpeaker, status: "confused")
+                ClassmateAvatarStage(name: "Zara", imageName: "student_dumb", activeSpeaker: activeSpeaker, status: "confused")
             }
         }
         .padding(.horizontal, 14)

@@ -126,7 +126,7 @@ enum ActiveLessonAdapter {
                             case "Rio":
                                 pendingSpeakerBadge = "Classmate"
                                 pendingSpeakerImageName = "student_funny"
-                            case "Zack":
+                            case "Zara":
                                 pendingSpeakerBadge = "Classmate"
                                 pendingSpeakerImageName = "student_dumb"
                             case "Lyo":

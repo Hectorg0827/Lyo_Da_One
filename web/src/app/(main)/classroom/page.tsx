@@ -21,15 +21,17 @@ import MascotAvatar from '@/components/chat/MascotAvatar';
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
 // Maya, Sam, and Rio have real illustrated artwork (same character family as
-// the Teacher/Lyo). Zack doesn't — his only existing asset (student_dumb.png)
-// is a duplicate of the Teacher's art, so he stays on emoji rather than
-// showing two "different" characters with identical faces.
+// the Teacher/Lyo). Zara doesn't yet — her purple/star character art hasn't
+// been added to the repo as a file (only seen inline in chat, no fetchable
+// path), so she stays on emoji until that PNG lands in
+// web/public/students/. Drop the file in and add `avatar: '/students/...'`
+// here, matching the pattern above.
 const CAST: { name: string; emoji: string; accent: string; avatar?: string }[] = [
   { name: 'Teacher', emoji: '🧑‍🏫', accent: 'ring-accent-purple text-accent-purple' },
   { name: 'Maya', emoji: '👩🏽‍🎓', accent: 'ring-accent-teal text-accent-teal', avatar: '/students/student_genius.png' },
   { name: 'Sam', emoji: '🧑🏻‍🎓', accent: 'ring-accent-orange text-accent-orange', avatar: '/students/student_clever.png' },
   { name: 'Rio', emoji: '🧑🏾‍🎓', accent: 'ring-accent-green text-accent-green', avatar: '/students/student_funny.png' },
-  { name: 'Zack', emoji: '👨🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
+  { name: 'Zara', emoji: '👩🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
 ];
 
 // The Teacher gets real illustrated artwork instead of an emoji — four

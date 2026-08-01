@@ -197,7 +197,7 @@ const VOICE_PROFILE: Record<string, { pitch: number; rate: number }> = {
   Maya: { pitch: 1.2, rate: 1.05 },
   Sam: { pitch: 1.0, rate: 1.12 },
   Rio: { pitch: 1.15, rate: 1.1 },
-  Zack: { pitch: 0.85, rate: 0.95 },
+  Zara: { pitch: 0.85, rate: 0.95 },
   Lyo: { pitch: 1.35, rate: 1.05 },
 };
 
