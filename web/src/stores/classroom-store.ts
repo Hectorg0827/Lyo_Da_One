@@ -89,7 +89,8 @@ export interface DirectorTurn {
 // ─── Board model — the main attraction ───────────────────────────────────────
 
 export type BoardElement =
-  | { id: string; kind: 'chalk'; text: string }
+  | { id: string; kind: 'chalk'; text: string; highlightedTerm?: string }
+  | { id: string; kind: 'highlight'; term: string }
   | { id: string; kind: 'latex'; latex: string }
   | { id: string; kind: 'mermaid'; source: string }
   | { id: string; kind: 'code'; code: string }
@@ -312,6 +313,38 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
   }
 
+  /** Wire the current spoken emphasis onto the board: mark the term inline
+      in the most recent chalk block if it appears there — e.g. highlighting
+      "3x" while the Teacher explains the coefficient — and always drop a
+      circled "spotlight" element too, so highlighting still shows up even
+      when the term lives inside a diagram/LaTeX block instead of plain
+      chalk text. */
+  function highlightBoardTerm(term: string) {
+    set((s) => {
+      const board = [...s.board];
+      const lastChalkIndex = board.map((b) => b.kind).lastIndexOf('chalk');
+      if (lastChalkIndex !== -1) {
+        const el = board[lastChalkIndex];
+        if (el.kind === 'chalk' && el.text.toLowerCase().includes(term.toLowerCase())) {
+          board[lastChalkIndex] = { ...el, highlightedTerm: term };
+        }
+      }
+      return { board };
+    });
+    // Auto-clear the inline mark after a few seconds — it reflects what's
+    // being discussed right now, not a permanent decoration. A plain timer,
+    // not `playTimer`, which drives turn sequencing and must not be
+    // hijacked by an unrelated cleanup callback.
+    setTimeout(() => {
+      set((s) => ({
+        board: s.board.map((b) => (
+          b.kind === 'chalk' && b.highlightedTerm === term ? { ...b, highlightedTerm: undefined } : b
+        )),
+      }));
+    }, 5000);
+    addBoardElement({ id: nextId(), kind: 'highlight', term });
+  }
+
   function addSources(labels?: string[]) {
     const clean = Array.from(
       new Set((labels ?? []).map((label) => label.trim()).filter(Boolean)),
@@ -431,6 +464,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           });
           playTimer = setTimeout(playNext, 2000);
           return;
+        }
+        if (action === 'highlight') {
+          const term = (turn.content ?? '').trim();
+          if (term) {
+            highlightBoardTerm(term);
+            playTimer = setTimeout(playNext, 1600);
+            return;
+          }
         }
         const content = (turn.content ?? '').trim();
         if (content) {
