@@ -273,7 +273,11 @@ function ClassroomStage() {
           {/* chalk tray */}
           <div className="absolute bottom-0 inset-x-6 h-1.5 rounded-t bg-[#3a3323]/80 z-10" />
 
-          <div className="h-full overflow-y-auto px-6 py-5 space-y-5">
+          {/* pb-20 reserves the corner where Lyo sits (see below) so the
+              last board element — often a Submit/Send button pinned to the
+              bottom-right, e.g. TransferView's "Submit application" — never
+              renders underneath the mascot. */}
+          <div className="h-full overflow-y-auto px-6 pt-5 pb-20 space-y-5">
             {shownBoard.length === 0 && !waitingForScene && (
               <div className="h-full flex items-center justify-center text-white/20 text-sm italic">
                 a clean board…
@@ -300,7 +304,10 @@ function ClassroomStage() {
               </div>
             )}
             {status === 'error' && (
-              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              // mr-14 keeps this banner's box clear of Lyo's corner —
+              // scroll-to-bottom can otherwise pull it up alongside the
+              // mascot even with the container's own bottom padding.
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mr-14">
                 {error ?? 'Something went wrong.'}{' '}
                 <button className="underline" onClick={() => connect(connection)}>Retry</button>
               </div>
@@ -334,12 +341,15 @@ function ClassroomStage() {
           </div>
         )}
 
-        {/* Lyo at their corner desk */}
+        {/* Lyo at their corner desk. pointer-events-none so a purely
+            decorative mascot can never intercept a tap meant for board
+            content underneath it — belt-and-suspenders alongside the
+            scroll area's reserved bottom padding above. */}
         <motion.img
           key={lyoState}
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
-          className="absolute -bottom-3 right-3 w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20"
+          className="absolute -bottom-3 right-3 w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20 pointer-events-none"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
