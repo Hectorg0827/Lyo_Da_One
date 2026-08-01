@@ -79,3 +79,14 @@ as structured data.
 
 Verified: `tests/test_ai_classroom_teaching_loop.py` (21/21, including 7 new
 tests for the gap-description leak regression and hesitation routing).
+
+**Follow-up fix, same branch:** `context.learning_objective` prioritized the
+one-time, session-wide "objective" the learner typed at course creation
+(e.g. "Learn the basic concepts of algebra") over the specific resolved
+`lesson_title`, for every scene in the session. That generic string fed
+both the visible transfer question and `expected_transfer_keywords()`,
+producing junk pseudo-concepts like "learn"/"basic"/"concepts" and broken
+instructional text ("Revise your application of Learn the basic
+concepts..."). Flipped the priority to prefer the current lesson's
+specific title, matching the pattern already used in the lesson-advance
+branch elsewhere in the same file.
