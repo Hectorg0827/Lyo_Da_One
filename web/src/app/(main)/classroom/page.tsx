@@ -20,11 +20,15 @@ import MascotAvatar from '@/components/chat/MascotAvatar';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
-const CAST: { name: string; emoji: string; accent: string }[] = [
+// Maya, Sam, and Rio have real illustrated artwork (same character family as
+// the Teacher/Lyo). Zack doesn't — his only existing asset (student_dumb.png)
+// is a duplicate of the Teacher's art, so he stays on emoji rather than
+// showing two "different" characters with identical faces.
+const CAST: { name: string; emoji: string; accent: string; avatar?: string }[] = [
   { name: 'Teacher', emoji: '🧑‍🏫', accent: 'ring-accent-purple text-accent-purple' },
-  { name: 'Maya', emoji: '👩🏽‍🎓', accent: 'ring-accent-teal text-accent-teal' },
-  { name: 'Sam', emoji: '🧑🏻‍🎓', accent: 'ring-accent-orange text-accent-orange' },
-  { name: 'Rio', emoji: '🧑🏾‍🎓', accent: 'ring-accent-green text-accent-green' },
+  { name: 'Maya', emoji: '👩🏽‍🎓', accent: 'ring-accent-teal text-accent-teal', avatar: '/students/student_genius.png' },
+  { name: 'Sam', emoji: '🧑🏻‍🎓', accent: 'ring-accent-orange text-accent-orange', avatar: '/students/student_clever.png' },
+  { name: 'Rio', emoji: '🧑🏾‍🎓', accent: 'ring-accent-green text-accent-green', avatar: '/students/student_funny.png' },
   { name: 'Zack', emoji: '👨🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
 ];
 
@@ -461,6 +465,7 @@ function ClassroomStage() {
           const speaking = activeSpeaker === member.name;
           const isTeacher = member.name === 'Teacher';
           const displayName = isTeacher ? teacherVariant.name : member.name;
+          const avatarSrc = isTeacher ? teacherVariant.image : member.avatar;
           return (
             <motion.div
               key={member.name}
@@ -479,11 +484,11 @@ function ClassroomStage() {
                   ? { duration: 0.7, repeat: Infinity }
                   : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
               >
-                {isTeacher ? (
+                {avatarSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={teacherVariant.image}
-                    alt={teacherVariant.name}
+                    src={avatarSrc}
+                    alt={displayName}
                     className="w-full h-full object-cover"
                   />
                 ) : (
