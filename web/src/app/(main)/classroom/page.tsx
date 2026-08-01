@@ -16,6 +16,7 @@ import {
   type HintLevel,
 } from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
+import MascotAvatar from '@/components/chat/MascotAvatar';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,10 @@ const CAST: { name: string; emoji: string; accent: string }[] = [
   { name: 'Zack', emoji: '👨🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
 ];
 
+// Reduced-motion fallback only: a single representative static frame per
+// state. When motion is allowed, LYO_ANIMATED_STATES below decides whether
+// MascotAvatar animates that state as a live flip-book or a gentle idle
+// breathe instead of freezing on one of these.
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
   thinking: '/mascot/mascot_reading_3.png',
@@ -38,6 +43,15 @@ const LYO_STATE_IMG: Record<string, string> = {
   shy: '/mascot/mascot_reading_1.png',
   sleeping: '/mascot/mascot_reading_1.png',
 };
+
+// States that used to freeze on a single reading-family frame now get the
+// live flip-book instead (MascotAvatar cycles all 4 reading frames every
+// 200ms) — a genuinely animated "thinking," not a static cutout. States
+// not in this set (listening, celebrating) get MascotAvatar's idle
+// breathing/glance animation instead of sitting perfectly still.
+const LYO_ANIMATED_STATES = new Set([
+  'reading', 'thinking', 'curious', 'surprised', 'confused', 'shy', 'sleeping',
+]);
 
 export default function ClassroomPage() {
   return (
@@ -345,11 +359,9 @@ function ClassroomStage() {
             decorative mascot can never intercept a tap meant for board
             content underneath it — belt-and-suspenders alongside the
             scroll area's reserved bottom padding above. */}
-        <motion.img
+        <motion.div
           key={lyoState}
-          src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
-          alt={`Lyo is ${lyoState}`}
-          className="absolute -bottom-3 right-3 w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20 pointer-events-none"
+          className="absolute -bottom-3 right-3 w-14 h-14 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20 pointer-events-none"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
@@ -357,7 +369,23 @@ function ClassroomStage() {
               ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
               : { scale: 1, rotate: 0, y: 0 }}
           transition={{ duration: animationsOff ? 0 : 0.6 }}
-        />
+        >
+          {animationsOff ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
+              alt={`Lyo is ${lyoState}`}
+              className="w-14 h-14 object-contain"
+            />
+          ) : (
+            <MascotAvatar
+              thinking={LYO_ANIMATED_STATES.has(lyoState)}
+              idle={!LYO_ANIMATED_STATES.has(lyoState)}
+              size={56}
+              alt={`Lyo is ${lyoState}`}
+            />
+          )}
+        </motion.div>
       </div>
 
       {/* ── Teacher's voice — one live caption line ── */}

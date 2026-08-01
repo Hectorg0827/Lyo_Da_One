@@ -23,10 +23,13 @@ export default function MascotAvatar({
   thinking = false,
   idle = false,
   size = 32,
+  alt,
 }: {
   thinking?: boolean;
   idle?: boolean;
   size?: number;
+  /** Overrides the default alt text (e.g. a specific lyoState like "Lyo is confused"). */
+  alt?: string;
 }) {
   const [frame, setFrame] = useState(0);
   const [glancing, setGlancing] = useState(false);
@@ -69,7 +72,7 @@ export default function MascotAvatar({
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={READING_FRAMES[frame]}
-        alt="Lyo is thinking"
+        alt={alt ?? 'Lyo is thinking'}
         width={size}
         height={size}
         className="shrink-0 rounded-full object-contain ring-1 ring-white/10"
@@ -82,7 +85,7 @@ export default function MascotAvatar({
       <motion.img
         // eslint-disable-next-line @next/next/no-img-element
         src={glancing ? '/mascot/mascot_reading_2.png' : '/mascot/mascot_standing.png'}
-        alt="Lyo"
+        alt={alt ?? 'Lyo'}
         width={size}
         height={size}
         className="shrink-0 object-contain select-none"
@@ -103,7 +106,7 @@ export default function MascotAvatar({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src="/mascot/mascot_standing.png"
-      alt="Lyo"
+      alt={alt ?? 'Lyo'}
       width={size}
       height={size}
       className="shrink-0 object-contain"
