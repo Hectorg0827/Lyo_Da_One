@@ -28,6 +28,25 @@ const CAST: { name: string; emoji: string; accent: string }[] = [
   { name: 'Zack', emoji: '👨🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
 ];
 
+// The Teacher gets real illustrated artwork instead of an emoji — four
+// named variants, mirroring the iOS classroom (ActiveLessonView.swift's
+// teacherIndex/actualTeacherName), so the same course consistently shows
+// the same teacher instead of a random one every render.
+const TEACHER_VARIANTS = [
+  { name: 'Mr. Newton', image: '/teacher/lyo_teacher_1.png' },
+  { name: 'Dr. Saria', image: '/teacher/lyo_teacher_2.png' },
+  { name: 'Prof. Chen', image: '/teacher/lyo_teacher_3.png' },
+  { name: 'Mr. Davis', image: '/teacher/lyo_teacher_4.png' },
+];
+
+function stableHash(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
 // Reduced-motion fallback only: a single representative static frame per
 // state. When motion is allowed, LYO_ANIMATED_STATES below decides whether
 // MascotAvatar animates that state as a live flip-book or a gentle idle
@@ -66,6 +85,7 @@ function ClassroomStage() {
   const params = useSearchParams();
   const topic = params.get('topic') || 'General Learning';
   const courseId = params.get('courseId') || topic;
+  const teacherVariant = TEACHER_VARIANTS[stableHash(courseId) % TEACHER_VARIANTS.length];
   const objective = params.get('objective') || `Understand and apply ${topic}`;
   const difficultyParam = params.get('difficulty');
   const difficulty: ClassroomConnection['difficulty'] = difficultyParam === 'beginner'
@@ -439,6 +459,8 @@ function ClassroomStage() {
       <div className="flex items-end justify-center gap-5 px-4 pt-1 pb-2">
         {visibleCast.map((member, i) => {
           const speaking = activeSpeaker === member.name;
+          const isTeacher = member.name === 'Teacher';
+          const displayName = isTeacher ? teacherVariant.name : member.name;
           return (
             <motion.div
               key={member.name}
@@ -447,7 +469,7 @@ function ClassroomStage() {
             >
               <motion.div
                 className={cn(
-                  'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow',
+                  'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow overflow-hidden',
                   speaking ? `${member.accent.split(' ')[0]} shadow-[0_0_18px_rgba(139,92,246,0.45)]` : 'ring-white/10',
                 )}
                 animate={speaking
@@ -457,11 +479,20 @@ function ClassroomStage() {
                   ? { duration: 0.7, repeat: Infinity }
                   : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
               >
-                {member.emoji}
+                {isTeacher ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={teacherVariant.image}
+                    alt={teacherVariant.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  member.emoji
+                )}
               </motion.div>
               <span className={cn('text-[9.5px] font-bold',
                 speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
-                {member.name}
+                {displayName}
               </span>
             </motion.div>
           );
