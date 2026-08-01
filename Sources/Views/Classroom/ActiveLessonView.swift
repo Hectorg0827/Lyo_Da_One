@@ -20,6 +20,11 @@ struct ActiveLessonView: View {
     var onAskLyo: (LessonStep) -> Void = { _ in }
     var onExplainEasier: (LessonStep) -> Void = { _ in }
     var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Void = { _, _ in }
+    /// Fired when the learner answers a `user_prompt` checkpoint — either by
+    /// tapping one of its options or by submitting an open response. This is
+    /// what makes a mid-lesson question a real, backend-visible exchange
+    /// instead of a line of text the learner just swipes past.
+    var onPromptAnswer: (LessonStep, String) -> Void = { _, _ in }
     var onBack: () -> Void = {}
     var onMenu: () -> Void = {}
     var onMic: () -> Void = {}
@@ -46,6 +51,13 @@ struct ActiveLessonView: View {
         var speakerName: String = "Teacher"
         var speakerBadge: String = "AI Teacher ✨"
         var speakerImageName: String? = nil
+
+        // A `user_prompt` checkpoint from the director script. Exactly one
+        // of these is set when the Teacher is genuinely waiting on a
+        // response (as opposed to a plain speech line the learner just
+        // reads and continues past).
+        var promptOptions: [String]? = nil
+        var requiresOpenResponse: Bool = false
 
         enum SupportingBlock {
             case comparison(ConceptComparisonModel)
@@ -74,6 +86,11 @@ struct ActiveLessonView: View {
     @State private var currentIndex: Int = 0
     @State private var quizSelections: [String: String] = [:]
     @State private var reflectionText: String = ""
+    // Keyed by LessonStep.id — the learner's answer to a user_prompt
+    // checkpoint (tapped option or typed/spoken open response), separate
+    // from quizSelections so a step id can never collide with a quiz
+    // component id.
+    @State private var promptResponses: [String: String] = [:]
     @State private var showLessonMap = false
     @State private var showLyoLens = false
     @State private var activeLensTab = "Ask"
@@ -96,6 +113,9 @@ struct ActiveLessonView: View {
         if case .classroomQuiz = step.supporting {
             return true
         }
+        if step.promptOptions?.isEmpty == false || step.requiresOpenResponse {
+            return true
+        }
         return false
     }
 
@@ -103,6 +123,9 @@ struct ActiveLessonView: View {
         guard let step = currentStep else { return true }
         if case .classroomQuiz(let component) = step.supporting {
             return quizSelections[component.id] != nil
+        }
+        if step.promptOptions?.isEmpty == false || step.requiresOpenResponse {
+            return promptResponses[step.id] != nil
         }
         return true
     }
@@ -167,11 +190,20 @@ struct ActiveLessonView: View {
                         LyoBoardView(
                             step: step,
                             quizSelections: quizSelections,
+                            promptResponses: promptResponses,
                             reflectionText: $reflectionText,
                             isTappedToComplete: $isBoardTappedToComplete,
                             onOptionSelected: { component, option in
                                 quizSelections[component.id] = option.id
                                 onQuizAnswer(component, option)
+                                unlockAndAdvanceSoftly(step)
+                            },
+                            onPromptSubmit: { response in
+                                let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                promptResponses[step.id] = trimmed
+                                reflectionText = ""
+                                onPromptAnswer(step, trimmed)
                                 unlockAndAdvanceSoftly(step)
                             }
                         )
@@ -507,9 +539,11 @@ struct ClassmateAvatarStage: View {
 struct LyoBoardView: View {
     let step: ActiveLessonView.LessonStep
     let quizSelections: [String: String]
+    let promptResponses: [String: String]
     @Binding var reflectionText: String
     @Binding var isTappedToComplete: Bool
     var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Void
+    var onPromptSubmit: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -524,19 +558,25 @@ struct LyoBoardView: View {
                 Spacer()
             }
 
-            switch step.supporting {
-            case .classroomQuiz(let component):
-                quizContent(component)
+            if let options = step.promptOptions, !options.isEmpty {
+                promptOptionsContent(options)
+            } else if step.requiresOpenResponse {
+                openResponseContent()
+            } else {
+                switch step.supporting {
+                case .classroomQuiz(let component):
+                    quizContent(component)
 
-            case .comparison(let model):
-                comparisonContent(model)
+                case .comparison(let model):
+                    comparisonContent(model)
 
-            case .lessonBlock(let block):
-                BlockRendererView(block: block)
-                    .padding(4)
+                case .lessonBlock(let block):
+                    BlockRendererView(block: block)
+                        .padding(4)
 
-            case .none:
-                defaultExplanationContent()
+                case .none:
+                    defaultExplanationContent()
+                }
             }
         }
         .padding(18)
@@ -564,6 +604,95 @@ struct LyoBoardView: View {
                 .lineSpacing(5)
                 .opacity(isTappedToComplete ? 1.0 : 0.9)
                 .animation(.easeOut, value: isTappedToComplete)
+        }
+    }
+
+    /// A `user_prompt` checkpoint with real, question-specific tap options.
+    /// Renders as a wrapping row of chips rather than a fixed yes/no pair —
+    /// the shape (two chips, or five) is whatever the Teacher's actual
+    /// options for THIS question are, so a binary check and a genuine
+    /// multiple-choice check both read naturally instead of looking like
+    /// the same generic control every time.
+    private func promptOptionsContent(_ options: [String]) -> some View {
+        let selected = promptResponses[step.id]
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Quick Check")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.accent)
+
+            Text(step.teachingText)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textPrimary)
+
+            PromptChipFlow(
+                options: options,
+                selected: selected,
+                onSelect: { option in onPromptSubmit(option) }
+            )
+        }
+    }
+
+    /// A `user_prompt` checkpoint that expects an actual explanation,
+    /// example, or opinion — not a tap. Includes a low-friction "I'm not
+    /// sure" escape hatch so a stuck learner can ask for help instead of
+    /// being pushed to invent an answer.
+    private func openResponseContent() -> some View {
+        let submitted = promptResponses[step.id]
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Your Turn")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.accent)
+
+            Text(step.teachingText)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textPrimary)
+
+            if let submitted {
+                Text(submitted)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(ClassroomTokens.textSecondary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.06), lineWidth: 1))
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("Explain it in your own words…", text: $reflectionText, axis: .vertical)
+                        .font(.system(size: 14))
+                        .foregroundStyle(ClassroomTokens.textPrimary)
+                        .lineLimit(1...4)
+                        .padding(12)
+                        .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
+
+                    HStack(spacing: 10) {
+                        Button {
+                            onPromptSubmit("I'm not sure")
+                        } label: {
+                            Text("I'm not sure")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(ClassroomTokens.textSecondary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.05), in: Capsule())
+                        }
+
+                        Spacer()
+
+                        Button {
+                            onPromptSubmit(reflectionText)
+                        } label: {
+                            Text("Send")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 8)
+                                .background(ClassroomTokens.accent, in: Capsule())
+                        }
+                        .disabled(reflectionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
         }
     }
 
@@ -646,6 +775,91 @@ struct LyoBoardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+}
+
+// MARK: - Prompt Chips (dynamic multiple-choice, not a fixed yes/no pair)
+
+/// Renders a `user_prompt` turn's options as a wrapping row of chips. The
+/// same component naturally reads as a simple binary check when there are
+/// two options and as a real multiple-choice check when there are more —
+/// the visual shape follows whatever the Teacher actually asked, instead of
+/// every checkpoint looking like the same generic yes/no control.
+@MainActor
+private struct PromptChipFlow: View {
+    let options: [String]
+    let selected: String?
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(options, id: \.self) { option in
+                let isSelected = selected == option
+                Button {
+                    onSelect(option)
+                } label: {
+                    Text(option)
+                        .font(.system(size: 14, weight: isSelected ? .bold : .medium))
+                        .foregroundStyle(isSelected ? Color.black : ClassroomTokens.textPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule().fill(isSelected ? ClassroomTokens.accent : Color.white.opacity(0.06))
+                        )
+                        .overlay(
+                            Capsule().stroke(isSelected ? ClassroomTokens.accent : Color.white.opacity(0.14), lineWidth: 1)
+                        )
+                }
+                .disabled(selected != nil)
+            }
+        }
+    }
+}
+
+/// Minimal wrapping flow layout (chips wrap to a new line instead of
+/// overflowing or requiring horizontal scroll).
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
+                totalHeight += rowHeight + spacing
+                totalWidth = max(totalWidth, rowWidth)
+                rowWidth = 0
+                rowHeight = 0
+            }
+            rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
+            rowHeight = max(rowHeight, size.height)
+        }
+        totalHeight += rowHeight
+        totalWidth = max(totalWidth, rowWidth)
+        return CGSize(width: maxWidth.isFinite ? maxWidth : totalWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

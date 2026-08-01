@@ -38,6 +38,13 @@ enum ActiveLessonAdapter {
 
         var pendingSupporting: ActiveLessonView.LessonStep.SupportingBlock?
         var pendingKeyTerm: ActiveLessonView.LessonStep.KeyTerm?
+        // A user_prompt turn is a real pause: the Teacher is waiting on a
+        // specific response, not just moving on to the next line. These
+        // carry the turn's actual answer shape through to the step so the
+        // UI can render it (tappable options, or an open response field)
+        // instead of a generic "Continue" that discards the question.
+        var pendingPromptOptions: [String]?
+        var pendingRequiresOpenResponse = false
         var finalCtaLabel: String?
         var finalCtaIntent: String?
         var finalCtaComponentId: String?
@@ -48,6 +55,7 @@ enum ActiveLessonAdapter {
                 pendingId = nil; pendingText = nil
                 pendingSpeakerName = nil; pendingSpeakerBadge = nil; pendingSpeakerImageName = nil
                 pendingSupporting = nil; pendingKeyTerm = nil
+                pendingPromptOptions = nil; pendingRequiresOpenResponse = false
                 return
             }
             result.append(.init(
@@ -58,7 +66,9 @@ enum ActiveLessonAdapter {
                 primaryActionLabel: "Continue",
                 speakerName: pendingSpeakerName ?? "Teacher",
                 speakerBadge: pendingSpeakerBadge ?? "AI Teacher ✨",
-                speakerImageName: pendingSpeakerImageName
+                speakerImageName: pendingSpeakerImageName,
+                promptOptions: pendingPromptOptions,
+                requiresOpenResponse: pendingRequiresOpenResponse
             ))
             pendingId = nil
             pendingText = nil
@@ -67,6 +77,8 @@ enum ActiveLessonAdapter {
             pendingSpeakerImageName = nil
             pendingSupporting = nil
             pendingKeyTerm = nil
+            pendingPromptOptions = nil
+            pendingRequiresOpenResponse = false
         }
 
         for component in components {
@@ -91,6 +103,18 @@ enum ActiveLessonAdapter {
                             pendingId = "\(component.id)_turn_\(turnIndex)"
                             pendingText = turn.text
                             pendingSpeakerName = turn.speaker ?? "Teacher"
+
+                            if turn.type == "user_prompt" {
+                                let options = (turn.options ?? []).filter { !$0.isEmpty }
+                                if !options.isEmpty {
+                                    pendingPromptOptions = options
+                                } else {
+                                    // No options means the Teacher wants an
+                                    // actual explanation/example, not a tap —
+                                    // require a real typed/spoken response.
+                                    pendingRequiresOpenResponse = true
+                                }
+                            }
 
                             switch pendingSpeakerName {
                             case "Maya":
@@ -237,7 +261,9 @@ enum ActiveLessonAdapter {
                 primaryActionPayload: finalCtaPayload,
                 speakerName: last.speakerName,
                 speakerBadge: last.speakerBadge,
-                speakerImageName: last.speakerImageName
+                speakerImageName: last.speakerImageName,
+                promptOptions: last.promptOptions,
+                requiresOpenResponse: last.requiresOpenResponse
             )
         }
         return result

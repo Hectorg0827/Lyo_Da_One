@@ -414,6 +414,17 @@ struct LivingClassroomView: View {
                     ]
                 )
             },
+            onPromptAnswer: { step, response in
+                // Route through the same "user_message" path chat uses, so
+                // the backend's hesitation detection and learner_signal
+                // handling apply here too — a mid-lesson checkpoint answer
+                // is a real message, not a decorative tap.
+                service.sendUserAction(
+                    actionIntent: "user_message",
+                    componentId: step.id,
+                    actionData: ["message": response]
+                )
+            },
             onBack: { dismiss() },
             onMenu: { withAnimation { showDrawer.toggle() } },
             onMic: { openAskOverlay(for: nil) },
