@@ -160,6 +160,7 @@ interface ClassroomStore {
   soundOn: boolean;
   voiceOn: boolean;
   speechRate: number;
+  isPaused: boolean;        // the single most accessible control: stop the class
 
   connect: (connection: ClassroomConnection) => void;
   disconnect: () => void;
@@ -172,6 +173,7 @@ interface ClassroomStore {
   continueLesson: () => void;
   toggleSound: () => void;
   toggleVoice: () => void;
+  togglePause: () => void;
   setSpeechRate: (rate: number) => void;
   viewBoard: (index: number) => void; // -1 = live
 }
@@ -380,7 +382,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function playNext() {
-    if (!playing) return;
+    if (!playing || get().isPaused) return;
     const turn = turnQueue.shift();
     if (!turn) {
       playing = false;
@@ -676,6 +678,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     soundOn: false,
     voiceOn: false,
     speechRate: 1,
+    isPaused: false,
 
     connect: (connection: ClassroomConnection) => {
       get().disconnect();
@@ -817,6 +820,22 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const next = !get().voiceOn;
       if (!next) stopSpeech();
       set({ voiceOn: next });
+    },
+    // The single most accessible control: stop the class right where it
+    // is. Pausing cancels the turn currently speaking/animating and holds
+    // the turn queue — it does not lose anything already on the board or
+    // in the transcript. Resuming continues with the NEXT turn (the
+    // interrupted line doesn't replay from the top; browser TTS
+    // pause/resume-mid-utterance is unreliable enough across engines that
+    // a clean stop-and-continue is the more trustworthy behavior).
+    togglePause: () => {
+      if (get().isPaused) {
+        set({ isPaused: false });
+        resumePlayer();
+      } else {
+        stopPlayer();
+        set({ isPaused: true, activeSpeaker: null });
+      }
     },
     setSpeechRate: (rate: number) => set({
       speechRate: Math.max(0.75, Math.min(1.25, rate)),

@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
-  NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
-  Accessibility, Gauge, Settings2, Timer,
+  NotebookPen, Volume2, VolumeX, X, Hand, Sparkles,
+  Accessibility, Gauge, Settings2, Timer, Pause, Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -125,9 +125,9 @@ function ClassroomStage() {
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
+    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate, isPaused,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, askQuestion, signal,
-    requestHint, continueLesson, toggleSound, toggleVoice, setSpeechRate, viewBoard,
+    requestHint, continueLesson, toggleSound, toggleVoice, togglePause, setSpeechRate, viewBoard,
   } = useClassroomStore();
 
   const [question, setQuestion] = useState('');
@@ -194,6 +194,7 @@ function ClassroomStage() {
           onClick={() => router.back()}
           className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
           title="Leave classroom"
+          aria-label="Leave classroom"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -211,25 +212,40 @@ function ClassroomStage() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          {/* The single most accessible control — leftmost, largest visual
+              weight, unambiguous icon + state color, matching "Pause
+              teacher" being the most important thing a learner can reach. */}
           <button
-            onClick={toggleVoice}
-            title={voiceOn ? 'Mute voices' : 'Hear the class speak'}
-            className={cn('p-2 rounded-lg transition-colors',
-              voiceOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
+            onClick={togglePause}
+            title={isPaused ? 'Resume class' : 'Pause class'}
+            aria-label={isPaused ? 'Resume class' : 'Pause class'}
+            className={cn('p-2.5 rounded-lg transition-colors',
+              isPaused
+                ? 'text-accent-gold bg-accent-gold/15 ring-1 ring-accent-gold/40'
+                : 'text-white/70 hover:text-white hover:bg-white/5')}
           >
-            <AudioLines className="w-4 h-4" />
+            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
           </button>
+          {/* One combined control for both audio streams (narration +
+              ambient sound effects) instead of two separate speaker-ish
+              icons that read as duplicates of each other. */}
           <button
-            onClick={toggleSound}
-            title={soundOn ? 'Mute classroom sounds' : 'Classroom sounds on'}
+            onClick={() => {
+              const nextOn = !(voiceOn || soundOn);
+              if (voiceOn !== nextOn) toggleVoice();
+              if (soundOn !== nextOn) toggleSound();
+            }}
+            title={voiceOn || soundOn ? 'Mute classroom sound' : 'Turn on classroom sound'}
+            aria-label={voiceOn || soundOn ? 'Mute classroom sound' : 'Turn on classroom sound'}
             className={cn('p-2 rounded-lg transition-colors',
-              soundOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
+              voiceOn || soundOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
           >
-            {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {voiceOn || soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
           <button
             onClick={() => setNotebookOpen(true)}
             title="Your notebook (transcript)"
+            aria-label="Open your notebook"
             className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
           >
             <NotebookPen className="w-4 h-4" />
@@ -237,6 +253,7 @@ function ClassroomStage() {
           <button
             onClick={() => setSettingsOpen((open) => !open)}
             title="Classroom settings"
+            aria-label="Classroom settings"
             aria-expanded={settingsOpen}
             className={cn(
               'p-2 rounded-lg transition-colors',
@@ -254,35 +271,62 @@ function ClassroomStage() {
           aria-label="Classroom settings"
           className="mx-4 mb-2 grid gap-3 rounded-xl border border-white/10 bg-[#111a38] p-3 text-xs text-white/75 sm:grid-cols-3"
         >
-          <label className="space-y-1">
+          {/* Dark pill groups instead of native <select> — a native select
+              opens the OS's own picker on mobile, which is bright/white and
+              breaks the classroom's theme entirely. */}
+          <div className="space-y-1.5">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Gauge className="h-3.5 w-3.5" /> Learning mode
             </span>
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as ClassroomMode)}
-              className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
-            >
-              <option value="solo">Solo teacher</option>
-              <option value="classroom">Classroom discussion</option>
-              <option value="challenge">Challenge mode</option>
-              <option value="review">Spaced review</option>
-            </select>
-          </label>
-          <label className="space-y-1">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Learning mode">
+              {(
+                [
+                  { value: 'solo', label: 'Solo' },
+                  { value: 'classroom', label: 'Classroom' },
+                  { value: 'challenge', label: 'Challenge' },
+                  { value: 'review', label: 'Review' },
+                ] as { value: ClassroomMode; label: string }[]
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMode(opt.value)}
+                  aria-pressed={mode === opt.value}
+                  className={cn(
+                    'px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors',
+                    mode === opt.value
+                      ? 'bg-lyo-500/25 border-lyo-400/50 text-white'
+                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Timer className="h-3.5 w-3.5" /> Session target
             </span>
-            <select
-              value={durationMinutes}
-              onChange={(event) => setDurationMinutes(Number(event.target.value))}
-              className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
-            >
-              <option value={5}>5 minutes</option>
-              <option value={10}>10 minutes</option>
-              <option value={20}>20 minutes</option>
-            </select>
-          </label>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Session target">
+              {[5, 10, 20].map((mins) => (
+                <button
+                  key={mins}
+                  type="button"
+                  onClick={() => setDurationMinutes(mins)}
+                  aria-pressed={durationMinutes === mins}
+                  className={cn(
+                    'px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors',
+                    durationMinutes === mins
+                      ? 'bg-lyo-500/25 border-lyo-400/50 text-white'
+                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  {mins} min
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="space-y-2">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Accessibility className="h-3.5 w-3.5" /> Accessibility
@@ -295,18 +339,27 @@ function ClassroomStage() {
                 onChange={(event) => setReduceMotion(event.target.checked)}
               />
             </label>
-            <label className="flex items-center justify-between gap-2">
-              Voice speed
-              <select
-                value={speechRate}
-                onChange={(event) => setSpeechRate(Number(event.target.value))}
-                className="rounded border border-white/15 bg-[#0a1026] px-1.5 py-1 text-white"
-              >
-                <option value={0.75}>0.75×</option>
-                <option value={1}>1×</option>
-                <option value={1.25}>1.25×</option>
-              </select>
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <span>Voice speed</span>
+              <div className="flex gap-1" role="group" aria-label="Voice speed">
+                {[0.75, 1, 1.25].map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => setSpeechRate(rate)}
+                    aria-pressed={speechRate === rate}
+                    className={cn(
+                      'px-2 py-1 rounded text-[10px] font-semibold border transition-colors',
+                      speechRate === rate
+                        ? 'bg-lyo-500/25 border-lyo-400/50 text-white'
+                        : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white',
+                    )}
+                  >
+                    {rate}×
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
