@@ -264,17 +264,42 @@ function ClassroomStage() {
         </div>
       )}
 
-      {/* ── THE BOARD — the main attraction ── */}
-      <div className="relative flex-1 min-h-0 mx-4">
+      {/* ── THE BOARD — the main attraction ──
+          Zone discipline: the frame is a column of non-overlapping bands —
+          an optional history rail, then the lesson content. Nothing floats
+          over the content, so the learner never reads through an element. */}
+      <div className="flex-1 min-h-0 mx-4">
         <div className={cn(
-          'h-full rounded-2xl border-[3px] border-[#3a3323] overflow-hidden',
+          'h-full flex flex-col rounded-2xl border-[3px] border-[#3a3323] overflow-hidden',
           'bg-[radial-gradient(ellipse_at_top,#17203f_0%,#0d142e_55%,#0a0f24_100%)]',
           'shadow-[inset_0_0_60px_rgba(0,0,0,0.55),0_10px_40px_rgba(0,0,0,0.4)]',
         )}>
-          {/* chalk tray */}
-          <div className="absolute bottom-0 inset-x-6 h-1.5 rounded-t bg-[#3a3323]/80 z-10" />
+          {/* history rail — its own band, never on top of the lesson */}
+          {totalBoards > 0 && (
+            <div className="flex items-center justify-end gap-1 shrink-0 border-b border-white/5 bg-black/25 px-3 py-1.5">
+              <button
+                disabled={viewingBoard === 0}
+                onClick={() => viewBoard(viewingBoard === -1 ? totalBoards - 1 : Math.max(viewingBoard - 1, 0))}
+                className="p-1 text-white/60 hover:text-white disabled:opacity-25"
+                title="Previous board"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[10px] text-white/50 font-mono">
+                {viewingBoard === -1 ? 'live' : `${viewingBoard + 1}/${totalBoards}`}
+              </span>
+              <button
+                disabled={viewingBoard === -1}
+                onClick={() => viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1)}
+                className="p-1 text-white/60 hover:text-white disabled:opacity-25"
+                title="Forward"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
-          <div className="h-full overflow-y-auto px-6 py-5 space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
             {shownBoard.length === 0 && !waitingForScene && (
               <div className="h-full flex items-center justify-center text-white/20 text-sm italic">
                 a clean board…
@@ -311,39 +336,20 @@ function ClassroomStage() {
             )}
             <div ref={boardEndRef} />
           </div>
+
+          {/* chalk tray — a real band at the foot of the frame */}
+          <div className="shrink-0 mx-6 h-1.5 rounded-t bg-[#3a3323]/80" />
         </div>
+      </div>
 
-        {/* board history flip */}
-        {(totalBoards > 0) && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/50 backdrop-blur rounded-full px-2 py-1 z-20">
-            <button
-              disabled={viewingBoard === 0}
-              onClick={() => viewBoard(viewingBoard === -1 ? totalBoards - 1 : Math.max(viewingBoard - 1, 0))}
-              className="p-1 text-white/60 hover:text-white disabled:opacity-25"
-              title="Previous board"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <span className="text-[10px] text-white/50 font-mono">
-              {viewingBoard === -1 ? 'live' : `${viewingBoard + 1}/${totalBoards}`}
-            </span>
-            <button
-              disabled={viewingBoard === -1}
-              onClick={() => viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1)}
-              className="p-1 text-white/60 hover:text-white disabled:opacity-25"
-              title="Forward"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Lyo at their corner desk */}
+      {/* ── Voice band — Lyo and the live caption each own a column, so the
+             avatar never sits on top of anything that has to be read. ── */}
+      <div className="flex items-center gap-3 px-6 pt-3 pb-1 min-h-[3.9rem]">
         <motion.img
           key={lyoState}
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
-          className="absolute -bottom-3 right-3 w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20"
+          className="w-12 h-12 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
@@ -352,30 +358,28 @@ function ClassroomStage() {
               : { scale: 1, rotate: 0, y: 0 }}
           transition={{ duration: animationsOff ? 0 : 0.6 }}
         />
-      </div>
-
-      {/* ── Teacher's voice — one live caption line ── */}
-      <div className="px-6 pt-3 pb-1 min-h-[3.4rem]">
-        <AnimatePresence mode="wait">
-          {caption && (
-            <motion.p
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              key={caption.speaker + caption.text.slice(0, 24)}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="text-[15px] leading-snug text-white/90 text-center"
-            >
-              <span className={cn('font-bold mr-2',
-                CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
-                {caption.speaker}:
-              </span>
-              “{caption.text}”
-            </motion.p>
-          )}
-        </AnimatePresence>
+        <div className="flex-1 min-w-0">
+          <AnimatePresence mode="wait">
+            {caption && (
+              <motion.p
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                key={caption.speaker + caption.text.slice(0, 24)}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="text-[15px] leading-snug text-white/90"
+              >
+                <span className={cn('font-bold mr-2',
+                  CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
+                  {caption.speaker}:
+                </span>
+                “{caption.text}”
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* ── Cold-call answer strip ── */}

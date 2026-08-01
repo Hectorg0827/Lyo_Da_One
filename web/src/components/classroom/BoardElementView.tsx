@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -135,6 +135,115 @@ function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; l
   );
 }
 
+// ─── Chalk: one idea at a time, with expressions colour-coded by role ────────
+
+type MathRole = 'coefficient' | 'variable' | 'constant' | 'operator' | 'plain';
+
+// Each part of an expression gets its own hue, so "3x + 5" reads as
+// coefficient / variable / constant at a glance rather than as flat text.
+const MATH_ROLE_CLASS: Record<MathRole, string> = {
+  coefficient: 'text-accent-gold',
+  variable: 'text-accent-teal',
+  constant: 'text-accent-violet',
+  operator: 'text-white/45',
+  plain: '',
+};
+
+// An operand is a bare number, a variable, or a coefficient glued to a variable
+// ("3x", "mx"). An expression is two or more of those joined by operators.
+const OPERAND = String.raw`(?:\d+(?:\.\d+)?[a-zA-Z]*|[a-zA-Z]+)`;
+const EXPRESSION = new RegExp(`${OPERAND}(?:\\s*[+\\-*/=^]\\s*${OPERAND})+`, 'g');
+
+/**
+ * Guards against colouring ordinary prose. "input/output" and "read/write"
+ * match the operand grammar but are not maths; real algebra either contains a
+ * digit or uses single-letter variables ("y = mx + b").
+ */
+function looksLikeMath(expression: string): boolean {
+  if (/\d/.test(expression)) return true;
+  return /(^|[^a-zA-Z])[a-zA-Z]([^a-zA-Z]|$)/.test(expression);
+}
+
+function tokenizeExpression(expression: string): { text: string; role: MathRole }[] {
+  const raw = expression.match(/\d+(?:\.\d+)?|[a-zA-Z]+|[+\-*/=^]|\s+/g) ?? [];
+  return raw.map((text, i) => {
+    if (/^\s+$/.test(text)) return { text, role: 'plain' };
+    if (/^\d/.test(text)) {
+      // A number immediately followed by a variable is a coefficient, not a
+      // standalone constant — that's what makes 3 and 5 read differently.
+      const next = raw[i + 1];
+      return { text, role: next && /^[a-zA-Z]/.test(next) ? 'coefficient' : 'constant' };
+    }
+    if (/^[a-zA-Z]+$/.test(text)) return { text, role: 'variable' };
+    return { text, role: 'operator' };
+  });
+}
+
+function ColouredExpression({ expression }: { expression: string }) {
+  return (
+    <span className="font-mono font-semibold tracking-tight">
+      {tokenizeExpression(expression).map((token, i) => (
+        <span key={i} className={MATH_ROLE_CLASS[token.role]}>{token.text}</span>
+      ))}
+    </span>
+  );
+}
+
+/** Splits a line into plain prose and colour-coded expressions. */
+function withExpressions(line: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  EXPRESSION.lastIndex = 0;
+  for (let match = EXPRESSION.exec(line); match; match = EXPRESSION.exec(line)) {
+    if (!looksLikeMath(match[0])) continue;
+    if (match.index > last) parts.push(line.slice(last, match.index));
+    parts.push(<ColouredExpression key={match.index} expression={match[0]} />);
+    last = match.index + match[0].length;
+  }
+  if (last < line.length) parts.push(line.slice(last));
+  return parts.length ? parts : [line];
+}
+
+/**
+ * Breaks a block into one-idea beats. Splits on blank lines and on sentence
+ * endings that are followed by whitespace, so decimals like "3.5" stay intact.
+ */
+function splitIntoBeats(text: string): string[] {
+  const beats: string[] = [];
+  for (const block of text.split(/\n+/)) {
+    // Split on sentence punctuation only when whitespace follows, so a
+    // decimal like "3.5" survives intact. The capture group keeps the
+    // punctuation attached to the sentence it ended.
+    const pieces = block.split(/([.!?])\s+/);
+    for (let i = 0; i < pieces.length; i += 2) {
+      const beat = `${pieces[i] ?? ''}${pieces[i + 1] ?? ''}`.trim();
+      if (beat) beats.push(beat);
+    }
+  }
+  return beats;
+}
+
+function ChalkView({ text, reducedMotion }: { text: string; reducedMotion: boolean }) {
+  const beats = useMemo(() => splitIntoBeats(text), [text]);
+  return (
+    <div className="space-y-2.5">
+      {beats.map((beat, i) => (
+        <motion.p
+          key={i}
+          initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reducedMotion
+            ? { duration: 0 }
+            : { delay: i * 0.5, duration: 0.4, ease: 'easeOut' }}
+          className="text-white/95 text-lg leading-relaxed font-medium [text-shadow:0_0_14px_rgba(167,139,250,0.25)]"
+        >
+          {withExpressions(beat)}
+        </motion.p>
+      ))}
+    </div>
+  );
+}
+
 function QuizView({
   el, onAnswer, onSkip, onUnskip, onAskHelp,
 }: {
@@ -240,26 +349,38 @@ function TransferView({
   onAskHelp: () => void;
 }) {
   const [response, setResponse] = useState(el.response || '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const minWords = el.input.min_words ?? 6;
   const wordCount = response.trim().split(/\s+/).filter(Boolean).length;
   const locked = !!el.submitted || !!el.skipped;
   const ready = wordCount >= minWords && !locked;
+
+  // Grow with the answer instead of trapping a conceptual explanation in a
+  // fixed-height box the learner has to scroll inside.
+  useEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+    node.style.height = 'auto';
+    node.style.height = `${node.scrollHeight}px`;
+  }, [response]);
   return (
     <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
         ✍️ Show you can use it
       </p>
       <label htmlFor={`transfer-${el.id}`} className="block text-white text-base font-medium">
-        {el.input.question || 'Explain and apply the idea in your own words.'}
+        {el.input.question || 'How would you use this idea?'}
       </label>
       <textarea
+        ref={textareaRef}
         id={`transfer-${el.id}`}
         value={response}
         disabled={locked}
+        rows={3}
         maxLength={Math.max(200, (el.input.max_words ?? 120) * 10)}
         onChange={(event) => setResponse(event.target.value)}
-        placeholder={el.input.placeholder || 'Explain your reasoning…'}
-        className="w-full min-h-28 resize-y rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
+        placeholder={el.input.placeholder || 'Type your thoughts here…'}
+        className="w-full min-h-[5.5rem] max-h-72 resize-none overflow-y-auto rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
       {el.skipped ? (
         <div className="flex items-center gap-3">
@@ -333,11 +454,7 @@ export function BoardElementView({
       transition={{ duration: reducedMotion ? 0 : 0.45, ease: 'easeOut' }}
       className="board-element"
     >
-      {el.kind === 'chalk' && (
-        <p className="text-white/95 text-lg leading-relaxed font-medium whitespace-pre-wrap [text-shadow:0_0_14px_rgba(167,139,250,0.25)]">
-          {el.text}
-        </p>
-      )}
+      {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
 
       {el.kind === 'latex' && <LatexView latex={el.latex} />}
 
