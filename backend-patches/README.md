@@ -36,3 +36,46 @@ creates the new tables automatically on startup, so no manual migration is
 required before these endpoints go live. One data prerequisite: an
 `organizations` row with `id=1` must exist (the TenantMixin default);
 production databases created via the normal seed path already have it.
+
+## AI Classroom: rubric-leak fix and hesitation scaffolding
+
+Unlike the patches above, this change was pushed directly to
+`Hectorg0827/LyoBackendJune` (branch `claude/multi-agent-rubric-separation-rs6iaf`,
+same name as this repo's branch) since push access was available this time —
+no `.patch` file needed. Noting it here for discoverability since the actual
+AI tutor/classroom logic lives in that repo, not this one.
+
+**Bug:** `SceneLifecycleEngine.handle_transfer_submission()` in
+`lyo_app/ai_classroom/scene_lifecycle_engine.py` built the learner-facing
+correction text by joining the deterministic Evaluator's raw missing-keyword
+list directly into the message (e.g. "Add the missing reasoning link around
+ratio, scale..."), and that string flowed straight into the visible
+`TeacherMessage` with no persona/LLM filtering — handing the learner the
+exact words the grading rubric was scoring for.
+
+**Fix:**
+- `describe_transfer_gap()` replaces the keyword-joining feedback: it
+  reports the *category* of gap (too short vs. not yet on-target) without
+  ever quoting a rubric keyword. `score_transfer_response()` (the hidden
+  Evaluator) is unchanged — only what gets surfaced to the visible Tutor
+  text changes.
+- `remediation_hint` on a transfer submission is now always `None` instead
+  of the joined keyword list (author-curated quiz-distractor remediation
+  hints, a separate code path, are untouched).
+- `detect_hesitation()` is a lightweight keyword classifier ("not sure",
+  "idk", "help", ...) that shifts the Director from Assessment into
+  Scaffolding: skip scoring/correction entirely and give one small hint
+  instead, regardless of frustration state or how the Evaluator scored the
+  response.
+- `director_prompt.py` and the instruction-generation system prompt gained
+  matching guardrails so the LLM-authored path never quotes rubric keywords
+  and treats a hesitant signal as "hint, not evaluation."
+
+The client-visible `InputField.expected_keywords` field is untouched — that
+is an intentional, separately-tested "transparent server rubric" (see
+`test_transfer_input_carries_a_transparent_server_rubric`); the bug was
+specifically the keywords bleeding into spoken/chat text, not their presence
+as structured data.
+
+Verified: `tests/test_ai_classroom_teaching_loop.py` (21/21, including 7 new
+tests for the gap-description leak regression and hesitation routing).
