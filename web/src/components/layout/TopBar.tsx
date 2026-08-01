@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Bell, MessageSquare, Search, User, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/Avatar';
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth-store';
 
 export function TopBar() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout } = useAuthStore();
 
   const [searchValue, setSearchValue] = useState('');
@@ -33,6 +34,13 @@ export function TopBar() {
     setDropdownOpen(false);
     logout();
     router.push('/auth/login');
+  }
+
+  // Focused classroom layout: no global search/notifications/messages
+  // competing with an active lesson. All hooks above still run every
+  // render — this only skips the header markup.
+  if (pathname.startsWith('/classroom')) {
+    return null;
   }
 
   return (

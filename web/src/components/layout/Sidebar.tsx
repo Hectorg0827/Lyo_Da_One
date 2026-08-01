@@ -47,6 +47,14 @@ export function Sidebar() {
   const { user } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
 
+  // The classroom owns a focused, distraction-free layout of its own —
+  // global nav chrome (search, notifications, course browsing) has no
+  // place alongside an active lesson. Hidden here, not in the shared
+  // layout, so this stays a single-file opt-out per shell piece.
+  if (pathname.startsWith('/classroom')) {
+    return null;
+  }
+
   return (
     <motion.aside
       animate={{ width: collapsed ? 72 : 240 }}

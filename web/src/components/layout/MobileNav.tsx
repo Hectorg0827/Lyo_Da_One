@@ -66,6 +66,12 @@ export function MobileNav() {
   const isItemActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
 
+  // Focused classroom layout: the lesson's own interaction dock replaces
+  // global tab navigation until the learner exits.
+  if (pathname.startsWith('/classroom')) {
+    return null;
+  }
+
   return (
     <nav
       className={cn(
