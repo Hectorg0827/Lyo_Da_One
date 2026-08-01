@@ -126,6 +126,17 @@ function ClassroomStage() {
     { level: 'prerequisite', label: 'Review the prerequisite' },
   ];
 
+  // Every desk control needs an open socket, so gate them on the session
+  // actually being live rather than letting the click vanish.
+  const live = status === 'live';
+  const deskDisabledReason = status === 'connecting'
+    ? 'Walking to class — one moment…'
+    : status === 'ended'
+      ? 'The class session ended. Retry to rejoin.'
+      : status === 'error'
+        ? 'Not connected to the classroom. Retry to rejoin.'
+        : 'The class has not started yet.';
+
   const chooseHint = (level: HintLevel) => {
     requestHint(level);
     setHintMenuOpen(false);
@@ -300,8 +311,21 @@ function ClassroomStage() {
           )}
 
           <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
+            {/* Pinned to the top: on an empty board the placeholder below fills
+                the scroll area, which would push a recovery action out of sight. */}
+            {(status === 'error' || status === 'ended' || error) && (
+              <div
+                role="alert"
+                className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3"
+              >
+                {error ?? (status === 'ended'
+                  ? 'The class session ended.'
+                  : 'Something went wrong.')}{' '}
+                <button className="underline" onClick={() => connect(connection)}>Retry</button>
+              </div>
+            )}
             {shownBoard.length === 0 && !waitingForScene && (
-              <div className="h-full flex items-center justify-center text-white/20 text-sm italic">
+              <div className="flex-1 flex items-center justify-center text-white/20 text-sm italic py-16">
                 a clean board…
               </div>
             )}
@@ -326,12 +350,6 @@ function ClassroomStage() {
                   <Sparkles className="w-4 h-4" />
                 </motion.span>
                 the teacher is preparing…
-              </div>
-            )}
-            {status === 'error' && (
-              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-                {error ?? 'Something went wrong.'}{' '}
-                <button className="underline" onClick={() => connect(connection)}>Retry</button>
               </div>
             )}
             <div ref={boardEndRef} />
@@ -438,12 +456,22 @@ function ClassroomStage() {
         })}
       </div>
 
-      {/* ── Your desk ── */}
+      {/* ── Your desk ──
+             Everything here needs a live socket. When the class is not in
+             session the controls are disabled rather than silently swallowing
+             input, and the reason is stated instead of implied. */}
       <div className="px-4 pb-3 pt-1 space-y-2">
+        {!live && (
+          <p className="text-[11px] text-white/45 text-center">
+            {deskDisabledReason}
+          </p>
+        )}
         {canContinue && (
           <button
             onClick={continueLesson}
-            className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all"
+            disabled={!live}
+            title={live ? undefined : deskDisabledReason}
+            className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
           >
             {continueLabel} →
           </button>
@@ -452,9 +480,11 @@ function ClassroomStage() {
           <div className="relative shrink-0">
             <button
               onClick={() => setHintMenuOpen((open) => !open)}
+              disabled={!live}
+              title={live ? undefined : deskDisabledReason}
               aria-expanded={hintMenuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-white/70"
             >
               <HelpCircle className="w-3.5 h-3.5" /> Get help
             </button>
@@ -479,7 +509,9 @@ function ClassroomStage() {
           </div>
           <button
             onClick={() => signal('too_easy')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0"
+            disabled={!live}
+            title={live ? undefined : deskDisabledReason}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-white/70"
           >
             <Zap className="w-3.5 h-3.5" /> Harder case
           </button>
@@ -493,12 +525,13 @@ function ClassroomStage() {
                 onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
                 placeholder="Ask the teacher…"
                 aria-label="Ask the teacher a question"
-                className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50"
+                disabled={!live}
+                className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50 disabled:cursor-not-allowed disabled:opacity-40"
               />
               <button
                 onClick={submitQuestion}
-                disabled={!question.trim()}
-                className="px-3.5 rounded-full bg-gradient-to-r from-lyo-600 to-accent-purple text-white disabled:opacity-40"
+                disabled={!live || !question.trim()}
+                className="px-3.5 rounded-full bg-gradient-to-r from-lyo-600 to-accent-purple text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -506,7 +539,9 @@ function ClassroomStage() {
           ) : (
             <button
               onClick={() => setHandRaised(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-accent-gold bg-accent-gold/10 border border-accent-gold/25 hover:bg-accent-gold/20 transition-colors"
+              disabled={!live}
+              title={live ? undefined : deskDisabledReason}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-accent-gold bg-accent-gold/10 border border-accent-gold/25 hover:bg-accent-gold/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent-gold/10"
             >
               <Hand className="w-3.5 h-3.5" /> Raise your hand
             </button>

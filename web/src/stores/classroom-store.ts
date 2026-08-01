@@ -670,8 +670,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
   }
 
-  function sendAction(actionIntent: string, componentId: string, answerData?: Record<string, unknown>) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  /**
+   * Returns whether the action actually reached the classroom. Callers must
+   * check it before optimistically showing "waiting for the teacher" — a
+   * silently dropped action used to leave the board spinning forever.
+   */
+  function sendAction(
+    actionIntent: string,
+    componentId: string,
+    answerData?: Record<string, unknown>,
+  ): boolean {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     const payload: Record<string, unknown> = {
       event_type: 'user_action',
       session_id: get().sessionId,
@@ -680,7 +689,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       timestamp: new Date().toISOString(),
     };
     if (answerData) payload.answer_data = answerData;
-    ws.send(JSON.stringify(payload));
+    try {
+      ws.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Surfaces a dropped action instead of hanging the board. */
+  function reportOffline() {
+    set({
+      waitingForScene: false,
+      error: 'That did not reach the classroom — the session is not connected.',
+    });
   }
 
   return {
@@ -759,15 +781,28 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     answerPrompt: (option: string) => {
       const prompt = get().prompt;
       if (!prompt) return;
+      // Keep the prompt on screen if it could not be delivered, rather than
+      // dismissing a question the classroom never received.
+      if (!sendAction('user_message', prompt.id, { message: option })) {
+        reportOffline();
+        return;
+      }
       pushTranscript('You', option);
       set({ prompt: null, lyoState: 'listening' });
-      sendAction('user_message', prompt.id, { message: option });
       resumePlayer();
     },
 
     answerQuiz: (elementId, option) => {
       const el = get().board.find((b) => b.id === elementId);
       if (!el || el.kind !== 'quiz' || el.answered) return;
+      // Do not lock the card to an answer the classroom never received.
+      if (!sendAction('submit_answer', el.quiz.component_id, {
+        selected_option_id: option.id,
+        selected_option_label: option.label,
+      })) {
+        reportOffline();
+        return;
+      }
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'quiz'
@@ -777,10 +812,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         waitingForScene: true,
       }));
       pushTranscript('You', option.label);
-      sendAction('submit_answer', el.quiz.component_id, {
-        selected_option_id: option.id,
-        selected_option_label: option.label,
-      });
     },
 
     answerTransfer: (elementId: string, response: string) => {
@@ -788,6 +819,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       if (!el || el.kind !== 'transfer' || el.submitted) return;
       const trimmed = response.trim();
       if (!trimmed) return;
+      // Keep the learner's writing editable if it could not be delivered.
+      if (!sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
+        response: trimmed,
+      })) {
+        reportOffline();
+        return;
+      }
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'transfer'
@@ -797,9 +835,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         lyoState: 'thinking',
       }));
       pushTranscript('You', `Application: ${trimmed}`);
-      sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
-        response: trimmed,
-      });
     },
 
     skipQuestion: (elementId: string) => {
@@ -821,7 +856,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       }));
       pushTranscript('You', "Skipped — I don't know this one");
       const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
-      sendAction('skip_question', componentId, { reason: 'unsure' });
+      // Delivery is best-effort by design: the card is already unblocked above,
+      // so a dropped signal costs tracking, never the learner's way forward.
+      void sendAction('skip_question', componentId, { reason: 'unsure' });
     },
 
     unskipQuestion: (elementId: string) => {
@@ -843,17 +880,23 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     askQuestion: (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
+      if (!sendAction('ask_question', 'web_ask', { message: trimmed })) {
+        reportOffline();
+        return;
+      }
       stopSpeech(); // barge-in: you raised your hand, the room listens
       pushTranscript('You', `✋ ${trimmed}`);
       set({ waitingForScene: true, lyoState: 'curious', caption: { speaker: 'You', text: trimmed } });
-      sendAction('ask_question', 'web_ask', { message: trimmed });
     },
 
     signal: (kind) => {
+      if (!sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
+        kind === 'confused' ? { hint_level: 'nudge' } : undefined)) {
+        reportOffline();
+        return;
+      }
       set({ waitingForScene: true, lyoState: kind === 'confused' ? 'thinking' : 'curious' });
       pushTranscript('You', kind === 'confused' ? 'Requested a small nudge' : 'Requested a harder case');
-      sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
-        kind === 'confused' ? { hint_level: 'nudge' } : undefined);
     },
 
     requestHint: (level) => {
@@ -864,20 +907,28 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         full_example: 'full worked example',
         prerequisite: 'prerequisite refresher',
       };
+      if (!sendAction('request_hint', 'web_hint', { hint_level: level })) {
+        reportOffline();
+        return;
+      }
       set({ waitingForScene: true, lyoState: 'thinking' });
       pushTranscript('You', `Requested: ${labels[level]}`);
-      sendAction('request_hint', 'web_hint', { hint_level: level });
     },
 
     continueLesson: () => {
       const actionIntent = get().nextActionIntent || 'continue';
+      // Leave the Continue button in place if the action never left the
+      // browser — clearing canContinue would strip the only way forward.
+      if (!sendAction(actionIntent, 'web_continue')) {
+        reportOffline();
+        return;
+      }
       set({
         canContinue: false,
         waitingForScene: true,
         continueLabel: 'Check understanding',
         nextActionIntent: 'continue',
       });
-      sendAction(actionIntent, 'web_continue');
     },
 
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
