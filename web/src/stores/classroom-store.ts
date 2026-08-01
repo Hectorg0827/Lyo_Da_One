@@ -114,7 +114,12 @@ export interface ActivePrompt {
   id: string;
   speaker: string;
   text: string;
-  options: string[];
+  /** Only set when the question is genuinely multiple-choice — real,
+      question-specific options from the director script. Absent for
+      open-ended questions ("what do you think...", "give me an
+      example..."), which expect a typed/spoken answer instead. Never
+      defaulted to a generic yes/no pair. */
+  options?: string[];
 }
 
 export interface Caption {
@@ -400,10 +405,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const text = (turn.text ?? '').trim();
         const speaker = turn.speaker || 'Teacher';
         const promptId = nextId();
+        // Never default to a generic yes/no pair — that's the exact bug
+        // that made "can you give me an example?" show Yes/No buttons.
+        // Only set `options` when the director actually sent real,
+        // question-specific ones; otherwise the UI renders an open text
+        // input instead.
         set({
           caption: { speaker, text },
           activeSpeaker: speaker,
-          prompt: { id: promptId, speaker, text, options: turn.options?.length ? turn.options : ['Yes', 'No'] },
+          prompt: {
+            id: promptId, speaker, text,
+            options: turn.options?.length ? turn.options : undefined,
+          },
         });
         pushTranscript(speaker, `${text} (asks you)`);
         if (get().voiceOn) speakLine(speaker, text, () => undefined);

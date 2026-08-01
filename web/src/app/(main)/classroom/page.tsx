@@ -131,6 +131,7 @@ function ClassroomStage() {
   } = useClassroomStore();
 
   const [question, setQuestion] = useState('');
+  const [promptResponseText, setPromptResponseText] = useState('');
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -175,6 +176,13 @@ function ClassroomStage() {
     askQuestion(question);
     setQuestion('');
     setHandRaised(false);
+  };
+
+  const submitPromptResponse = (response: string) => {
+    const trimmed = response.trim();
+    if (!trimmed) return;
+    answerPrompt(trimmed);
+    setPromptResponseText('');
   };
 
   return (
@@ -438,26 +446,68 @@ function ClassroomStage() {
         </AnimatePresence>
       </div>
 
-      {/* ── Cold-call answer strip ── */}
+      {/* ── Cold-call answer strip ──
+          Real, question-specific options render as chips. An open-ended
+          question (no options — "what do you think...", "give me an
+          example...") gets a text field instead of a fabricated yes/no
+          pair, plus a low-friction "I'm not sure" escape hatch. */}
       <AnimatePresence>
         {prompt && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className="px-6 py-1.5 flex flex-wrap items-center justify-center gap-2"
-          >
-            <Hand className="w-4 h-4 text-accent-gold animate-bounce" />
-            {prompt.options.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => answerPrompt(opt)}
-                className="px-4 py-2 rounded-full text-sm font-semibold bg-accent-gold/15 border border-accent-gold/40 text-white hover:bg-accent-gold/30 transition-colors"
-              >
-                {opt}
-              </button>
-            ))}
-          </motion.div>
+          prompt.options?.length ? (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="px-6 py-1.5 flex flex-wrap items-center justify-center gap-2"
+            >
+              <Hand className="w-4 h-4 text-accent-gold animate-bounce" />
+              {prompt.options.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => answerPrompt(opt)}
+                  className="px-4 py-2 rounded-full text-sm font-semibold bg-accent-gold/15 border border-accent-gold/40 text-white hover:bg-accent-gold/30 transition-colors"
+                >
+                  {opt}
+                </button>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="px-6 py-1.5 space-y-2"
+            >
+              <div className="flex items-center gap-2">
+                <Hand className="w-4 h-4 text-accent-gold shrink-0 animate-bounce" />
+                <input
+                  autoFocus
+                  value={promptResponseText}
+                  onChange={(e) => setPromptResponseText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && submitPromptResponse(promptResponseText)}
+                  placeholder="Explain in your own words…"
+                  aria-label="Answer the teacher's question"
+                  className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-accent-gold/50"
+                />
+                <button
+                  onClick={() => submitPromptResponse(promptResponseText)}
+                  disabled={!promptResponseText.trim()}
+                  className="p-2 rounded-full bg-gradient-to-r from-lyo-600 to-accent-purple text-white disabled:opacity-40 shrink-0"
+                  aria-label="Send answer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={() => submitPromptResponse("I'm not sure")}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  I&apos;m not sure
+                </button>
+              </div>
+            </motion.div>
+          )
         )}
       </AnimatePresence>
 
