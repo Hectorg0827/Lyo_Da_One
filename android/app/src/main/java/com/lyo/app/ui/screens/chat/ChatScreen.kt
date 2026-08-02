@@ -98,6 +98,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val MAX_CHAT_CHARS = 4_000
 private const val MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024
+private const val ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f
 private val SupportedChatImageTypes = setOf(
     "image/jpeg",
     "image/png",
@@ -411,7 +412,7 @@ fun ChatScreen(nav: NavHostController) {
             LazyColumn(
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
@@ -596,8 +597,12 @@ private fun MessageBubble(
     val parsed = remember(msg.content) { parseChatContent(msg.content) }
 
     Row(
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Center,
+        modifier = if (isUser) {
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        } else {
+            Modifier.fillMaxWidth()
+        },
     ) {
         val bubbleShape = RoundedCornerShape(
             topStart = 18.dp,
@@ -606,7 +611,10 @@ private fun MessageBubble(
             bottomEnd = if (isUser) 4.dp else 18.dp,
         )
         val bubbleModifier = Modifier
-            .widthIn(max = 320.dp)
+            .then(
+                if (isUser) Modifier.widthIn(max = 320.dp)
+                else Modifier.fillMaxWidth(ASSISTANT_RESPONSE_WIDTH_FRACTION),
+            )
             .clip(bubbleShape)
             .let {
                 if (isUser) it.background(LyoBrandGradient)
