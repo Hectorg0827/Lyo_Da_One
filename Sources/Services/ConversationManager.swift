@@ -316,7 +316,7 @@ class ConversationManager: ObservableObject {
                 let parsed = message.role == "user"
                     ? Self.parseCanonicalContent(message.content)
                     : (text: message.content, attachments: [ChatAttachment]())
-                MultimodalMessage(
+                return MultimodalMessage(
                     id: message.id,
                     sessionId: detail.id,
                     role: MultimodalMessage.MessageRole(rawValue: message.role) ?? .assistant,
