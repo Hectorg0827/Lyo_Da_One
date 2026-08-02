@@ -10,12 +10,33 @@ const contracts = [
       'conversation_id',
       'client_message_id',
       'device_id',
+      'media?: Array<{',
+      'mime_type',
     ],
+  },
+  {
+    name: 'web multimodal composer',
+    path: 'web/src/components/chat/ChatInputBar.tsx',
+    needles: [
+      "api.media.upload(normalizedFile, 'chat')",
+      'multiple',
+      'sendMessage(trimmed, sentAttachments)',
+      'application/pdf',
+      'MAX_ATTACHMENTS = 4',
+    ],
+    forbidden: ["api.storage.upload(file, 'chat')"],
   },
   {
     name: 'web canonical store',
     path: 'web/src/stores/chat-store.ts',
-    needles: ['hydrate:', 'loadConversation:', 'createConversation', 'userMessage.id'],
+    needles: [
+      'hydrate:',
+      'loadConversation:',
+      'createConversation',
+      'userMessage.id',
+      'attachments.map((attachment)',
+      "modality: attachment.kind === 'image' ? 'IMAGE' as const : 'DOCUMENT' as const",
+    ],
   },
   {
     name: 'web adaptive AI response width',
@@ -69,7 +90,15 @@ const contracts = [
   {
     name: 'Android stream',
     path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
-    needles: ['conversation_id', 'client_message_id', 'ChatStreamEvent.Conversation'],
+    needles: [
+      'conversation_id',
+      'client_message_id',
+      'ChatStreamEvent.Conversation',
+      'data class ChatMediaRef',
+      '"media"',
+      '"mime_type"',
+      '"size_bytes"',
+    ],
   },
   {
     name: 'Android multimodal chat UI',
@@ -79,6 +108,11 @@ const contracts = [
       'TextToSpeech',
       'ApiClient.api.uploadMedia',
       'folder = "chat"',
+      'ActivityResultContracts.OpenMultipleDocuments()',
+      'uploadChatAttachment',
+      'ChatMediaRef(',
+      '"DOCUMENT"',
+      'MAX_CHAT_ATTACHMENTS = 4',
       'buildChatContent',
       'parseChatContent',
       'ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f',
@@ -86,6 +120,7 @@ const contracts = [
     ],
     forbidden: [
       'val bubbleModifier = Modifier\n            .widthIn(max = 320.dp)',
+      'ChatStreamClient.stream(content, conversationId, clientMessageId)',
     ],
   },
   {
@@ -111,7 +146,45 @@ const contracts = [
   {
     name: 'iOS stream request',
     path: 'Sources/Models/Lyo2Models.swift',
-    needles: ['conversation_id', 'client_message_id', 'case conversation(id: String)'],
+    needles: [
+      'conversation_id',
+      'client_message_id',
+      'case conversation(id: String)',
+      'case sizeBytes = "size_bytes"',
+    ],
+  },
+  {
+    name: 'iOS active multimodal composer',
+    path: 'Sources/Views/Main/Hybrid/LyoOverlayView.swift',
+    needles: [
+      'showAttachmentMenu = true',
+      '.photosPicker(',
+      '.fileImporter(',
+      'mediaService.uploadMedia(media)',
+      'viewModel.addAttachment(attachment)',
+    ],
+    forbidden: ['Button(action: { /* Show attachments */ })'],
+  },
+  {
+    name: 'iOS multimodal transport',
+    path: 'Sources/Services/UnifiedChatService.swift',
+    needles: [
+      'let media = mediaRefs(from: attachments)',
+      'media: media,',
+      'modality = "IMAGE"',
+      'modality = "DOCUMENT"',
+    ],
+  },
+  {
+    name: 'iOS consumer media upload',
+    path: 'Sources/Services/MediaPickerService.swift',
+    needles: [
+      'CloudStorageService.shared.uploadFile(',
+      'folder: "chat"',
+      'maxAttachmentCount = 4',
+      'maxTotalSize: Int64 = 20 * 1024 * 1024',
+    ],
+    forbidden: ['return try await LyoRepository.shared.uploadFile(url: tempURL)'],
   },
   {
     name: 'iOS server history',
@@ -142,4 +215,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('Chat continuity contract: web, Android, and iOS share canonical server history, idempotent turn IDs, and adaptive 99% AI response width; Android media and voice input remain wired.');
+console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, adaptive 99% AI response width, and structured image/document uploads.');

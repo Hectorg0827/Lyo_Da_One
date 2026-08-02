@@ -279,7 +279,14 @@ export const api = {
       onDone: () => void,
       onError: (err: Error) => void,
       conversationId?: string,
-      clientMessageId?: string
+      clientMessageId?: string,
+      media?: Array<{
+        modality: 'IMAGE' | 'DOCUMENT';
+        uri: string;
+        mime_type: string;
+        name: string;
+        size_bytes: number;
+      }>
     ): AbortController {
       const controller = new AbortController();
       const token = getAccessToken();
@@ -296,6 +303,7 @@ export const api = {
           conversation_history: history,
           device_id: getOrCreateChatDeviceId(),
           client_message_id: clientMessageId,
+          media,
         }),
         signal: controller.signal,
       })
@@ -534,25 +542,37 @@ export const api = {
     },
   },
 
-  // ── Media upload (multipart; used for reel videos and post images) ──
+  // ── Media upload (multipart; chat attachments, reels, and post images) ──
   media: {
     async upload(file: File, folder = 'content') {
       const form = new FormData();
       form.append('file', file);
       form.append('folder', folder);
-      const headers: Record<string, string> = {};
-      const token = getAccessToken();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_URL}/api/v1/media/upload`, {
-        method: 'POST',
-        headers, // no Content-Type — the browser sets the multipart boundary
-        body: form,
-      });
+      const send = () => {
+        const headers: Record<string, string> = {};
+        const token = getAccessToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return fetch(`${API_URL}/api/v1/media/upload`, {
+          method: 'POST',
+          headers, // no Content-Type — the browser sets the multipart boundary
+          body: form,
+        });
+      };
+      let res = await send();
+      if (res.status === 401 && await tryRefreshToken()) {
+        res = await send();
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({ detail: 'Upload failed' }));
         throw new ApiError(body.detail || `HTTP ${res.status}`, res.status);
       }
-      return res.json() as Promise<{ success: boolean; url: string; contentType: string; size: number }>;
+      return res.json() as Promise<{
+        success: boolean;
+        url: string;
+        path: string;
+        contentType: string;
+        size: number;
+      }>;
     },
   },
 

@@ -687,7 +687,7 @@ class LyoAIViewModel: ObservableObject {
 
     func sendMessage(mode: String? = nil) async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty || !attachments.isEmpty else { return }
 
         let messageText = text
         let messageAttachments = attachments
@@ -721,7 +721,8 @@ class LyoAIViewModel: ObservableObject {
         }
 
         // Route to test prep orchestrator if a funnel session is active
-        if case .gatheringInfo = TestPrepOrchestrator.shared.state {
+        if messageAttachments.isEmpty,
+           case .gatheringInfo = TestPrepOrchestrator.shared.state {
             unifiedChat.appendUserMessage(messageText, attachments: messageAttachments)
             let attachmentIds = messageAttachments.compactMap { $0.id }
             TestPrepOrchestrator.shared.handleFunnelResponse(
@@ -733,7 +734,7 @@ class LyoAIViewModel: ObservableObject {
         }
 
         // Detect fresh test prep intent before sending to the backend
-        if isTestPrepIntent(messageText) {
+        if messageAttachments.isEmpty && isTestPrepIntent(messageText) {
             unifiedChat.appendUserMessage(messageText, attachments: messageAttachments)
             TestPrepOrchestrator.shared.handleIntent(rawPhrase: messageText, in: unifiedChat)
             return
