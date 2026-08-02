@@ -333,6 +333,36 @@ class LyoRepository: ObservableObject {
         
         let _: EmptyResponse = try await post(endpoint: "/learning/lesson-completions", body: progressDict ?? [:])
     }
+
+    /// Records checkpoint evidence without falsely marking the lesson complete.
+    func trackClassroomCheckOutcome(
+        checkId: String,
+        question: String,
+        outcome: String,
+        isCorrect: Bool?
+    ) async throws {
+        let eventType: String
+        switch outcome {
+        case "skipped":
+            eventType = "check_skipped"
+        case "help_requested":
+            eventType = "help_requested"
+        default:
+            eventType = "quiz_answered"
+        }
+        var body: [String: Any] = [
+            "event_type": eventType,
+            "card_id": checkId,
+            "topic": question,
+        ]
+        if let isCorrect {
+            body["is_correct"] = isCorrect
+        }
+        let _: EmptyResponse = try await post(
+            endpoint: "/classroom/analytics/event",
+            body: body
+        )
+    }
     
     // MARK: - Course Management
     

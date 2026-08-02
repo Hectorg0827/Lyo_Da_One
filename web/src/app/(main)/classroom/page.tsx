@@ -6,9 +6,13 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
   NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
-  Accessibility, Gauge, Settings2, Timer,
+  Accessibility, Gauge, Settings2, Timer, Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  createBrowserSpeechRecognition,
+  type BrowserSpeechRecognition,
+} from '@/lib/browser-speech';
 import {
   useClassroomStore,
   type ClassroomConnection,
@@ -52,7 +56,9 @@ function ClassroomStage() {
   const params = useSearchParams();
   const topic = params.get('topic') || 'General Learning';
   const courseId = params.get('courseId') || topic;
+  const lessonId = params.get('lessonId') || undefined;
   const objective = params.get('objective') || `Understand and apply ${topic}`;
+  const language = params.get('language') || 'auto';
   const difficultyParam = params.get('difficulty');
   const difficulty: ClassroomConnection['difficulty'] = difficultyParam === 'beginner'
     || difficultyParam === 'intermediate'
@@ -75,11 +81,14 @@ function ClassroomStage() {
   const connection: ClassroomConnection = {
     topic,
     sessionId: courseId,
+    courseId,
+    lessonId,
     objective,
     difficulty,
     mode,
     durationMinutes,
     reducedMotion: animationsOff,
+    language,
   };
 
   const {
@@ -87,8 +96,8 @@ function ClassroomStage() {
     transcript, lyoState, waitingForScene, canContinue, continueLabel,
     progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
-    askQuestion, signal, requestHint, continueLesson, toggleSound, toggleVoice, setSpeechRate,
-    viewBoard,
+    askQuestion, signal, takeFloor, requestHint, continueLesson, toggleSound, toggleVoice,
+    setSpeechRate, viewBoard,
   } = useClassroomStore();
 
   const [question, setQuestion] = useState('');
@@ -96,13 +105,22 @@ function ClassroomStage() {
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
   const boardEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const dictationBaseRef = useRef('');
 
   useEffect(() => {
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, objective, difficulty, mode, durationMinutes, animationsOff]);
+  }, [topic, courseId, lessonId, objective, difficulty, mode, durationMinutes, animationsOff, language]);
+
+  useEffect(() => {
+    setSpeechSupported(createBrowserSpeechRecognition() !== null);
+    return () => recognitionRef.current?.stop();
+  }, []);
 
   useEffect(() => {
     if (viewingBoard === -1) {
@@ -147,6 +165,36 @@ function ClassroomStage() {
     askQuestion(question);
     setQuestion('');
     setHandRaised(false);
+  };
+
+  const toggleQuestionDictation = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = createBrowserSpeechRecognition();
+    if (!recognition) return;
+    takeFloor();
+    recognitionRef.current = recognition;
+    dictationBaseRef.current = question ? question.replace(/\s*$/, ' ') : '';
+    recognition.lang = language === 'auto' ? navigator.language || 'en-US' : language;
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index][0].transcript;
+      }
+      setQuestion((dictationBaseRef.current + transcript).slice(0, 1000));
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
   };
 
   return (
@@ -335,6 +383,7 @@ function ClassroomStage() {
                 el={el}
                 onQuizAnswer={answerQuiz}
                 onTransferSubmit={answerTransfer}
+                onLearnerInputStart={takeFloor}
                 onSkipQuestion={skipQuestion}
                 onUnskipQuestion={unskipQuestion}
                 onAskHelp={() => requestHint('nudge')}
@@ -449,7 +498,7 @@ function ClassroomStage() {
               </motion.div>
               <span className={cn('text-[9.5px] font-bold',
                 speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
-                {member.name}
+                {member.name === 'Teacher' ? 'Lyo' : member.name}
               </span>
             </motion.div>
           );
@@ -521,13 +570,32 @@ function ClassroomStage() {
               <input
                 autoFocus
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onFocus={takeFloor}
+                onChange={(e) => {
+                  takeFloor();
+                  setQuestion(e.target.value);
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
                 placeholder="Ask the teacher…"
                 aria-label="Ask the teacher a question"
                 disabled={!live}
                 className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50 disabled:cursor-not-allowed disabled:opacity-40"
               />
+              {speechSupported && (
+                <button
+                  type="button"
+                  onClick={toggleQuestionDictation}
+                  aria-label={listening ? 'Stop dictation' : 'Dictate your question'}
+                  className={cn(
+                    'px-3 rounded-full border transition-colors',
+                    listening
+                      ? 'border-red-400/50 bg-red-500/15 text-red-200'
+                      : 'border-white/10 bg-white/5 text-white/60 hover:text-white',
+                  )}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 onClick={submitQuestion}
                 disabled={!live || !question.trim()}

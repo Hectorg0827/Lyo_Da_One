@@ -4,8 +4,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { BookOpenCheck, CheckCircle2, FileText, HelpCircle, ImageIcon, Send, XCircle } from 'lucide-react';
+import {
+  BookOpenCheck, CheckCircle2, FileText, HelpCircle, ImageIcon, Mic, Send, XCircle,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  createBrowserSpeechRecognition,
+  type BrowserSpeechRecognition,
+} from '@/lib/browser-speech';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 
@@ -254,10 +260,13 @@ function QuizView({
   onAskHelp: () => void;
 }) {
   const quiz = el.quiz;
+  const isSpanish = quiz.language_code?.toLowerCase().startsWith('es') === true;
   const locked = !!el.answered || !!el.skipped;
   return (
     <div className="space-y-3">
-      <p className="text-[11px] font-black tracking-widest text-accent-gold uppercase">📝 On the board — checkpoint</p>
+      <p className="text-[11px] font-black tracking-widest text-accent-gold uppercase">
+        {isSpanish ? '📝 En el tablero — comprobación' : '📝 On the board — checkpoint'}
+      </p>
       <p className="text-white text-base font-medium">{quiz.question}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {(quiz.options ?? []).map((opt) => {
@@ -294,7 +303,7 @@ function QuizView({
             onClick={() => onSkip(el.id)}
             className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
           >
-            I don&apos;t know — skip
+            {isSpanish ? 'No lo sé — omitir' : <>I don&apos;t know — skip</>}
           </button>
           <span className="text-white/20">·</span>
           <button
@@ -302,19 +311,19 @@ function QuizView({
             onClick={onAskHelp}
             className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
           >
-            <HelpCircle className="w-3.5 h-3.5" /> Ask for help
+            <HelpCircle className="w-3.5 h-3.5" /> {isSpanish ? 'Pedir ayuda' : 'Ask for help'}
           </button>
         </div>
       )}
       {el.skipped && (
         <div className="flex items-center gap-3">
-          <p className="text-sm text-white/40 italic">Skipped.</p>
+          <p className="text-sm text-white/40 italic">{isSpanish ? 'Omitida.' : 'Skipped.'}</p>
           <button
             type="button"
             onClick={() => onUnskip(el.id)}
             className="text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
           >
-            Try this now
+            {isSpanish ? 'Intentarla ahora' : 'Try this now'}
           </button>
         </div>
       )}
@@ -336,40 +345,78 @@ function QuizView({
 }
 
 function TransferView({
-  el,
-  onSubmit,
-  onSkip,
-  onUnskip,
-  onAskHelp,
+  el, onInputStart, onSubmit, onSkip, onUnskip, onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'transfer' }>;
+  onInputStart: () => void;
   onSubmit: (elementId: string, response: string) => void;
   onSkip: (elementId: string) => void;
   onUnskip: (elementId: string) => void;
   onAskHelp: () => void;
 }) {
   const [response, setResponse] = useState(el.response || '');
+  const [listening, setListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const dictationBaseRef = useRef('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const minWords = el.input.min_words ?? 6;
+  const isSpanish = el.input.language_code?.toLowerCase().startsWith('es') === true;
   const wordCount = response.trim().split(/\s+/).filter(Boolean).length;
   const locked = !!el.submitted || !!el.skipped;
   const ready = wordCount >= minWords && !locked;
 
-  // Grow with the answer instead of trapping a conceptual explanation in a
-  // fixed-height box the learner has to scroll inside.
+  useEffect(() => {
+    setSpeechSupported(createBrowserSpeechRecognition() !== null);
+    return () => recognitionRef.current?.stop();
+  }, []);
+
   useEffect(() => {
     const node = textareaRef.current;
     if (!node) return;
     node.style.height = 'auto';
     node.style.height = `${node.scrollHeight}px`;
   }, [response]);
+
+  const toggleDictation = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = createBrowserSpeechRecognition();
+    if (!recognition) return;
+    onInputStart();
+    recognitionRef.current = recognition;
+    dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
+    recognition.lang = el.input.language_code === 'auto'
+      ? navigator.language || 'en-US'
+      : el.input.language_code || navigator.language || 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index][0].transcript;
+      }
+      setResponse((dictationBaseRef.current + transcript).slice(0, 1200));
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
   return (
     <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
-        ✍️ Show you can use it
+        {isSpanish ? '✍️ Demuestra que puedes usarlo' : '✍️ Show you can use it'}
       </p>
       <label htmlFor={`transfer-${el.id}`} className="block text-white text-base font-medium">
-        {el.input.question || 'How would you use this idea?'}
+        {el.input.question || (isSpanish ? '¿Cómo usarías esta idea?' : 'How would you use this idea?')}
       </label>
       <textarea
         ref={textareaRef}
@@ -378,27 +425,46 @@ function TransferView({
         disabled={locked}
         rows={3}
         maxLength={Math.max(200, (el.input.max_words ?? 120) * 10)}
-        onChange={(event) => setResponse(event.target.value)}
-        placeholder={el.input.placeholder || 'Type your thoughts here…'}
+        onFocus={onInputStart}
+        onChange={(event) => {
+          onInputStart();
+          setResponse(event.target.value);
+        }}
+        placeholder={el.input.placeholder || (isSpanish ? 'Explica tu razonamiento…' : 'Explain your reasoning…')}
         className="w-full min-h-[5.5rem] max-h-72 resize-none overflow-y-auto rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
       {el.skipped ? (
         <div className="flex items-center gap-3">
-          <p className="text-sm text-white/40 italic">Skipped.</p>
+          <p className="text-sm text-white/40 italic">{isSpanish ? 'Omitida.' : 'Skipped.'}</p>
           <button
             type="button"
             onClick={() => onUnskip(el.id)}
             className="text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
           >
-            Try this now
+            {isSpanish ? 'Intentarla ahora' : 'Try this now'}
           </button>
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
-              {wordCount}/{minWords} minimum words
+              {wordCount}/{minWords} {isSpanish ? 'palabras como mínimo' : 'minimum words'}
             </span>
+            {speechSupported && !el.submitted && (
+              <button
+                type="button"
+                onClick={toggleDictation}
+                aria-label={listening ? 'Stop dictation' : 'Dictate your application'}
+                className={cn(
+                  'rounded-lg border p-2 transition-colors',
+                  listening
+                    ? 'border-red-400/50 bg-red-500/15 text-red-200'
+                    : 'border-white/15 bg-white/5 text-white/65 hover:text-white',
+                )}
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            )}
             {!el.submitted && (
               <>
                 <button
@@ -406,14 +472,14 @@ function TransferView({
                   onClick={() => onSkip(el.id)}
                   className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
                 >
-                  I don&apos;t know — skip
+                  {isSpanish ? 'No lo sé — omitir' : <>I don&apos;t know — skip</>}
                 </button>
                 <button
                   type="button"
                   onClick={onAskHelp}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
                 >
-                  <HelpCircle className="w-3.5 h-3.5" /> Ask for help
+                  <HelpCircle className="w-3.5 h-3.5" /> {isSpanish ? 'Pedir ayuda' : 'Ask for help'}
                 </button>
               </>
             )}
@@ -425,7 +491,9 @@ function TransferView({
             className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
-            {el.submitted ? 'Submitted' : 'Submit application'}
+            {el.submitted
+              ? (isSpanish ? 'Enviada' : 'Submitted')
+              : (isSpanish ? 'Enviar aplicación' : 'Submit application')}
           </button>
         </div>
       )}
@@ -436,12 +504,13 @@ function TransferView({
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
-  el, onQuizAnswer, onTransferSubmit, onSkipQuestion, onUnskipQuestion, onAskHelp,
-  reducedMotion = false,
+  el, onQuizAnswer, onTransferSubmit, onLearnerInputStart,
+  onSkipQuestion, onUnskipQuestion, onAskHelp, reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
   onTransferSubmit: (elementId: string, response: string) => void;
+  onLearnerInputStart: () => void;
   onSkipQuestion: (elementId: string) => void;
   onUnskipQuestion: (elementId: string) => void;
   onAskHelp: () => void;
@@ -547,6 +616,7 @@ export function BoardElementView({
         <TransferView
           el={el}
           onSubmit={onTransferSubmit}
+          onInputStart={onLearnerInputStart}
           onSkip={onSkipQuestion}
           onUnskip={onUnskipQuestion}
           onAskHelp={onAskHelp}

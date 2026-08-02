@@ -60,6 +60,7 @@ import com.lyo.app.data.api.LessonDto
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
+import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
@@ -202,6 +203,16 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                             totalLessons = totalLessons,
                             progressPercent = progressPercent,
                         )
+                    }
+
+                    item {
+                        Button(
+                            onClick = { nav.navigate(Routes.classroom(courseId)) },
+                            colors = ButtonDefaults.buttonColors(containerColor = LyoPurple),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Start AI Classroom")
+                        }
                     }
 
                     progressWarning?.let { warning ->

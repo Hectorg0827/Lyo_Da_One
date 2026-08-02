@@ -40,6 +40,7 @@ import com.lyo.app.data.Session
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
+import com.lyo.app.ui.screens.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.ReliableCommunityScreen
@@ -81,6 +82,7 @@ object Routes {
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
+    const val CLASSROOM = "classroom/{courseId}"
     const val DISCOVER = "discover"
     const val PROFILE = "profile"
     const val USER_PROFILE = "profile/{userId}"
@@ -90,6 +92,7 @@ object Routes {
 
     fun postDetail(postId: String) = "community/$postId"
     fun courseDetail(courseId: String) = "courses/$courseId"
+    fun classroom(courseId: String) = "classroom/$courseId"
     fun userProfile(userId: String) = "profile/$userId"
 }
 
@@ -192,6 +195,12 @@ private fun LyoNavHost() {
                     RecentCourseStore.save(context, courseId)
                 }
                 CourseDetailScreen(nav, courseId)
+            }
+            composable(Routes.CLASSROOM) { entry ->
+                ClassroomScreen(
+                    nav = nav,
+                    courseId = entry.arguments?.getString("courseId") ?: "",
+                )
             }
             composable(Routes.DISCOVER) { DiscoverScreen(nav) }
             composable(Routes.PROFILE) { ProfileScreen(nav, userId = null) }

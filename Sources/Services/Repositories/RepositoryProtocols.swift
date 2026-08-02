@@ -99,7 +99,7 @@ protocol GamificationRepository {
 
 // MARK: - TTS Repository Protocol
 protocol TTSRepository {
-    func generate(text: String, voice: TTSVoice, speed: Double, withTimings: Bool) async throws -> TTSResult
+    func generate(text: String, voice: TTSVoice, speed: Double, withTimings: Bool, language: String) async throws -> TTSResult
     func batchGenerate(texts: [String], voice: TTSVoice) async throws -> [TTSResult]
     func getAudioURL(id: String) async throws -> URL
     func getTimings(id: String) async throws -> [WordTiming]

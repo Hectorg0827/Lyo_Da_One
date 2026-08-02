@@ -377,11 +377,9 @@ final class SDUIModelTests: XCTestCase {
     func testDecodeUnsupportedBackendTypesAsUnknown() throws {
         let unsupportedTypes = [
             "ChatBubble",
-            "InputField",
             "Celebration",
             "TypingIndicator",
-            "ReflectionPrompt",
-            "ExampleBlock"
+            "ReflectionPrompt"
         ]
 
         for typeName in unsupportedTypes {
@@ -400,6 +398,40 @@ final class SDUIModelTests: XCTestCase {
             XCTAssertEqual(comp.content, "Sample \(typeName) content",
                            "\(typeName) text content must still decode so fallback view shows it")
         }
+    }
+
+    func testDecodeApplicationAndExampleComponents() throws {
+        let inputJSON = """
+        {
+            "component_id": "apply_1",
+            "type": "InputField",
+            "question": "Apply the idea to a new case.",
+            "placeholder": "Explain your reasoning",
+            "min_words": 6,
+            "max_words": 120,
+            "action_intent": "submit_transfer",
+            "language_code": "es-US"
+        }
+        """.data(using: .utf8)!
+        let exampleJSON = """
+        {
+            "component_id": "example_1",
+            "type": "ExampleBlock",
+            "title": "Worked example",
+            "content": "A concrete case",
+            "language_code": "en-US"
+        }
+        """.data(using: .utf8)!
+
+        let input = try decoder.decode(SDUIComponent.self, from: inputJSON)
+        let example = try decoder.decode(SDUIComponent.self, from: exampleJSON)
+
+        XCTAssertEqual(input.type, .inputField)
+        XCTAssertEqual(input.minWords, 6)
+        XCTAssertEqual(input.actionIntent, "submit_transfer")
+        XCTAssertEqual(input.languageCode, "es-US")
+        XCTAssertEqual(example.type, .exampleBlock)
+        XCTAssertEqual(example.title, "Worked example")
     }
 
     /// LessonBlock pass-through for the BlockRendererView pipeline.

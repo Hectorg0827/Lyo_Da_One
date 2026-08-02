@@ -6,6 +6,9 @@ private struct BackendTTSResponse: Codable {
     let voice: String
     let format: String
     let duration_estimate_seconds: Double
+    let language_code: String?
+    let provider: String?
+    let provider_voice: String?
 }
 
 // MARK: - Default TTS Repository
@@ -20,10 +23,22 @@ class DefaultTTSRepository: TTSRepository {
 
     /// Synthesize text via the backend and return a `TTSResult` whose `audioURL`
     /// is a local `file://` URL suitable for AVPlayer.
-    func generate(text: String, voice: TTSVoice = .nova, speed: Double = 1.0, withTimings: Bool = true) async throws -> TTSResult {
+    func generate(
+        text: String,
+        voice: TTSVoice = .nova,
+        speed: Double = 1.0,
+        withTimings: Bool = true,
+        language: String = "auto"
+    ) async throws -> TTSResult {
         // 1. Call backend — returns { audio_base64, voice, format, duration_estimate_seconds }
         let response: BackendTTSResponse = try await networkClient.request(
-            Endpoints.TTS.generate(text: text, voice: voice, speed: speed, withTimings: withTimings),
+            Endpoints.TTS.generate(
+                text: text,
+                voice: voice,
+                speed: speed,
+                withTimings: withTimings,
+                language: language
+            ),
             cachePolicy: .default
         )
 
@@ -56,7 +71,13 @@ class DefaultTTSRepository: TTSRepository {
         return try await withThrowingTaskGroup(of: TTSResult.self) { group in
             for text in texts {
                 group.addTask { [self] in
-                    try await self.generate(text: text, voice: voice, speed: 1.0, withTimings: false)
+                    try await self.generate(
+                        text: text,
+                        voice: voice,
+                        speed: 1.0,
+                        withTimings: false,
+                        language: "auto"
+                    )
                 }
             }
             var results: [TTSResult] = []
@@ -122,7 +143,13 @@ class DefaultTTSRepository: TTSRepository {
 // MARK: - Mock TTS Repository
 class MockTTSRepository: TTSRepository {
 
-    func generate(text: String, voice: TTSVoice, speed: Double, withTimings: Bool) async throws -> TTSResult {
+    func generate(
+        text: String,
+        voice: TTSVoice,
+        speed: Double,
+        withTimings: Bool,
+        language: String
+    ) async throws -> TTSResult {
         try await Task.sleep(nanoseconds: 800_000_000)
         return TTSResult(
             id: UUID().uuidString,

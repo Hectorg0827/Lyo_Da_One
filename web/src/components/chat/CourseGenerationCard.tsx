@@ -65,6 +65,7 @@ export default function CourseGenerationCard({
     const query = new URLSearchParams({ topic, objective });
     if (course?.id) query.set('courseId', course.id);
     if (course?.difficulty) query.set('difficulty', course.difficulty);
+    query.set('language', course?.language || 'auto');
     router.push(`/classroom?${query.toString()}`);
   };
 

@@ -121,10 +121,10 @@ struct QuickCheckOverlay: View {
             switch check.type {
             case .multipleChoice, .trueFalse:
                 multipleChoiceOptions(check: check)
-            case .tapToOrder:
-                tapToOrderOptions(check: check)
-            case .labelDiagram:
-                labelDiagramView(check: check)
+            case .tapToOrder, .labelDiagram:
+                // Legacy payloads are rendered as an honest choice check. New
+                // classroom sessions never expose these under-specified types.
+                multipleChoiceOptions(check: check)
             case .flashDecision:
                 flashDecisionOptions(check: check)
             }
@@ -184,70 +184,6 @@ struct QuickCheckOverlay: View {
                     )
                 }
                 .disabled(isAnswered)
-            }
-        }
-    }
-    
-    // Tap to Order Options
-    private func tapToOrderOptions(check: QuickCheck) -> some View {
-        VStack(spacing: 12) {
-            Text("Tap in the correct order")
-                .font(.system(size: 16))
-                .foregroundColor(Color("LyoTextSecondary"))
-            
-            // Simplified for now - show as grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(check.options ?? [], id: \.self) { option in
-                    Button {
-                        selectOption(option)
-                    } label: {
-                        Text(option)
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color("LyoBackground").opacity(0.5))
-                            )
-                    }
-                    .disabled(isAnswered)
-                }
-            }
-        }
-    }
-    
-    // Label Diagram
-    private func labelDiagramView(check: QuickCheck) -> some View {
-        VStack(spacing: 16) {
-            // Placeholder for diagram
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color("LyoBackground").opacity(0.5))
-                .frame(height: 300)
-                .overlay(
-                    VStack {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 48))
-                            .foregroundColor(Color("LyoAccent").opacity(0.5))
-                        Text("Interactive Diagram")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color("LyoTextSecondary"))
-                    }
-                )
-            
-            // Options as labels to drag
-            HStack(spacing: 12) {
-                ForEach(check.options ?? [], id: \.self) { option in
-                    Text(option)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(Color("LyoAccent").opacity(0.3))
-                        )
-                }
             }
         }
     }

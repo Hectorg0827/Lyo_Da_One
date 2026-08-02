@@ -25,6 +25,9 @@ struct Slide: Identifiable, Codable {
     let content: SlideContent
     let narration: String
     let estimatedReadTime: Int // in seconds
+    /// Optional server-authored check for this exact slide. A missing check
+    /// means no checkpoint; clients must never synthesize a generic question.
+    let quickCheck: QuickCheck?
     
     enum SlideType: String, Codable {
         case concept
@@ -36,6 +39,7 @@ struct Slide: Identifiable, Codable {
     
     enum CodingKeys: String, CodingKey {
         case id, type, content, narration
+        case quickCheck = "quick_check"
         case estimatedReadTime = "estimated_read_time"
     }
 }
@@ -86,6 +90,15 @@ struct QuickCheck: Identifiable, Codable {
         case labelDiagram = "label_diagram"
         case flashDecision = "flash_decision"
         case trueFalse = "true_false"
+
+        var isSupported: Bool {
+            switch self {
+            case .multipleChoice, .flashDecision, .trueFalse:
+                return true
+            case .tapToOrder, .labelDiagram:
+                return false
+            }
+        }
     }
     
     enum CodingKeys: String, CodingKey {
@@ -153,6 +166,9 @@ struct ModuleProgress: Codable {
     var currentSlideIndex: Int
     var completedSlides: Set<String>
     var checkResults: [String: Bool] // checkId -> passed
+    /// Latest neutral outcome, including skips/help which cannot be represented
+    /// by the legacy Boolean `checkResults` map.
+    var checkOutcomes: [String: String]?
     var narrationPosition: Double // seconds into current slide
     var confidenceLevels: [String: Int] // conceptId -> 1-3
     var lastUpdated: Date
@@ -162,6 +178,7 @@ struct ModuleProgress: Codable {
         case currentSlideIndex = "current_slide_index"
         case completedSlides = "completed_slides"
         case checkResults = "check_results"
+        case checkOutcomes = "check_outcomes"
         case narrationPosition = "narration_position"
         case confidenceLevels = "confidence_levels"
         case lastUpdated = "last_updated"
