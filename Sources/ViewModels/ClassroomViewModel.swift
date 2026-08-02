@@ -17,6 +17,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
     @Published var currentQuickCheck: QuickCheck?
     @Published var showReteach: Bool = false
     @Published var reteachContent: ReteachContent?
+    @Published var isRequestingHelp: Bool = false
     @Published var errorMessage: String?
     
     // TTS State
@@ -35,6 +36,10 @@ class ClassroomViewModel: NSObject, ObservableObject {
     private let repository = LyoRepository.shared
     /// Stores the requested session ID so retry works even if initial load fails
     private var lastRequestedSessionId: String?
+    /// Identifies the in-flight help request so a response that arrives after
+    /// the learner closed the panel (or moved to another check) is discarded
+    /// instead of overwriting whatever they're looking at now.
+    private var helpRequestToken: UUID?
     
     override init() {
         super.init()
@@ -172,7 +177,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
         stopNarration()
         
         let utterance = AVSpeechUtterance(string: currentSlide.narration)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.voice = SpeechLanguage.voice(for: currentSlide.narration)
         utterance.rate = settings.playbackSpeed * 0.5 // AVSpeechUtterance rate is 0.0-1.0
         
         currentUtterance = utterance
@@ -337,12 +342,86 @@ class ClassroomViewModel: NSObject, ObservableObject {
     func dismissReteach() {
         showReteach = false
         reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
         currentQuickCheck = nil
         state = .ready
-        
+
         // Continue to next slide
         if settings.autoAdvanceAfterNarration {
             nextSlide()
+        }
+    }
+
+    /// Returns from the reteach panel to the check the learner was working on.
+    /// Deliberately does not go through `dismissReteach()`, which advances the
+    /// lesson when `autoAdvanceAfterNarration` is set — "Try Again" must
+    /// re-present the same question on the same slide.
+    func retryCheck() {
+        guard currentQuickCheck != nil else { return }
+        showReteach = false
+        reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
+        state = .quickCheck
+    }
+
+    /// Explicitly skips the current check. Unlike a wrong answer, this does
+    /// not force the reteach walkthrough — it just records that the learner
+    /// passed on this question and moves the lesson forward, so a confused
+    /// learner is never trapped behind a question they can't answer.
+    func skipCheck() {
+        guard let check = currentQuickCheck else { return }
+        Log.classroom.info("Check skipped: \(check.id)")
+        currentQuickCheck = nil
+        state = .ready
+
+        if settings.autoAdvanceAfterNarration {
+            nextSlide()
+        }
+    }
+
+    /// Asks the AI tutor to explain the current question a different way,
+    /// using a real backend response instead of the check's static reteach
+    /// text (which is only ever the same canned copy for a given question).
+    func requestHelp() {
+        guard let check = currentQuickCheck else { return }
+        let token = UUID()
+        helpRequestToken = token
+        isRequestingHelp = true
+        reteachContent = nil
+        showReteach = true
+        state = .reteach
+
+        Task { @MainActor in
+            let prompt = "I'm stuck on this classroom question and don't understand it: \"\(check.question)\". Can you explain it a different way, with a simple analogy?"
+            let content: ReteachContent
+            do {
+                let response = try await repository.sendLyoMessage(message: prompt)
+                content = ReteachContent(
+                    explanation: response.message.content,
+                    analogy: nil,
+                    diagram: nil,
+                    alternativeApproach: nil
+                )
+            } catch {
+                Log.classroom.error("requestHelp failed: \(error.localizedDescription)")
+                // Fall back to the question's own canned explanation rather
+                // than leaving the help panel empty.
+                content = check.reteachContent ?? ReteachContent(
+                    explanation: check.explanation,
+                    analogy: nil,
+                    diagram: nil,
+                    alternativeApproach: nil
+                )
+            }
+
+            // The learner may have closed the panel or moved to another check
+            // while this was in flight — in that case the response is stale.
+            guard helpRequestToken == token else { return }
+            reteachContent = content
+            isRequestingHelp = false
+            helpRequestToken = nil
         }
     }
     

@@ -15,24 +15,25 @@ struct ReteachOverlay: View {
             VStack(spacing: 0) {
                 // Header
                 header
-                
+
                 // Scrollable content
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        // Explanation section
-                        if let content = viewModel.reteachContent {
+                        if viewModel.isRequestingHelp {
+                            loadingSection
+                        } else if let content = viewModel.reteachContent {
                             explanationSection(content.explanation)
-                            
+
                             // Analogy section (highlighted)
                             if let analogy = content.analogy {
                                 analogySection(analogy)
                             }
-                            
+
                             // Diagram section
                             if let diagram = content.diagram {
                                 diagramSection(diagram)
                             }
-                            
+
                             // Alternative approach section
                             if let alternative = content.alternativeApproach {
                                 alternativeSection(alternative)
@@ -41,7 +42,7 @@ struct ReteachOverlay: View {
                     }
                     .padding(32)
                 }
-                
+
                 // Bottom actions
                 bottomActions
             }
@@ -54,45 +55,82 @@ struct ReteachOverlay: View {
             .padding(40)
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
-        .onAppear {
+        .onChange(of: viewModel.reteachContent?.explanation) { _, _ in
             if viewModel.settings.autoplayNarration {
                 readAloud()
             }
         }
+        .onAppear {
+            if viewModel.settings.autoplayNarration, viewModel.reteachContent != nil {
+                readAloud()
+            }
+        }
+    }
+
+    // MARK: - Loading
+
+    private var loadingSection: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(Color("LyoAccent"))
+                .scaleEffect(1.2)
+            Text("Getting help…")
+                .font(.system(size: 16))
+                .foregroundColor(Color("LyoTextSecondary"))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
     }
     
     // MARK: - Header
     
     private var header: some View {
-        VStack(spacing: 12) {
-            // Icon
-            Image(systemName: "lightbulb.fill")
-                .font(.system(size: 36))
-                .foregroundColor(Color("LyoAccent"))
-            
-            // Title
-            Text(headerTitle)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(.white)
-            
-            // Subtitle
-            Text("Let's look at this from a different angle")
-                .font(.system(size: 16))
-                .foregroundColor(Color("LyoTextSecondary"))
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 12) {
+                // Icon
+                Image(systemName: "lightbulb.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(Color("LyoAccent"))
+
+                // Title
+                Text(headerTitle)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+
+                // Subtitle
+                Text("Let's look at this from a different angle")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color("LyoTextSecondary"))
+            }
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
+
+            // Close — this panel is help, not a required gate; the learner
+            // can back out at any time without answering.
+            Button {
+                gotIt()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .accessibilityLabel("Close")
+            .padding(16)
         }
-        .padding(.vertical, 24)
-        .frame(maxWidth: .infinity)
         .background(
             Color("LyoBackground").opacity(0.5)
         )
     }
-    
+
     private var headerTitle: String {
+        if viewModel.isRequestingHelp {
+            return "Getting help…"
+        }
         guard viewModel.currentQuickCheck != nil,
               viewModel.reteachContent?.explanation != nil else {
             return "Let's try a different approach"
         }
-        
+
         // Check if answer was close
         return "Close! Let's clarify."
     }
@@ -205,28 +243,33 @@ struct ReteachOverlay: View {
     
     private var bottomActions: some View {
         HStack(spacing: 16) {
-            // Try again button
-            Button {
-                tryAgain()
-            } label: {
-                HStack {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Try Again")
+            // Try again button — only meaningful once there's actually a
+            // question to retry (skips never land here with a null check).
+            if viewModel.currentQuickCheck != nil {
+                Button {
+                    tryAgain()
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Try Again")
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 14)
+                    .background(
+                        Capsule()
+                            .fill(Color("LyoBackground"))
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            )
+                    )
                 }
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(
-                    Capsule()
-                        .fill(Color("LyoBackground"))
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
-                )
+                .disabled(viewModel.isRequestingHelp)
+                .opacity(viewModel.isRequestingHelp ? 0.5 : 1)
             }
-            
+
             // Got it button
             Button {
                 gotIt()
@@ -244,27 +287,27 @@ struct ReteachOverlay: View {
                         .fill(Color("LyoAccent"))
                 )
             }
+            .disabled(viewModel.isRequestingHelp)
+            .opacity(viewModel.isRequestingHelp ? 0.5 : 1)
         }
         .padding(24)
         .background(
             Color("LyoBackground").opacity(0.5)
         )
     }
-    
+
     // MARK: - Actions
-    
+
     private func tryAgain() {
-        viewModel.dismissReteach()
-        
-        // Return to quick check
-        if viewModel.currentQuickCheck != nil {
-            viewModel.state = .quickCheck
-        }
+        // Deliberately not dismissReteach(): that clears currentQuickCheck and
+        // auto-advances the lesson, which would drop the learner on the next
+        // slide while showing the previous slide's question.
+        viewModel.retryCheck()
     }
-    
+
     private func gotIt() {
         viewModel.dismissReteach()
-        
+
         // Continue to next slide
         if viewModel.settings.autoplayNarration {
             viewModel.startNarration()
@@ -290,7 +333,7 @@ struct ReteachOverlay: View {
         // Use the ClassroomViewModel's speech synthesizer for consistent TTS
         isReadingAloud = true
         let utterance = AVSpeechUtterance(string: textToRead)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.voice = SpeechLanguage.voice(for: textToRead)
         utterance.rate = viewModel.settings.playbackSpeed * 0.45
         utterance.pitchMultiplier = 1.05
         

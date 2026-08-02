@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { BookOpenCheck, CheckCircle2, FileText, ImageIcon, Send, XCircle } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, FileText, HelpCircle, ImageIcon, Send, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
@@ -135,13 +135,126 @@ function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; l
   );
 }
 
+// ─── Chalk: one idea at a time, with expressions colour-coded by role ────────
+
+type MathRole = 'coefficient' | 'variable' | 'constant' | 'operator' | 'plain';
+
+// Each part of an expression gets its own hue, so "3x + 5" reads as
+// coefficient / variable / constant at a glance rather than as flat text.
+const MATH_ROLE_CLASS: Record<MathRole, string> = {
+  coefficient: 'text-accent-gold',
+  variable: 'text-accent-teal',
+  constant: 'text-accent-violet',
+  operator: 'text-white/45',
+  plain: '',
+};
+
+// An operand is a bare number, a variable, or a coefficient glued to a variable
+// ("3x", "mx"). An expression is two or more of those joined by operators.
+const OPERAND = String.raw`(?:\d+(?:\.\d+)?[a-zA-Z]*|[a-zA-Z]+)`;
+const EXPRESSION = new RegExp(`${OPERAND}(?:\\s*[+\\-*/=^]\\s*${OPERAND})+`, 'g');
+
+/**
+ * Guards against colouring ordinary prose. "input/output" and "read/write"
+ * match the operand grammar but are not maths; real algebra either contains a
+ * digit or uses single-letter variables ("y = mx + b").
+ */
+function looksLikeMath(expression: string): boolean {
+  if (/\d/.test(expression)) return true;
+  return /(^|[^a-zA-Z])[a-zA-Z]([^a-zA-Z]|$)/.test(expression);
+}
+
+function tokenizeExpression(expression: string): { text: string; role: MathRole }[] {
+  const raw = expression.match(/\d+(?:\.\d+)?|[a-zA-Z]+|[+\-*/=^]|\s+/g) ?? [];
+  return raw.map((text, i) => {
+    if (/^\s+$/.test(text)) return { text, role: 'plain' };
+    if (/^\d/.test(text)) {
+      // A number immediately followed by a variable is a coefficient, not a
+      // standalone constant — that's what makes 3 and 5 read differently.
+      const next = raw[i + 1];
+      return { text, role: next && /^[a-zA-Z]/.test(next) ? 'coefficient' : 'constant' };
+    }
+    if (/^[a-zA-Z]+$/.test(text)) return { text, role: 'variable' };
+    return { text, role: 'operator' };
+  });
+}
+
+function ColouredExpression({ expression }: { expression: string }) {
+  return (
+    <span className="font-mono font-semibold tracking-tight">
+      {tokenizeExpression(expression).map((token, i) => (
+        <span key={i} className={MATH_ROLE_CLASS[token.role]}>{token.text}</span>
+      ))}
+    </span>
+  );
+}
+
+/** Splits a line into plain prose and colour-coded expressions. */
+function withExpressions(line: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  EXPRESSION.lastIndex = 0;
+  for (let match = EXPRESSION.exec(line); match; match = EXPRESSION.exec(line)) {
+    if (!looksLikeMath(match[0])) continue;
+    if (match.index > last) parts.push(line.slice(last, match.index));
+    parts.push(<ColouredExpression key={match.index} expression={match[0]} />);
+    last = match.index + match[0].length;
+  }
+  if (last < line.length) parts.push(line.slice(last));
+  return parts.length ? parts : [line];
+}
+
+/**
+ * Breaks a block into one-idea beats. Splits on blank lines and on sentence
+ * endings that are followed by whitespace, so decimals like "3.5" stay intact.
+ */
+function splitIntoBeats(text: string): string[] {
+  const beats: string[] = [];
+  for (const block of text.split(/\n+/)) {
+    // Split on sentence punctuation only when whitespace follows, so a
+    // decimal like "3.5" survives intact. The capture group keeps the
+    // punctuation attached to the sentence it ended.
+    const pieces = block.split(/([.!?])\s+/);
+    for (let i = 0; i < pieces.length; i += 2) {
+      const beat = `${pieces[i] ?? ''}${pieces[i + 1] ?? ''}`.trim();
+      if (beat) beats.push(beat);
+    }
+  }
+  return beats;
+}
+
+function ChalkView({ text, reducedMotion }: { text: string; reducedMotion: boolean }) {
+  const beats = useMemo(() => splitIntoBeats(text), [text]);
+  return (
+    <div className="space-y-2.5">
+      {beats.map((beat, i) => (
+        <motion.p
+          key={i}
+          initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reducedMotion
+            ? { duration: 0 }
+            : { delay: i * 0.5, duration: 0.4, ease: 'easeOut' }}
+          className="text-white/95 text-lg leading-relaxed font-medium [text-shadow:0_0_14px_rgba(167,139,250,0.25)]"
+        >
+          {withExpressions(beat)}
+        </motion.p>
+      ))}
+    </div>
+  );
+}
+
 function QuizView({
-  el, onAnswer,
+  el, onAnswer, onSkip, onUnskip, onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'quiz' }>;
   onAnswer: (elementId: string, option: QuizOption) => void;
+  onSkip: (elementId: string) => void;
+  onUnskip: (elementId: string) => void;
+  onAskHelp: () => void;
 }) {
   const quiz = el.quiz;
+  const locked = !!el.answered || !!el.skipped;
   return (
     <div className="space-y-3">
       <p className="text-[11px] font-black tracking-widest text-accent-gold uppercase">📝 On the board — checkpoint</p>
@@ -152,15 +265,15 @@ function QuizView({
           return (
             <button
               key={opt.id}
-              disabled={!!el.answered}
+              disabled={locked}
               onClick={() => onAnswer(el.id, opt)}
               className={cn(
                 'flex items-center justify-between px-4 py-3 rounded-xl text-sm text-left border transition-all',
                 chosen && el.wasCorrect === true && 'bg-green-500/15 border-green-500/40 text-white',
                 chosen && el.wasCorrect === false && 'bg-red-500/15 border-red-500/40 text-white',
                 chosen && el.wasCorrect === undefined && 'bg-lyo-500/15 border-lyo-400/40 text-white',
-                !el.answered && 'bg-white/5 border-white/15 text-white/85 hover:bg-lyo-500/15 hover:border-lyo-500/40',
-                !chosen && el.answered && 'bg-white/[0.03] border-white/5 text-white/30',
+                !locked && 'bg-white/5 border-white/15 text-white/85 hover:bg-lyo-500/15 hover:border-lyo-500/40',
+                !chosen && locked && 'bg-white/[0.03] border-white/5 text-white/30',
               )}
             >
               <span>{opt.label}</span>
@@ -174,6 +287,37 @@ function QuizView({
           );
         })}
       </div>
+      {!el.answered && !el.skipped && (
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => onSkip(el.id)}
+            className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
+          >
+            I don&apos;t know — skip
+          </button>
+          <span className="text-white/20">·</span>
+          <button
+            type="button"
+            onClick={onAskHelp}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+          >
+            <HelpCircle className="w-3.5 h-3.5" /> Ask for help
+          </button>
+        </div>
+      )}
+      {el.skipped && (
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-white/40 italic">Skipped.</p>
+          <button
+            type="button"
+            onClick={() => onUnskip(el.id)}
+            className="text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+          >
+            Try this now
+          </button>
+        </div>
+      )}
       {el.feedback && (
         <p
           className={cn(
@@ -194,45 +338,97 @@ function QuizView({
 function TransferView({
   el,
   onSubmit,
+  onSkip,
+  onUnskip,
+  onAskHelp,
 }: {
   el: Extract<BoardElement, { kind: 'transfer' }>;
   onSubmit: (elementId: string, response: string) => void;
+  onSkip: (elementId: string) => void;
+  onUnskip: (elementId: string) => void;
+  onAskHelp: () => void;
 }) {
   const [response, setResponse] = useState(el.response || '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const minWords = el.input.min_words ?? 6;
   const wordCount = response.trim().split(/\s+/).filter(Boolean).length;
-  const ready = wordCount >= minWords && !el.submitted;
+  const locked = !!el.submitted || !!el.skipped;
+  const ready = wordCount >= minWords && !locked;
+
+  // Grow with the answer instead of trapping a conceptual explanation in a
+  // fixed-height box the learner has to scroll inside.
+  useEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+    node.style.height = 'auto';
+    node.style.height = `${node.scrollHeight}px`;
+  }, [response]);
   return (
     <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
         ✍️ Show you can use it
       </p>
       <label htmlFor={`transfer-${el.id}`} className="block text-white text-base font-medium">
-        {el.input.question || 'Explain and apply the idea in your own words.'}
+        {el.input.question || 'How would you use this idea?'}
       </label>
       <textarea
+        ref={textareaRef}
         id={`transfer-${el.id}`}
         value={response}
-        disabled={el.submitted}
+        disabled={locked}
+        rows={3}
         maxLength={Math.max(200, (el.input.max_words ?? 120) * 10)}
         onChange={(event) => setResponse(event.target.value)}
-        placeholder={el.input.placeholder || 'Explain your reasoning…'}
-        className="w-full min-h-28 resize-y rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
+        placeholder={el.input.placeholder || 'Type your thoughts here…'}
+        className="w-full min-h-[5.5rem] max-h-72 resize-none overflow-y-auto rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
-      <div className="flex items-center justify-between gap-3">
-        <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
-          {wordCount}/{minWords} minimum words
-        </span>
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={() => onSubmit(el.id, response)}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Send className="h-4 w-4" />
-          {el.submitted ? 'Submitted' : 'Submit application'}
-        </button>
-      </div>
+      {el.skipped ? (
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-white/40 italic">Skipped.</p>
+          <button
+            type="button"
+            onClick={() => onUnskip(el.id)}
+            className="text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+          >
+            Try this now
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
+              {wordCount}/{minWords} minimum words
+            </span>
+            {!el.submitted && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSkip(el.id)}
+                  className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
+                >
+                  I don&apos;t know — skip
+                </button>
+                <button
+                  type="button"
+                  onClick={onAskHelp}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" /> Ask for help
+                </button>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={!ready}
+            onClick={() => onSubmit(el.id, response)}
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Send className="h-4 w-4" />
+            {el.submitted ? 'Submitted' : 'Submit application'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -240,11 +436,15 @@ function TransferView({
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
-  el, onQuizAnswer, onTransferSubmit, reducedMotion = false,
+  el, onQuizAnswer, onTransferSubmit, onSkipQuestion, onUnskipQuestion, onAskHelp,
+  reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
   onTransferSubmit: (elementId: string, response: string) => void;
+  onSkipQuestion: (elementId: string) => void;
+  onUnskipQuestion: (elementId: string) => void;
+  onAskHelp: () => void;
   reducedMotion?: boolean;
 }) {
   return (
@@ -254,11 +454,7 @@ export function BoardElementView({
       transition={{ duration: reducedMotion ? 0 : 0.45, ease: 'easeOut' }}
       className="board-element"
     >
-      {el.kind === 'chalk' && (
-        <p className="text-white/95 text-lg leading-relaxed font-medium whitespace-pre-wrap [text-shadow:0_0_14px_rgba(167,139,250,0.25)]">
-          {el.text}
-        </p>
-      )}
+      {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
 
       {el.kind === 'latex' && <LatexView latex={el.latex} />}
 
@@ -337,9 +533,25 @@ export function BoardElementView({
         />
       )}
 
-      {el.kind === 'quiz' && <QuizView el={el} onAnswer={onQuizAnswer} />}
+      {el.kind === 'quiz' && (
+        <QuizView
+          el={el}
+          onAnswer={onQuizAnswer}
+          onSkip={onSkipQuestion}
+          onUnskip={onUnskipQuestion}
+          onAskHelp={onAskHelp}
+        />
+      )}
 
-      {el.kind === 'transfer' && <TransferView el={el} onSubmit={onTransferSubmit} />}
+      {el.kind === 'transfer' && (
+        <TransferView
+          el={el}
+          onSubmit={onTransferSubmit}
+          onSkip={onSkipQuestion}
+          onUnskip={onUnskipQuestion}
+          onAskHelp={onAskHelp}
+        />
+      )}
 
       {el.kind === 'summary' && (
         <section className="space-y-3 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
