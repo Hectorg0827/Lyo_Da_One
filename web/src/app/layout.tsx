@@ -1,7 +1,8 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Nunito } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
 import AuthProvider from '@/components/providers/AuthProvider';
+import InstallPWAPrompt from '@/components/providers/InstallPWAPrompt';
 import './globals.css';
 
 const inter = Inter({
@@ -28,6 +29,22 @@ export const metadata: Metadata = {
   keywords: ['AI learning', 'education', 'courses', 'personalized learning', 'LYO'],
   authors: [{ name: 'LYO Team' }],
   creator: 'LYO',
+  // Installable PWA: manifest + icons so "Install Lyo" is a real browser
+  // prompt, and it launches full-screen (display: standalone in the
+  // manifest) instead of opening as a website inside Chrome.
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/favicon-16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: '/icons/apple-touch-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Lyo',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
@@ -44,6 +61,13 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0d0f18',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -88,6 +112,8 @@ export default function RootLayout({
             },
           }}
         />
+
+        <InstallPWAPrompt />
       </body>
     </html>
   );
