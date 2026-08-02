@@ -275,15 +275,18 @@ class LivingClassroomService: ObservableObject {
             payload["answer_data"] = actionData
         }
 
-        guard let data = try? JSONSerialization.data(withJSONObject: payload),
-            let jsonString = String(data: data, encoding: .utf8)
-        else {
-            logger.error("Failed to serialize user action payload")
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            logger.error("Failed to serialize user action payload: \(error.localizedDescription)")
             isGenerating = false
             statusText = nil
-            error = URLError(.cannotEncodeContentData)
+            self.error = error
             return false
         }
+        // JSONSerialization emits UTF-8 JSON bytes by contract.
+        let jsonString = String(decoding: data, as: UTF8.self)
 
         task.send(.string(jsonString)) { [weak self] error in
             Task { @MainActor in
