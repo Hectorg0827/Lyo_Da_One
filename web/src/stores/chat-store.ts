@@ -4,11 +4,14 @@ import type { ChatMessage, ChatConversation } from '@/types';
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 
+export type GenerationActivity = 'thinking' | 'response' | 'course';
+
 interface ChatStore {
   conversations: ChatConversation[];
   activeConversationId: string | null;
   isGenerating: boolean;
   generationProgress: number;
+  generationActivity: GenerationActivity;
   isHydrating: boolean;
 
   createConversation: () => string;
@@ -25,6 +28,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeConversationId: null,
   isGenerating: false,
   generationProgress: 0,
+  generationActivity: 'thinking',
   isHydrating: false,
 
   createConversation: () => {
@@ -154,6 +158,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
       isGenerating: true,
       generationProgress: 10,
+      generationActivity: 'thinking',
     }));
 
     // The server is the source of truth for history. Sending only the current
@@ -194,6 +199,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           };
         }),
         generationProgress: Math.min(90, get().generationProgress + 5),
+        generationActivity: s.generationActivity === 'course' ? 'course' : 'response',
       }));
     };
 
@@ -251,6 +257,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
 
               set((s) => ({
+                generationActivity: 'course',
                 conversations: s.conversations.map((c) => {
                   if (c.id !== convoId) return c;
                   const existing = c.messages.find((m) => m.id === aiMessageId);
@@ -298,7 +305,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (!accumulated) {
             recoverCanonicalConversation(convoId!);
           } else {
-            set({ isGenerating: false, generationProgress: 0 });
+            set({
+              isGenerating: false,
+              generationProgress: 0,
+              generationActivity: 'thinking',
+            });
           }
         },
         () => {
@@ -312,7 +323,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     async function recoverCanonicalConversation(cId: string) {
-      set({ isGenerating: false, generationProgress: 0 });
+      set({
+        isGenerating: false,
+        generationProgress: 0,
+        generationActivity: 'thinking',
+      });
       try {
         // A broken SSE connection does not imply the server failed. Reload the
         // canonical thread so a completed answer is recovered without creating
