@@ -33,6 +33,30 @@ const contracts = [
     forbidden: ['px-4 py-6 max-w-3xl mx-auto w-full'],
   },
   {
+    name: 'web honest generation status',
+    path: 'web/src/components/chat/ChatInterface.tsx',
+    needles: [
+      'getGenerationStatusLabel',
+      "case 'thinking':",
+      "case 'response':",
+      "case 'course':",
+      "return 'Thinking…';",
+      "'Finalizing response…' : 'Generating response…'",
+      "'Finalizing your course…' : 'Preparing your course…'",
+      'aria-live="polite"',
+    ],
+    forbidden: ['>Generating course…</span>'],
+  },
+  {
+    name: 'web response-aware generation activity',
+    path: 'web/src/stores/chat-store.ts',
+    needles: [
+      "GenerationActivity = 'thinking' | 'response' | 'course'",
+      "generationActivity: 'thinking'",
+      "generationActivity: 'course'",
+    ],
+  },
+  {
     name: 'Android API',
     path: 'android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt',
     needles: [
