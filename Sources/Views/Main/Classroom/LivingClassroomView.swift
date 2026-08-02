@@ -315,7 +315,11 @@ struct LivingClassroomView: View {
         .navigationBarHidden(true)
         .statusBar(hidden: true)
         .task {
-            service.connect(sessionId: courseId, topic: courseTitle)
+            service.connect(
+                sessionId: courseId,
+                courseId: courseId,
+                topic: courseTitle
+            )
             sessionTimer.start()
         }
         .onDisappear {
@@ -421,6 +425,20 @@ struct LivingClassroomView: View {
                     actionData: ["response": response]
                 )
             },
+            onHint: { component in
+                service.sendUserAction(
+                    actionIntent: "request_hint",
+                    componentId: component.id,
+                    actionData: ["hint_level": "nudge"]
+                )
+            },
+            onSkip: { component in
+                service.sendUserAction(
+                    actionIntent: "skip_question",
+                    componentId: component.id,
+                    actionData: ["reason": "unsure"]
+                )
+            },
             onBack: { dismiss() },
             onMenu: { withAnimation { showDrawer.toggle() } },
             onMic: { openAskOverlay(for: nil) },
@@ -505,9 +523,11 @@ struct LivingClassroomView: View {
                 return
             }
 
-            service.showLocalFallbackScene(topic: courseTitle)
+            service.isGenerating = false
+            service.statusText = nil
+            service.error = URLError(.timedOut)
             LyoAnalyticsManager.shared.trackEvent(
-                "classroom_local_fallback_scene_shown",
+                "classroom_live_continuation_timed_out",
                 parameters: [
                     "courseId": courseId,
                     "courseTitle": courseTitle,
@@ -2265,29 +2285,19 @@ struct LivingClassroomView: View {
 
     private func explainStepEasier(_ step: ActiveLessonView.LessonStep) {
         HapticManager.shared.playSelection()
-        let message = makeSimpleExplanation(from: step.teachingText, keyTerm: step.keyTerm)
         quickHelp = ClassroomQuickHelp(
-            title: "Simpler explanation",
-            message: message,
+            title: isSpanishClassroom ? "Ayuda solicitada" : "Help requested",
+            message: isSpanishClassroom
+                ? "Lyo pausó la lección y explicará esta idea de otra manera."
+                : "Lyo paused the lesson and will explain this idea another way.",
             icon: "wand.and.stars",
             accent: Color(hexString: "8B5CF6")
         )
-        localQuestions.insert(
-            ClassroomLocalQuestion(
-                question: "Explain this easier",
-                response: message,
-                context: step.teachingText,
-                timestamp: Date()
-            ),
-            at: 0
-        )
         service.sendUserAction(
-            actionIntent: "explain_easier",
+            actionIntent: "request_hint",
             componentId: step.id,
             actionData: [
-                "message": "Explain this more simply.",
-                "context": step.teachingText,
-                "course_title": courseTitle,
+                "hint_level": "principle"
             ]
         )
         LyoAnalyticsManager.shared.trackEvent(
@@ -2302,41 +2312,34 @@ struct LivingClassroomView: View {
             return
         }
 
-        let message = makeSimpleExplanation(from: currentMomentText, keyTerm: nil)
         quickHelp = ClassroomQuickHelp(
-            title: "Simpler explanation",
-            message: message,
+            title: isSpanishClassroom ? "Ayuda solicitada" : "Help requested",
+            message: isSpanishClassroom
+                ? "Lyo pausó la lección y explicará esta idea de otra manera."
+                : "Lyo paused the lesson and will explain this idea another way.",
             icon: "wand.and.stars",
             accent: Color(hexString: "8B5CF6")
         )
         service.sendUserAction(
-            actionIntent: "explain_easier",
+            actionIntent: "request_hint",
             componentId: currentMomentId,
-            actionData: ["message": "Explain this more simply.", "context": currentMomentText]
+            actionData: ["hint_level": "principle"]
         )
     }
 
     private func askForComparison() {
-        let response = "Compare it this way: one side is the new idea, the other side is the mistake it prevents. For this moment, the useful contrast is: \(currentMomentText) The mistake to avoid is treating recognition as understanding. Test yourself, then correct the weak part."
         quickHelp = ClassroomQuickHelp(
-            title: "Comparison",
-            message: response,
+            title: isSpanishClassroom ? "Ejemplo solicitado" : "Example requested",
+            message: isSpanishClassroom
+                ? "Lyo pausó la lección y está preparando una comparación."
+                : "Lyo paused the lesson and is preparing a comparison.",
             icon: "rectangle.on.rectangle",
             accent: Color(hexString: "7AB3E0")
         )
-        localQuestions.insert(
-            ClassroomLocalQuestion(
-                question: "Compare this with the common mistake",
-                response: response,
-                context: currentMomentText,
-                timestamp: Date()
-            ),
-            at: 0
-        )
         service.sendUserAction(
-            actionIntent: "compare_concepts",
+            actionIntent: "request_example",
             componentId: currentMomentId,
-            actionData: ["message": "Compare the current idea with the common mistake.", "context": currentMomentText]
+            actionData: ["example_type": "comparison"]
         )
     }
 
@@ -2433,7 +2436,7 @@ struct LivingClassroomView: View {
         showDrawer = false
         showAskSheet = false
         service.sendUserAction(
-            actionIntent: "create_quiz",
+            actionIntent: "continue",
             componentId: currentMomentId,
             actionData: [
                 "mode": "quick_check",
@@ -2441,7 +2444,6 @@ struct LivingClassroomView: View {
                 "context": currentMomentText,
             ]
         )
-        service.showLocalQuickCheck(topic: courseTitle, focusText: currentMomentText)
         LyoAnalyticsManager.shared.trackEvent(
             "classroom_quick_check_started",
             parameters: ["courseId": courseId, "momentId": currentMomentId]
@@ -2480,17 +2482,6 @@ struct LivingClassroomView: View {
 
         let context = askContextStep?.teachingText ?? currentMomentText
         let contextId = askContextStep?.id ?? currentMomentId
-        let response = makeLocalQuestionResponse(question: trimmed, context: context)
-
-        localQuestions.insert(
-            ClassroomLocalQuestion(
-                question: trimmed,
-                response: response,
-                context: context,
-                timestamp: Date()
-            ),
-            at: 0
-        )
         selectedBottomTab = .discussion
 
         service.sendUserAction(
@@ -2510,9 +2501,11 @@ struct LivingClassroomView: View {
             lastQuestion: trimmed
         )
         quickHelp = ClassroomQuickHelp(
-            title: "Lyo answered",
-            message: response,
-            icon: "bubble.left.and.bubble.right",
+            title: isSpanishClassroom ? "Pregunta enviada" : "Question sent",
+            message: isSpanishClassroom
+                ? "Lyo pausó la lección y está preparando una respuesta."
+                : "Lyo paused the lesson and is preparing a response.",
+            icon: "paperplane.fill",
             accent: accentBlue
         )
         LyoAnalyticsManager.shared.trackEvent(
@@ -2525,32 +2518,6 @@ struct LivingClassroomView: View {
         inputFieldFocused = false
     }
 
-    private func makeLocalQuestionResponse(question: String, context: String) -> String {
-        let lower = question.lowercased()
-        if lower.contains("example") {
-            return "Concrete example: take the idea from this moment and use it in one small task right now. For this lesson: \(context) Then say it back in your own words and check what you missed."
-        }
-        if lower.contains("quiz") || lower.contains("test") || lower.contains("practice") {
-            return "Yes. I can turn this moment into a quick check. The best first question should test whether you can explain the idea without looking, not just recognize the wording."
-        }
-        if lower.contains("why") {
-            return "Why it matters: \(context) This matters because the goal is transfer. You want to use the idea later, under pressure, without needing the original notes in front of you."
-        }
-        return "Short answer: \(context) The useful move is to restate it in your own words, test yourself once, and correct the part that feels fuzzy."
-    }
-
-    private func makeSimpleExplanation(
-        from text: String,
-        keyTerm: ActiveLessonView.LessonStep.KeyTerm?
-    ) -> String {
-        var response = "Simple version: \(compactText(text, limit: 180))"
-        if let keyTerm {
-            response += " Key idea: \(keyTerm.term) means \(keyTerm.definition)"
-        }
-        response += " Try this now: say it back in one plain sentence. If you get stuck, that stuck point is exactly what to practice next."
-        return response
-    }
-
     private func compactText(_ text: String, limit: Int) -> String {
         let collapsed = text
             .replacingOccurrences(of: "\n", with: " ")
@@ -2559,6 +2526,14 @@ struct LivingClassroomView: View {
         guard collapsed.count > limit else { return collapsed }
         let index = collapsed.index(collapsed.startIndex, offsetBy: limit)
         return String(collapsed[..<index]).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+
+    private var isSpanishClassroom: Bool {
+        service.renderedComponents
+            .compactMap(\.languageCode)
+            .last?
+            .lowercased()
+            .hasPrefix("es") == true
     }
 
     private func shortTime(_ date: Date) -> String {
@@ -2735,7 +2710,30 @@ struct WhiteboardComponentRenderer: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(wordCount < minimum)
             }
+            checkpointSupportActions
         }
+    }
+
+    private var checkpointSupportActions: some View {
+        let isSpanish = component.languageCode?.lowercased().hasPrefix("es") == true
+        return HStack(spacing: 12) {
+            Button {
+                onAction?("request_hint", component.id, ["hint_level": "nudge"])
+            } label: {
+                Label(
+                    isSpanish ? "Pedir ayuda" : "Ask for help",
+                    systemImage: "lightbulb"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            Button(isSpanish ? "Omitir por ahora" : "Skip for now") {
+                onAction?("skip_question", component.id, ["reason": "unsure"])
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(textLight)
+        }
+        .font(.system(size: 12, weight: .semibold, design: .rounded))
     }
 
     /// Pass-through to the rich BlockRendererView for diagrams, math, charts,
@@ -2928,6 +2926,7 @@ struct WhiteboardComponentRenderer: View {
                     .buttonStyle(.plain)
                 }
             }
+            checkpointSupportActions
         }
         .padding(18)
         .background(

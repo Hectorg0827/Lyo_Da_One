@@ -52,14 +52,14 @@ struct QuickCheckOverlay: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 28))
                 .foregroundColor(Color("LyoAccent"))
-            
+
             // Title
             Text("Quick Check")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundColor(.white)
-            
+
             Spacer()
-            
+
             // Timer
             if let timeRemaining = timeRemaining {
                 Text("\(timeRemaining)s")
@@ -72,6 +72,18 @@ struct QuickCheckOverlay: View {
                             .fill(Color("LyoBackground"))
                     )
             }
+
+            // Close — always available so this overlay can never trap the learner.
+            // Closing without answering is treated the same as "I don't know": skip.
+            Button {
+                skip()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .accessibilityLabel("Close, skip this question")
+            .padding(.leading, 12)
         }
     }
     
@@ -109,10 +121,10 @@ struct QuickCheckOverlay: View {
             switch check.type {
             case .multipleChoice, .trueFalse:
                 multipleChoiceOptions(check: check)
-            case .tapToOrder:
-                tapToOrderOptions(check: check)
-            case .labelDiagram:
-                labelDiagramView(check: check)
+            case .tapToOrder, .labelDiagram:
+                // Legacy payloads are rendered as an honest choice check. New
+                // classroom sessions never expose these under-specified types.
+                multipleChoiceOptions(check: check)
             case .flashDecision:
                 flashDecisionOptions(check: check)
             }
@@ -176,70 +188,6 @@ struct QuickCheckOverlay: View {
         }
     }
     
-    // Tap to Order Options
-    private func tapToOrderOptions(check: QuickCheck) -> some View {
-        VStack(spacing: 12) {
-            Text("Tap in the correct order")
-                .font(.system(size: 16))
-                .foregroundColor(Color("LyoTextSecondary"))
-            
-            // Simplified for now - show as grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(check.options ?? [], id: \.self) { option in
-                    Button {
-                        selectOption(option)
-                    } label: {
-                        Text(option)
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color("LyoBackground").opacity(0.5))
-                            )
-                    }
-                    .disabled(isAnswered)
-                }
-            }
-        }
-    }
-    
-    // Label Diagram
-    private func labelDiagramView(check: QuickCheck) -> some View {
-        VStack(spacing: 16) {
-            // Placeholder for diagram
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color("LyoBackground").opacity(0.5))
-                .frame(height: 300)
-                .overlay(
-                    VStack {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 48))
-                            .foregroundColor(Color("LyoAccent").opacity(0.5))
-                        Text("Interactive Diagram")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color("LyoTextSecondary"))
-                    }
-                )
-            
-            // Options as labels to drag
-            HStack(spacing: 12) {
-                ForEach(check.options ?? [], id: \.self) { option in
-                    Text(option)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(Color("LyoAccent").opacity(0.3))
-                        )
-                }
-            }
-        }
-    }
-    
     // Flash Decision
     private func flashDecisionOptions(check: QuickCheck) -> some View {
         HStack(spacing: 40) {
@@ -275,28 +223,54 @@ struct QuickCheckOverlay: View {
         VStack(spacing: 16) {
             // Submit or continue button
             if !isAnswered {
-                // "I'm not sure" button
-                Button {
-                    handleUnsure()
-                } label: {
-                    HStack {
-                        Image(systemName: "questionmark.circle")
-                        Text("I'm not sure")
+                HStack(spacing: 12) {
+                    // "I don't know" — a real skip, not scored as wrong, never
+                    // forces the reteach walkthrough.
+                    Button {
+                        skip()
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.uturn.forward.circle")
+                            Text("I don't know")
+                        }
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                        .background(
+                            Capsule()
+                                .fill(Color("LyoBackground"))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                        )
                     }
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(
-                        Capsule()
-                            .fill(Color("LyoBackground"))
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                            )
-                    )
+
+                    // "Ask for help" — routes to a real, question-specific
+                    // explanation instead of a canned wrong-answer reteach.
+                    Button {
+                        askForHelp()
+                    } label: {
+                        HStack {
+                            Image(systemName: "questionmark.circle")
+                            Text("Ask for help")
+                        }
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color("LyoAccent"))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                        .background(
+                            Capsule()
+                                .fill(Color("LyoBackground"))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color("LyoAccent").opacity(0.5), lineWidth: 1)
+                                )
+                        )
+                    }
                 }
-                
+
                 // Submit button (if option selected)
                 if selectedOption != nil {
                     Button {
@@ -364,12 +338,14 @@ struct QuickCheckOverlay: View {
         viewModel.answerCheck(selected)
     }
     
-    private func handleUnsure() {
-        isAnswered = true
+    private func skip() {
         timer?.invalidate()
-        
-        // Treat as wrong answer - show reteach
-        viewModel.answerCheck("")
+        viewModel.skipCheck()
+    }
+
+    private func askForHelp() {
+        timer?.invalidate()
+        viewModel.requestHelp()
     }
     
     private func continueAfterCheck() {
@@ -391,12 +367,13 @@ struct QuickCheckOverlay: View {
                 if remaining > 0 {
                     timeRemaining = remaining - 1
                 } else {
-                    // Time's up - auto-submit or show as unsure
+                    // Time's up - auto-submit the selected option, or skip
+                    // (not scored as wrong) if nothing was selected.
                     timer?.invalidate()
                     if selectedOption != nil {
                         submitAnswer()
                     } else {
-                        handleUnsure()
+                        skip()
                     }
                 }
             }

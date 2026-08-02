@@ -136,6 +136,8 @@ internal class AndroidClassroomController(
             ).toHttpUrl()
             .newBuilder()
             .addQueryParameter("session_id", courseId)
+            .addQueryParameter("course_id", courseId)
+            .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", topic)
             .addQueryParameter("token", token)
             .addQueryParameter("mode", "solo")
@@ -190,41 +192,67 @@ internal class AndroidClassroomController(
 
     fun answer(option: ClassroomOption) {
         val checkpoint = state.checkpoint ?: return
-        learnerTakesFloor()
-        sendAction(
+        beginLearnerInput()
+        if (sendAction(
             intent = "submit_answer",
             componentId = checkpoint.componentId,
             answerData = mapOf(
                 "selected_option_id" to option.id,
                 "selected_option_label" to option.label,
             ),
-        )
+        )) awaitServerScene()
     }
 
     fun submitApplication(response: String) {
         val application = state.application ?: return
-        learnerTakesFloor()
-        sendAction(
+        beginLearnerInput()
+        if (sendAction(
             intent = application.actionIntent,
             componentId = application.componentId,
             answerData = mapOf("response" to response.trim()),
-        )
+        )) awaitServerScene()
     }
 
     fun continueLesson() {
         val intent = state.continueIntent
-        learnerTakesFloor()
-        sendAction(intent, "android_continue")
+        beginLearnerInput()
+        if (sendAction(intent, "android_continue")) awaitServerScene()
     }
 
-    fun askQuestion(question: String) {
-        if (question.isBlank()) return
-        learnerTakesFloor()
-        sendAction(
+    fun askQuestion(question: String): Boolean {
+        if (question.isBlank()) return false
+        beginLearnerInput()
+        val sent = sendAction(
             intent = "ask_question",
             componentId = "android_ask",
             answerData = mapOf("message" to question.trim()),
         )
+        if (sent) awaitServerScene()
+        return sent
+    }
+
+    fun requestHint() {
+        val componentId = state.checkpoint?.componentId
+            ?: state.application?.componentId
+            ?: return
+        beginLearnerInput()
+        if (sendAction(
+            intent = "request_hint",
+            componentId = componentId,
+            answerData = mapOf("hint_level" to "nudge"),
+        )) awaitServerScene()
+    }
+
+    fun skipQuestion() {
+        val componentId = state.checkpoint?.componentId
+            ?: state.application?.componentId
+            ?: return
+        beginLearnerInput()
+        if (sendAction(
+            intent = "skip_question",
+            componentId = componentId,
+            answerData = mapOf("reason" to "unsure"),
+        )) awaitServerScene()
     }
 
     fun close() {
@@ -234,8 +262,7 @@ internal class AndroidClassroomController(
         scope.cancel()
     }
 
-    private fun learnerTakesFloor() {
-        voice.stop()
+    private fun awaitServerScene() {
         state = state.copy(
             waiting = true,
             checkpoint = null,
@@ -249,7 +276,15 @@ internal class AndroidClassroomController(
         intent: String,
         componentId: String,
         answerData: Map<String, String>? = null,
-    ) {
+    ): Boolean {
+        val activeSocket = socket
+        if (activeSocket == null || !state.connected) {
+            state = state.copy(
+                waiting = false,
+                error = "The classroom is offline. Reconnect before sending your answer.",
+            )
+            return false
+        }
         val payload = linkedMapOf<String, Any>(
             "event_type" to "user_action",
             "session_id" to courseId,
@@ -258,7 +293,14 @@ internal class AndroidClassroomController(
             "timestamp" to Instant.now().toString(),
         )
         answerData?.let { payload["answer_data"] = it }
-        socket?.send(ApiClient.gson.toJson(payload))
+        val sent = activeSocket.send(ApiClient.gson.toJson(payload))
+        if (!sent) {
+            state = state.copy(
+                waiting = false,
+                error = "Your response was not sent. Please try again.",
+            )
+        }
+        return sent
     }
 
     private fun consumeMessage(raw: String) {
@@ -453,7 +495,11 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
             putExtra(
                 RecognizerIntent.EXTRA_PROMPT,
-                if (forApplication) "Explain your answer" else "Ask the teacher",
+                if (forApplication) {
+                    if (isSpanish) "Explica tu respuesta" else "Explain your answer"
+                } else {
+                    if (isSpanish) "Pregunta al docente" else "Ask the teacher"
+                },
             )
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
@@ -536,7 +582,7 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
                     GlassCard {
                         Column(Modifier.padding(18.dp)) {
                             Text(
-                                if (isSpanish) "Docente de IA" else "AI Teacher",
+                                "Lyo",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = LyoPurple,
                             )
@@ -600,6 +646,25 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
                                     Text(option.label)
                                 }
                             }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = controller::requestHint,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (isSpanish) "Pedir ayuda" else "Ask for help")
+                                }
+                                OutlinedButton(
+                                    onClick = controller::skipQuestion,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (isSpanish) "Omitir" else "Skip for now")
+                                }
+                            }
                         }
                     }
                 }
@@ -659,6 +724,25 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
                                     enabled = wordCount >= application.minWords,
                                 ) {
                                     Text(if (isSpanish) "Enviar" else "Submit")
+                                }
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = controller::requestHint,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (isSpanish) "Pedir ayuda" else "Ask for help")
+                                }
+                                OutlinedButton(
+                                    onClick = controller::skipQuestion,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (isSpanish) "Omitir" else "Skip for now")
                                 }
                             }
                         }
@@ -741,8 +825,9 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
                     )
                     IconButton(
                         onClick = {
-                            controller.askQuestion(question)
-                            question = ""
+                            if (controller.askQuestion(question)) {
+                                question = ""
+                            }
                         },
                     ) {
                         Icon(

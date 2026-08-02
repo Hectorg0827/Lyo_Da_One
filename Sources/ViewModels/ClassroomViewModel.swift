@@ -17,6 +17,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
     @Published var currentQuickCheck: QuickCheck?
     @Published var showReteach: Bool = false
     @Published var reteachContent: ReteachContent?
+    @Published var isRequestingHelp: Bool = false
     @Published var errorMessage: String?
     
     // TTS State
@@ -35,6 +36,10 @@ class ClassroomViewModel: NSObject, ObservableObject {
     private let repository = LyoRepository.shared
     /// Stores the requested session ID so retry works even if initial load fails
     private var lastRequestedSessionId: String?
+    /// Identifies the in-flight help request so a response that arrives after
+    /// the learner closed the panel (or moved to another check) is discarded
+    /// instead of overwriting whatever they're looking at now.
+    private var helpRequestToken: UUID?
     
     override init() {
         super.init()
@@ -172,7 +177,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
         stopNarration()
         
         let utterance = AVSpeechUtterance(string: currentSlide.narration)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.voice = SpeechLanguage.voice(for: currentSlide.narration)
         utterance.rate = settings.playbackSpeed * 0.5 // AVSpeechUtterance rate is 0.0-1.0
         
         currentUtterance = utterance
@@ -272,7 +277,15 @@ class ClassroomViewModel: NSObject, ObservableObject {
     // MARK: - Quick Checks
     
     private func shouldShowQuickCheck() -> Bool {
-        // Show check after completing 2nd slide (index 1)
+        guard let session,
+              session.modules.indices.contains(currentModuleIndex),
+              session.modules[currentModuleIndex].slides.indices.contains(currentSlideIndex),
+              let check = session.modules[currentModuleIndex].slides[currentSlideIndex].quickCheck,
+              check.type.isSupported else {
+            return false
+        }
+
+        // Respect the learner's frequency only when this slide has an authored check.
         let frequency = settings.checkFrequency
         
         switch frequency {
@@ -286,33 +299,24 @@ class ClassroomViewModel: NSObject, ObservableObject {
     }
     
     private func showQuickCheck() {
-        // Load a quick check for current concept
-        currentQuickCheck = createMockQuickCheck()
+        guard let session,
+              session.modules.indices.contains(currentModuleIndex),
+              session.modules[currentModuleIndex].slides.indices.contains(currentSlideIndex),
+              let check = session.modules[currentModuleIndex].slides[currentSlideIndex].quickCheck,
+              check.type.isSupported else {
+            currentQuickCheck = nil
+            state = .ready
+            return
+        }
+        currentQuickCheck = check
         state = .quickCheck
-    }
-    
-    private func createMockQuickCheck() -> QuickCheck {
-        QuickCheck(
-            id: "check-1",
-            type: .multipleChoice,
-            question: "Which part of y = mx + b represents the slope?",
-            options: ["y", "m", "x", "b"],
-            correctAnswer: "m",
-            explanation: "The letter 'm' represents the slope, which is the rate of change of the line.",
-            reteachContent: ReteachContent(
-                explanation: "Think of slope as how steep a hill is. The steeper the hill, the larger the slope value.",
-                analogy: "Imagine climbing stairs. The slope tells you how many steps up you go for each step forward.",
-                diagram: nil,
-                alternativeApproach: "Slope = Rise over Run. It's the vertical change divided by the horizontal change."
-            ),
-            timeLimit: 15
-        )
     }
     
     func answerCheck(_ answer: String) {
         guard let check = currentQuickCheck else { return }
         
         if answer == check.correctAnswer {
+            recordCheckOutcome(check, outcome: "correct", passed: true)
             // Correct answer
             Log.classroom.info("Check passed: \(check.id)")
             currentQuickCheck = nil
@@ -325,6 +329,7 @@ class ClassroomViewModel: NSObject, ObservableObject {
                 }
             }
         } else {
+            recordCheckOutcome(check, outcome: "incorrect", passed: false)
             // Wrong answer - show reteach
             if let reteach = check.reteachContent {
                 reteachContent = reteach
@@ -337,12 +342,140 @@ class ClassroomViewModel: NSObject, ObservableObject {
     func dismissReteach() {
         showReteach = false
         reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
         currentQuickCheck = nil
         state = .ready
-        
+
         // Continue to next slide
         if settings.autoAdvanceAfterNarration {
             nextSlide()
+        }
+    }
+
+    /// Returns from the reteach panel to the check the learner was working on.
+    /// Deliberately does not go through `dismissReteach()`, which advances the
+    /// lesson when `autoAdvanceAfterNarration` is set — "Try Again" must
+    /// re-present the same question on the same slide.
+    func retryCheck() {
+        guard currentQuickCheck != nil else { return }
+        showReteach = false
+        reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
+        state = .quickCheck
+    }
+
+    /// Explicitly skips the current check. Unlike a wrong answer, this does
+    /// not force the reteach walkthrough — it just records that the learner
+    /// passed on this question and moves the lesson forward, so a confused
+    /// learner is never trapped behind a question they can't answer.
+    func skipCheck() {
+        guard let check = currentQuickCheck else { return }
+        Log.classroom.info("Check skipped: \(check.id)")
+        recordCheckOutcome(check, outcome: "skipped", passed: nil)
+        currentQuickCheck = nil
+        state = .ready
+
+        if settings.autoAdvanceAfterNarration {
+            nextSlide()
+        }
+    }
+
+    /// Asks the AI tutor to explain the current question a different way,
+    /// using a real backend response instead of the check's static reteach
+    /// text (which is only ever the same canned copy for a given question).
+    func requestHelp() {
+        guard let check = currentQuickCheck else { return }
+        let token = UUID()
+        helpRequestToken = token
+        isRequestingHelp = true
+        reteachContent = nil
+        showReteach = true
+        state = .reteach
+        recordCheckOutcome(check, outcome: "help_requested", passed: nil)
+
+        Task { @MainActor in
+            let languageCode = SpeechLanguage.dominantLanguageCode(for: check.question) ?? "en"
+            let prompt = """
+            A learner needs help with this classroom question: "\(check.question)"
+            Explain it a different way with one simple analogy. Reply entirely in
+            the question's language (ISO language code: \(languageCode)).
+            """
+            let content: ReteachContent
+            do {
+                let response = try await repository.sendLyoMessage(message: prompt)
+                content = ReteachContent(
+                    explanation: response.message.content,
+                    analogy: nil,
+                    diagram: nil,
+                    alternativeApproach: nil
+                )
+            } catch {
+                Log.classroom.error("requestHelp failed: \(error.localizedDescription)")
+                // Fall back to the question's own canned explanation rather
+                // than leaving the help panel empty.
+                content = check.reteachContent ?? ReteachContent(
+                    explanation: check.explanation,
+                    analogy: nil,
+                    diagram: nil,
+                    alternativeApproach: nil
+                )
+            }
+
+            // The learner may have closed the panel or moved to another check
+            // while this was in flight — in that case the response is stale.
+            guard helpRequestToken == token else { return }
+            reteachContent = content
+            isRequestingHelp = false
+            helpRequestToken = nil
+        }
+    }
+
+    private func recordCheckOutcome(
+        _ check: QuickCheck,
+        outcome: String,
+        passed: Bool?
+    ) {
+        guard var activeSession = session,
+              activeSession.modules.indices.contains(currentModuleIndex) else { return }
+        let module = activeSession.modules[currentModuleIndex]
+        var progress = activeSession.progress
+        var moduleProgress = progress.moduleProgress[module.id] ?? ModuleProgress(
+            moduleId: module.id,
+            currentSlideIndex: currentSlideIndex,
+            completedSlides: [],
+            checkResults: [:],
+            checkOutcomes: [:],
+            narrationPosition: narrationProgress,
+            confidenceLevels: [:],
+            lastUpdated: Date()
+        )
+        moduleProgress.currentSlideIndex = currentSlideIndex
+        moduleProgress.checkOutcomes = moduleProgress.checkOutcomes ?? [:]
+        moduleProgress.checkOutcomes?[check.id] = outcome
+        if let passed {
+            moduleProgress.checkResults[check.id] = passed
+        }
+        moduleProgress.lastUpdated = Date()
+        progress.moduleProgress[module.id] = moduleProgress
+        progress.lastAccessedAt = Date()
+        activeSession.progress = progress
+        session = activeSession
+
+        Task {
+            do {
+                try await repository.trackClassroomCheckOutcome(
+                    checkId: check.id,
+                    question: check.question,
+                    outcome: outcome,
+                    isCorrect: passed
+                )
+            } catch {
+                Log.classroom.warning(
+                    "Failed to save check outcome: \(error.localizedDescription)"
+                )
+            }
         }
     }
     

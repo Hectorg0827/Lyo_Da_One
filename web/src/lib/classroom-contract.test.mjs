@@ -10,6 +10,8 @@ test('classroom URL preserves learner controls and course context', () => {
   const url = new URL(buildClassroomWsUrl('https://api.lyoapp.com/', {
     topic: 'Fractions',
     sessionId: 'course-7',
+    courseId: 'course-7',
+    lessonId: 'lesson-3',
     objective: 'Compare fractions',
     difficulty: 'advanced',
     mode: 'challenge',
@@ -19,6 +21,9 @@ test('classroom URL preserves learner controls and course context', () => {
   }, 'token-1'));
   assert.equal(url.protocol, 'wss:');
   assert.equal(url.searchParams.get('session_id'), 'course-7');
+  assert.equal(url.searchParams.get('course_id'), 'course-7');
+  assert.equal(url.searchParams.get('lesson_id'), 'lesson-3');
+  assert.equal(url.searchParams.get('client_contract_version'), '2');
   assert.equal(url.searchParams.get('objective'), 'Compare fractions');
   assert.equal(url.searchParams.get('mode'), 'challenge');
   assert.equal(url.searchParams.get('duration_minutes'), '20');

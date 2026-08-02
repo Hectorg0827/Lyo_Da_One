@@ -19,8 +19,10 @@ struct ActiveLessonView: View {
     var onAdvance: (LessonStep) -> Void = { _ in }
     var onAskLyo: (LessonStep) -> Void = { _ in }
     var onExplainEasier: (LessonStep) -> Void = { _ in }
-    var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Void = { _, _ in }
-    var onTransferSubmit: (SDUIComponent, String) -> Void = { _, _ in }
+    var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Bool = { _, _ in false }
+    var onTransferSubmit: (SDUIComponent, String) -> Bool = { _, _ in false }
+    var onHint: (SDUIComponent) -> Bool = { _ in false }
+    var onSkip: (SDUIComponent) -> Bool = { _ in false }
     var onBack: () -> Void = {}
     var onMenu: () -> Void = {}
     var onMic: () -> Void = {}
@@ -76,6 +78,7 @@ struct ActiveLessonView: View {
     @State private var currentIndex: Int = 0
     @State private var quizSelections: [String: String] = [:]
     @State private var submittedTransferIds: Set<String> = []
+    @State private var skippedInteractionIds: Set<String> = []
     @State private var reflectionText: String = ""
     @State private var showLessonMap = false
     @State private var showLyoLens = false
@@ -109,9 +112,11 @@ struct ActiveLessonView: View {
         guard let step = currentStep else { return true }
         if case .classroomQuiz(let component) = step.supporting {
             return quizSelections[component.id] != nil
+                || skippedInteractionIds.contains(component.id)
         }
         if case .classroomInput(let component) = step.supporting {
             return submittedTransferIds.contains(component.id)
+                || skippedInteractionIds.contains(component.id)
         }
         return true
     }
@@ -122,13 +127,7 @@ struct ActiveLessonView: View {
     }
 
     private var actualTeacherName: String {
-        switch teacherIndex {
-        case 1: return "Mr. Newton"
-        case 2: return "Dr. Saria"
-        case 3: return "Prof. Chen"
-        case 4: return "Mr. Davis"
-        default: return "Teacher"
-        }
+        "Lyo"
     }
 
     // MARK: - Body
@@ -178,13 +177,24 @@ struct ActiveLessonView: View {
                             quizSelections: quizSelections,
                             reflectionText: $reflectionText,
                             isTappedToComplete: $isBoardTappedToComplete,
+                            interactionCompleted: isInteractionCompleted,
                             onOptionSelected: { component, option in
+                                guard onQuizAnswer(component, option) else { return false }
                                 quizSelections[component.id] = option.id
-                                onQuizAnswer(component, option)
+                                return true
                             },
                             onTransferSubmit: { component, response in
+                                guard onTransferSubmit(component, response) else { return false }
                                 submittedTransferIds.insert(component.id)
-                                onTransferSubmit(component, response)
+                                return true
+                            },
+                            onHint: { component in
+                                onHint(component)
+                            },
+                            onSkip: { component in
+                                guard onSkip(component) else { return false }
+                                skippedInteractionIds.insert(component.id)
+                                return true
                             }
                         )
                         .offset(x: shakeOffset)
@@ -512,8 +522,11 @@ struct LyoBoardView: View {
     let quizSelections: [String: String]
     @Binding var reflectionText: String
     @Binding var isTappedToComplete: Bool
-    var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Void
-    var onTransferSubmit: (SDUIComponent, String) -> Void
+    let interactionCompleted: Bool
+    var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Bool
+    var onTransferSubmit: (SDUIComponent, String) -> Bool
+    var onHint: (SDUIComponent) -> Bool
+    var onSkip: (SDUIComponent) -> Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -590,7 +603,7 @@ struct LyoBoardView: View {
                     ForEach(options) { option in
                         let selected = quizSelections[component.id] == option.id
                         Button {
-                            onOptionSelected(component, option)
+                            _ = onOptionSelected(component, option)
                         } label: {
                             HStack {
                                 Circle()
@@ -606,9 +619,11 @@ struct LyoBoardView: View {
                             .background(selected ? ClassroomTokens.accent.opacity(0.12) : Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? ClassroomTokens.accent : Color.white.opacity(0.06), lineWidth: 1))
                         }
+                        .disabled(interactionCompleted)
                     }
                 }
             }
+            checkpointSupportActions(component)
         }
     }
 
@@ -641,6 +656,7 @@ struct LyoBoardView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
+                .disabled(interactionCompleted)
 
             HStack {
                 Text(
@@ -655,13 +671,40 @@ struct LyoBoardView: View {
                     let response = reflectionText.trimmingCharacters(
                         in: .whitespacesAndNewlines
                     )
-                    onTransferSubmit(component, response)
+                    _ = onTransferSubmit(component, response)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(ClassroomTokens.accent)
-                .disabled(wordCount < minimum)
+                .disabled(wordCount < minimum || interactionCompleted)
             }
+            checkpointSupportActions(component)
         }
+    }
+
+    private func checkpointSupportActions(_ component: SDUIComponent) -> some View {
+        let isSpanish = component.languageCode?.lowercased().hasPrefix("es") == true
+        return HStack(spacing: 10) {
+            Button {
+                _ = onHint(component)
+            } label: {
+                Label(
+                    isSpanish ? "Pedir ayuda" : "Ask for help",
+                    systemImage: "lightbulb"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                _ = onSkip(component)
+            } label: {
+                Text(isSpanish ? "Omitir por ahora" : "Skip for now")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(ClassroomTokens.textTertiary)
+        }
+        .font(.system(size: 12, weight: .semibold, design: .rounded))
+        .disabled(interactionCompleted)
+        .opacity(interactionCompleted ? 0.55 : 1)
     }
 
     private func comparisonContent(_ model: ActiveLessonView.ConceptComparisonModel) -> some View {

@@ -99,8 +99,8 @@ export type BoardElement =
   | { id: string; kind: 'bullets'; items: string[] }
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
-  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string }
-  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
+  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
   | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string };
@@ -127,6 +127,8 @@ type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 
 export interface ClassroomConnection extends ClassroomContractConnection {
   mode?: ClassroomMode;
+  courseId?: string;
+  lessonId?: string;
 }
 
 interface ClassroomStore {
@@ -163,6 +165,8 @@ interface ClassroomStore {
   answerPrompt: (option: string) => void;
   answerQuiz: (elementId: string, option: QuizOption) => void;
   answerTransfer: (elementId: string, response: string) => void;
+  skipQuestion: (elementId: string) => void;
+  unskipQuestion: (elementId: string) => void;
   askQuestion: (text: string) => void;
   takeFloor: () => void;
   signal: (kind: 'confused' | 'too_easy') => void;
@@ -218,6 +222,73 @@ function stopSpeech() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
+}
+
+// Non-Latin scripts are decisive, but only in this order: Japanese prose mixes
+// kana with kanji, and Korean can carry hanja, so those language-specific
+// scripts must be checked before the CJK ideographs they share with Chinese.
+const SCRIPT_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
+  { code: 'ja', test: /[぀-ヿ]/ },   // hiragana + katakana
+  { code: 'ko', test: /[가-힯]/ },   // hangul syllables
+  { code: 'ar', test: /[؀-ۿ]/ },
+  { code: 'ru', test: /[Ѐ-ӿ]/ },
+  { code: 'hi', test: /[ऀ-ॿ]/ },
+  { code: 'zh', test: /[一-鿿]/ },   // shared ideographs — last resort
+];
+
+// Latin-script languages share an alphabet and much of their function-word
+// vocabulary ("la" is French and Spanish, "para" is Spanish and Portuguese),
+// so no single hint is decisive. Score every candidate across the whole sample
+// and take the strongest rather than returning on the first pattern that hits.
+const LATIN_LANGUAGE_HINTS: { code: string; unique?: RegExp; words: RegExp }[] = [
+  { code: 'es', unique: /[¿¡ñ]/g, words: /\b(el|los|las|que|para|con|una|uno|por|cómo|qué|cuál|más|así|pero|también|está)\b/gi },
+  { code: 'pt', unique: /[ãõ]/g, words: /\b(não|com|para|uma|isso|então|você|está|são|também|mais)\b/gi },
+  { code: 'fr', unique: /[œùêîôë]/g, words: /\b(le|la|les|des|est|une|avec|pour|qui|où|dans|nous|être|cette)\b/gi },
+  { code: 'de', unique: /[äöüß]/g, words: /\b(der|die|das|und|nicht|mit|für|eine|ist|auch|sich|wird)\b/gi },
+  { code: 'it', words: /\b(il|lo|gli|che|per|con|una|è|questo|come|sono|anche|della)\b/gi },
+];
+
+// A language-exclusive character is far stronger evidence than a function word
+// that several languages share.
+const UNIQUE_CHAR_WEIGHT = 3;
+// Below this, the evidence is as likely to be an English coincidence as a real
+// signal — fall back to the browser's default voice instead of guessing.
+const MIN_LANGUAGE_SCORE = 2;
+
+function scoreLatinLanguage(text: string, hint: { unique?: RegExp; words: RegExp }): number {
+  const uniqueHits = hint.unique ? (text.match(hint.unique)?.length ?? 0) : 0;
+  const distinctWords = new Set(
+    (text.match(hint.words) ?? []).map((word) => word.toLowerCase()),
+  ).size;
+  return uniqueHits * UNIQUE_CHAR_WEIGHT + distinctWords;
+}
+
+/**
+ * Best-effort guess at the spoken-language code for `text`, so narration is
+ * read in a matching voice instead of always defaulting to English. Returns
+ * null (meaning: let the browser's default voice handle it) when the text is
+ * too short or shows no language-specific signal.
+ */
+function detectSpeechLanguage(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length < 8) return null;
+
+  for (const { code, test } of SCRIPT_LANGUAGE_HINTS) {
+    if (test.test(trimmed)) return code;
+  }
+
+  let best: { code: string; score: number } | null = null;
+  for (const hint of LATIN_LANGUAGE_HINTS) {
+    const score = scoreLatinLanguage(trimmed, hint);
+    if (score > (best?.score ?? 0)) best = { code: hint.code, score };
+  }
+  return best && best.score >= MIN_LANGUAGE_SCORE ? best.code : null;
+}
+
+/** Picks an installed SpeechSynthesis voice matching a language code, if any. */
+function findVoiceForLanguage(code: string): SpeechSynthesisVoice | undefined {
+  return window.speechSynthesis.getVoices()
+    .find((voice) => voice.lang.toLowerCase().startsWith(code));
 }
 
 /** Classify a board "write"/"draw" payload into the right visual. */
@@ -297,14 +368,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
     try {
       const utterance = new SpeechSynthesisUtterance(text);
+      const detectedLanguage = detectSpeechLanguage(text);
       const resolvedLanguage = language === 'auto'
-        ? (window.navigator.language || 'en-US')
+        ? (detectedLanguage || window.navigator.language || 'en-US')
         : language;
       utterance.lang = resolvedLanguage;
       const family = resolvedLanguage.split('-')[0].toLowerCase();
-      utterance.voice = window.speechSynthesis.getVoices().find(
-        (voice) => voice.lang.toLowerCase().startsWith(family),
-      ) ?? null;
+      utterance.voice = findVoiceForLanguage(family) ?? null;
       utterance.pitch = 1;
       utterance.rate = get().speechRate;
       let finished = false;
@@ -706,8 +776,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
   }
 
-  function sendAction(actionIntent: string, componentId: string, answerData?: Record<string, unknown>) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  /**
+   * Returns whether the action actually reached the classroom. Callers must
+   * check it before optimistically showing "waiting for the teacher" — a
+   * silently dropped action used to leave the board spinning forever.
+   */
+  function sendAction(
+    actionIntent: string,
+    componentId: string,
+    answerData?: Record<string, unknown>,
+  ): boolean {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     const payload: Record<string, unknown> = {
       event_type: 'user_action',
       session_id: get().sessionId,
@@ -716,7 +795,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       timestamp: new Date().toISOString(),
     };
     if (answerData) payload.answer_data = answerData;
-    ws.send(JSON.stringify(payload));
+    try {
+      ws.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Surfaces a dropped action instead of hanging the board. */
+  function reportOffline() {
+    set({
+      waitingForScene: false,
+      error: 'That did not reach the classroom — the session is not connected.',
+    });
   }
 
   return {
@@ -799,16 +891,29 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     answerPrompt: (option: string) => {
       const prompt = get().prompt;
       if (!prompt) return;
+      // Keep the prompt on screen if it could not be delivered, rather than
+      // dismissing a question the classroom never received.
+      if (!sendAction('user_message', prompt.id, { message: option })) {
+        reportOffline();
+        return;
+      }
       learnerTakesFloor();
       pushTranscript('You', option);
       set({ prompt: null, lyoState: 'listening' });
-      sendAction('user_message', prompt.id, { message: option });
     },
 
     answerQuiz: (elementId, option) => {
       const el = get().board.find((b) => b.id === elementId);
       if (!el || el.kind !== 'quiz' || el.answered) return;
       learnerTakesFloor();
+      // Do not lock the card to an answer the classroom never received.
+      if (!sendAction('submit_answer', el.quiz.component_id, {
+        selected_option_id: option.id,
+        selected_option_label: option.label,
+      })) {
+        reportOffline();
+        return;
+      }
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'quiz'
@@ -818,10 +923,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         waitingForScene: true,
       }));
       pushTranscript('You', option.label);
-      sendAction('submit_answer', el.quiz.component_id, {
-        selected_option_id: option.id,
-        selected_option_label: option.label,
-      });
     },
 
     answerTransfer: (elementId: string, response: string) => {
@@ -830,6 +931,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const trimmed = response.trim();
       if (!trimmed) return;
       learnerTakesFloor();
+      // Keep the learner's writing editable if it could not be delivered.
+      if (!sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
+        response: trimmed,
+      })) {
+        reportOffline();
+        return;
+      }
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'transfer'
@@ -839,28 +947,85 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         lyoState: 'thinking',
       }));
       pushTranscript('You', `Application: ${trimmed}`);
-      sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
-        response: trimmed,
-      });
+    },
+
+    skipQuestion: (elementId: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || (el.kind !== 'quiz' && el.kind !== 'transfer')) return;
+      if ((el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted) || el.skipped) return;
+
+      learnerTakesFloor();
+      const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
+      if (!sendAction('skip_question', componentId, { reason: 'unsure' })) {
+        reportOffline();
+        return;
+      }
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && (item.kind === 'quiz' || item.kind === 'transfer')
+            ? { ...item, skipped: true }
+            : item),
+        canContinue: false,
+        waitingForScene: true,
+        lyoState: 'thinking',
+      }));
+      pushTranscript(
+        'You',
+        get().languageCode.toLowerCase().startsWith('es')
+          ? 'Omití esta pregunta para repasarla después'
+          : 'Skipped this question for later review',
+      );
+    },
+
+    unskipQuestion: (elementId: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || (el.kind !== 'quiz' && el.kind !== 'transfer') || !el.skipped) return;
+
+      learnerTakesFloor();
+      const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
+      if (!sendAction('retry', componentId)) {
+        reportOffline();
+        return;
+      }
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && (item.kind === 'quiz' || item.kind === 'transfer')
+            ? { ...item, skipped: false }
+            : item),
+        waitingForScene: true,
+        lyoState: 'thinking',
+      }));
+      pushTranscript(
+        'You',
+        get().languageCode.toLowerCase().startsWith('es')
+          ? 'Volví a la pregunta omitida'
+          : 'Returned to the skipped question',
+      );
     },
 
     askQuestion: (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       learnerTakesFloor();
+      if (!sendAction('ask_question', 'web_ask', { message: trimmed })) {
+        reportOffline();
+        return;
+      }
       pushTranscript('You', `✋ ${trimmed}`);
       set({ waitingForScene: true, lyoState: 'curious', caption: { speaker: 'You', text: trimmed } });
-      sendAction('ask_question', 'web_ask', { message: trimmed });
     },
 
     takeFloor: () => learnerTakesFloor(),
 
     signal: (kind) => {
       learnerTakesFloor();
+      if (!sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
+        kind === 'confused' ? { hint_level: 'nudge' } : undefined)) {
+        reportOffline();
+        return;
+      }
       set({ waitingForScene: true, lyoState: kind === 'confused' ? 'thinking' : 'curious' });
       pushTranscript('You', kind === 'confused' ? 'Requested a small nudge' : 'Requested a harder case');
-      sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
-        kind === 'confused' ? { hint_level: 'nudge' } : undefined);
     },
 
     requestHint: (level) => {
@@ -872,21 +1037,29 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         prerequisite: 'prerequisite refresher',
       };
       learnerTakesFloor();
+      if (!sendAction('request_hint', 'web_hint', { hint_level: level })) {
+        reportOffline();
+        return;
+      }
       set({ waitingForScene: true, lyoState: 'thinking' });
       pushTranscript('You', `Requested: ${labels[level]}`);
-      sendAction('request_hint', 'web_hint', { hint_level: level });
     },
 
     continueLesson: () => {
       const actionIntent = get().nextActionIntent || 'continue';
       learnerTakesFloor();
+      // Leave the Continue button in place if the action never left the
+      // browser — clearing canContinue would strip the only way forward.
+      if (!sendAction(actionIntent, 'web_continue')) {
+        reportOffline();
+        return;
+      }
       set({
         canContinue: false,
         waitingForScene: true,
         continueLabel: 'Check understanding',
         nextActionIntent: 'continue',
       });
-      sendAction(actionIntent, 'web_continue');
     },
 
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
