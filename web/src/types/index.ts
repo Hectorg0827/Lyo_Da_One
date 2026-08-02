@@ -31,12 +31,21 @@ export interface AuthState {
 }
 
 // ---- Chat / LYO AI ----
+export interface ChatAttachment {
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  kind: 'image' | 'document';
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   type: 'text' | 'course_proposal' | 'flashcard' | 'quiz' | 'diagram' | 'roadmap' | 'topic_selection';
   metadata?: Record<string, unknown>;
+  attachments?: ChatAttachment[];
   createdAt: string;
 }
 
