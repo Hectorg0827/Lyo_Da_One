@@ -14,6 +14,8 @@ interface MessageBubbleProps {
   message: ChatMessage;
 }
 
+const ASSISTANT_RESPONSE_WIDTH_CLASS = 'w-[99%]';
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -208,14 +210,14 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={cn(
         'flex w-full group',
-        isUser ? 'flex-row-reverse items-end gap-3' : 'flex-col'
+        isUser ? 'flex-row-reverse items-end gap-3 px-4' : 'flex-col'
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Header – assistant only (mirrors iOS: mascot + "Lyo" name) */}
       {!isUser && (
-        <div className="flex items-center gap-2 mb-1.5">
+        <div className={cn('flex items-center gap-2 mb-1.5 mx-auto', ASSISTANT_RESPONSE_WIDTH_CLASS)}>
           <MascotAvatar
             thinking={isLatestMessage && isGenerating}
             size={32}
@@ -227,9 +229,10 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       {/* Bubble */}
       <div
         className={cn(
-          'relative max-w-[78%] md:max-w-[68%]',
-          isUser ? 'items-end' : 'items-start pl-10',
-          'flex flex-col gap-1'
+          'relative flex flex-col gap-1',
+          isUser
+            ? 'max-w-[78%] md:max-w-[68%] items-end'
+            : cn(ASSISTANT_RESPONSE_WIDTH_CLASS, 'max-w-none mx-auto items-start')
         )}
       >
         {/* Course proposal card */}
@@ -246,6 +249,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           <div
             className={cn(
               'px-4 py-3 rounded-2xl text-sm leading-relaxed',
+              !isUser && 'w-full',
               isUser
                 ? 'bg-gradient-to-br from-accent-purple to-lyo-500 text-white rounded-br-sm shadow-lg shadow-lyo-900/30'
                 : 'bg-white/5 border border-white/10 text-white/80 rounded-bl-sm backdrop-blur-sm'
