@@ -193,7 +193,6 @@ struct LyoOverlayView: View {
                 }
             }
             .padding(.top, 60)
-            .padding(.horizontal, 8)
             .padding(.bottom, 20)
         }
     }

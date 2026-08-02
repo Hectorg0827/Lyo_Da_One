@@ -153,7 +153,7 @@ export default function ChatInterface() {
         {messages.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="flex flex-col gap-6 px-4 py-6 max-w-3xl mx-auto w-full">
+          <div className="flex flex-col gap-6 py-6 w-full">
             <AnimatePresence initial={false}>
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} />
