@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
@@ -138,6 +138,64 @@ function ClassroomStage() {
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
   const boardEndRef = useRef<HTMLDivElement>(null);
 
+  // ── Netflix/YouTube-style chrome auto-hide ──
+  // Everything except the board, the teacher's caption, and the two
+  // mascots hides itself after a few seconds of no interaction, and a
+  // single tap on the board brings it back — mirroring YouTube's
+  // controls-overlay behavior. A quiz/prompt checkpoint always forces
+  // chrome back on and holds it there until answered.
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const classroomRootRef = useRef<HTMLDivElement>(null);
+
+  const resetHideTimer = useCallback(() => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    setChromeVisible(true);
+    const keepAlive = isPaused || !!prompt || settingsOpen || notebookOpen || hintMenuOpen;
+    if (!keepAlive) {
+      hideTimerRef.current = setTimeout(() => setChromeVisible(false), 3000);
+    }
+  }, [isPaused, prompt, settingsOpen, notebookOpen, hintMenuOpen]);
+
+  useEffect(() => {
+    resetHideTimer();
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetHideTimer]);
+
+  // Mobile: default the classroom to a full-bleed, landscape, full-screen
+  // "video player" feel. Real orientation lock + fullscreen where the
+  // platform supports it (Chrome/Android); everywhere else (notably iOS
+  // Safari, which implements neither API) falls back to the CSS rotate
+  // trick scoped via `.classroom-landscape-shell` in globals.css.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia('(max-width: 768px)').matches) return;
+    const tryLandscape = async () => {
+      try {
+        const el = classroomRootRef.current;
+        if (el && !document.fullscreenElement) await el.requestFullscreen?.();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (screen.orientation as any)?.lock?.('landscape');
+      } catch {
+        // Unsupported (iOS Safari) or blocked without a user gesture —
+        // the CSS fallback in globals.css handles it instead.
+      }
+    };
+    void tryLandscape();
+    return () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (screen.orientation as any)?.unlock?.();
+        if (document.fullscreenElement) void document.exitFullscreen();
+      } catch {
+        // Nothing to clean up if it never locked in the first place.
+      }
+    };
+  }, []);
+
   useEffect(() => {
     connect(connection);
     return () => disconnect();
@@ -169,6 +227,7 @@ function ClassroomStage() {
   const chooseHint = (level: HintLevel) => {
     requestHint(level);
     setHintMenuOpen(false);
+    resetHideTimer();
   };
 
   const submitQuestion = () => {
@@ -176,6 +235,7 @@ function ClassroomStage() {
     askQuestion(question);
     setQuestion('');
     setHandRaised(false);
+    resetHideTimer();
   };
 
   const submitPromptResponse = (response: string) => {
@@ -183,87 +243,112 @@ function ClassroomStage() {
     if (!trimmed) return;
     answerPrompt(trimmed);
     setPromptResponseText('');
+    resetHideTimer();
+  };
+
+  const handleBoardQuizAnswer: typeof answerQuiz = (...args) => {
+    answerQuiz(...args);
+    resetHideTimer();
+  };
+
+  const handleBoardTransferSubmit: typeof answerTransfer = (...args) => {
+    answerTransfer(...args);
+    resetHideTimer();
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-8rem)] md:h-[calc(100dvh-4rem)] max-w-4xl mx-auto">
+    <div
+      ref={classroomRootRef}
+      className="classroom-landscape-shell flex flex-col h-dvh w-full md:h-[calc(100dvh-4rem)] md:max-w-4xl md:mx-auto"
+    >
 
-      {/* ── Top bar ── */}
-      <div className="flex items-center gap-2 px-4 py-2">
-        <button
-          onClick={() => router.back()}
-          className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
-          title="Leave classroom"
-          aria-label="Leave classroom"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="min-w-0">
-          <h1 className="text-sm font-bold text-white truncate">{topic}</h1>
-          <p className="text-[11px] text-lyo-200/80 truncate" title={objective}>
-            Goal: {objective}
-          </p>
-          <p className="text-[10px] text-white/45">
-            {status === 'live' ? <span className="text-green-400">● class in session</span>
-              : status === 'connecting' ? 'walking to class…' : status}
-            <span className="ml-2">
-              {progressCurrent}/{progressTotal} checkpoints mastered
-            </span>
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-1">
-          {/* The single most accessible control — leftmost, largest visual
-              weight, unambiguous icon + state color, matching "Pause
-              teacher" being the most important thing a learner can reach. */}
-          <button
-            onClick={togglePause}
-            title={isPaused ? 'Resume class' : 'Pause class'}
-            aria-label={isPaused ? 'Resume class' : 'Pause class'}
-            className={cn('p-2.5 rounded-lg transition-colors',
-              isPaused
-                ? 'text-accent-gold bg-accent-gold/15 ring-1 ring-accent-gold/40'
-                : 'text-white/70 hover:text-white hover:bg-white/5')}
+      {/* ── Top bar — chrome, auto-hides like a video player's controls ── */}
+      <AnimatePresence>
+        {chromeVisible && (
+          <motion.div
+            initial={animationsOff ? false : { opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={animationsOff ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={{ duration: animationsOff ? 0 : 0.2 }}
+            className="flex items-center gap-2 px-4 py-2"
           >
-            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-          </button>
-          {/* One combined control for both audio streams (narration +
-              ambient sound effects) instead of two separate speaker-ish
-              icons that read as duplicates of each other. */}
-          <button
-            onClick={() => {
-              const nextOn = !(voiceOn || soundOn);
-              if (voiceOn !== nextOn) toggleVoice();
-              if (soundOn !== nextOn) toggleSound();
-            }}
-            title={voiceOn || soundOn ? 'Mute classroom sound' : 'Turn on classroom sound'}
-            aria-label={voiceOn || soundOn ? 'Mute classroom sound' : 'Turn on classroom sound'}
-            className={cn('p-2 rounded-lg transition-colors',
-              voiceOn || soundOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
-          >
-            {voiceOn || soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={() => setNotebookOpen(true)}
-            title="Your notebook (transcript)"
-            aria-label="Open your notebook"
-            className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <NotebookPen className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setSettingsOpen((open) => !open)}
-            title="Classroom settings"
-            aria-label="Classroom settings"
-            aria-expanded={settingsOpen}
-            className={cn(
-              'p-2 rounded-lg transition-colors',
-              settingsOpen ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5',
-            )}
-          >
-            <Settings2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={() => router.back()}
+              className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
+              title="Leave classroom"
+              aria-label="Leave classroom"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-sm font-bold text-white truncate">{topic}</h1>
+              <p className="text-[11px] text-lyo-200/80 truncate" title={objective}>
+                Goal: {objective}
+              </p>
+              <p className="text-[10px] text-white/45">
+                {status === 'live' ? <span className="text-green-400">● class in session</span>
+                  : status === 'connecting' ? 'walking to class…' : status}
+                <span className="ml-2">
+                  {progressCurrent}/{progressTotal} checkpoints mastered
+                </span>
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-1">
+              {/* The single most accessible control — leftmost, largest visual
+                  weight, unambiguous icon + state color, matching "Pause
+                  teacher" being the most important thing a learner can reach. */}
+              <button
+                onClick={() => { togglePause(); resetHideTimer(); }}
+                title={isPaused ? 'Resume class' : 'Pause class'}
+                aria-label={isPaused ? 'Resume class' : 'Pause class'}
+                className={cn('p-2.5 rounded-lg transition-colors',
+                  isPaused
+                    ? 'text-accent-gold bg-accent-gold/15 ring-1 ring-accent-gold/40'
+                    : 'text-white/70 hover:text-white hover:bg-white/5')}
+              >
+                {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+              </button>
+              {/* One combined control for both audio streams (narration +
+                  ambient sound effects) instead of two separate speaker-ish
+                  icons that read as duplicates of each other. */}
+              <button
+                onClick={() => {
+                  const nextOn = !(voiceOn || soundOn);
+                  if (voiceOn !== nextOn) toggleVoice();
+                  if (soundOn !== nextOn) toggleSound();
+                  resetHideTimer();
+                }}
+                title={voiceOn || soundOn ? 'Mute classroom sound' : 'Turn on classroom sound'}
+                aria-label={voiceOn || soundOn ? 'Mute classroom sound' : 'Turn on classroom sound'}
+                className={cn('p-2 rounded-lg transition-colors',
+                  voiceOn || soundOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
+              >
+                {voiceOn || soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => { setNotebookOpen(true); resetHideTimer(); }}
+                title="Your notebook (transcript)"
+                aria-label="Open your notebook"
+                className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <NotebookPen className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { setSettingsOpen((open) => !open); resetHideTimer(); }}
+                title="Classroom settings"
+                aria-label="Classroom settings"
+                aria-expanded={settingsOpen}
+                className={cn(
+                  'p-2 rounded-lg transition-colors',
+                  settingsOpen ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5',
+                )}
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {settingsOpen && (
         <div
@@ -364,7 +449,7 @@ function ClassroomStage() {
         </div>
       )}
 
-      {/* ── THE BOARD — the main attraction ── */}
+      {/* ── THE BOARD — the main attraction, always on screen ── */}
       <div className="relative flex-1 min-h-0 mx-4">
         <div className={cn(
           'h-full rounded-2xl border-[3px] border-[#3a3323] overflow-hidden',
@@ -378,7 +463,21 @@ function ClassroomStage() {
               last board element — often a Submit/Send button pinned to the
               bottom-right, e.g. TransferView's "Submit application" — never
               renders underneath the mascot. */}
-          <div className="h-full overflow-y-auto px-6 pt-5 pb-20 space-y-5">
+          {/* Tap-to-toggle chrome, YouTube-style: a tap that lands on the
+              scroll container itself (empty board space — not a quiz
+              button, not a scroll drag on a child) toggles the chrome. */}
+          <div
+            className="h-full overflow-y-auto px-6 pt-5 pb-20 space-y-5"
+            onClick={(e) => {
+              if (e.target !== e.currentTarget) return;
+              if (chromeVisible) {
+                if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+                setChromeVisible(false);
+              } else {
+                resetHideTimer();
+              }
+            }}
+          >
             {shownBoard.length === 0 && !waitingForScene && (
               <div className="h-full flex items-center justify-center text-white/20 text-sm italic">
                 a clean board…
@@ -388,8 +487,8 @@ function ClassroomStage() {
               <BoardElementView
                 key={el.id}
                 el={el}
-                onQuizAnswer={answerQuiz}
-                onTransferSubmit={answerTransfer}
+                onQuizAnswer={handleBoardQuizAnswer}
+                onTransferSubmit={handleBoardTransferSubmit}
                 reducedMotion={animationsOff}
               />
             ))}
@@ -417,12 +516,12 @@ function ClassroomStage() {
           </div>
         </div>
 
-        {/* board history flip */}
-        {(totalBoards > 0) && (
+        {/* board history flip — chrome, auto-hides */}
+        {(totalBoards > 0 && chromeVisible) && (
           <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/50 backdrop-blur rounded-full px-2 py-1 z-20">
             <button
               disabled={viewingBoard === 0}
-              onClick={() => viewBoard(viewingBoard === -1 ? totalBoards - 1 : Math.max(viewingBoard - 1, 0))}
+              onClick={() => { viewBoard(viewingBoard === -1 ? totalBoards - 1 : Math.max(viewingBoard - 1, 0)); resetHideTimer(); }}
               className="p-1 text-white/60 hover:text-white disabled:opacity-25"
               title="Previous board"
             >
@@ -433,7 +532,7 @@ function ClassroomStage() {
             </span>
             <button
               disabled={viewingBoard === -1}
-              onClick={() => viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1)}
+              onClick={() => { viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1); resetHideTimer(); }}
               className="p-1 text-white/60 hover:text-white disabled:opacity-25"
               title="Forward"
             >
@@ -475,8 +574,17 @@ function ClassroomStage() {
         </motion.div>
       </div>
 
-      {/* ── Teacher's voice — one live caption line ── */}
-      <div className="px-6 pt-3 pb-1 min-h-[3.4rem]">
+      {/* ── Teacher's voice — permanent, never hides with the rest of the
+          chrome. The Teacher's illustrated avatar sits here as a small
+          badge so it stays on screen even once the cast row (which is
+          where it normally lives) auto-hides. ── */}
+      <div className="px-6 pt-3 pb-1 min-h-[3.4rem] flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={teacherVariant.image}
+          alt={teacherVariant.name}
+          className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-white/10"
+        />
         <AnimatePresence mode="wait">
           {caption && (
             <motion.p
@@ -487,7 +595,7 @@ function ClassroomStage() {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              className="text-[15px] leading-snug text-white/90 text-center"
+              className="text-[15px] leading-snug text-white/90 text-left flex-1"
             >
               <span className={cn('font-bold mr-2',
                 CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
@@ -517,7 +625,7 @@ function ClassroomStage() {
               {prompt.options.map((opt) => (
                 <button
                   key={opt}
-                  onClick={() => answerPrompt(opt)}
+                  onClick={() => { answerPrompt(opt); resetHideTimer(); }}
                   className="px-4 py-2 rounded-full text-sm font-semibold bg-accent-gold/15 border border-accent-gold/40 text-white hover:bg-accent-gold/30 transition-colors"
                 >
                   {opt}
@@ -564,126 +672,148 @@ function ClassroomStage() {
         )}
       </AnimatePresence>
 
-      {/* ── The class, seated ── */}
-      <div className="flex items-end justify-center gap-5 px-4 pt-1 pb-2">
-        {visibleCast.map((member, i) => {
-          const speaking = activeSpeaker === member.name;
-          const isTeacher = member.name === 'Teacher';
-          const displayName = isTeacher ? teacherVariant.name : member.name;
-          const avatarSrc = isTeacher ? teacherVariant.image : member.avatar;
-          return (
-            <motion.div
-              key={member.name}
-              className="flex flex-col items-center gap-0.5"
-              animate={{ y: speaking ? -4 : 0 }}
-            >
-              <motion.div
-                className={cn(
-                  'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow overflow-hidden',
-                  speaking ? `${member.accent.split(' ')[0]} shadow-[0_0_18px_rgba(139,92,246,0.45)]` : 'ring-white/10',
-                )}
-                animate={speaking
-                  ? { scale: [1, 1.07, 1] }
-                  : { y: [0, i % 2 === 0 ? 1.5 : -1.5, 0] }}
-                transition={speaking
-                  ? { duration: 0.7, repeat: Infinity }
-                  : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                {avatarSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={avatarSrc}
-                    alt={displayName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  member.emoji
-                )}
-              </motion.div>
-              <span className={cn('text-[9.5px] font-bold',
-                speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
-                {displayName}
-              </span>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* ── Your desk ── */}
-      <div className="px-4 pb-3 pt-1 space-y-2">
-        {canContinue && (
-          <button
-            onClick={continueLesson}
-            className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all"
+      {/* ── The class, seated — chrome, auto-hides ── */}
+      <AnimatePresence>
+        {chromeVisible && (
+          <motion.div
+            initial={animationsOff ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={animationsOff ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: animationsOff ? 0 : 0.2 }}
+            className="flex items-end justify-center gap-5 px-4 pt-1 pb-2 overflow-hidden"
           >
-            {continueLabel} →
-          </button>
-        )}
-        <div className="flex items-center gap-2">
-          <div className="relative shrink-0">
-            <button
-              onClick={() => setHintMenuOpen((open) => !open)}
-              aria-expanded={hintMenuOpen}
-              aria-haspopup="menu"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
-            >
-              <HelpCircle className="w-3.5 h-3.5" /> Get help
-            </button>
-            {hintMenuOpen && (
-              <div
-                role="menu"
-                aria-label="Choose a hint level"
-                className="absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden rounded-xl border border-white/15 bg-[#111a38] p-1 shadow-2xl"
-              >
-                {hintOptions.map((option) => (
-                  <button
-                    key={option.level}
-                    role="menuitem"
-                    onClick={() => chooseHint(option.level)}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-xs text-white/80 hover:bg-white/10 hover:text-white"
+            {visibleCast.map((member, i) => {
+              const speaking = activeSpeaker === member.name;
+              const isTeacher = member.name === 'Teacher';
+              const displayName = isTeacher ? teacherVariant.name : member.name;
+              const avatarSrc = isTeacher ? teacherVariant.image : member.avatar;
+              return (
+                <motion.div
+                  key={member.name}
+                  className="flex flex-col items-center gap-0.5"
+                  animate={{ y: speaking ? -4 : 0 }}
+                >
+                  <motion.div
+                    className={cn(
+                      'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow overflow-hidden',
+                      speaking ? `${member.accent.split(' ')[0]} shadow-[0_0_18px_rgba(139,92,246,0.45)]` : 'ring-white/10',
+                    )}
+                    animate={speaking
+                      ? { scale: [1, 1.07, 1] }
+                      : { y: [0, i % 2 === 0 ? 1.5 : -1.5, 0] }}
+                    transition={speaking
+                      ? { duration: 0.7, repeat: Infinity }
+                      : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
                   >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => signal('too_easy')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0"
-          >
-            <Zap className="w-3.5 h-3.5" /> Harder case
-          </button>
+                    {avatarSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarSrc}
+                        alt={displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      member.emoji
+                    )}
+                  </motion.div>
+                  <span className={cn('text-[9.5px] font-bold',
+                    speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
+                    {displayName}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {handRaised ? (
-            <div className="flex-1 flex gap-2">
-              <input
-                autoFocus
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
-                placeholder="Ask the teacher…"
-                aria-label="Ask the teacher a question"
-                className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50"
-              />
+      {/* ── Your desk — chrome, auto-hides (a live prompt/quiz forces it
+          back via resetHideTimer's `keepAlive` check, so the necessary
+          buttons are still reachable at a checkpoint) ── */}
+      <AnimatePresence>
+        {chromeVisible && (
+          <motion.div
+            initial={animationsOff ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={animationsOff ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: animationsOff ? 0 : 0.2 }}
+            className="px-4 pb-3 pt-1 space-y-2 overflow-hidden"
+          >
+            {canContinue && (
               <button
-                onClick={submitQuestion}
-                disabled={!question.trim()}
-                className="px-3.5 rounded-full bg-gradient-to-r from-lyo-600 to-accent-purple text-white disabled:opacity-40"
+                onClick={() => { continueLesson(); resetHideTimer(); }}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all"
               >
-                <Send className="w-3.5 h-3.5" />
+                {continueLabel} →
               </button>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => { setHintMenuOpen((open) => !open); resetHideTimer(); }}
+                  aria-expanded={hintMenuOpen}
+                  aria-haspopup="menu"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" /> Get help
+                </button>
+                {hintMenuOpen && (
+                  <div
+                    role="menu"
+                    aria-label="Choose a hint level"
+                    className="absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden rounded-xl border border-white/15 bg-[#111a38] p-1 shadow-2xl"
+                  >
+                    {hintOptions.map((option) => (
+                      <button
+                        key={option.level}
+                        role="menuitem"
+                        onClick={() => chooseHint(option.level)}
+                        className="block w-full rounded-lg px-3 py-2 text-left text-xs text-white/80 hover:bg-white/10 hover:text-white"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => { signal('too_easy'); resetHideTimer(); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0"
+              >
+                <Zap className="w-3.5 h-3.5" /> Harder case
+              </button>
+
+              {handRaised ? (
+                <div className="flex-1 flex gap-2">
+                  <input
+                    autoFocus
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
+                    placeholder="Ask the teacher…"
+                    aria-label="Ask the teacher a question"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-lyo-500/50"
+                  />
+                  <button
+                    onClick={submitQuestion}
+                    disabled={!question.trim()}
+                    className="px-3.5 rounded-full bg-gradient-to-r from-lyo-600 to-accent-purple text-white disabled:opacity-40"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setHandRaised(true); resetHideTimer(); }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-accent-gold bg-accent-gold/10 border border-accent-gold/25 hover:bg-accent-gold/20 transition-colors"
+                >
+                  <Hand className="w-3.5 h-3.5" /> Raise your hand
+                </button>
+              )}
             </div>
-          ) : (
-            <button
-              onClick={() => setHandRaised(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-accent-gold bg-accent-gold/10 border border-accent-gold/25 hover:bg-accent-gold/20 transition-colors"
-            >
-              <Hand className="w-3.5 h-3.5" /> Raise your hand
-            </button>
-          )}
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Notebook drawer — the transcript, a byproduct ── */}
       <AnimatePresence>
