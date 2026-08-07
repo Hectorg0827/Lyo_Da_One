@@ -99,6 +99,48 @@ struct ActiveLessonView: View {
     @State private var shakeOffset: CGFloat = 0.0
     @State private var isBoardTappedToComplete = false
 
+    // Netflix/YouTube-style chrome auto-hide — mirrors the web classroom's
+    // `chromeVisible`/`resetHideTimer` (see web/src/app/(main)/classroom/page.tsx).
+    // Everything except the board, the dialogue card, and the Teacher's
+    // portrait hides itself after 3s of no interaction; a tap on the
+    // background brings it back.
+    @State private var chromeVisible: Bool = true
+    @State private var chromeHideTask: Task<Void, Never>? = nil
+
+    /// Restarts the 3s auto-hide countdown and makes chrome visible right
+    /// away. Refuses to schedule a hide while the current step still needs
+    /// an answer — `requiresInteraction && !isInteractionCompleted` is the
+    /// same checkpoint signal `goToNextScene()` already uses to lock swipe
+    /// navigation, reused here so a quiz/prompt never gets hidden mid-task.
+    private func resetChromeTimer() {
+        chromeHideTask?.cancel()
+        withAnimation(.easeOut(duration: 0.2)) {
+            chromeVisible = true
+        }
+        guard !(requiresInteraction && !isInteractionCompleted) else { return }
+        chromeHideTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                chromeVisible = false
+            }
+        }
+    }
+
+    /// Tap-to-toggle, YouTube-style: if chrome is already up, a tap hides
+    /// it immediately; otherwise it brings chrome back and restarts the
+    /// countdown.
+    private func toggleChrome() {
+        if chromeVisible {
+            chromeHideTask?.cancel()
+            withAnimation(.easeOut(duration: 0.2)) {
+                chromeVisible = false
+            }
+        } else {
+            resetChromeTimer()
+        }
+    }
+
     private var currentStep: LessonStep? {
         steps.indices.contains(currentIndex) ? steps[currentIndex] : nil
     }
@@ -160,33 +202,67 @@ struct ActiveLessonView: View {
             // Falling floating dust particles for immersive learning environment
             ClassroomFloatingParticlesView()
 
+            // Tap-to-toggle chrome, YouTube-style — scoped to the background
+            // layers only (this invisible catcher sits behind everything in
+            // the ZStack) so it never fights LyoBoardView's own tap gesture
+            // or the root DragGesture's swipe-to-advance.
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { toggleChrome() }
+
             VStack(spacing: 0) {
-                // ZONE 1: Top Header
-                ClassroomHeaderView(
-                    courseTitle: header.title,
-                    currentSceneText: "Warm-Up • Scene \(currentIndex + 1) of \(steps.count)",
-                    progress: progress,
-                    onBack: onBack,
-                    onMapTap: {
-                        HapticManager.shared.playQuizSelection()
-                        showLessonMap = true
-                    }
-                )
-                .padding(.horizontal, ClassroomTokens.pagePadding)
-                .padding(.top, 8)
+                // ZONE 1: Top Header — chrome, auto-hides
+                if chromeVisible {
+                    ClassroomHeaderView(
+                        courseTitle: header.title,
+                        currentSceneText: "Warm-Up • Scene \(currentIndex + 1) of \(steps.count)",
+                        progress: progress,
+                        onBack: onBack,
+                        onMapTap: {
+                            HapticManager.shared.playQuizSelection()
+                            showLessonMap = true
+                            resetChromeTimer()
+                        }
+                    )
+                    .padding(.horizontal, ClassroomTokens.pagePadding)
+                    .padding(.top, 8)
+                    .transition(.opacity)
+                }
 
                 if let step = currentStep {
                     VStack(spacing: 12) {
-                        // ZONE 2: Classroom Stage & Avatars
-                        ClassroomStageView(
-                            activeSpeaker: step.speakerName,
-                            teacherImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)",
-                            teacherName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName
-                        )
+                        // ZONE 2: Classroom Stage & Avatars.
+                        // The Teacher's own portrait/status is permanent —
+                        // per the product decision that both the Teacher's
+                        // illustrated avatar and Lyo stay on screen at all
+                        // times. Only the classmate row hides with the rest
+                        // of the chrome.
+                        HStack(spacing: 12) {
+                            ClassroomTeacherStage(
+                                activeSpeaker: step.speakerName,
+                                teacherImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)",
+                                teacherName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName
+                            )
+
+                            Spacer()
+
+                            if chromeVisible {
+                                HStack(spacing: -10) {
+                                    ClassmateAvatarStage(name: "Maya", imageName: "student_genius", activeSpeaker: step.speakerName, status: "curious")
+                                    ClassmateAvatarStage(name: "Sam", imageName: "student_clever", activeSpeaker: step.speakerName, status: "thinking")
+                                    ClassmateAvatarStage(name: "Rio", imageName: "student_funny", activeSpeaker: step.speakerName, status: "grinning")
+                                    ClassmateAvatarStage(name: "Zara", imageName: "student_dumb", activeSpeaker: step.speakerName, status: "confused")
+                                }
+                                .transition(.opacity)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.02), in: RoundedRectangle(cornerRadius: 16))
                         .padding(.horizontal, ClassroomTokens.pagePadding)
                         .frame(height: 70)
 
-                        // ZONE 3: Lyo Board (Interactive centerpiece)
+                        // ZONE 3: Lyo Board (Interactive centerpiece) — permanent
                         LyoBoardView(
                             step: step,
                             quizSelections: quizSelections,
@@ -196,6 +272,7 @@ struct ActiveLessonView: View {
                             onOptionSelected: { component, option in
                                 quizSelections[component.id] = option.id
                                 onQuizAnswer(component, option)
+                                resetChromeTimer()
                                 unlockAndAdvanceSoftly(step)
                             },
                             onPromptSubmit: { response in
@@ -204,6 +281,7 @@ struct ActiveLessonView: View {
                                 promptResponses[step.id] = trimmed
                                 reflectionText = ""
                                 onPromptAnswer(step, trimmed)
+                                resetChromeTimer()
                                 unlockAndAdvanceSoftly(step)
                             }
                         )
@@ -213,9 +291,10 @@ struct ActiveLessonView: View {
                             withAnimation(.easeOut(duration: 0.2)) {
                                 isBoardTappedToComplete = true
                             }
+                            resetChromeTimer()
                         }
 
-                        // ZONE 4: Dialogue Card
+                        // ZONE 4: Dialogue Card — permanent (the "teacher bubble")
                         ClassroomDialogueCard(
                             speakerName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName,
                             speakerBadge: step.speakerBadge,
@@ -242,44 +321,58 @@ struct ActiveLessonView: View {
                     Spacer()
                 }
 
-                // Scene dots & Swipe indicator
-                HStack(spacing: 6) {
-                    ForEach(0..<steps.count, id: \.self) { idx in
-                        Circle()
-                            .fill(idx == currentIndex ? ClassroomTokens.accent : Color.white.opacity(0.15))
-                            .frame(width: idx == currentIndex ? 8 : 6, height: idx == currentIndex ? 8 : 6)
-                            .animation(.spring(), value: currentIndex)
+                // Scene dots & Swipe indicator — chrome, auto-hides
+                if chromeVisible {
+                    HStack(spacing: 6) {
+                        ForEach(0..<steps.count, id: \.self) { idx in
+                            Circle()
+                                .fill(idx == currentIndex ? ClassroomTokens.accent : Color.white.opacity(0.15))
+                                .frame(width: idx == currentIndex ? 8 : 6, height: idx == currentIndex ? 8 : 6)
+                                .animation(.spring(), value: currentIndex)
+                        }
                     }
-                }
-                .padding(.vertical, 8)
+                    .padding(.vertical, 8)
+                    .transition(.opacity)
 
-                if showSwipeNudge {
-                    Text("Choose an answer to continue")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.red.opacity(0.85))
-                        .transition(.opacity.combined(with: .scale))
-                        .padding(.bottom, 4)
-                } else {
-                    Text("Swipe left to continue")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(ClassroomTokens.textTertiary)
-                        .padding(.bottom, 4)
-                }
+                    if showSwipeNudge {
+                        Text("Choose an answer to continue")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                            .transition(.opacity.combined(with: .scale))
+                            .padding(.bottom, 4)
+                    } else {
+                        Text("Swipe left to continue")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(ClassroomTokens.textTertiary)
+                            .padding(.bottom, 4)
+                            .transition(.opacity)
+                    }
 
-                // ZONE 5: Bottom Dock (Sleek Lens Toolbar)
-                LyoLensDock(
-                    onLensTap: { tab in
-                        HapticManager.shared.playQuizSelection()
-                        activeLensTab = tab
-                        showLyoLens = true
-                    },
-                    onMicTap: onMic
-                )
-                .padding(.horizontal, ClassroomTokens.pagePadding)
-                .padding(.bottom, 12)
+                    // ZONE 5: Bottom Dock (Sleek Lens Toolbar) — chrome, auto-hides
+                    LyoLensDock(
+                        onLensTap: { tab in
+                            HapticManager.shared.playQuizSelection()
+                            activeLensTab = tab
+                            showLyoLens = true
+                            resetChromeTimer()
+                        },
+                        onMicTap: {
+                            onMic()
+                            resetChromeTimer()
+                        }
+                    )
+                    .padding(.horizontal, ClassroomTokens.pagePadding)
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
+                }
             }
         }
         .preferredColorScheme(.dark)
+        .persistentSystemOverlays(.hidden)
+        .onAppear { resetChromeTimer() }
+        .onChange(of: currentIndex) { _, _ in resetChromeTimer() }
+        .onChange(of: quizSelections) { _, _ in resetChromeTimer() }
+        .onChange(of: promptResponses) { _, _ in resetChromeTimer() }
         .gesture(
             DragGesture()
                 .onEnded { gesture in
@@ -457,47 +550,35 @@ struct ClassroomHeaderView: View {
 
 // MARK: - Zone 2: Living Stage View
 
+/// Just the Teacher's own portrait/status — permanent, never hides with the
+/// rest of the chrome (the classmate row that used to live alongside it in
+/// `ClassroomStageView` is now composed separately in `ActiveLessonView.body`
+/// so it can hide independently as chrome auto-hides).
 @MainActor
-struct ClassroomStageView: View {
+struct ClassroomTeacherStage: View {
     let activeSpeaker: String
     let teacherImageName: String
     let teacherName: String
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Teacher standalone png representation
-            HStack(spacing: 8) {
-                Image(teacherImageName)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 54)
-                    .shadow(color: ClassroomTokens.accentGlow.opacity(activeSpeaker == "Teacher" ? 0.6 : 0.0), radius: 10)
-                    .scaleEffect(activeSpeaker == "Teacher" ? 1.08 : 0.95)
-                    .animation(.spring(), value: activeSpeaker)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(teacherName)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text(activeSpeaker == "Teacher" ? "explaining live" : "observing class")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(activeSpeaker == "Teacher" ? ClassroomTokens.accent : ClassroomTokens.textTertiary)
-                }
-            }
+        HStack(spacing: 8) {
+            Image(teacherImageName)
+                .resizable()
+                .scaledToFit()
+                .frame(height: 54)
+                .shadow(color: ClassroomTokens.accentGlow.opacity(activeSpeaker == "Teacher" ? 0.6 : 0.0), radius: 10)
+                .scaleEffect(activeSpeaker == "Teacher" ? 1.08 : 0.95)
+                .animation(.spring(), value: activeSpeaker)
 
-            Spacer()
-
-            // Standing Classmates avatars row
-            HStack(spacing: -10) {
-                ClassmateAvatarStage(name: "Maya", imageName: "student_genius", activeSpeaker: activeSpeaker, status: "curious")
-                ClassmateAvatarStage(name: "Sam", imageName: "student_clever", activeSpeaker: activeSpeaker, status: "thinking")
-                ClassmateAvatarStage(name: "Rio", imageName: "student_funny", activeSpeaker: activeSpeaker, status: "grinning")
-                ClassmateAvatarStage(name: "Zara", imageName: "student_dumb", activeSpeaker: activeSpeaker, status: "confused")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(teacherName)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text(activeSpeaker == "Teacher" ? "explaining live" : "observing class")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(activeSpeaker == "Teacher" ? ClassroomTokens.accent : ClassroomTokens.textTertiary)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Color.white.opacity(0.02), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
