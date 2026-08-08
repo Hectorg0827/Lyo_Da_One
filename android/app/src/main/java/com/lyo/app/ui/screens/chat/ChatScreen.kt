@@ -40,7 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
@@ -78,6 +78,7 @@ import coil.compose.AsyncImage
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
+import com.lyo.app.data.api.ChatMediaRef
 import com.lyo.app.data.api.CreateAiConversationRequest
 import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.theme.Background
@@ -86,6 +87,7 @@ import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
@@ -97,17 +99,28 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val MAX_CHAT_CHARS = 4_000
-private const val MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024
+private const val MAX_CHAT_ATTACHMENT_BYTES = 10L * 1024 * 1024
+private const val MAX_CHAT_ATTACHMENT_TOTAL_BYTES = 20L * 1024 * 1024
+private const val MAX_CHAT_ATTACHMENTS = 4
 private const val ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f
-private val SupportedChatImageTypes = setOf(
+private val SupportedChatAttachmentTypes = setOf(
     "image/jpeg",
     "image/png",
     "image/webp",
     "image/heic",
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "application/json",
 )
 
-private val ImageMarkdown = Regex("""!\[([^]]*)]\((https?://[^)]+)\)""")
-private val FileMarkdown = Regex("""\[📎 ([^]]+)]\((https?://[^)]+)\)""")
+private val ImageMarkdown = Regex(
+    """!\[([^]]*)]\((https?://[^)]*/api/v1/media/file/chat/[^)]+)\)""",
+)
+private val FileMarkdown = Regex(
+    """\[📎 ([^]]+)]\((https?://[^)]*/api/v1/media/file/chat/[^)]+)\)""",
+)
 
 data class ChatMsg(
     val role: String,
@@ -115,9 +128,12 @@ data class ChatMsg(
     val id: String = UUID.randomUUID().toString(),
 )
 
-private data class PendingImageAttachment(
+private data class PendingChatAttachment(
     val name: String,
     val url: String,
+    val mimeType: String,
+    val size: Long,
+    val isImage: Boolean,
 )
 
 private data class LinkedAttachment(
@@ -128,7 +144,7 @@ private data class LinkedAttachment(
 
 private data class ParsedChatContent(
     val text: String,
-    val attachment: LinkedAttachment?,
+    val attachments: List<LinkedAttachment>,
 )
 
 private val Suggestions = listOf(
@@ -146,7 +162,7 @@ fun ChatScreen(nav: NavHostController) {
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
-    var pendingAttachment by remember { mutableStateOf<PendingImageAttachment?>(null) }
+    val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
@@ -214,20 +230,38 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent(),
-    ) { uri ->
-        if (uri == null || uploadingAttachment || isStreaming) return@rememberLauncherForActivityResult
+    val attachmentPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isEmpty() || uploadingAttachment || isStreaming) {
+            return@rememberLauncherForActivityResult
+        }
+        val remaining = MAX_CHAT_ATTACHMENTS - pendingAttachments.size
+        if (remaining <= 0) {
+            inputError = "You can attach up to four files."
+            return@rememberLauncherForActivityResult
+        }
+        if (uris.size > remaining) {
+            inputError = "Only $remaining more attachment${if (remaining == 1) "" else "s"} can be added."
+        } else {
+            inputError = null
+        }
 
         uploadingAttachment = true
-        inputError = null
         scope.launch {
-            runCatching {
-                uploadChatImage(context, uri)
-            }.onSuccess { attachment ->
-                pendingAttachment = attachment
-            }.onFailure { error ->
-                inputError = error.message ?: "The image could not be uploaded."
+            var totalBytes = pendingAttachments.sumOf { it.size }
+            for (uri in uris.take(remaining)) {
+                try {
+                    val attachment = uploadChatAttachment(
+                        context = context,
+                        uri = uri,
+                        remainingTotalBytes = MAX_CHAT_ATTACHMENT_TOTAL_BYTES - totalBytes,
+                    )
+                    pendingAttachments.add(attachment)
+                    totalBytes += attachment.size
+                } catch (error: Exception) {
+                    inputError = error.message ?: "The attachment could not be uploaded."
+                }
             }
             uploadingAttachment = false
         }
@@ -235,22 +269,24 @@ fun ChatScreen(nav: NavHostController) {
 
     fun send(raw: String) {
         val trimmed = raw.trim()
-        val attachment = pendingAttachment
-        if ((trimmed.isEmpty() && attachment == null) || isStreaming || uploadingAttachment) return
+        val attachments = pendingAttachments.toList()
+        if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
 
-        val content = buildChatContent(trimmed, attachment)
+        val content = buildChatContent(trimmed, attachments)
         val clientMessageId = UUID.randomUUID().toString()
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
         messages.add(ChatMsg(role = "assistant", content = ""))
         input = ""
-        pendingAttachment = null
+        pendingAttachments.clear()
         inputError = null
         isStreaming = true
 
         scope.launch {
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
-                    CreateAiConversationRequest(title = trimmed.ifBlank { attachment?.name.orEmpty() }.take(80)),
+                    CreateAiConversationRequest(
+                        title = trimmed.ifBlank { attachments.firstOrNull()?.name.orEmpty() }.take(80),
+                    ),
                 ).id
             }.getOrElse {
                 messages[messages.lastIndex] = messages.last().copy(
@@ -262,7 +298,20 @@ fun ChatScreen(nav: NavHostController) {
             activeConversationId = conversationId
 
             runCatching {
-                ChatStreamClient.stream(content, conversationId, clientMessageId).collect { event ->
+                ChatStreamClient.stream(
+                    text = trimmed,
+                    conversationId = conversationId,
+                    clientMessageId = clientMessageId,
+                    media = attachments.map { attachment ->
+                        ChatMediaRef(
+                            modality = if (attachment.isImage) "IMAGE" else "DOCUMENT",
+                            uri = attachment.url,
+                            mimeType = attachment.mimeType,
+                            name = attachment.name,
+                            sizeBytes = attachment.size,
+                        )
+                    },
+                ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
                             val last = messages.last()
@@ -315,7 +364,7 @@ fun ChatScreen(nav: NavHostController) {
 
         val parsed = parseChatContent(message.content)
         val spokenText = parsed.text.ifBlank {
-            parsed.attachment?.let { "Image attachment: ${it.name}" }.orEmpty()
+            parsed.attachments.joinToString(", ") { "Attachment: ${it.name}" }
         }
         if (spokenText.isBlank()) return
 
@@ -362,7 +411,7 @@ fun ChatScreen(nav: NavHostController) {
                     textToSpeech?.stop()
                     speakingMessageId = null
                     activeConversationId = null
-                    pendingAttachment = null
+                    pendingAttachments.clear()
                     inputError = null
                     messages.clear()
                 },
@@ -441,10 +490,10 @@ fun ChatScreen(nav: NavHostController) {
             )
         }
 
-        pendingAttachment?.let { attachment ->
+        pendingAttachments.forEach { attachment ->
             PendingAttachmentChip(
                 attachment = attachment,
-                onRemove = { pendingAttachment = null },
+                onRemove = { pendingAttachments.remove(attachment) },
             )
         }
 
@@ -456,8 +505,17 @@ fun ChatScreen(nav: NavHostController) {
                 .padding(horizontal = 8.dp, vertical = 8.dp),
         ) {
             IconButton(
-                onClick = { imagePicker.launch("image/*") },
-                enabled = !isStreaming && !uploadingAttachment,
+                onClick = {
+                    attachmentPicker.launch(
+                        arrayOf(
+                            "image/jpeg", "image/png", "image/webp", "image/heic",
+                            "application/pdf", "text/plain", "text/markdown", "text/csv",
+                            "application/json",
+                        ),
+                    )
+                },
+                enabled = !isStreaming && !uploadingAttachment &&
+                    pendingAttachments.size < MAX_CHAT_ATTACHMENTS,
                 modifier = Modifier.size(44.dp),
             ) {
                 if (uploadingAttachment) {
@@ -468,8 +526,8 @@ fun ChatScreen(nav: NavHostController) {
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Default.AddPhotoAlternate,
-                        contentDescription = "Attach image",
+                        imageVector = Icons.Default.AttachFile,
+                        contentDescription = "Attach an image or document",
                         tint = TextSecondary,
                     )
                 }
@@ -525,7 +583,7 @@ fun ChatScreen(nav: NavHostController) {
                 onClick = { send(input) },
                 enabled = !isStreaming &&
                     !uploadingAttachment &&
-                    (input.isNotBlank() || pendingAttachment != null),
+                    (input.isNotBlank() || pendingAttachments.isNotEmpty()),
                 modifier = Modifier
                     .padding(start = 6.dp)
                     .size(48.dp)
@@ -547,7 +605,7 @@ fun ChatScreen(nav: NavHostController) {
 
 @Composable
 private fun PendingAttachmentChip(
-    attachment: PendingImageAttachment,
+    attachment: PendingChatAttachment,
     onRemove: () -> Unit,
 ) {
     Row(
@@ -558,14 +616,23 @@ private fun PendingAttachmentChip(
             .background(Surface)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        AsyncImage(
-            model = attachment.url,
-            contentDescription = attachment.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        )
+        if (attachment.isImage) {
+            AsyncImage(
+                model = attachment.url,
+                contentDescription = attachment.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.InsertDriveFile,
+                contentDescription = null,
+                tint = LyoPurple,
+                modifier = Modifier.size(32.dp),
+            )
+        }
         Text(
             text = attachment.name,
             style = MaterialTheme.typography.bodySmall,
@@ -577,7 +644,7 @@ private fun PendingAttachmentChip(
         IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Remove image",
+                contentDescription = "Remove attachment",
                 tint = TextSecondary,
             )
         }
@@ -643,7 +710,7 @@ private fun MessageBubble(
                     modifier = Modifier.alpha(blinkAlpha),
                 )
             } else {
-                parsed.attachment?.let { attachment ->
+                parsed.attachments.forEachIndexed { index, attachment ->
                     if (attachment.isImage) {
                         AsyncImage(
                             model = attachment.url,
@@ -652,6 +719,7 @@ private fun MessageBubble(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 120.dp, max = 240.dp)
+                                .padding(top = if (index == 0) 0.dp else 8.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable { openAttachment(context, attachment.url) },
                         )
@@ -663,6 +731,8 @@ private fun MessageBubble(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color.White.copy(alpha = 0.08f))
                                 .clickable { openAttachment(context, attachment.url) }
+                                .fillMaxWidth()
+                                .padding(top = if (index == 0) 0.dp else 8.dp)
                                 .padding(10.dp),
                         ) {
                             Icon(
@@ -686,7 +756,7 @@ private fun MessageBubble(
                         text = parsed.text,
                         style = MaterialTheme.typography.bodyLarge,
                         color = if (isUser) Color.White else TextPrimary,
-                        modifier = Modifier.padding(top = if (parsed.attachment != null) 8.dp else 0.dp),
+                        modifier = Modifier.padding(top = if (parsed.attachments.isNotEmpty()) 8.dp else 0.dp),
                     )
                 }
 
@@ -711,27 +781,45 @@ private fun MessageBubble(
     }
 }
 
-private suspend fun uploadChatImage(
+private suspend fun uploadChatAttachment(
     context: Context,
     uri: Uri,
-): PendingImageAttachment {
+    remainingTotalBytes: Long,
+): PendingChatAttachment {
     val resolver = context.contentResolver
-    val contentType = resolver.getType(uri)?.lowercase()
-        ?: throw IllegalArgumentException("The selected image type could not be identified.")
-    if (contentType !in SupportedChatImageTypes) {
-        throw IllegalArgumentException("Choose a JPEG, PNG, WebP, or HEIC image.")
+    val displayName = attachmentDisplayName(context, uri)
+    val contentType = chatAttachmentMimeType(resolver.getType(uri), displayName)
+        ?: throw IllegalArgumentException("Choose an image, PDF, TXT, Markdown, CSV, or JSON file.")
+    if (contentType !in SupportedChatAttachmentTypes) {
+        throw IllegalArgumentException("That file type is not supported in chat.")
+    }
+    if (remainingTotalBytes <= 0) {
+        throw IllegalArgumentException("Attachments may total at most 20MB.")
     }
 
-    val displayName = attachmentDisplayName(context, uri)
+    val byteLimit = minOf(MAX_CHAT_ATTACHMENT_BYTES, remainingTotalBytes)
     val bytes = withContext(Dispatchers.IO) {
         resolver.openInputStream(uri)?.use { stream ->
-            val data = stream.readBytes()
-            if (data.size > MAX_CHAT_IMAGE_BYTES) {
-                throw IllegalArgumentException("Image too large. Maximum size is 10MB.")
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > byteLimit) {
+                    val message = if (total > MAX_CHAT_ATTACHMENT_BYTES) {
+                        "Each attachment must be 10MB or smaller."
+                    } else {
+                        "Attachments may total at most 20MB."
+                    }
+                    throw IllegalArgumentException(message)
+                }
+                output.write(buffer, 0, read)
             }
-            data
+            output.toByteArray()
         }
-    } ?: throw IllegalStateException("The selected image could not be read.")
+    } ?: throw IllegalStateException("The selected attachment could not be read.")
 
     val file = MultipartBody.Part.createFormData(
         "file",
@@ -743,8 +831,31 @@ private suspend fun uploadChatImage(
         folder = "chat".toRequestBody("text/plain".toMediaType()),
     )
     val url = uploaded.url
-        ?: throw IllegalStateException("The media service did not return an image URL.")
-    return PendingImageAttachment(displayName, url)
+        ?: throw IllegalStateException("The media service did not return a file URL.")
+    return PendingChatAttachment(
+        name = displayName,
+        url = url,
+        mimeType = contentType,
+        size = bytes.size.toLong(),
+        isImage = contentType.startsWith("image/"),
+    )
+}
+
+private fun chatAttachmentMimeType(reportedType: String?, displayName: String): String? {
+    val normalized = reportedType?.substringBefore(';')?.trim()?.lowercase()
+    if (normalized in SupportedChatAttachmentTypes) return normalized
+    return when (displayName.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "heic" -> "image/heic"
+        "pdf" -> "application/pdf"
+        "txt" -> "text/plain"
+        "md", "markdown" -> "text/markdown"
+        "csv" -> "text/csv"
+        "json" -> "application/json"
+        else -> null
+    }
 }
 
 private fun attachmentDisplayName(context: Context, uri: Uri): String {
@@ -760,44 +871,53 @@ private fun attachmentDisplayName(context: Context, uri: Uri): String {
         ?.replace("]", "")
         ?.replace("(", "")
         ?.replace(")", "")
-        ?: "chat-image.jpg"
+        ?.take(120)
+        ?: "attachment"
 }
 
 private fun buildChatContent(
     text: String,
-    attachment: PendingImageAttachment?,
+    attachments: List<PendingChatAttachment>,
 ): String {
-    if (attachment == null) return text
-    val markdown = "![${attachment.name}](${attachment.url})"
-    return if (text.isBlank()) markdown else "$text\n\n$markdown"
+    val parts = mutableListOf<String>()
+    if (text.isNotBlank()) parts.add(text)
+    attachments.forEach { attachment ->
+        parts.add(
+            if (attachment.isImage) "![${attachment.name}](${attachment.url})"
+            else "[📎 ${attachment.name}](${attachment.url})",
+        )
+    }
+    return parts.joinToString("\n\n")
 }
 
 private fun parseChatContent(content: String): ParsedChatContent {
-    val imageMatch = ImageMarkdown.find(content)
-    if (imageMatch != null) {
-        return ParsedChatContent(
-            text = content.replace(imageMatch.value, "").trim(),
-            attachment = LinkedAttachment(
-                name = imageMatch.groupValues[1].ifBlank { "Image" },
-                url = imageMatch.groupValues[2],
+    val attachments = mutableListOf<Pair<Int, LinkedAttachment>>()
+    ImageMarkdown.findAll(content).forEach { match ->
+        attachments.add(
+            match.range.first to LinkedAttachment(
+                name = match.groupValues[1].ifBlank { "Image" },
+                url = match.groupValues[2],
                 isImage = true,
             ),
         )
     }
-
-    val fileMatch = FileMarkdown.find(content)
-    if (fileMatch != null) {
-        return ParsedChatContent(
-            text = content.replace(fileMatch.value, "").trim(),
-            attachment = LinkedAttachment(
-                name = fileMatch.groupValues[1],
-                url = fileMatch.groupValues[2],
+    FileMarkdown.findAll(content).forEach { match ->
+        attachments.add(
+            match.range.first to LinkedAttachment(
+                name = match.groupValues[1],
+                url = match.groupValues[2],
                 isImage = false,
             ),
         )
     }
-
-    return ParsedChatContent(text = content, attachment = null)
+    val text = content
+        .replace(ImageMarkdown, "")
+        .replace(FileMarkdown, "")
+        .trim()
+    return ParsedChatContent(
+        text = text,
+        attachments = attachments.sortedBy { it.first }.map { it.second },
+    )
 }
 
 private fun openAttachment(context: Context, url: String) {

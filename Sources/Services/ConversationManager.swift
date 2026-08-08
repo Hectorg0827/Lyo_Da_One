@@ -101,6 +101,9 @@ class ConversationManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let conversationsKey = "saved_conversations"
     private let currentConversationKey = "current_conversation_id"
+    private static let attachmentPattern = try! NSRegularExpression(
+        pattern: #"!\[([^\]]*)\]\((https?://[^)]*/api/v1/media/file/chat/[^)]+)\)|\[📎 ([^\]]+)\]\((https?://[^)]*/api/v1/media/file/chat/[^)]+)\)"#
+    )
     
     private init() {
         loadConversations()
@@ -310,11 +313,15 @@ class ConversationManager: ObservableObject {
             )
             let detail: ServerConversationDetail = try await NetworkClient.shared.request(endpoint)
             let messages = detail.messages.map { message in
-                MultimodalMessage(
+                let parsed = message.role == "user"
+                    ? Self.parseCanonicalContent(message.content)
+                    : (text: message.content, attachments: [ChatAttachment]())
+                return MultimodalMessage(
                     id: message.id,
                     sessionId: detail.id,
                     role: MultimodalMessage.MessageRole(rawValue: message.role) ?? .assistant,
-                    content: message.content,
+                    content: parsed.text,
+                    attachments: parsed.attachments,
                     timestamp: message.createdAt
                 )
             }
@@ -336,6 +343,63 @@ class ConversationManager: ObservableObject {
             UnifiedChatService.shared.loadConversation(hydrated)
         } catch {
             Log.net.warning("Could not hydrate server conversation \(id): \(error)")
+        }
+    }
+
+    private static func parseCanonicalContent(
+        _ content: String
+    ) -> (text: String, attachments: [ChatAttachment]) {
+        let fullRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        let matches = attachmentPattern.matches(in: content, range: fullRange)
+        guard !matches.isEmpty else { return (content, []) }
+
+        func capture(_ range: NSRange) -> String? {
+            guard range.location != NSNotFound,
+                  let swiftRange = Range(range, in: content) else { return nil }
+            return String(content[swiftRange])
+        }
+
+        var attachments: [ChatAttachment] = []
+        for match in matches {
+            let imageURL = capture(match.range(at: 2))
+            let fileURL = capture(match.range(at: 4))
+            guard let url = imageURL ?? fileURL else { continue }
+            let isImage = imageURL != nil
+            let name = capture(match.range(at: isImage ? 1 : 3))?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallbackName = URL(string: url)?.lastPathComponent ?? "Attachment"
+            attachments.append(
+                ChatAttachment(
+                    id: url,
+                    type: isImage ? .image : .document,
+                    url: url,
+                    name: (name?.isEmpty == false ? name! : fallbackName),
+                    mimeType: mimeType(for: url, isImage: isImage),
+                    size: 0
+                )
+            )
+        }
+
+        var text = content
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: text) else { continue }
+            text.removeSubrange(range)
+        }
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines), attachments)
+    }
+
+    private static func mimeType(for url: String, isImage: Bool) -> String {
+        let ext = URL(string: url)?.pathExtension.lowercased() ?? ""
+        switch ext {
+        case "png": return "image/png"
+        case "webp": return "image/webp"
+        case "heic": return "image/heic"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "pdf": return "application/pdf"
+        case "csv": return "text/csv"
+        case "md", "markdown": return "text/markdown"
+        case "json": return "application/json"
+        default: return isImage ? "image/jpeg" : "text/plain"
         }
     }
     

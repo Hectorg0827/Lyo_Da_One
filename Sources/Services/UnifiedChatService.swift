@@ -110,7 +110,10 @@ final class UnifiedChatService: ObservableObject {
         forcedIntent: String? = nil
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return nil }
+        guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
+        let displaySeed = trimmedText.isEmpty
+            ? (attachments.first?.filename ?? "Attachment")
+            : trimmedText
 
         // Reset stale chips at the beginning of a new user turn.
         // New suggestions (if any) are set from backend response/actions events.
@@ -136,9 +139,9 @@ final class UnifiedChatService: ObservableObject {
         // 4. Update stack
         stackStore.upsertChat(
             key: currentConversationId,
-            title: extractTitle(from: trimmedText),
+            title: extractTitle(from: displaySeed),
             subtitle: "Just now",
-            lastMessage: trimmedText
+            lastMessage: displaySeed
         )
 
         isLoading = true
@@ -147,12 +150,15 @@ final class UnifiedChatService: ObservableObject {
         // 5. Prepare placeholder AI message ID for streaming
         let aiMessageId = UUID().uuidString
 
-        // 6. Extract attachment IDs for RAG pipeline
+        // 6. Send structured media references. IDs alone only gave the model a
+        // Markdown URL; these fields make Gemini receive the actual file bytes.
         let attachmentIds = attachments.map { $0.id }
+        let media = mediaRefs(from: attachments)
 
         // 7. Route through ChatRouter (Two-Speed Engine)
         let result = await chatRouter.route(
             message: trimmedText,
+            media: media,
             attachmentIds: attachmentIds,
             mode: mode,
             forcedIntent: forcedIntent,
@@ -427,7 +433,7 @@ final class UnifiedChatService: ObservableObject {
         attachments: [MessageAttachment] = []
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
 
         // 1. Add User Message
         let userMessage = LyoMessage(
@@ -458,12 +464,35 @@ final class UnifiedChatService: ObservableObject {
         // 4. Start Stream
         lyo2ChatService.sendMessageStreaming(
             text: trimmedText,
+            media: mediaRefs(from: attachments),
+            attachmentIds: attachments.map { $0.id },
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id
         ) { [weak self] event in
             guard let self else { return }
             self.handleLyo2Event(event, aiMessageId: aiMessageId)
+        }
+    }
+
+    private func mediaRefs(from attachments: [MessageAttachment]) -> [Lyo2MediaRef] {
+        attachments.compactMap { attachment in
+            let mimeType = attachment.mimeType ?? "application/octet-stream"
+            let modality: String
+            if attachment.type == .image || mimeType.hasPrefix("image/") {
+                modality = "IMAGE"
+            } else if attachment.type == .document || attachment.type == .file {
+                modality = "DOCUMENT"
+            } else {
+                return nil
+            }
+            return Lyo2MediaRef(
+                modality: modality,
+                uri: attachment.url,
+                mimeType: mimeType,
+                name: attachment.filename,
+                sizeBytes: attachment.size
+            )
         }
     }
 
@@ -1604,23 +1633,46 @@ final class UnifiedChatService: ObservableObject {
     // MARK: - Message Compatibility
 
     private func convertToMultimodal(_ msg: LyoMessage) -> MultimodalMessage {
+        let chatAttachments = msg.attachments?.map { attachment in
+            ChatAttachment(
+                id: attachment.id,
+                type: attachment.type,
+                url: attachment.url,
+                name: attachment.filename ?? "Attachment",
+                mimeType: attachment.mimeType ?? "application/octet-stream",
+                size: Int64(attachment.size ?? 0)
+            )
+        } ?? []
         return MultimodalMessage(
             id: msg.id,
             sessionId: msg.sessionId,
             role: msg.isFromUser ? .user : .assistant,
             content: msg.content,
             contentTypes: msg.contentTypes ?? [.text],
+            attachments: chatAttachments,
             timestamp: msg.timestamp,
             isStreaming: false
         )
     }
 
     private func convertToLyo(_ msg: MultimodalMessage) -> LyoMessage {
+        let messageAttachments = msg.attachments.compactMap { attachment -> MessageAttachment? in
+            guard let url = attachment.url else { return nil }
+            return MessageAttachment(
+                id: attachment.id,
+                type: attachment.type,
+                url: url,
+                filename: attachment.name,
+                size: Int(attachment.size),
+                mimeType: attachment.mimeType
+            )
+        }
         var lyoMsg = LyoMessage(
             id: msg.id,
             content: msg.content,
             isFromUser: msg.role == .user,
             timestamp: msg.timestamp,
+            attachments: messageAttachments.isEmpty ? nil : messageAttachments,
             status: .sent
         )
         lyoMsg.sessionId = msg.sessionId

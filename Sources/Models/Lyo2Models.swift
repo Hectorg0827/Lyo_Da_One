@@ -64,16 +64,36 @@ struct Lyo2RouterRequest: Codable {
 }
 
 struct Lyo2MediaRef: Codable {
-    let modality: String // TEXT, IMAGE, AUDIO, VIDEO, PDF
+    let modality: String // IMAGE or DOCUMENT for chat attachments
     let uri: String
     let mimeType: String
     let durationMs: Int?
+    let name: String?
+    let sizeBytes: Int?
     
     enum CodingKeys: String, CodingKey {
         case modality
         case uri
         case mimeType = "mime_type"
         case durationMs = "duration_ms"
+        case name
+        case sizeBytes = "size_bytes"
+    }
+
+    init(
+        modality: String,
+        uri: String,
+        mimeType: String,
+        durationMs: Int? = nil,
+        name: String? = nil,
+        sizeBytes: Int? = nil
+    ) {
+        self.modality = modality
+        self.uri = uri
+        self.mimeType = mimeType
+        self.durationMs = durationMs
+        self.name = name
+        self.sizeBytes = sizeBytes
     }
 }
 

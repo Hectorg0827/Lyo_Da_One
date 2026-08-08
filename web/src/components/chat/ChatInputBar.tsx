@@ -7,11 +7,25 @@ import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
+import type { ChatAttachment } from '@/types';
 
 const MAX_CHARS = 4000;
 const MAX_ROWS = 6;
 const LINE_HEIGHT = 24; // px per row
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_TOTAL_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
+const MAX_ATTACHMENTS = 4;
+const SUPPORTED_ATTACHMENT_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/json',
+]);
 
 // Minimal typing for the Web Speech API (not yet in lib.dom for all targets).
 type SpeechRecognitionLike = {
@@ -34,10 +48,22 @@ function getSpeechRecognition(): SpeechRecognitionLike | null {
   return Ctor ? new Ctor() : null;
 }
 
-interface PendingAttachment {
-  name: string;
-  url: string;
-  isImage: boolean;
+function attachmentMimeType(file: File): string {
+  const reportedType = file.type.toLowerCase();
+  if (SUPPORTED_ATTACHMENT_TYPES.has(reportedType)) return reportedType;
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return ({
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    heic: 'image/heic',
+    pdf: 'application/pdf',
+    txt: 'text/plain',
+    md: 'text/markdown',
+    csv: 'text/csv',
+    json: 'application/json',
+  } as Record<string, string>)[extension || ''] || '';
 }
 
 export default function ChatInputBar() {
@@ -46,7 +72,7 @@ export default function ChatInputBar() {
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,56 +133,80 @@ export default function ChatInputBar() {
     }
   };
 
-  // ── Attachments (existing storage API) ────────────────────────────────────
+  // ── Attachments (shared consumer media API) ───────────────────────────────
 
   const handleFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const selected = Array.from(e.target.files ?? []);
     e.target.value = ''; // allow re-picking the same file
-    if (!file) return;
-    if (file.size > MAX_UPLOAD_BYTES) {
-      toast.error('File too large (max 10MB)');
+    if (selected.length === 0) return;
+
+    const capacity = MAX_ATTACHMENTS - attachments.length;
+    if (capacity <= 0) {
+      toast.error(`You can attach up to ${MAX_ATTACHMENTS} files`);
       return;
     }
-    setUploading(true);
-    try {
-      const result = await api.storage.upload(file, 'chat');
-      const url = Object.values(result.urls ?? {})[0];
-      if (!url) throw new Error('no url');
-      setAttachment({
-        name: file.name,
-        url,
-        isImage: file.type.startsWith('image/'),
-      });
-    } catch {
-      toast.error("Upload failed — check that you're logged in");
-    } finally {
-      setUploading(false);
+    if (selected.length > capacity) {
+      toast.error(`Only ${capacity} more attachment${capacity === 1 ? '' : 's'} can be added`);
     }
+
+    setUploading(true);
+    const uploaded: ChatAttachment[] = [];
+    let totalBytes = attachments.reduce((sum, attachment) => sum + attachment.size, 0);
+
+    for (const file of selected.slice(0, capacity)) {
+      const mimeType = attachmentMimeType(file);
+      if (!SUPPORTED_ATTACHMENT_TYPES.has(mimeType)) {
+        toast.error(`${file.name} is not a supported image or document`);
+        continue;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        toast.error(`${file.name} is larger than 10MB`);
+        continue;
+      }
+      if (totalBytes + file.size > MAX_TOTAL_UPLOAD_BYTES) {
+        toast.error('Attachments may total at most 20MB');
+        break;
+      }
+
+      try {
+        const normalizedFile = file.type === mimeType
+          ? file
+          : new File([file], file.name, { type: mimeType });
+        const result = await api.media.upload(normalizedFile, 'chat');
+        uploaded.push({
+          name: file.name,
+          url: result.url,
+          mimeType: result.contentType || mimeType,
+          size: result.size || file.size,
+          kind: mimeType.startsWith('image/') ? 'image' : 'document',
+        });
+        totalBytes += file.size;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Upload failed';
+        toast.error(`${file.name}: ${message}`);
+      }
+    }
+
+    if (uploaded.length > 0) {
+      setAttachments((current) => [...current, ...uploaded].slice(0, MAX_ATTACHMENTS));
+    }
+    setUploading(false);
   };
 
   // ── Send ──────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
     const trimmed = value.trim();
-    if ((!trimmed && !attachment) || isGenerating) return;
+    if ((!trimmed && attachments.length === 0) || isGenerating || uploading) return;
     recognitionRef.current?.stop();
 
-    // Reference the uploaded file inside the message so the AI (and the
-    // transcript) can see it — markdown renders it inline in the thread.
-    let content = trimmed;
-    if (attachment) {
-      const md = attachment.isImage
-        ? `![${attachment.name}](${attachment.url})`
-        : `[📎 ${attachment.name}](${attachment.url})`;
-      content = trimmed ? `${trimmed}\n\n${md}` : md;
-    }
-
     setValue('');
-    setAttachment(null);
+    const sentAttachments = attachments;
+    setAttachments([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    await sendMessage(content);
+    await sendMessage(trimmed, sentAttachments);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -168,20 +218,22 @@ export default function ChatInputBar() {
 
   const charCount = value.length;
   const showCount = charCount > MAX_CHARS * 0.75;
-  const canSend = (value.trim().length > 0 || !!attachment) && !isGenerating && !uploading;
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !uploading;
 
   return (
     <div className="relative px-3 py-3 md:px-6 md:py-4">
-      {/* Pending attachment chip */}
-      <AnimatePresence>
-        {attachment && (
+      {/* Pending attachment chips */}
+      <div className="flex gap-2 mb-2 overflow-x-auto max-w-3xl mx-auto">
+        <AnimatePresence initial={false}>
+          {attachments.map((attachment) => (
           <motion.div
+            key={`${attachment.url}-${attachment.name}`}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 w-fit max-w-full"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 min-w-0 max-w-[240px] shrink-0"
           >
-            {attachment.isImage ? (
+            {attachment.kind === 'image' ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={attachment.url} alt={attachment.name} className="w-8 h-8 rounded object-cover" />
             ) : (
@@ -189,15 +241,16 @@ export default function ChatInputBar() {
             )}
             <span className="text-xs text-white/70 truncate">{attachment.name}</span>
             <button
-              onClick={() => setAttachment(null)}
+              onClick={() => setAttachments((current) => current.filter((item) => item.url !== attachment.url))}
               className="p-0.5 text-white/40 hover:text-white"
               title="Remove attachment"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </motion.div>
-        )}
-      </AnimatePresence>
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* Input island — mirrors iOS HybridInputBar: black rounded-24 card,
           rotating angular-gradient border tinted by AI state, text field on
@@ -233,14 +286,15 @@ export default function ChatInputBar() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,.pdf,.txt,.md,.csv"
+            accept="image/jpeg,image/png,image/webp,image/heic,.pdf,.txt,.md,.csv,.json"
+            multiple
             className="hidden"
             onChange={handleFilePicked}
           />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
+            disabled={uploading || isGenerating || attachments.length >= MAX_ATTACHMENTS}
             className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/90 hover:bg-white/15 transition-all duration-200 shrink-0 disabled:opacity-50"
             title="Attach an image or document"
           >

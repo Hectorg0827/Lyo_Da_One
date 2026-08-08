@@ -75,6 +75,7 @@ final class ChatRouter: ObservableObject {
     /// Returns the route result; for streaming, blocks arrive via the callback.
     func route(
         message: String,
+        media: [Lyo2MediaRef] = [],
         attachmentIds: [String] = [],
         mode: String = "chat",
         forcedIntent: String? = nil,
@@ -87,7 +88,10 @@ final class ChatRouter: ObservableObject {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         // 1. Classify intent on-device (< 1ms)
-        let intent = intentClassifier.classify(message)
+        let classificationText = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Analyze the attached study material"
+            : message
+        let intent = intentClassifier.classify(classificationText)
         lastIntent = intent
         currentTier = intent.tier
 
@@ -95,7 +99,25 @@ final class ChatRouter: ObservableObject {
             "🎯 Intent: \(intent.category.rawValue) | Tier: \(intent.tier.label) | Confidence: \(String(format: "%.0f%%", intent.confidence * 100))"
         )
 
-        // 2. Route based on tier
+        // Attachments must use the Lyo 2.0 stream because the quick endpoint is
+        // text-only. This prevents a selected image from silently becoming a URL.
+        if !media.isEmpty {
+            return await handleDeepPath(
+                message: message,
+                media: media,
+                attachmentIds: attachmentIds,
+                mode: mode,
+                intent: intent,
+                forcedIntent: forcedIntent,
+                conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
+                onStreamEvent: onStreamEvent,
+                startTime: startTime
+            )
+        }
+
+        // 2. Route text-only messages based on tier
         switch intent.tier {
         case .instant:
             // Chat turns must use the canonical server path even when an
@@ -225,6 +247,7 @@ final class ChatRouter: ObservableObject {
 
     private func handleDeepPath(
         message: String,
+        media: [Lyo2MediaRef] = [],
         attachmentIds: [String] = [],
         mode: String,
         intent: ClassifiedIntent,
@@ -247,6 +270,7 @@ final class ChatRouter: ObservableObject {
         // so this closure runs on the main thread — safe to access @MainActor state directly.
         lyo2Chat.sendMessageStreaming(
             text: message,
+            media: media,
             attachmentIds: attachmentIds,
             forcedIntent: forcedIntent,
             stateSummary: buildStateSummary(mode: mode, intent: intent),
