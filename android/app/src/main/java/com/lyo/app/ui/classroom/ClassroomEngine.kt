@@ -7,6 +7,7 @@ import com.lyo.app.data.a2ui.A2uiAction
 import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiSurfaceState
 import com.lyo.app.data.a2ui.resolvePointer
+import com.lyo.app.data.classroom.ClassroomComponent
 import com.lyo.app.data.classroom.ClassroomServerEvent
 import com.lyo.app.data.classroom.ClassroomSocketClient
 import com.lyo.app.data.classroom.DirectorTurn
@@ -118,39 +119,63 @@ class ClassroomEngine(
 
     // ── Incoming ──────────────────────────────────────────────────────────
 
+    /** Backend component_ids already processed — de-dupes the real
+     *  backend's confirmed duplicate-delivery pattern (a scene's
+     *  components arrive both embedded in scene_start AND individually via
+     *  component_render; see ClassroomServerEvent's doc comment). Only
+     *  components carrying a non-null component_id can be de-duped this
+     *  way; ad-hoc/LLM-authored ones without an id are processed every
+     *  time they arrive (the fast-welcome path relies on this — it has no
+     *  duplicate component_render follow-up to de-dupe against anyway). */
+    private val processedComponentIds = mutableSetOf<String>()
+
     private fun handleServerEvent(event: ClassroomServerEvent) {
         when (event) {
             is ClassroomServerEvent.ComponentRenderEvent -> {
                 status = "live"
-                eraseIfPending()
-                val turns = ClassroomBridge.extractTurns(event.component)
-                if (turns != null) {
-                    turnQueue.addAll(turns)
-                    if (playerJob == null || playerJob?.isActive != true) startPlayer()
-                } else {
-                    // Non-turn-based components (QuizCard, InputField,
-                    // ExampleBlock, LessonBlock, ProgressBar, CTAButton)
-                    // render immediately — the wire contract never paces
-                    // these.
-                    applyMutation(ClassroomBridge.onImmediateComponentRender(event.component, boardChildren))
-                }
+                processComponent(event.component)
             }
 
-            ClassroomServerEvent.SceneStartEvent -> {
+            is ClassroomServerEvent.SceneStartEvent -> {
+                status = "live"
                 // Lazy erase: don't clear the board the instant scene_start
-                // arrives — wait until the NEXT real content actually lands
-                // (see eraseIfPending(), called from the ComponentRenderEvent
-                // branch above), so the board never flashes empty during
-                // ordinary LLM latency between scenes.
+                // arrives on its own — wait until real content actually
+                // lands, so the board never flashes empty during ordinary
+                // LLM latency between scenes. If this scene_start already
+                // carries embedded components (the ad-hoc fast-welcome
+                // shape, or the real welcome scene's inline array), that
+                // content IS the next thing landing, so erase happens
+                // immediately before rendering it, not deferred further.
                 pendingErase = true
+                event.components.forEach { processComponent(it) }
             }
 
             ClassroomServerEvent.SceneCompleteEvent -> Unit // no board effect; canContinue is driven by CTAButton
+            ClassroomServerEvent.IgnoredEvent -> Unit // system_state / scene_update — acknowledged, nothing to act on yet
 
             is ClassroomServerEvent.ErrorEvent -> {
                 status = "error"
                 errorMessage = event.message ?: "The classroom hit a snag."
             }
+        }
+    }
+
+    private fun processComponent(component: ClassroomComponent) {
+        val id = component.component_id
+        if (id != null) {
+            if (id in processedComponentIds) return
+            processedComponentIds += id
+        }
+        eraseIfPending()
+        val turns = ClassroomBridge.extractTurns(component)
+        if (turns != null) {
+            turnQueue.addAll(turns)
+            if (playerJob == null || playerJob?.isActive != true) startPlayer()
+        } else {
+            // Non-turn-based components (QuizCard, InputField, ExampleBlock,
+            // LessonBlock, ProgressBar, CTAButton, Celebration) render
+            // immediately — the wire contract never paces these.
+            applyMutation(ClassroomBridge.onImmediateComponentRender(component, boardChildren))
         }
     }
 

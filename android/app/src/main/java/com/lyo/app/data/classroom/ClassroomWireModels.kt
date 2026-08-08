@@ -37,10 +37,18 @@ data class ClassroomBlock(
 /**
  * The `component_render` payload. `type` is the discriminator dispatched on
  * in ClassroomBridge.onServerEvent — see that file for the exact handled
- * values (TeacherMessage, StudentPrompt, QuizCard, InputField, ExampleBlock,
- * LessonBlock, ProgressBar, CTAButton). Fields beyond `component_id`/`type`
- * are a superset across every component type the backend can send; each
- * handler reads only the subset it needs.
+ * values. The real backend's `ComponentType` enum (LyoBackendJune
+ * lyo_app/ai_classroom/sdui_models.py) has 13 values; this client handles
+ * 9 of them (TeacherMessage, StudentPrompt, QuizCard, InputField,
+ * ExampleBlock, LessonBlock, ProgressBar, CTAButton, Celebration — the
+ * last confirmed actively emitted on lesson-mastery/course-complete
+ * scenes). TextBlock/ChatBubble/TypingIndicator/ReflectionPrompt are
+ * declared in the backend's schema/union but have zero constructor call
+ * sites there as of this writing — dead types, not implemented here;
+ * ClassroomBridge's `else -> unchanged(...)` branch drops them safely
+ * (no crash) if that ever changes. Fields beyond `component_id`/`type`
+ * are a superset across every handled component type; each handler reads
+ * only the subset it needs.
  */
 data class ClassroomComponent(
     val component_id: String? = null,
@@ -65,6 +73,13 @@ data class ClassroomComponent(
     val content: String? = null,
     val block_type: String? = null,
     val block: ClassroomBlock? = null,
+    // Celebration-only fields (lyo_app's _create_celebration_components).
+    val message: String? = null,
+    val celebration_type: String? = null,
+    val particle_effect: String? = null,
+    val achievement_type: String? = null,
+    val points_earned: Int? = null,
+    val auto_dismiss_ms: Int? = null,
 )
 
 /** One parameter slider for an `explorable` board action (a graphable expression). */

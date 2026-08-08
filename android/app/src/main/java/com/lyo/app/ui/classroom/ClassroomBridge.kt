@@ -219,6 +219,31 @@ object ClassroomBridge {
                 )
             }
 
+            "Celebration" -> {
+                // Confirmed actively emitted (lesson-mastery/course-complete
+                // scenes) after reading the real backend source — not in the
+                // wire contract as originally reconstructed from the web
+                // client alone. See CelebrationCardRenderer's doc comment.
+                val id = UUID.randomUUID().toString()
+                appendLeaf(
+                    boardChildren = boardChildren,
+                    newComponent = A2uiComponent(
+                        id = "celebration_$id",
+                        component = "CelebrationCard",
+                        properties = mapOf(
+                            "message" to A2uiValue.PathRef("/board/elements/celebration_$id/message"),
+                            "pointsEarned" to A2uiValue.PathRef("/board/elements/celebration_$id/pointsEarned"),
+                            "achievementType" to A2uiValue.PathRef("/board/elements/celebration_$id/achievementType"),
+                        ),
+                    ),
+                    dataModelWrites = listOf(
+                        "/board/elements/celebration_$id/message" to JsonPrimitive(component.message ?: component.text ?: "Great work!"),
+                        "/board/elements/celebration_$id/pointsEarned" to (component.points_earned?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
+                        "/board/elements/celebration_$id/achievementType" to (component.achievement_type?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
+                    ),
+                )
+            }
+
             "ExampleBlock" -> {
                 val id = UUID.randomUUID().toString()
                 appendSummary(

@@ -36,6 +36,7 @@ val ClassroomCatalog: A2uiCatalog = A2uiCatalog(
         "SummaryBlock" to A2uiComponentRenderer { SummaryBlockRenderer() },
         "SourceLine" to A2uiComponentRenderer { SourceLineRenderer() },
         "DismissalCard" to A2uiComponentRenderer { DismissalCardRenderer() },
+        "CelebrationCard" to A2uiComponentRenderer { CelebrationCardRenderer() },
         "ChartBlock" to A2uiComponentRenderer { ChartBlockRenderer() },
         "ExplorableBlock" to A2uiComponentRenderer { ExplorableBlockRenderer() },
         "MermaidBlock" to A2uiComponentRenderer { MermaidBlockRenderer() },
