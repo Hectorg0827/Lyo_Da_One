@@ -17,6 +17,7 @@ import {
 } from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 import MascotAvatar from '@/components/chat/MascotAvatar';
+import { upsertCourseOnStart } from '@/lib/stack';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -201,6 +202,16 @@ function ClassroomStage() {
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, courseId, objective, difficulty, mode, durationMinutes, animationsOff]);
+
+  // Save this course into the learner's device- and platform-agnostic
+  // Stacks list the moment the classroom opens (both the chat-proposal
+  // "Start Learning" path and the catalog "/courses/[id]" path land here),
+  // mirroring Android's LyoNavHost Routes.CLASSROOM wiring. No-ops silently
+  // if the visitor isn't signed in or the sync fails — never blocks class.
+  useEffect(() => {
+    void upsertCourseOnStart(courseId, topic);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, topic]);
 
   useEffect(() => {
     if (viewingBoard === -1) {

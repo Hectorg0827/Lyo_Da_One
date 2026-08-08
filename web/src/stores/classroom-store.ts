@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
+import { updateCourseProgress } from '@/lib/stack';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -595,12 +596,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           addSources(comp.block.source_attributions);
         }
         break;
-      case 'ProgressBar':
-        set({
-          progressCurrent: Math.max(0, comp.current ?? 0),
-          progressTotal: Math.max(1, comp.total ?? 1),
-        });
+      case 'ProgressBar': {
+        const current = Math.max(0, comp.current ?? 0);
+        const total = Math.max(1, comp.total ?? 1);
+        set({ progressCurrent: current, progressTotal: total });
+        // Keep this course's Stacks entry in sync with the backend's own
+        // authoritative mastery-progress signal — non-blocking, mirrors
+        // Android's ClassroomEngine.syncStackProgress. sessionId equals
+        // the real course id once the classroom route passes a real
+        // courseId (falls back to topic otherwise, same as upsert).
+        void updateCourseProgress(get().sessionId, current / total);
         break;
+      }
       case 'CTAButton':
         set({
           canContinue: true,
