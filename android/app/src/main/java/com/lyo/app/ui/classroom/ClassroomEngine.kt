@@ -1,6 +1,7 @@
 package com.lyo.app.ui.classroom
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lyo.app.data.a2ui.A2uiAction
@@ -22,6 +23,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.ArrayDeque
+import java.util.UUID
+
+/** One line in the notebook drawer — the transcript, a byproduct of turn
+ *  playback and outgoing actions alike (mirrors web's TranscriptItem /
+ *  classroom-store.ts's pushTranscript). Never sent anywhere; purely a
+ *  local scroll-back record for ClassroomChrome's NotebookPanel. */
+data class TranscriptLine(val id: String, val speaker: String, val text: String)
 
 /**
  * The turn-queue/pacing player and single source of truth ClassroomScreen
@@ -84,6 +92,14 @@ class ClassroomEngine(
      */
     var hasActiveCheckpoint by mutableStateOf(false); private set
 
+    /** The notebook drawer's content — see TranscriptLine's doc comment. */
+    val transcript = mutableStateListOf<TranscriptLine>()
+
+    private fun pushTranscript(speaker: String, text: String) {
+        if (text.isBlank()) return
+        transcript += TranscriptLine(UUID.randomUUID().toString(), speaker, text)
+    }
+
     val canContinue: Boolean
         get() = surface.dataModel.resolvePointer("/canContinue")
             ?.takeIf { it.isJsonPrimitive }?.asBoolean == true
@@ -106,7 +122,7 @@ class ClassroomEngine(
             sessionId = sessionId,
             mode = mode,
             durationMinutes = durationMinutes,
-            reducedMotion = false,
+            reducedMotion = ClassroomPreferences.reducedMotion,
             objective = objective,
             difficulty = difficulty,
         )
@@ -222,6 +238,14 @@ class ClassroomEngine(
         val mutation = ClassroomBridge.directorTurnToA2ui(turn, boardChildren)
         applyMutation(mutation)
 
+        when (turn.type) {
+            "speech", "user_prompt" -> pushTranscript(turn.speaker ?: "Teacher", turn.text.orEmpty())
+            "session_end" -> pushTranscript(
+                "Teacher",
+                "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
+            )
+        }
+
         if (turn.type == "user_prompt") {
             hasActiveCheckpoint = true
             val beatSeconds = (turn.beat_seconds ?: 5.0) + 8.0
@@ -293,6 +317,9 @@ class ClassroomEngine(
         if (action.name == "submitPrompt") {
             promptTimeoutJob?.cancel()
             hasActiveCheckpoint = false
+            val answer = action.context["selectedLabel"]?.takeIf { it.isJsonPrimitive }?.asString
+                ?: action.context["value"]?.takeIf { it.isJsonPrimitive }?.asString
+            answer?.let { pushTranscript("You", it) }
             // Close the open-response Send/"I'm not sure" buttons the
             // instant this fires, before the network round-trip — prevents
             // a double-tap from sending a duplicate answer (the chip/
@@ -337,18 +364,22 @@ class ClassroomEngine(
     fun askQuestion(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
+        pushTranscript("You", "✋ $trimmed")
         ClassroomSocketClient.send(ClassroomBridge.askQuestionAction(sessionId, trimmed))
     }
 
     fun requestHint(level: String) {
+        pushTranscript("You", "Requested a hint")
         ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))
     }
 
     fun signalConfused() {
+        pushTranscript("You", "Requested a small nudge")
         ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))
     }
 
     fun signalTooEasy() {
+        pushTranscript("You", "Requested a harder case")
         ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))
     }
 }

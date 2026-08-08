@@ -16,7 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -76,7 +79,16 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
         }
     }
 
-    val chrome = rememberChromeVisibility(blockAutoHide = engine.hasActiveCheckpoint)
+    var settingsOpen by remember { mutableStateOf(false) }
+    var notebookOpen by remember { mutableStateOf(false) }
+    // ClassroomPreferences.reducedMotion is a plain var (see its doc
+    // comment — an in-memory singleton, not a Compose-observable one), so
+    // the Switch needs its own observable copy to actually recompose on
+    // toggle; this mirrors it into ClassroomPreferences on every change.
+    var reducedMotionUi by remember { mutableStateOf(ClassroomPreferences.reducedMotion) }
+    val chrome = rememberChromeVisibility(
+        blockAutoHide = engine.hasActiveCheckpoint || settingsOpen || notebookOpen,
+    )
 
     Box(
         modifier = Modifier
@@ -108,7 +120,28 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
                     isPaused = engine.isPaused,
                     onBack = { nav.popBackStack() },
                     onTogglePause = { engine.togglePause(); chrome.poke() },
+                    onToggleNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
+                    onToggleSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
                 )
+            }
+
+            // Independent of chrome.visible (matching web's settingsOpen/
+            // notebookOpen panels, which stay open even if the rest of the
+            // desk row would otherwise auto-hide) — blockAutoHide above
+            // already keeps chrome.visible true the whole time either is
+            // open, so this is never actually shown while the top bar
+            // toggling it is hidden.
+            if (settingsOpen) {
+                SettingsPanel(
+                    reducedMotion = reducedMotionUi,
+                    onReducedMotionChange = {
+                        reducedMotionUi = it
+                        ClassroomPreferences.reducedMotion = it
+                    },
+                )
+            }
+            if (notebookOpen) {
+                NotebookPanel(transcript = engine.transcript)
             }
 
             // The board — permanent, fills remaining space. Lyo's mascot
