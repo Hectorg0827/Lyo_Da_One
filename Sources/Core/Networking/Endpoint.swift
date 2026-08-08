@@ -911,6 +911,59 @@ enum Endpoints {
         var cacheTTL: TimeInterval { 0 }
     }
 
+    // MARK: - Course Stack Sync
+    /// The real, correctly-shaped `/api/v1/stack/items` calls (see
+    /// CourseStackSyncModels.swift's header comment for why this is
+    /// separate from `Stack` above, which targets a different, unused-by-
+    /// these-routes schema). `.updateProgress` uses PUT — the route is
+    /// declared `@router.put(...)`, not PATCH.
+    enum CourseStack: Endpoint {
+        case listCourseItems
+        case create(CreateBackendStackItemRequest)
+        case updateProgress(id: Int, request: UpdateBackendStackItemProgressRequest)
+
+        var path: String {
+            switch self {
+            case .listCourseItems, .create:
+                return "/api/v1/stack/items"
+            case .updateProgress(let id, _):
+                return "/api/v1/stack/items/\(id)"
+            }
+        }
+
+        var method: HTTPMethod {
+            switch self {
+            case .listCourseItems: return .get
+            case .create: return .post
+            case .updateProgress: return .put
+            }
+        }
+
+        var body: Encodable? {
+            switch self {
+            case .create(let request): return request
+            case .updateProgress(_, let request): return request
+            case .listCourseItems: return nil
+            }
+        }
+
+        var queryItems: [URLQueryItem]? {
+            switch self {
+            case .listCourseItems:
+                return [
+                    URLQueryItem(name: "item_type", value: "course"),
+                    URLQueryItem(name: "limit", value: "100"),
+                ]
+            default:
+                return nil
+            }
+        }
+
+        // Progress changes on every lesson/turn — a 5-minute default cache
+        // would show stale progress right after a pull-to-refresh.
+        var cacheTTL: TimeInterval { 0 }
+    }
+
     // MARK: - Gamification
     enum Gamification: Endpoint {
         // XP

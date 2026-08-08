@@ -360,6 +360,31 @@ class LyoRepository: ObservableObject {
         return try await NetworkClient.shared.request(Endpoints.Stack.updateItem(id: id, item: request))
     }
 
+    // MARK: - Course Stack Sync (real backend contract — see
+    // CourseStackSyncModels.swift's header comment)
+
+    /// Every course stack item this user has on the backend — including
+    /// ones created on another device/platform, which is the whole point.
+    func fetchCourseStackItems() async throws -> [BackendStackItem] {
+        let response: BackendStackItemListResponse = try await NetworkClient.shared.request(Endpoints.CourseStack.listCourseItems)
+        return response.items
+    }
+
+    func createCourseStackItem(title: String, contentId: String) async throws -> BackendStackItem {
+        let request = CreateBackendStackItemRequest(
+            title: title,
+            itemType: "course",
+            contentId: contentId,
+            contentType: "course"
+        )
+        return try await NetworkClient.shared.request(Endpoints.CourseStack.create(request))
+    }
+
+    func updateCourseStackItemProgress(id: Int, progress: Double) async throws -> BackendStackItem {
+        let request = UpdateBackendStackItemProgressRequest(progress: max(0, min(progress, 1)))
+        return try await NetworkClient.shared.request(Endpoints.CourseStack.updateProgress(id: id, request: request))
+    }
+
     // MARK: - Feed / Discover
     
     // Replaced legacy Feed endpoints with direct access to Courses and Events
