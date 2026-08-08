@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useChatStore } from '@/stores/chat-store';
+import { useChatStore, type GenerationActivity } from '@/stores/chat-store';
 import { useAuthStore } from '@/stores/auth-store';
 import MessageBubble from './MessageBubble';
 import ChatInputBar from './ChatInputBar';
@@ -86,11 +86,47 @@ function ThinkingIndicator() {
 }
 
 // ─── Generation progress bar ──────────────────────────────────────────────────
-function GenerationProgressBar({ progress }: { progress: number }) {
+export function getGenerationStatusLabel(
+  progress: number,
+  activity: GenerationActivity
+) {
+  switch (activity) {
+    case 'course':
+      return progress >= 75 ? 'Finalizing your course…' : 'Preparing your course…';
+    case 'response':
+      return progress >= 75 ? 'Finalizing response…' : 'Generating response…';
+    case 'thinking':
+    default:
+      return 'Thinking…';
+  }
+}
+
+function GenerationProgressBar({
+  progress,
+  activity,
+}: {
+  progress: number;
+  activity: GenerationActivity;
+}) {
+  const label = getGenerationStatusLabel(progress, activity);
+
   return (
     <div className="px-4 py-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-white/40">Generating course…</span>
+        <div role="status" aria-live="polite" aria-atomic="true" className="min-w-0">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={label}
+              initial={{ opacity: 0, y: 2 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.2 }}
+              className="block text-xs text-white/40"
+            >
+              {label}
+            </motion.span>
+          </AnimatePresence>
+        </div>
         <span className="text-xs text-lyo-400 font-medium">{progress}%</span>
       </div>
       <div className="h-1 w-full rounded-full bg-white/10 overflow-hidden">
@@ -132,7 +168,13 @@ function EmptyState() {
 
 // ─── Main ChatInterface ───────────────────────────────────────────────────────
 export default function ChatInterface() {
-  const { getActiveConversation, isGenerating, generationProgress, hydrate } = useChatStore();
+  const {
+    getActiveConversation,
+    isGenerating,
+    generationProgress,
+    generationActivity,
+    hydrate,
+  } = useChatStore();
   const conversation = getActiveConversation();
   const messages = conversation?.messages ?? [];
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -189,7 +231,10 @@ export default function ChatInterface() {
             exit={{ opacity: 0, height: 0 }}
             className="shrink-0 border-t border-white/5"
           >
-            <GenerationProgressBar progress={generationProgress} />
+            <GenerationProgressBar
+              progress={generationProgress}
+              activity={generationActivity}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -201,3 +246,4 @@ export default function ChatInterface() {
     </div>
   );
 }
+

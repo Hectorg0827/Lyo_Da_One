@@ -54,6 +54,30 @@ const contracts = [
     forbidden: ['px-4 py-6 max-w-3xl mx-auto w-full'],
   },
   {
+    name: 'web honest generation status',
+    path: 'web/src/components/chat/ChatInterface.tsx',
+    needles: [
+      'getGenerationStatusLabel',
+      "case 'thinking':",
+      "case 'response':",
+      "case 'course':",
+      "return 'Thinking…';",
+      "'Finalizing response…' : 'Generating response…'",
+      "'Finalizing your course…' : 'Preparing your course…'",
+      'aria-live="polite"',
+    ],
+    forbidden: ['>Generating course…</span>'],
+  },
+  {
+    name: 'web response-aware generation activity',
+    path: 'web/src/stores/chat-store.ts',
+    needles: [
+      "GenerationActivity = 'thinking' | 'response' | 'course'",
+      "generationActivity: 'thinking'",
+      "generationActivity: 'course'",
+    ],
+  },
+  {
     name: 'Android API',
     path: 'android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt',
     needles: [
@@ -191,4 +215,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, adaptive 99% AI response width, and structured image/document uploads.');
+console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, adaptive 99% AI response width, structured image/document uploads, and context-aware generation status.');
