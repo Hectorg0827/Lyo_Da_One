@@ -358,14 +358,12 @@ object ClassroomBridge {
                     // resolve their own "value" property as the fireAction
                     // context's submitted answer — Send's is bound to the
                     // live draft text, "I'm not sure"'s is a fixed literal.
-                    // KNOWN v1 GAP: neither button disables itself once
-                    // answered (BasicCatalog's generic Button has no
-                    // conditional-local-write mechanism to flip an "open"
-                    // flag on tap without adding classroom-specific
-                    // plumbing to a catalog file meant to stay
-                    // protocol-only — see the implementation plan). A
-                    // double-tap sends a harmless duplicate user_message,
-                    // not a crash or data-corruption risk.
+                    // Both are also bound to a shared "open" flag (initially
+                    // true) so ClassroomEngine can flip it false the instant
+                    // either fires (see closePromptPanel()), preventing a
+                    // double-submit — ButtonRenderer's existing generic
+                    // `enabled` binding handles the rest with no
+                    // classroom-specific plumbing added to BasicCatalog.
                     val fieldId = "${controlId}_field"
                     val sendId = "${controlId}_send"
                     val notSureId = "${controlId}_notsure"
@@ -388,6 +386,7 @@ object ClassroomBridge {
                             "value" to A2uiValue.PathRef("/board/elements/$panelId/draftText"),
                             "promptId" to A2uiValue.Literal(JsonPrimitive(promptId)),
                             "action" to A2uiValue.Literal(JsonPrimitive("submitPrompt")),
+                            "enabled" to A2uiValue.PathRef("/board/elements/$panelId/open"),
                         ),
                     )
                     extraComponents += A2uiComponent(
@@ -398,6 +397,7 @@ object ClassroomBridge {
                             "value" to A2uiValue.Literal(JsonPrimitive("I'm not sure")),
                             "promptId" to A2uiValue.Literal(JsonPrimitive(promptId)),
                             "action" to A2uiValue.Literal(JsonPrimitive("submitPrompt")),
+                            "enabled" to A2uiValue.PathRef("/board/elements/$panelId/open"),
                         ),
                     )
                     extraComponents += A2uiComponent(
@@ -411,6 +411,7 @@ object ClassroomBridge {
                         children = A2uiChildren.Fixed(listOf(fieldId, actionsRowId)),
                     )
                     extraDataWrites += "/board/elements/$panelId/draftText" to JsonPrimitive("")
+                    extraDataWrites += "/board/elements/$panelId/open" to JsonPrimitive(true)
                 }
                 val panelComponent = A2uiComponent(
                     id = panelId,
@@ -662,6 +663,15 @@ object ClassroomBridge {
      *  by ClassroomEngine ~5000ms after the highlight was set. */
     fun clearHighlight(elementId: String): A2uiMessage =
         A2uiMessage.UpdateDataModel(SURFACE_ID, "/board/elements/$elementId/highlightedTerm", JsonNull.INSTANCE)
+
+    /** Flips a user_prompt panel's shared "open" flag false — fired by
+     *  ClassroomEngine.onAction the instant a "submitPrompt" action is
+     *  received, so the open-response Send/"I'm not sure" buttons
+     *  (bound to this same path via `enabled`) can't be double-tapped
+     *  into sending a duplicate answer. No-op for the chip (ChoicePicker)
+     *  path, which already self-disables once `selectedId` is non-null. */
+    fun closePromptPanel(promptId: String): A2uiMessage =
+        A2uiMessage.UpdateDataModel(SURFACE_ID, "/board/elements/prompt_$promptId/open", JsonPrimitive(false))
 
     // ── Outgoing, board-content actions (A2uiAction → UserActionEnvelope) ──
 

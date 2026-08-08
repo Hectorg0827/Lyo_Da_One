@@ -268,6 +268,14 @@ class ClassroomEngine(
         if (action.name == "submitPrompt") {
             promptTimeoutJob?.cancel()
             hasActiveCheckpoint = false
+            // Close the open-response Send/"I'm not sure" buttons the
+            // instant this fires, before the network round-trip — prevents
+            // a double-tap from sending a duplicate answer (the chip/
+            // ChoicePicker path already self-disables via its own
+            // selectedId check and doesn't need this).
+            action.context["promptId"]?.takeIf { it.isJsonPrimitive }?.asString?.let { promptId ->
+                applyMessage(ClassroomBridge.closePromptPanel(promptId))
+            }
         }
         ClassroomSocketClient.send(ClassroomBridge.actionToUserAction(action, sessionId))
         if (action.name == "submitPrompt") {
