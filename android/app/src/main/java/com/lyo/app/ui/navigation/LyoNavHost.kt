@@ -37,6 +37,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lyo.app.data.RecentCourseStore
 import com.lyo.app.data.Session
+import com.lyo.app.ui.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
@@ -87,10 +88,16 @@ object Routes {
     const val MESSAGES = "messages"
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
+    // Deliberately NOT added to bottomItems below — any route not in that
+    // list already renders full-screen with no bottom nav bar, which is
+    // exactly the chrome-free canvas the Netflix/YouTube-style classroom
+    // needs, with no further special-casing required.
+    const val CLASSROOM = "classroom/{topic}"
 
     fun postDetail(postId: String) = "community/$postId"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun userProfile(userId: String) = "profile/$userId"
+    fun classroom(topic: String) = "classroom/${java.net.URLEncoder.encode(topic, "UTF-8")}"
 }
 
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
@@ -192,6 +199,11 @@ private fun LyoNavHost() {
                     RecentCourseStore.save(context, courseId)
                 }
                 CourseDetailScreen(nav, courseId)
+            }
+            composable(Routes.CLASSROOM) { entry ->
+                val encodedTopic = entry.arguments?.getString("topic") ?: ""
+                val topic = java.net.URLDecoder.decode(encodedTopic, "UTF-8")
+                ClassroomScreen(nav, topic = topic)
             }
             composable(Routes.DISCOVER) { DiscoverScreen(nav) }
             composable(Routes.PROFILE) { ProfileScreen(nav, userId = null) }

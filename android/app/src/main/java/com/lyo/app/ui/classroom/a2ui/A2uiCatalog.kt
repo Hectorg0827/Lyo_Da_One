@@ -82,6 +82,17 @@ class A2uiRenderScope(
     }
 
     /**
+     * The actual data-model JSON Pointer a property is bound to, if it's a
+     * PathRef — this is what writeLocalDataModel() needs, NOT the property
+     * name itself. A property declared as a Literal or Call has no
+     * writable path and returns null. Shared by every input renderer
+     * (TextField, ChoicePicker, QuizCard, TransferInput, ...) so the same
+     * `as? A2uiValue.PathRef` cast isn't duplicated at every call site.
+     */
+    fun boundPath(propertyName: String): String? =
+        (component.properties[propertyName] as? A2uiValue.PathRef)?.path
+
+    /**
      * Two-way binding contract (a2ui_protocol.md): when the user interacts
      * with an input component, the renderer updates the LOCAL data model at
      * the bound path immediately — this does not touch the network. Network

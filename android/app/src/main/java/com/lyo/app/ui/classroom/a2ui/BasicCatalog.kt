@@ -33,16 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.google.gson.JsonPrimitive
 import com.lyo.app.data.a2ui.A2uiChildren
-import com.lyo.app.data.a2ui.A2uiValue
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
-import com.lyo.app.ui.theme.SurfaceElevated
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 
@@ -77,11 +74,6 @@ val BasicCatalog: A2uiCatalog = A2uiCatalog(
 )
 
 private val leafMargin = Modifier.padding(8.dp)
-
-/** Every input renderer below reads its bound path this same way — pulled
- *  out once so the `as?` cast isn't repeated at every call site. */
-private fun A2uiRenderScope.boundPath(propertyName: String): String? =
-    (component.properties[propertyName] as? A2uiValue.PathRef)?.path
 
 @Composable
 private fun A2uiRenderScope.TextRenderer() {
@@ -257,34 +249,17 @@ private fun A2uiRenderScope.ChoicePickerRenderer() {
     val selected = resolveString("value")
     val actionName = literalString("action")
 
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(4.dp),
-    ) {
-        options.forEach { option ->
-            val isSelected = option == selected
-            Text(
-                text = option,
-                color = if (isSelected) Color.White else TextPrimary,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                modifier = Modifier
-                    .background(
-                        if (isSelected) LyoPurple else SurfaceElevated,
-                        RoundedCornerShape(50),
-                    )
-                    .clickable(enabled = selected == null) {
-                        if (path != null) writeLocalDataModel(path, JsonPrimitive(option))
-                        if (actionName != null) {
-                            fireAction(
-                                actionName,
-                                mapOf("selectedLabel" to JsonPrimitive(option)),
-                            )
-                        }
-                    }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-            )
-        }
-    }
+    ClassroomChipRow(
+        options = options,
+        stateFor = { option -> if (option == selected) ChipState.SELECTED else ChipState.DEFAULT },
+        enabledFor = { selected == null },
+        onSelect = { option ->
+            if (path != null) writeLocalDataModel(path, JsonPrimitive(option))
+            if (actionName != null) {
+                fireAction(actionName, mapOf("selectedLabel" to JsonPrimitive(option)))
+            }
+        },
+    )
 }
 
 @Composable
