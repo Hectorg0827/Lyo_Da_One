@@ -603,12 +603,19 @@ object ClassroomBridge {
                             "expression" to A2uiValue.PathRef("/board/elements/explorable_$id/expression"),
                             "prompt" to A2uiValue.PathRef("/board/elements/explorable_$id/prompt"),
                             "params" to A2uiValue.PathRef("/board/elements/explorable_$id/params"),
+                            "xMin" to A2uiValue.PathRef("/board/elements/explorable_$id/xMin"),
+                            "xMax" to A2uiValue.PathRef("/board/elements/explorable_$id/xMax"),
                         ),
                     ),
                     dataModelWrites = listOf(
                         "/board/elements/explorable_$id/expression" to JsonPrimitive(turn.expression),
                         "/board/elements/explorable_$id/prompt" to (turn.prompt?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
                         "/board/elements/explorable_$id/params" to paramsJson,
+                        // Unused by v1's static renderer (no plotting yet) —
+                        // forwarded now so a v2 live-plot upgrade doesn't
+                        // also need a bridge change to get the axis range.
+                        "/board/elements/explorable_$id/xMin" to (turn.x_min?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
+                        "/board/elements/explorable_$id/xMax" to (turn.x_max?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
                     ),
                 )
             }
