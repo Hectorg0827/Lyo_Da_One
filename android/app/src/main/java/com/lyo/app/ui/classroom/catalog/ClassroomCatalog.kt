@@ -24,7 +24,9 @@ import com.lyo.app.ui.classroom.a2ui.A2uiComponentRenderer
  *   input) rather than duplicating that rendering.
  * - MermaidBlock, LatexBlock: v1 fallback (styled raw-source text, see each
  *   file's doc comment) pending a possible v2 WebView upgrade.
- * - ExplorableBlock: v1 static (no live parameter re-plotting yet).
+ * - ExplorableBlock: v2 — real live plotting (ExpressionEvaluator +
+ *   Canvas), upgraded from v1's static param list. See that file's doc
+ *   comment.
  */
 val ClassroomCatalog: A2uiCatalog = A2uiCatalog(
     mapOf(
