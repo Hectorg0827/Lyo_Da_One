@@ -11,9 +11,7 @@ struct MainTabView: View {
     @StateObject private var aiViewModel = LyoAIViewModel()
     
     @State private var selectedTab: Tab = .focus
-    @State private var isStackDrawerOpen = false
-    @State private var isStackPanelPresented = false
-    
+
     // Lyo Overlay State
     @State private var isLyoOverlayPresented = false
     @State private var lyoButtonFrame: CGRect = .zero
@@ -154,10 +152,6 @@ struct MainTabView: View {
                 .zIndex(100) // Ensure it's on top
             }
             
-            // Stack Drawer Overlay
-            StackDrawerView(isPresented: $isStackDrawerOpen)
-                .environmentObject(stackService)
-            
             // Notification Listeners
             notificationListeners
             
@@ -179,14 +173,6 @@ struct MainTabView: View {
                 .environmentObject(uiState)
                 .environmentObject(aiViewModel)
         }
-        .sheet(isPresented: $isStackPanelPresented) {
-            StackPanelView(
-                onClose: { isStackPanelPresented = false },
-                onNavigate: { action in handleStackNavigation(action) }
-            )
-            .environmentObject(uiStackStore)
-            .environmentObject(uiState)
-        }
         .sheet(isPresented: $isTutorModePresented) {
             if let tutor = navigateToTutor {
                 TutorModeView(
@@ -207,12 +193,16 @@ struct MainTabView: View {
                 isCourseGatePresented = false
                 if let finalData = pendingClassroomFromGate {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        // Route: GENERATE: courses → LiveClassroomView (offline-capable)
-                        //        Real-time sessions → LivingClassroomView (WebSocket)
+                        // Both branches present LivingClassroomView (see the two
+                        // fullScreenCover(isPresented:) below) — isLiveClassroomPresented
+                        // is a distinct trigger/state pair from isLivingClassroomPresented,
+                        // not a route to a different view. (The LiveClassroomView type
+                        // this was named after no longer exists — removed as dead code,
+                        // unreachable since this migration.)
                         if finalData.courseId.hasPrefix("GENERATE:") || !AppConfig.isLivingClassroomEnabled {
                             liveClassroomData = finalData
                             withAnimation { isLiveClassroomPresented = true }
-                            Log.ui.info("MainTabView: Gate done → LiveClassroomView for \(finalData.courseTitle)")
+                            Log.ui.info("MainTabView: Gate done → LivingClassroomView (GENERATE path) for \(finalData.courseTitle)")
                         } else {
                             livingClassroomData = (finalData.courseId, finalData.courseTitle)
                             withAnimation { isLivingClassroomPresented = true }
@@ -268,29 +258,13 @@ struct MainTabView: View {
         }
     }
     
-    // MARK: - Stack Navigation Handler
-    
-    private func handleStackNavigation(_ action: StackNavigationAction) {
-        isStackPanelPresented = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.performStackNavigation(action)
-        }
-    }
-    
-    private func performStackNavigation(_ action: StackNavigationAction) {
-        switch action {
-        case .openCourse(let courseId):
-            navigateToCourse(courseId)
-        case .openTutor(let courseId, let lessonId):
-            navigateToTutor = (courseId, lessonId)
-            isTutorModePresented = true
-        case .openCollab(let roomId):
-            uiState.currentCollabRoomId = roomId
-        case .openChat:
-            uiState.isLioChatPresented = true
-        }
-    }
-    
+    // MARK: - Deep-link course navigation
+    // (StackPanelView's own onNavigate/StackNavigationAction routing was
+    // removed along with StackPanelView.swift/StackDrawerView.swift — see
+    // git history — since neither was ever reachable from any live UI
+    // trigger. navigateToCourse itself stays: it's also the target of the
+    // deep-link handler below, a genuinely live, reachable path.)
+
     private func navigateToCourse(_ courseId: String) {
         if let courseItem = uiStackStore.items.first(where: { $0.id == courseId && $0.type == .course }) {
             let lessonId: String = courseItem.lessonId ?? "lesson-1"

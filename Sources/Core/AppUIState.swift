@@ -49,7 +49,6 @@ final class AppUIState: ObservableObject {
     
     /// Whether the Lio chat sheet is presented
     @Published var isLioChatPresented = false
-    @Published var isStackPanelPresented = false
     @Published var isCreatingEvent = false // Triggers event creation in CampusView
     
     /// Context hint for Ask Lio buttons (set before presenting LioChatSheet)
