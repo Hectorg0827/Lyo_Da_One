@@ -451,7 +451,7 @@ object ClassroomBridge {
                 )
 
                 val dataModelMessages = (
-                    listOf("/board/elements/$panelId/text" to JsonPrimitive(text) as Pair<String, JsonElement>) +
+                    listOf<Pair<String, JsonElement>>("/board/elements/$panelId/text" to JsonPrimitive(text)) +
                         extraDataWrites
                     ).map { (path, value) -> A2uiMessage.UpdateDataModel(SURFACE_ID, path, value) }
 
