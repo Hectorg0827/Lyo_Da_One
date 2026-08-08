@@ -1,6 +1,7 @@
 package com.lyo.app.ui.screens.home
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,10 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -37,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,10 +71,12 @@ import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(nav: NavHostController) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var overview by remember { mutableStateOf<JsonObject?>(null) }
     var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
     var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
@@ -197,14 +204,31 @@ fun HomeScreen(nav: NavHostController) {
                                 val courseId = stackItem.contentId ?: stackItem.id.toString()
                                 nav.navigate(Routes.classroom(topic = stackItem.title, courseId = courseId))
                             },
-                            onShare = {
+                            onShareExternally = {
                                 val courseId = stackItem.contentId ?: stackItem.id.toString()
-                                val shareUrl = "https://lyoai.app/courses/$courseId"
+                                val shareUrl = StackRepository.courseShareUrl(courseId)
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, "Check out \"${stackItem.title}\" on Lyo! $shareUrl")
                                 }
                                 context.startActivity(Intent.createChooser(sendIntent, null))
+                            },
+                            onPostToCommunity = {
+                                val courseId = stackItem.contentId ?: stackItem.id.toString()
+                                val progressPercent = (stackItem.progress.coerceIn(0f, 1f) * 100).toInt()
+                                scope.launch {
+                                    val posted = StackRepository.postCourseToCommunity(
+                                        courseId,
+                                        stackItem.title,
+                                        progressPercent,
+                                    )
+                                    val message = if (posted) {
+                                        "Posted \"${stackItem.title}\" to Community"
+                                    } else {
+                                        "Couldn't post right now — try again later"
+                                    }
+                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                }
                             },
                         )
                     }
@@ -337,7 +361,8 @@ private fun StackCourseCard(
     item: StackItemDto,
     gradient: Brush,
     onResume: () -> Unit,
-    onShare: () -> Unit,
+    onShareExternally: () -> Unit,
+    onPostToCommunity: () -> Unit,
 ) {
     GlassCard(
         modifier = Modifier
@@ -351,15 +376,41 @@ private fun StackCourseCard(
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .background(gradient),
         ) {
-            IconButton(
-                onClick = onShare,
-                modifier = Modifier.align(Alignment.TopEnd),
-            ) {
-                Icon(
-                    Icons.Filled.Share,
-                    contentDescription = "Share ${item.title}",
-                    tint = Color.White,
-                )
+            var shareMenuExpanded by remember { mutableStateOf(false) }
+            Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                IconButton(onClick = { shareMenuExpanded = true }) {
+                    Icon(
+                        Icons.Filled.Share,
+                        contentDescription = "Share ${item.title}",
+                        tint = Color.White,
+                    )
+                }
+                // Two distinct actions, both building on the same
+                // courseShareUrl (StackRepository): "Share" hands off to
+                // any installed app via the OS share sheet; "Post to
+                // Community" publishes inside Lyo's own Community feed —
+                // see StackRepository.postCourseToCommunity's doc comment.
+                DropdownMenu(
+                    expanded = shareMenuExpanded,
+                    onDismissRequest = { shareMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Share…") },
+                        leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                        onClick = {
+                            shareMenuExpanded = false
+                            onShareExternally()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Post to Community") },
+                        leadingIcon = { Icon(Icons.Filled.People, contentDescription = null) },
+                        onClick = {
+                            shareMenuExpanded = false
+                            onPostToCommunity()
+                        },
+                    )
+                }
             }
         }
         Column(modifier = Modifier.padding(14.dp)) {

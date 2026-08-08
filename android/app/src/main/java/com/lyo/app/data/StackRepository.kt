@@ -1,6 +1,7 @@
 package com.lyo.app.data
 
 import com.lyo.app.data.api.ApiClient
+import com.lyo.app.data.api.CommunityCreatePostRequest
 import com.lyo.app.data.api.CreateStackItemRequest
 import com.lyo.app.data.api.StackItemDto
 import com.lyo.app.data.api.UpdateStackItemRequest
@@ -70,6 +71,41 @@ object StackRepository {
             ApiClient.stack.updateItem(item.id, UpdateStackItemRequest(progress = progress.coerceIn(0f, 1f)))
         }
     }
+
+    /** Posts a stack card in-app, to the real Community feed (distinct
+     *  from the external OS share sheet HomeScreen also offers — one
+     *  shares outside the app via any installed app, this shares inside
+     *  it as a real, visible-to-others Community post). Uses the same
+     *  content_id-derived link both share paths build, so a course
+     *  shared either way resolves to the same course. Returns whether
+     *  the post was actually created — the caller surfaces that to the
+     *  user (e.g. a Toast), since a network failure here is silent
+     *  otherwise. */
+    suspend fun postCourseToCommunity(courseId: String, title: String, progressPercent: Int): Boolean {
+        val shareUrl = courseShareUrl(courseId)
+        val content = if (progressPercent > 0) {
+            "I'm $progressPercent% through \"$title\" on Lyo — join me: $shareUrl"
+        } else {
+            "Just started \"$title\" on Lyo — check it out: $shareUrl"
+        }
+        return runCatching {
+            ApiClient.api.createCommunityPost(
+                CommunityCreatePostRequest(content = content, tags = listOf("course"), postType = "text"),
+            )
+        }.isSuccess
+    }
+
+    /** The canonical, cross-platform course link both share paths (the
+     *  external OS share sheet and the in-app Community post above)
+     *  build — a real HTTPS link to web's existing /courses/{id} route,
+     *  which resolves for any recipient whether or not they have the app
+     *  installed (unlike iOS's app-only lyoapp://course/{id} scheme).
+     *  ASSUMPTION, disclosed: web's actual production domain isn't
+     *  recorded anywhere in either repo (checked layout.tsx/.env.example
+     *  — no NEXT_PUBLIC_SITE_URL); this follows the backend API's real
+     *  domain (https://api.lyoai.app/) by convention. Single named
+     *  constant — trivial to correct if wrong. */
+    fun courseShareUrl(courseId: String): String = "https://lyoai.app/courses/$courseId"
 
     /** The Focus/Home tab's "Your Stacks" list — every saved course,
      *  most-recently-touched first. The backend sorts by
