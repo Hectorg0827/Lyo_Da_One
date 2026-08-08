@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.A2uiAction
 import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiSurfaceState
@@ -192,6 +193,24 @@ class ClassroomEngine(
             // LessonBlock, ProgressBar, CTAButton, Celebration) render
             // immediately — the wire contract never paces these.
             applyMutation(ClassroomBridge.onImmediateComponentRender(component, boardChildren))
+            if (component.type == "ProgressBar") syncStackProgress(component)
+        }
+    }
+
+    /** Mirrors the backend's own authoritative mastery-progress signal
+     *  (ProgressBar's current/total — the same fields ClassroomBridge
+     *  already reads for the on-screen bar) into the course's Stacks
+     *  entry, so "Your Stacks" on the Focus/Home tab stays live without
+     *  a separate polling mechanism. `sessionId` is the real course id
+     *  once this screen was entered via Routes.classroom(topic, courseId)
+     *  — see LyoNavHost — so no extra field is needed here. Fire-and-
+     *  forget: StackRepository is itself resilient (never throws), and a
+     *  failed sync must never interrupt turn playback. */
+    private fun syncStackProgress(component: ClassroomComponent) {
+        val total = (component.total ?: 1).coerceAtLeast(1)
+        val current = (component.current ?: 0).coerceIn(0, total)
+        scope.launch {
+            StackRepository.updateCourseProgress(sessionId, current.toFloat() / total.toFloat())
         }
     }
 

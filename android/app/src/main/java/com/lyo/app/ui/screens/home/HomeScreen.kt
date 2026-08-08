@@ -1,5 +1,6 @@
 package com.lyo.app.ui.screens.home
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,11 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,10 +50,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.gson.JsonObject
-import com.lyo.app.data.RecentCourseStore
 import com.lyo.app.data.Session
+import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.CourseDto
+import com.lyo.app.data.api.StackItemDto
 import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
@@ -68,16 +72,11 @@ fun HomeScreen(nav: NavHostController) {
     val context = LocalContext.current
     var overview by remember { mutableStateOf<JsonObject?>(null) }
     var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
-    var recentCourseId by remember { mutableStateOf<String?>(null) }
-    var recentCourse by remember { mutableStateOf<CourseDto?>(null) }
+    var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
     var catalogError by remember { mutableStateOf<String?>(null) }
-    var recentCourseUnavailable by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val storedRecent = RecentCourseStore.load(context)
-        recentCourseId = storedRecent?.id
-
         runCatching { ApiClient.api.gamificationOverview() }
             .onSuccess { overview = it }
 
@@ -90,16 +89,12 @@ fun HomeScreen(nav: NavHostController) {
                 catalogError = it.localizedMessage ?: "The course catalog is unavailable."
             }
 
-        if (storedRecent != null) {
-            runCatching { ApiClient.api.course(storedRecent.id) }
-                .onSuccess {
-                    recentCourse = it
-                    recentCourseUnavailable = false
-                }
-                .onFailure {
-                    recentCourseUnavailable = true
-                }
-        }
+        // Device- and platform-agnostic — the same list backs Focus/Home
+        // on any device the user is signed into, unlike the old single-
+        // slot RecentCourseStore this replaces (StackRepository is
+        // internally resilient; an empty list here just means "none yet"
+        // or "sync failed," handled identically by EmptyLearningCard below).
+        courseStacks = StackRepository.listCourseStacks()
 
         loaded = true
     }
@@ -191,23 +186,31 @@ fun HomeScreen(nav: NavHostController) {
         }
 
         item {
-            SectionHeader("Your Learning")
-            when {
-                recentCourse != null -> RecentCourseCard(
-                    title = recentCourse?.title ?: "Course",
-                    subtitle = "Recent on this device · account progress refreshes when opened",
-                    onClick = {
-                        recentCourseId?.let { nav.navigate(Routes.courseDetail(it)) }
-                    },
-                )
-                recentCourseId != null && recentCourseUnavailable -> RecentCourseCard(
-                    title = "Recent course",
-                    subtitle = "Course details are temporarily unavailable. Open it to retry.",
-                    onClick = {
-                        recentCourseId?.let { nav.navigate(Routes.courseDetail(it)) }
-                    },
-                )
-                else -> EmptyLearningCard(
+            SectionHeader("Your Stacks")
+            if (courseStacks.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    itemsIndexed(courseStacks) { index, stackItem ->
+                        StackCourseCard(
+                            item = stackItem,
+                            gradient = CardGradients[index % CardGradients.size],
+                            onResume = {
+                                val courseId = stackItem.contentId ?: stackItem.id.toString()
+                                nav.navigate(Routes.classroom(topic = stackItem.title, courseId = courseId))
+                            },
+                            onShare = {
+                                val courseId = stackItem.contentId ?: stackItem.id.toString()
+                                val shareUrl = "https://lyoai.app/courses/$courseId"
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, "Check out \"${stackItem.title}\" on Lyo! $shareUrl")
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, null))
+                            },
+                        )
+                    }
+                }
+            } else {
+                EmptyLearningCard(
                     onClick = { nav.navigate(Routes.COURSES) },
                 )
             }
@@ -322,52 +325,78 @@ private fun StatCard(
     }
 }
 
+/**
+ * A card in the "Your Stacks" row — a course the user has actually
+ * started (has a real, backend-synced StackItemDto), with live progress
+ * and a share affordance. Replaces the old single-slot RecentCourseCard
+ * (device-local, at most one course) with a real multi-item, device- and
+ * platform-agnostic list — see StackRepository's doc comment.
+ */
 @Composable
-private fun RecentCourseCard(
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
+private fun StackCourseCard(
+    item: StackItemDto,
+    gradient: Brush,
+    onResume: () -> Unit,
+    onShare: () -> Unit,
 ) {
     GlassCard(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .width(220.dp)
+            .clickable(onClick = onResume),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(18.dp),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(gradient),
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(LyoPurple.copy(alpha = 0.18f)),
+            IconButton(
+                onClick = onShare,
+                modifier = Modifier.align(Alignment.TopEnd),
             ) {
                 Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = LyoPurple,
+                    Icons.Filled.Share,
+                    contentDescription = "Share ${item.title}",
+                    tint = Color.White,
                 )
             }
-            Column(
+        }
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            LinearProgressIndicator(
+                progress = { item.progress.coerceIn(0f, 1f) },
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 14.dp),
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .height(6.dp)
+                    .clip(CircleShape),
+                color = LyoPurple,
+                trackColor = LyoPurple.copy(alpha = 0.15f),
+            )
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
             ) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    text = if (item.status == "completed") "Completed" else "In progress",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
                 )
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(top = 4.dp),
+                    text = "${(item.progress.coerceIn(0f, 1f) * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LyoPurple,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
@@ -388,12 +417,12 @@ private fun EmptyLearningCard(onClick: () -> Unit) {
                 .padding(24.dp),
         ) {
             Text(
-                text = "No recent course on this device",
+                text = "No courses in your Stacks yet",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
             )
             Text(
-                text = "Open a real course from Explore. Focus will remember the course ID and refresh account progress when you return.",
+                text = "Start a course from Explore and it'll show up here — and on any other device you sign into.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 5.dp),

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
+import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.CourseDto
 import com.lyo.app.data.api.CourseProgressResponse
@@ -60,6 +62,7 @@ import com.lyo.app.data.api.LessonDto
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
+import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
@@ -201,6 +204,11 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                             completedLessons = safeCompletedCount,
                             totalLessons = totalLessons,
                             progressPercent = progressPercent,
+                            onStartClass = {
+                                nav.navigate(
+                                    Routes.classroom(topic = course?.title ?: "Course", courseId = courseId),
+                                )
+                            },
                         )
                     }
 
@@ -312,6 +320,17 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                                             )
                                             displayedProgressPercent = refreshedProgress.normalizedPercent
                                             progressWarning = null
+                                            // Keep this course's Stacks entry in sync even when
+                                            // progress is made via this reader screen, not just
+                                            // the AI Classroom (ClassroomEngine's own ProgressBar
+                                            // hook covers that path) — one consistent progress
+                                            // number regardless of which UI the learner uses.
+                                            scope.launch {
+                                                StackRepository.updateCourseProgress(
+                                                    courseId,
+                                                    refreshedProgress.normalizedPercent / 100f,
+                                                )
+                                            }
                                         } else {
                                             progressWarning = "The lesson was saved, but the latest course total could not be refreshed."
                                         }
@@ -376,6 +395,7 @@ private fun CourseHeader(
     completedLessons: Int,
     totalLessons: Int,
     progressPercent: Int,
+    onStartClass: () -> Unit,
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -423,6 +443,21 @@ private fun CourseHeader(
                     color = LyoPurple,
                     fontWeight = FontWeight.Bold,
                 )
+            }
+            // Opens the AI Classroom (ClassroomScreen/A2UI) rather than
+            // this screen's own paragraph-reader lesson flow below — the
+            // primary "Start" action per course-creation UX. Also the
+            // moment this course gets saved into "Your Stacks" on the
+            // Focus/Home tab (see LyoNavHost's Routes.CLASSROOM
+            // composable, which upserts on entry).
+            Button(
+                onClick = onStartClass,
+                colors = ButtonDefaults.buttonColors(containerColor = LyoPurple),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text(if (completedLessons > 0) "Resume in Classroom" else "Start Class")
             }
         }
     }
