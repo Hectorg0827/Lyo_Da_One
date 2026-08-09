@@ -18,6 +18,9 @@ private let assistantResponseWidthFraction: CGFloat = 0.99
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
     let onTTSToggle: (() -> Void)?
+    let isSpeaking: Bool
+    let canRegenerate: Bool
+    let onRegenerate: (() -> Void)?
     let onQuizAnswer: ((Int) -> Void)?
     let onCourseOpen: ((String) -> Void)?
     let onTopicSelect: ((TopicOption) -> Void)?
@@ -28,13 +31,16 @@ struct EnhancedMessageBubble: View {
     let highlights: [ChatHighlight]
     let onTextSelectionAction: ((TextSelectionAction) -> Void)?
 
-    @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
     @State private var selectedImageURL: URL?
+    @State private var didCopy = false
 
     init(
         message: MultimodalMessage,
         onTTSToggle: (() -> Void)? = nil,
+        isSpeaking: Bool = false,
+        canRegenerate: Bool = false,
+        onRegenerate: (() -> Void)? = nil,
         onQuizAnswer: ((Int) -> Void)? = nil,
         onCourseOpen: ((String) -> Void)? = nil,
         onTopicSelect: ((TopicOption) -> Void)? = nil,
@@ -46,6 +52,9 @@ struct EnhancedMessageBubble: View {
     ) {
         self.message = message
         self.onTTSToggle = onTTSToggle
+        self.isSpeaking = isSpeaking
+        self.canRegenerate = canRegenerate
+        self.onRegenerate = onRegenerate
         self.onQuizAnswer = onQuizAnswer
         self.onCourseOpen = onCourseOpen
         self.onTopicSelect = onTopicSelect
@@ -111,20 +120,6 @@ struct EnhancedMessageBubble: View {
                 }
                 
                 Spacer()
-                
-                // Read Aloud (TTS) in Header — only when there's text to speak
-                if !message.content.isEmpty {
-                Button(action: {
-                    onTTSToggle?()
-                }) {
-                    Image(systemName: audioService.isPlaying ? "stop.circle.fill" : "speaker.wave.2")
-                        .font(.system(size: 14))
-                        .foregroundColor(audioService.isPlaying ? .red : .white.opacity(0.6))
-                        .padding(8)
-                        .background(Color.white.opacity(0.05))
-                        .clipShape(Circle())
-                }
-                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -142,41 +137,69 @@ struct EnhancedMessageBubble: View {
                     }
                 }
                 
-                // Action Footer (Share, Copy) — only when there's text to copy
+                // Persistent actions remain discoverable on touch devices.
                 if !message.content.isEmpty {
-                HStack(spacing: 16) {
-                    Spacer()
-                    
-                    // Copy
-                    Button(action: {
-                        UIPasteboard.general.string = message.content
-                        HapticManager.shared.light()
-                    }) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
-                    
-                    // Share
-                    Button(action: {
-                        // Start simple share sheet
-                        let activityVC = UIActivityViewController(activityItems: [message.content], applicationActivities: nil)
-                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                           let rootVC = windowScene.windows.first?.rootViewController {
-                            rootVC.present(activityVC, animated: true)
+                    Divider()
+                        .overlay(Color.white.opacity(0.08))
+                        .padding(.top, 4)
+
+                    HStack(spacing: 6) {
+                        responseActionButton(
+                            title: didCopy ? "Copied" : "Copy",
+                            systemImage: didCopy ? "checkmark" : "doc.on.doc"
+                        ) {
+                            UIPasteboard.general.string = message.content
+                            didCopy = true
+                            HapticManager.shared.light()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                                didCopy = false
+                            }
                         }
-                    }) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.6))
+
+                        responseActionButton(
+                            title: isSpeaking ? "Stop" : "Listen",
+                            systemImage: isSpeaking ? "stop.fill" : "speaker.wave.2",
+                            isActive: isSpeaking,
+                            isEnabled: onTTSToggle != nil
+                        ) { onTTSToggle?() }
+
+                        responseActionButton(
+                            title: "Try again",
+                            systemImage: "arrow.clockwise",
+                            isEnabled: canRegenerate && onRegenerate != nil
+                        ) { onRegenerate?() }
+
+                        responseActionButton(
+                            title: "Save",
+                            systemImage: "arrow.down.doc"
+                        ) {
+                            saveResponseToFiles()
+                        }
                     }
-                }
                 } // end if !message.content.isEmpty
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, DesignTokens.Spacing.xs)
-            .padding(.vertical, 14)
-            .background(Color.clear)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.075),
+                                Color.white.opacity(0.04),
+                                Color.accentColor.opacity(0.035)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.11), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 24, y: 12)
         }
         .containerRelativeFrame(.horizontal) { width, _ in
             width * assistantResponseWidthFraction
@@ -245,25 +268,77 @@ struct EnhancedMessageBubble: View {
             .frame(width: 40, height: 40)
     }
     
-    // MARK: - TTS Button
-    
-    private var ttsButton: some View {
-        Button {
-            onTTSToggle?()
-            HapticManager.shared.playLightImpact()
-        } label: {
-            Group {
-                if audioService.currentMessageId == message.id && audioService.isPlaying {
-                    Image(systemName: "stop.circle.fill")
-                } else if audioService.currentMessageId == message.id && audioService.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else {
-                    Image(systemName: "speaker.wave.2.circle.fill")
-                }
+    // MARK: - Response Actions
+
+    private func responseActionButton(
+        title: String,
+        systemImage: String,
+        isActive: Bool = false,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
-            .font(.system(size: 20))
-            .foregroundColor(.accentColor.opacity(0.8))
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .foregroundColor(isActive ? Color.accentColor : Color.white.opacity(0.62))
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isActive ? Color.accentColor.opacity(0.14) : Color.white.opacity(0.035))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        isActive ? Color.accentColor.opacity(0.35) : Color.white.opacity(0.08),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.35)
+        .accessibilityLabel(title)
+    }
+
+    private func saveResponseToFiles() {
+        let markdown = "# Lyo response\n\n\(message.content.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lyo-response-\(String(message.id.prefix(8))).md")
+
+        do {
+            try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
+            let activity = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+            guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let root = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+                return
+            }
+
+            var presenter = root
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            if let popover = activity.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(
+                    x: presenter.view.bounds.midX,
+                    y: presenter.view.bounds.maxY - 1,
+                    width: 1,
+                    height: 1
+                )
+            }
+            activity.completionWithItemsHandler = { _, _, _, _ in
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            presenter.present(activity, animated: true)
+            HapticManager.shared.playSuccess()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
     

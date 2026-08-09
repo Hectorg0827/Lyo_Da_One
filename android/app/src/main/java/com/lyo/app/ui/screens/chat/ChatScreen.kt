@@ -2,8 +2,11 @@ package com.lyo.app.ui.screens.chat
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +14,7 @@ import android.provider.OpenableColumns
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -26,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -42,11 +47,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,11 +77,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.data.api.ApiClient
@@ -80,6 +91,7 @@ import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
 import com.lyo.app.data.api.ChatMediaRef
 import com.lyo.app.data.api.CreateAiConversationRequest
+import com.lyo.app.data.api.TtsSynthesizeRequest
 import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
@@ -88,11 +100,17 @@ import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -169,6 +187,9 @@ fun ChatScreen(nav: NavHostController) {
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    var speechJob by remember { mutableStateOf<Job?>(null) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var pendingResponseSave by remember { mutableStateOf<Pair<String, String>?>(null) }
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -202,8 +223,11 @@ fun ChatScreen(nav: NavHostController) {
         textToSpeech = engine
 
         onDispose {
+            speechJob?.cancel()
             engine.stop()
             engine.shutdown()
+            speechJob = null
+            mediaPlayer = null
             textToSpeech = null
             textToSpeechReady = false
             speakingMessageId = null
@@ -264,6 +288,31 @@ fun ChatScreen(nav: NavHostController) {
                 }
             }
             uploadingAttachment = false
+        }
+    }
+
+    val saveResponseLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri ->
+        val pending = pendingResponseSave
+        pendingResponseSave = null
+        if (uri == null || pending == null) return@rememberLauncherForActivityResult
+
+        scope.launch {
+            val saved = runCatching {
+                withContext(Dispatchers.IO) {
+                    val stream = context.contentResolver.openOutputStream(uri)
+                        ?: throw IllegalStateException("The selected file could not be opened.")
+                    stream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                        writer.write(pending.second)
+                    }
+                }
+            }.isSuccess
+            Toast.makeText(
+                context,
+                if (saved) "Response saved." else "The response could not be saved.",
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
@@ -354,11 +403,17 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    fun stopSpeech() {
+        speechJob?.cancel()
+        speechJob = null
+        mediaPlayer = null
+        textToSpeech?.stop()
+        speakingMessageId = null
+    }
+
     fun toggleSpeech(message: ChatMsg) {
-        val engine = textToSpeech ?: return
         if (speakingMessageId == message.id) {
-            engine.stop()
-            speakingMessageId = null
+            stopSpeech()
             return
         }
 
@@ -368,14 +423,42 @@ fun ChatScreen(nav: NavHostController) {
         }
         if (spokenText.isBlank()) return
 
-        engine.stop()
+        stopSpeech()
         speakingMessageId = message.id
-        engine.speak(
-            spokenText,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            message.id,
-        )
+        speechJob = scope.launch {
+            try {
+                for (chunk in splitSpeechText(spokenText)) {
+                    val bytes = withContext(Dispatchers.IO) {
+                        ApiClient.api.synthesizeSpeech(
+                            TtsSynthesizeRequest(text = chunk),
+                        ).bytes()
+                    }
+                    playSpeechAudio(
+                        context = context,
+                        bytes = bytes,
+                        onPlayerChanged = { mediaPlayer = it },
+                    )
+                }
+                if (speakingMessageId == message.id) speakingMessageId = null
+            } catch (_: CancellationException) {
+                // A second tap intentionally stopped playback.
+            } catch (_: Exception) {
+                // Keep a localized device voice as an offline fallback, but use
+                // the shared Kokoro voice whenever the backend is reachable.
+                val engine = textToSpeech
+                if (engine != null && textToSpeechReady && speakingMessageId == message.id) {
+                    engine.speak(
+                        spokenText,
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        message.id,
+                    )
+                } else if (speakingMessageId == message.id) {
+                    speakingMessageId = null
+                    Toast.makeText(context, "Lyo voice is temporarily unavailable.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     // Resume the most recent server conversation on any Android device.
@@ -408,8 +491,7 @@ fun ChatScreen(nav: NavHostController) {
             TextButton(
                 enabled = !isStreaming && !uploadingAttachment,
                 onClick = {
-                    textToSpeech?.stop()
-                    speakingMessageId = null
+                    stopSpeech()
                     activeConversationId = null
                     pendingAttachments.clear()
                     inputError = null
@@ -473,9 +555,23 @@ fun ChatScreen(nav: NavHostController) {
                             msg.id == messages.lastOrNull()?.id &&
                             msg.role == "assistant" &&
                             msg.content.isEmpty(),
-                        canSpeak = textToSpeechReady && msg.role == "assistant" && msg.content.isNotBlank(),
+                        canSpeak = msg.role == "assistant" && msg.content.isNotBlank(),
                         speaking = speakingMessageId == msg.id,
                         onToggleSpeech = { toggleSpeech(msg) },
+                        canRegenerate = !isStreaming && messages.lastOrNull()?.id == msg.id,
+                        onRegenerate = {
+                            send("Please try that again with a fresh, clearer explanation.")
+                        },
+                        onCopy = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Lyo response", msg.content))
+                            Toast.makeText(context, "Response copied.", Toast.LENGTH_SHORT).show()
+                        },
+                        onSave = {
+                            val fileName = "lyo-response-${msg.id.take(8)}.md"
+                            pendingResponseSave = fileName to "# Lyo response\n\n${msg.content.trim()}\n"
+                            saveResponseLauncher.launch(fileName)
+                        },
                     )
                 }
             }
@@ -658,6 +754,10 @@ private fun MessageBubble(
     canSpeak: Boolean,
     speaking: Boolean,
     onToggleSpeech: () -> Unit,
+    canRegenerate: Boolean,
+    onRegenerate: () -> Unit,
+    onCopy: () -> Unit,
+    onSave: () -> Unit,
 ) {
     val context = LocalContext.current
     val isUser = msg.role == "user"
@@ -672,10 +772,10 @@ private fun MessageBubble(
         },
     ) {
         val bubbleShape = RoundedCornerShape(
-            topStart = 18.dp,
-            topEnd = 18.dp,
-            bottomStart = if (isUser) 18.dp else 4.dp,
-            bottomEnd = if (isUser) 4.dp else 18.dp,
+            topStart = if (isUser) 18.dp else 24.dp,
+            topEnd = if (isUser) 18.dp else 24.dp,
+            bottomStart = if (isUser) 18.dp else 24.dp,
+            bottomEnd = if (isUser) 4.dp else 24.dp,
         )
         val bubbleModifier = Modifier
             .then(
@@ -686,12 +786,42 @@ private fun MessageBubble(
             .let {
                 if (isUser) it.background(LyoBrandGradient)
                 else it
-                    .background(Surface)
-                    .border(1.dp, BorderColor, bubbleShape)
+                    .background(Color.White.copy(alpha = 0.055f))
+                    .border(1.dp, Color.White.copy(alpha = 0.11f), bubbleShape)
             }
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(
+                horizontal = if (isUser) 14.dp else 18.dp,
+                vertical = if (isUser) 10.dp else 16.dp,
+            )
 
         Column(modifier = bubbleModifier) {
+            if (!isUser) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 12.dp),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(LyoPurple.copy(alpha = 0.18f)),
+                    ) {
+                        Text(
+                            text = "L",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = LyoPurple,
+                        )
+                    }
+                    Text(
+                        text = "Lyo",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextPrimary,
+                    )
+                }
+            }
+
             if (showTyping) {
                 val transition = rememberInfiniteTransition(label = "typing")
                 val blinkAlpha by transition.animateFloat(
@@ -754,30 +884,172 @@ private fun MessageBubble(
                 if (parsed.text.isNotBlank()) {
                     Text(
                         text = parsed.text,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 28.sp),
                         color = if (isUser) Color.White else TextPrimary,
                         modifier = Modifier.padding(top = if (parsed.attachments.isNotEmpty()) 8.dp else 0.dp),
                     )
                 }
 
-                if (canSpeak) {
-                    IconButton(
-                        onClick = onToggleSpeech,
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .padding(top = 4.dp)
-                            .size(32.dp),
+                if (!isUser && parsed.text.isNotBlank()) {
+                    HorizontalDivider(
+                        color = Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Icon(
-                            imageVector = if (speaking) Icons.Default.Stop else Icons.Default.VolumeUp,
-                            contentDescription = if (speaking) "Stop reading" else "Read response aloud",
-                            tint = LyoPurple,
-                            modifier = Modifier.size(18.dp),
+                        ResponseAction(
+                            label = "Copy",
+                            icon = Icons.Default.ContentCopy,
+                            onClick = onCopy,
+                        )
+                        ResponseAction(
+                            label = if (speaking) "Stop" else "Listen",
+                            icon = if (speaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+                            enabled = canSpeak,
+                            active = speaking,
+                            onClick = onToggleSpeech,
+                        )
+                        ResponseAction(
+                            label = "Try again",
+                            icon = Icons.Default.Refresh,
+                            enabled = canRegenerate,
+                            onClick = onRegenerate,
+                        )
+                        ResponseAction(
+                            label = "Save",
+                            icon = Icons.Default.Download,
+                            onClick = onSave,
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RowScope.ResponseAction(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    active: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .weight(1f)
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (active) LyoPurple.copy(alpha = 0.14f)
+                else Color.White.copy(alpha = 0.035f),
+            )
+            .border(
+                width = 1.dp,
+                color = if (active) LyoPurple.copy(alpha = 0.35f)
+                else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.35f)
+            .padding(vertical = 6.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (active) LyoPurple else TextSecondary,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (active) LyoPurple else TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun splitSpeechText(raw: String, limit: Int = 1_100): List<String> {
+    var remaining = raw
+        .replace(Regex("""```[\s\S]*?```"""), " Code example omitted. ")
+        .replace(Regex("""!\[([^]]*)]\([^)]*\)"""), "\$1")
+        .replace(Regex("""\[([^]]+)]\([^)]*\)"""), "\$1")
+        .replace(Regex("""(?m)^#{1,6}\s+"""), "")
+        .replace(Regex("""(?m)^\s*[-*+]\s+"""), "")
+        .replace(Regex("""(?m)^\s*\d+\.\s+"""), "")
+        .replace(Regex("""[*_`~>|]"""), " ")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+    if (remaining.isBlank()) return emptyList()
+
+    val chunks = mutableListOf<String>()
+    val boundaries = charArrayOf('.', '!', '?', ';', ',', ' ')
+    while (remaining.length > limit) {
+        val window = remaining.substring(0, limit)
+        val natural = window.lastIndexOfAny(boundaries)
+        val splitAt = if (natural >= limit / 2) natural + 1 else limit
+        chunks.add(remaining.substring(0, splitAt).trim())
+        remaining = remaining.substring(splitAt).trim()
+    }
+    if (remaining.isNotBlank()) chunks.add(remaining)
+    return chunks
+}
+
+private suspend fun playSpeechAudio(
+    context: Context,
+    bytes: ByteArray,
+    onPlayerChanged: (MediaPlayer?) -> Unit,
+) {
+    val file = withContext(Dispatchers.IO) {
+        File.createTempFile("lyo-response-", ".mp3", context.cacheDir).apply {
+            writeBytes(bytes)
+        }
+    }
+
+    try {
+        suspendCancellableCoroutine { continuation ->
+            val player = MediaPlayer()
+            onPlayerChanged(player)
+
+            fun releasePlayer() {
+                player.setOnCompletionListener(null)
+                player.setOnErrorListener(null)
+                player.runCatching { stop() }
+                player.release()
+                onPlayerChanged(null)
+            }
+
+            continuation.invokeOnCancellation { releasePlayer() }
+            player.setOnCompletionListener {
+                releasePlayer()
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+            player.setOnErrorListener { _, what, extra ->
+                releasePlayer()
+                if (continuation.isActive) {
+                    continuation.resumeWithException(
+                        IllegalStateException("Audio playback failed ($what/$extra)."),
+                    )
+                }
+                true
+            }
+
+            try {
+                player.setDataSource(file.absolutePath)
+                player.prepare()
+                player.start()
+            } catch (error: Exception) {
+                releasePlayer()
+                if (continuation.isActive) continuation.resumeWithException(error)
+            }
+        }
+    } finally {
+        withContext(Dispatchers.IO) { file.delete() }
     }
 }
 

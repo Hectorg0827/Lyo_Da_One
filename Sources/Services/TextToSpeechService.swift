@@ -60,7 +60,7 @@ class TextToSpeechService: NSObject, ObservableObject {
         let cleanText = prepareSpeechText(text)
         guard !cleanText.isEmpty else { return }
 
-        speechQueue.append((cleanText, language))
+        speechQueue.append(contentsOf: speechChunks(cleanText).map { ($0, language) })
         startPlaybackIfNeeded()
     }
 
@@ -279,5 +279,32 @@ class TextToSpeechService: NSObject, ObservableObject {
         clean = clean.replacingOccurrences(of: #"\n+"#, with: " ", options: .regularExpression)
         clean = clean.replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
         return clean.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The shared voice accepts short teaching turns. Chunk long chat replies
+    /// at natural boundaries so Listen keeps the same Kokoro voice instead of
+    /// dropping immediately to device speech for responses over 1,200 chars.
+    private func speechChunks(_ text: String, limit: Int = 1_100) -> [String] {
+        var remaining = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var chunks: [String] = []
+
+        while remaining.count > limit {
+            let hardBoundary = remaining.index(remaining.startIndex, offsetBy: limit)
+            let window = remaining[..<hardBoundary]
+            let naturalBoundary = window.lastIndex(where: { character in
+                character == "." || character == "!" || character == "?" ||
+                    character == ";" || character == "," || character.isWhitespace
+            })
+            let splitIndex = naturalBoundary.map { remaining.index(after: $0) } ?? hardBoundary
+            let chunk = String(remaining[..<splitIndex])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !chunk.isEmpty { chunks.append(chunk) }
+            remaining = String(remaining[splitIndex...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if !remaining.isEmpty { chunks.append(remaining) }
+        return chunks
     }
 }

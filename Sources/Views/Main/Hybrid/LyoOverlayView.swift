@@ -203,7 +203,15 @@ struct LyoOverlayView: View {
     private func messageBubble(for message: LyoMessage) -> some View {
         EnhancedMessageBubble(
             message: MultimodalMessage(from: message),
-            onTTSToggle: nil,
+            onTTSToggle: {
+                viewModel.toggleMessageAudio(messageId: message.id, text: message.content)
+            },
+            isSpeaking: viewModel.currentlyPlayingMessageId == message.id,
+            canRegenerate: !isThinking && viewModel.messages.last?.id == message.id,
+            onRegenerate: {
+                viewModel.inputText = "Please try that again with a fresh, clearer explanation."
+                submitText()
+            },
             onQuizAnswer: { index in
                 // Notify the AI of the user's selected option index
                 viewModel.inputText = "I selected option \(index + 1) in the quiz."

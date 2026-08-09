@@ -476,6 +476,13 @@ data class SimpleChatResponse(
     val response: String? = null,
 )
 
+data class TtsSynthesizeRequest(
+    val text: String,
+    val language: String = "auto",
+    val format: String = "mp3",
+    val speed: Double = 0.98,
+)
+
 // ── Canonical AI conversation continuity ────────────────────────────────────
 
 data class AiConversationMessageDto(
