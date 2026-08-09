@@ -202,7 +202,7 @@ fun HomeScreen(nav: NavHostController) {
                             gradient = CardGradients[index % CardGradients.size],
                             onResume = {
                                 val courseId = stackItem.contentId ?: stackItem.id.toString()
-                                nav.navigate(Routes.classroom(topic = stackItem.title, courseId = courseId))
+                                nav.navigate(Routes.classroom(courseId))
                             },
                             onShareExternally = {
                                 val courseId = stackItem.contentId ?: stackItem.id.toString()

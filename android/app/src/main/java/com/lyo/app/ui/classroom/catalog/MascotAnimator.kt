@@ -15,12 +15,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.graphicsLayer
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.unit.IntOffset
 import com.lyo.app.R
 import com.lyo.app.ui.theme.ClassroomTokens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlin.math.roundToInt
 
 /**
  * The 9 canonical `lyoState` values from the director-turn wire contract
@@ -45,7 +49,7 @@ private val READING_FRAMES = intArrayOf(
     R.drawable.mascot_reading_4,
 )
 
-private const val STANDING_FRAME = R.drawable.mascot_standing
+private val STANDING_FRAME = R.drawable.mascot_standing
 
 /**
  * Drives one mascot's current drawable resource + a breathing/bounce
@@ -93,12 +97,13 @@ fun rememberMascotFrame(state: String, variant: String = "lyo"): MascotFrame {
                 animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
             )
         }
+        val translationY = -12f * bounce.value * (1f - bounce.value) * 4f
+        val rotationZ = 8f * bounce.value * (1f - bounce.value) * 4f
         return MascotFrame(
             READING_FRAMES[0],
-            breathing.graphicsLayer {
-                translationY = -12f * bounce.value * (1f - bounce.value) * 4f
-                rotationZ = 8f * bounce.value * (1f - bounce.value) * 4f
-            },
+            breathing
+                .rotate(rotationZ)
+                .offset { IntOffset(0, translationY.roundToInt()) },
         )
     }
     return MascotFrame(READING_FRAMES[0], breathing)
@@ -116,5 +121,5 @@ private fun rememberBreathingModifier(): Modifier {
         ),
         label = "mascot-breathing-scale",
     )
-    return Modifier.graphicsLayer { scaleX = scale; scaleY = scale }
+    return Modifier.scale(scale)
 }
