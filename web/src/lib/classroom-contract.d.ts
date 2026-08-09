@@ -4,11 +4,14 @@ export type HintLevel = 'nudge' | 'principle' | 'worked_step' | 'full_example' |
 export interface ClassroomContractConnection {
   topic: string;
   sessionId?: string;
+  courseId?: string;
+  lessonId?: string;
   objective?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
   mode?: ClassroomMode;
   durationMinutes?: number;
   reducedMotion?: boolean;
+  language?: string;
 }
 
 export const CLASSROOM_MODES: readonly ClassroomMode[];

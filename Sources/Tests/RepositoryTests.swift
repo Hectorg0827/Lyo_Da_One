@@ -266,7 +266,13 @@ class RepositoryTests: XCTestCase {
 
         // Test 1: Generate TTS
         await runTest(name: "TTS: Generate Audio") {
-            let result = try await repo.generate(text: "Hello world", voice: .nova, speed: 1.0, withTimings: true)
+            let result = try await repo.generate(
+                text: "Hello world",
+                voice: .nova,
+                speed: 1.0,
+                withTimings: true,
+                language: "en-US"
+            )
             assert(!result.audioURL.isEmpty, "Audio URL should not be empty")
         }
 

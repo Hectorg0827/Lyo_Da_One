@@ -15,11 +15,15 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   const base = apiUrl.replace(/^http/, 'ws').replace(/\/$/, '');
   const params = new URLSearchParams({
     session_id: connection.sessionId || connection.topic,
+    client_contract_version: '2',
     topic: connection.topic,
     mode: normalizeClassroomMode(connection.mode),
     duration_minutes: String(Math.max(3, Math.min(60, Number(connection.durationMinutes) || 10))),
     reduced_motion: connection.reducedMotion ? 'true' : 'false',
+    language: connection.language || 'auto',
   });
+  if (connection.courseId) params.set('course_id', connection.courseId);
+  if (connection.lessonId) params.set('lesson_id', connection.lessonId);
   if (connection.objective) params.set('objective', connection.objective);
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
   if (token) params.set('token', token);

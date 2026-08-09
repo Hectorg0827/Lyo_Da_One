@@ -43,6 +43,8 @@ export interface ClassroomComponent {
   min_score?: number;
   evidence_type?: string;
   source_attributions?: string[];
+  language_code?: string;
+  audio_url?: string | null;
   title?: string;
   content?: string;
   block_type?: string;
@@ -99,8 +101,8 @@ export type BoardElement =
   | { id: string; kind: 'bullets'; items: string[] }
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
-  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string }
-  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
+  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
   | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string };
@@ -132,6 +134,8 @@ type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 
 export interface ClassroomConnection extends ClassroomContractConnection {
   mode?: ClassroomMode;
+  courseId?: string;
+  lessonId?: string;
 }
 
 interface ClassroomStore {
@@ -139,6 +143,7 @@ interface ClassroomStore {
   topic: string;
   sessionId: string;
   objective: string;
+  languageCode: string;
 
   board: BoardElement[];        // the live board
   boardHistory: BoardElement[][]; // erased boards (flip back through)
@@ -168,7 +173,10 @@ interface ClassroomStore {
   answerPrompt: (option: string) => void;
   answerQuiz: (elementId: string, option: QuizOption) => void;
   answerTransfer: (elementId: string, response: string) => void;
+  skipQuestion: (elementId: string) => void;
+  unskipQuestion: (elementId: string) => void;
   askQuestion: (text: string) => void;
+  takeFloor: () => void;
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
@@ -185,11 +193,17 @@ let ws: WebSocket | null = null;
 let turnQueue: DirectorTurn[] = [];
 let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
+let speechAbort: AbortController | null = null;
+let activeAudio: HTMLAudioElement | null = null;
+let activeAudioUrl: string | null = null;
+let speechGeneration = 0;
+let authToken: string | null = null;
 let idCounter = 0;
 let pendingErase = false; // erase lazily when the NEW scene's content arrives
 const nextId = () => `cf_${++idCounter}`;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 function wsUrl(connection: ClassroomConnection, token: string | null): string {
   return buildClassroomWsUrl(API_URL, connection, token);
@@ -199,20 +213,91 @@ function speechDelay(text: string): number {
   return Math.min(Math.max(text.length * 34, 1400), 7000);
 }
 
-// Distinct voices for the cast (browser SpeechSynthesis).
-const VOICE_PROFILE: Record<string, { pitch: number; rate: number }> = {
-  Teacher: { pitch: 0.92, rate: 1.0 },
-  Maya: { pitch: 1.2, rate: 1.05 },
-  Sam: { pitch: 1.0, rate: 1.12 },
-  Rio: { pitch: 1.15, rate: 1.1 },
-  Zara: { pitch: 0.85, rate: 0.95 },
-  Lyo: { pitch: 1.35, rate: 1.05 },
-};
-
 function stopSpeech() {
+  speechGeneration += 1;
+  speechAbort?.abort();
+  speechAbort = null;
+  if (activeAudio) {
+    activeAudio.onended = null;
+    activeAudio.onerror = null;
+    activeAudio.pause();
+    activeAudio.src = '';
+    activeAudio = null;
+  }
+  if (activeAudioUrl) {
+    URL.revokeObjectURL(activeAudioUrl);
+    activeAudioUrl = null;
+  }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
+}
+
+// Non-Latin scripts are decisive, but only in this order: Japanese prose mixes
+// kana with kanji, and Korean can carry hanja, so those language-specific
+// scripts must be checked before the CJK ideographs they share with Chinese.
+const SCRIPT_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
+  { code: 'ja', test: /[぀-ヿ]/ },   // hiragana + katakana
+  { code: 'ko', test: /[가-힯]/ },   // hangul syllables
+  { code: 'ar', test: /[؀-ۿ]/ },
+  { code: 'ru', test: /[Ѐ-ӿ]/ },
+  { code: 'hi', test: /[ऀ-ॿ]/ },
+  { code: 'zh', test: /[一-鿿]/ },   // shared ideographs — last resort
+];
+
+// Latin-script languages share an alphabet and much of their function-word
+// vocabulary ("la" is French and Spanish, "para" is Spanish and Portuguese),
+// so no single hint is decisive. Score every candidate across the whole sample
+// and take the strongest rather than returning on the first pattern that hits.
+const LATIN_LANGUAGE_HINTS: { code: string; unique?: RegExp; words: RegExp }[] = [
+  { code: 'es', unique: /[¿¡ñ]/g, words: /\b(el|los|las|que|para|con|una|uno|por|cómo|qué|cuál|más|así|pero|también|está)\b/gi },
+  { code: 'pt', unique: /[ãõ]/g, words: /\b(não|com|para|uma|isso|então|você|está|são|também|mais)\b/gi },
+  { code: 'fr', unique: /[œùêîôë]/g, words: /\b(le|la|les|des|est|une|avec|pour|qui|où|dans|nous|être|cette)\b/gi },
+  { code: 'de', unique: /[äöüß]/g, words: /\b(der|die|das|und|nicht|mit|für|eine|ist|auch|sich|wird)\b/gi },
+  { code: 'it', words: /\b(il|lo|gli|che|per|con|una|è|questo|come|sono|anche|della)\b/gi },
+];
+
+// A language-exclusive character is far stronger evidence than a function word
+// that several languages share.
+const UNIQUE_CHAR_WEIGHT = 3;
+// Below this, the evidence is as likely to be an English coincidence as a real
+// signal — fall back to the browser's default voice instead of guessing.
+const MIN_LANGUAGE_SCORE = 2;
+
+function scoreLatinLanguage(text: string, hint: { unique?: RegExp; words: RegExp }): number {
+  const uniqueHits = hint.unique ? (text.match(hint.unique)?.length ?? 0) : 0;
+  const distinctWords = new Set(
+    (text.match(hint.words) ?? []).map((word) => word.toLowerCase()),
+  ).size;
+  return uniqueHits * UNIQUE_CHAR_WEIGHT + distinctWords;
+}
+
+/**
+ * Best-effort guess at the spoken-language code for `text`, so narration is
+ * read in a matching voice instead of always defaulting to English. Returns
+ * null (meaning: let the browser's default voice handle it) when the text is
+ * too short or shows no language-specific signal.
+ */
+function detectSpeechLanguage(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length < 8) return null;
+
+  for (const { code, test } of SCRIPT_LANGUAGE_HINTS) {
+    if (test.test(trimmed)) return code;
+  }
+
+  let best: { code: string; score: number } | null = null;
+  for (const hint of LATIN_LANGUAGE_HINTS) {
+    const score = scoreLatinLanguage(trimmed, hint);
+    if (score > (best?.score ?? 0)) best = { code: hint.code, score };
+  }
+  return best && best.score >= MIN_LANGUAGE_SCORE ? best.code : null;
+}
+
+/** Picks an installed SpeechSynthesis voice matching a language code, if any. */
+function findVoiceForLanguage(code: string): SpeechSynthesisVoice | undefined {
+  return window.speechSynthesis.getVoices()
+    .find((voice) => voice.lang.toLowerCase().startsWith(code));
 }
 
 /** Classify a board "write"/"draw" payload into the right visual. */
@@ -280,26 +365,120 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   const sfx = (sound: AmbientSound) => { if (get().soundOn) playSound(sound); };
 
-  function speakLine(speaker: string, text: string, onDone: () => void) {
-    if (!get().voiceOn || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+  function speakWithLocalizedDeviceVoice(
+    text: string,
+    language: string,
+    generation: number,
+    onDone: () => void,
+  ) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       playTimer = setTimeout(onDone, speechDelay(text));
       return;
     }
     try {
       const utterance = new SpeechSynthesisUtterance(text);
-      const profile = VOICE_PROFILE[speaker] ?? VOICE_PROFILE.Teacher;
-      utterance.pitch = profile.pitch;
-      utterance.rate = profile.rate * get().speechRate;
+      const detectedLanguage = detectSpeechLanguage(text);
+      const resolvedLanguage = language === 'auto'
+        ? (detectedLanguage || window.navigator.language || 'en-US')
+        : language;
+      utterance.lang = resolvedLanguage;
+      const family = resolvedLanguage.split('-')[0].toLowerCase();
+      utterance.voice = findVoiceForLanguage(family) ?? null;
+      utterance.pitch = 1;
+      utterance.rate = get().speechRate;
       let finished = false;
-      const done = () => { if (!finished) { finished = true; onDone(); } };
+      const done = () => {
+        if (!finished && generation === speechGeneration) {
+          finished = true;
+          onDone();
+        }
+      };
       utterance.onend = done;
       utterance.onerror = done;
       window.speechSynthesis.speak(utterance);
-      // Safety net: some browsers drop onend.
       playTimer = setTimeout(done, Math.max(speechDelay(text) * 1.8, 9000));
     } catch {
       playTimer = setTimeout(onDone, speechDelay(text));
     }
+  }
+
+  function speakLine(_speaker: string, text: string, onDone: () => void) {
+    if (!get().voiceOn || typeof window === 'undefined') {
+      playTimer = setTimeout(onDone, speechDelay(text));
+      return;
+    }
+
+    const generation = ++speechGeneration;
+    const controller = new AbortController();
+    speechAbort = controller;
+    const language = get().languageCode || 'auto';
+
+    void (async () => {
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (authToken) headers.Authorization = `Bearer ${authToken}`;
+        if (API_KEY) headers['X-API-Key'] = API_KEY;
+        const response = await fetch(
+          `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
+          {
+            method: 'POST',
+            headers,
+            signal: controller.signal,
+            body: JSON.stringify({
+              text,
+              voice: 'nova',
+              format: 'mp3',
+              speed: get().speechRate,
+              content_type: 'explanation',
+              language,
+            }),
+          },
+        );
+        if (!response.ok) throw new Error(`Shared voice returned ${response.status}`);
+        const audioBlob = await response.blob();
+        if (generation !== speechGeneration) return;
+
+        activeAudioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(activeAudioUrl);
+        activeAudio = audio;
+        let finished = false;
+        const cleanup = () => {
+          if (activeAudio === audio) activeAudio = null;
+          if (activeAudioUrl) {
+            URL.revokeObjectURL(activeAudioUrl);
+            activeAudioUrl = null;
+          }
+        };
+        const done = () => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          if (generation === speechGeneration) onDone();
+        };
+        audio.onended = done;
+        audio.onerror = done;
+        await audio.play();
+      } catch {
+        if (controller.signal.aborted || generation !== speechGeneration) return;
+        if (activeAudio) {
+          activeAudio.onended = null;
+          activeAudio.onerror = null;
+          activeAudio.pause();
+          activeAudio = null;
+        }
+        if (activeAudioUrl) {
+          URL.revokeObjectURL(activeAudioUrl);
+          activeAudioUrl = null;
+        }
+        // Emergency fallback only: choose a device voice in the correct locale.
+        // The shared neural voice remains the normal cross-platform path.
+        speakWithLocalizedDeviceVoice(text, language, generation, onDone);
+      } finally {
+        if (speechAbort === controller) speechAbort = null;
+      }
+    })();
   }
 
   function pushTranscript(speaker: string, text: string) {
@@ -382,6 +561,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     stopSpeech();
   }
 
+  function learnerTakesFloor() {
+    stopPlayer();
+    turnQueue = [];
+    set({ caption: null, activeSpeaker: null, prompt: null });
+  }
+
   function playNext() {
     if (!playing || get().isPaused) return;
     const turn = turnQueue.shift();
@@ -424,13 +609,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         pushTranscript(speaker, `${text} (asks you)`);
         if (get().voiceOn) speakLine(speaker, text, () => undefined);
         playing = false;
-        const beat = (turn.beat_seconds ?? 5) + 8;
-        playTimer = setTimeout(() => {
-          if (get().prompt?.id === promptId) {
-            set({ prompt: null });
-            resumePlayer(); // a classmate jumps in, per the director's script
-          }
-        }, beat * 1000);
+        // The learner owns this turn. There is intentionally no timer and no
+        // AI classmate response while the real learner is silent.
         return;
       }
 
@@ -546,6 +726,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'TeacherMessage': {
         const text = (comp.text ?? '').trim();
         if (!text) return;
+        if (comp.language_code) set({ languageCode: comp.language_code });
         if (text.startsWith('[')) {
           try {
             const turns = JSON.parse(text) as DirectorTurn[];
@@ -633,10 +814,19 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       }
       case 'scene_start':
+        // A new scene invalidates every older queued or playing turn.
+        stopPlayer();
+        turnQueue = [];
         // Mark for erase, but keep the current board up while the teacher
         // "prepares" — it only wipes when the new content arrives.
         pendingErase = true;
-        set({ waitingForScene: true, canContinue: false });
+        set({
+          waitingForScene: true,
+          canContinue: false,
+          prompt: null,
+          caption: null,
+          activeSpeaker: null,
+        });
         break;
       case 'scene_complete':
         set({ waitingForScene: false });
@@ -649,8 +839,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
   }
 
-  function sendAction(actionIntent: string, componentId: string, answerData?: Record<string, unknown>) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  /**
+   * Returns whether the action actually reached the classroom. Callers must
+   * check it before optimistically showing "waiting for the teacher" — a
+   * silently dropped action used to leave the board spinning forever.
+   */
+  function sendAction(
+    actionIntent: string,
+    componentId: string,
+    answerData?: Record<string, unknown>,
+  ): boolean {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     const payload: Record<string, unknown> = {
       event_type: 'user_action',
       session_id: get().sessionId,
@@ -659,7 +858,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       timestamp: new Date().toISOString(),
     };
     if (answerData) payload.answer_data = answerData;
-    ws.send(JSON.stringify(payload));
+    try {
+      ws.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Surfaces a dropped action instead of hanging the board. */
+  function reportOffline() {
+    set({
+      waitingForScene: false,
+      error: 'That did not reach the classroom — the session is not connected.',
+    });
   }
 
   return {
@@ -667,6 +879,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     topic: '',
     sessionId: '',
     objective: '',
+    languageCode: 'auto',
     board: [],
     boardHistory: [],
     viewingBoard: -1,
@@ -683,7 +896,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     nextActionIntent: 'continue',
     error: null,
     soundOn: false,
-    voiceOn: false,
+    voiceOn: true,
     speechRate: 1,
     isPaused: false,
 
@@ -698,6 +911,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         });
         return;
       }
+      authToken = token;
       idCounter = 0;
       turnQueue = [];
       pendingErase = false;
@@ -707,6 +921,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         topic: connection.topic,
         sessionId,
         objective: connection.objective || '',
+        languageCode: connection.language || 'auto',
         board: [], boardHistory: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, canContinue: false,
@@ -732,6 +947,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     disconnect: () => {
       stopPlayer();
       turnQueue = [];
+      authToken = null;
       if (ws) { try { ws.close(); } catch { /* noop */ } ws = null; }
       set({ status: 'idle' });
     },
@@ -739,15 +955,29 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     answerPrompt: (option: string) => {
       const prompt = get().prompt;
       if (!prompt) return;
+      // Keep the prompt on screen if it could not be delivered, rather than
+      // dismissing a question the classroom never received.
+      if (!sendAction('user_message', prompt.id, { message: option })) {
+        reportOffline();
+        return;
+      }
+      learnerTakesFloor();
       pushTranscript('You', option);
       set({ prompt: null, lyoState: 'listening' });
-      sendAction('user_message', prompt.id, { message: option });
-      resumePlayer();
     },
 
     answerQuiz: (elementId, option) => {
       const el = get().board.find((b) => b.id === elementId);
       if (!el || el.kind !== 'quiz' || el.answered) return;
+      learnerTakesFloor();
+      // Do not lock the card to an answer the classroom never received.
+      if (!sendAction('submit_answer', el.quiz.component_id, {
+        selected_option_id: option.id,
+        selected_option_label: option.label,
+      })) {
+        reportOffline();
+        return;
+      }
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'quiz'
@@ -757,10 +987,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         waitingForScene: true,
       }));
       pushTranscript('You', option.label);
-      sendAction('submit_answer', el.quiz.component_id, {
-        selected_option_id: option.id,
-        selected_option_label: option.label,
-      });
     },
 
     answerTransfer: (elementId: string, response: string) => {
@@ -768,6 +994,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       if (!el || el.kind !== 'transfer' || el.submitted) return;
       const trimmed = response.trim();
       if (!trimmed) return;
+      learnerTakesFloor();
+      // Keep the learner's writing editable if it could not be delivered.
+      if (!sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
+        response: trimmed,
+      })) {
+        reportOffline();
+        return;
+      }
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'transfer'
@@ -777,25 +1011,85 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         lyoState: 'thinking',
       }));
       pushTranscript('You', `Application: ${trimmed}`);
-      sendAction(el.input.action_intent || 'submit_transfer', el.input.component_id, {
-        response: trimmed,
-      });
+    },
+
+    skipQuestion: (elementId: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || (el.kind !== 'quiz' && el.kind !== 'transfer')) return;
+      if ((el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted) || el.skipped) return;
+
+      learnerTakesFloor();
+      const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
+      if (!sendAction('skip_question', componentId, { reason: 'unsure' })) {
+        reportOffline();
+        return;
+      }
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && (item.kind === 'quiz' || item.kind === 'transfer')
+            ? { ...item, skipped: true }
+            : item),
+        canContinue: false,
+        waitingForScene: true,
+        lyoState: 'thinking',
+      }));
+      pushTranscript(
+        'You',
+        get().languageCode.toLowerCase().startsWith('es')
+          ? 'Omití esta pregunta para repasarla después'
+          : 'Skipped this question for later review',
+      );
+    },
+
+    unskipQuestion: (elementId: string) => {
+      const el = get().board.find((b) => b.id === elementId);
+      if (!el || (el.kind !== 'quiz' && el.kind !== 'transfer') || !el.skipped) return;
+
+      learnerTakesFloor();
+      const componentId = el.kind === 'quiz' ? el.quiz.component_id : el.input.component_id;
+      if (!sendAction('retry', componentId)) {
+        reportOffline();
+        return;
+      }
+      set((state) => ({
+        board: state.board.map((item) =>
+          item.id === elementId && (item.kind === 'quiz' || item.kind === 'transfer')
+            ? { ...item, skipped: false }
+            : item),
+        waitingForScene: true,
+        lyoState: 'thinking',
+      }));
+      pushTranscript(
+        'You',
+        get().languageCode.toLowerCase().startsWith('es')
+          ? 'Volví a la pregunta omitida'
+          : 'Returned to the skipped question',
+      );
     },
 
     askQuestion: (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      stopSpeech(); // barge-in: you raised your hand, the room listens
+      learnerTakesFloor();
+      if (!sendAction('ask_question', 'web_ask', { message: trimmed })) {
+        reportOffline();
+        return;
+      }
       pushTranscript('You', `✋ ${trimmed}`);
       set({ waitingForScene: true, lyoState: 'curious', caption: { speaker: 'You', text: trimmed } });
-      sendAction('ask_question', 'web_ask', { message: trimmed });
     },
 
+    takeFloor: () => learnerTakesFloor(),
+
     signal: (kind) => {
+      learnerTakesFloor();
+      if (!sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
+        kind === 'confused' ? { hint_level: 'nudge' } : undefined)) {
+        reportOffline();
+        return;
+      }
       set({ waitingForScene: true, lyoState: kind === 'confused' ? 'thinking' : 'curious' });
       pushTranscript('You', kind === 'confused' ? 'Requested a small nudge' : 'Requested a harder case');
-      sendAction(kind === 'confused' ? 'request_hint' : 'skip_ahead', 'web_signal',
-        kind === 'confused' ? { hint_level: 'nudge' } : undefined);
     },
 
     requestHint: (level) => {
@@ -806,27 +1100,41 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         full_example: 'full worked example',
         prerequisite: 'prerequisite refresher',
       };
+      learnerTakesFloor();
+      if (!sendAction('request_hint', 'web_hint', { hint_level: level })) {
+        reportOffline();
+        return;
+      }
       set({ waitingForScene: true, lyoState: 'thinking' });
       pushTranscript('You', `Requested: ${labels[level]}`);
-      sendAction('request_hint', 'web_hint', { hint_level: level });
     },
 
     continueLesson: () => {
       const actionIntent = get().nextActionIntent || 'continue';
+      learnerTakesFloor();
+      // Leave the Continue button in place if the action never left the
+      // browser — clearing canContinue would strip the only way forward.
+      if (!sendAction(actionIntent, 'web_continue')) {
+        reportOffline();
+        return;
+      }
       set({
         canContinue: false,
         waitingForScene: true,
         continueLabel: 'Check understanding',
         nextActionIntent: 'continue',
       });
-      sendAction(actionIntent, 'web_continue');
     },
 
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
     toggleVoice: () => {
       const next = !get().voiceOn;
-      if (!next) stopSpeech();
       set({ voiceOn: next });
+      if (!next) {
+        if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+        stopSpeech();
+        if (playing) playNext();
+      }
     },
     // The single most accessible control: stop the class right where it
     // is. Pausing cancels the turn currently speaking/animating and holds

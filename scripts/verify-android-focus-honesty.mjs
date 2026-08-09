@@ -20,17 +20,23 @@ const home = read('android/app/src/main/java/com/lyo/app/ui/screens/home/HomeScr
 const navigation = read('android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt');
 const recentStore = read('android/app/src/main/java/com/lyo/app/data/RecentCourseStore.kt');
 
-requireText(home, 'SectionHeader("Your Learning")', 'Android Focus learner section');
+// "Your Learning"/RecentCourseStore (a single-slot, device-local pointer)
+// was superseded by "Your Stacks" — a real, backend-synced, multi-item list
+// (StackRepository) that's device- and platform-agnostic by design, so a
+// course started here also shows up on iOS/web. RecentCourseStore itself
+// is intentionally left in place (still written to on course-detail visits
+// — see the navigation assertion below) but is no longer HomeScreen's
+// source of truth.
+requireText(home, 'SectionHeader("Your Stacks")', 'Android Focus learner section');
 requireText(home, 'SectionHeader("Explore Courses")', 'Android Focus catalog section');
-requireText(home, 'RecentCourseStore.load(context)', 'Android Focus real recent-course pointer');
-requireText(home, 'ApiClient.api.course(storedRecent.id)', 'Android Focus backend course hydration');
+requireText(home, 'StackRepository.listCourseStacks()', 'Android Focus real, backend-synced Stacks list');
 requireText(home, 'ApiClient.api.courses(0, 5)', 'Android Focus public catalog exploration');
-requireText(home, 'account progress refreshes when opened', 'Android Focus progress disclosure');
 requireText(navigation, 'RecentCourseStore.save(context, courseId)', 'Android real course visit recording');
 requireText(recentStore, 'Device-local pointer', 'Android recent-course scope disclosure');
 
 for (const forbidden of [
   'SectionHeader("Continue Learning")',
+  'SectionHeader("Your Learning")',
   'ApiClient.api.publicFeed',
   'SectionHeader("Community Activity")',
   'PostDto',
@@ -40,4 +46,4 @@ for (const forbidden of [
   rejectText(home + recentStore, forbidden, 'Android Focus honesty');
 }
 
-console.log('Android Focus separates real device learning activity from the public catalog.');
+console.log('Android Focus sources Your Stacks from the real, device-agnostic backend list, separate from the public catalog.');

@@ -390,7 +390,7 @@ struct AccessibleLyoAvatar: View {
     private func speakResponse(_ response: String) {
         let utterance = AVSpeechUtterance(string: response)
         utterance.rate = 0.5
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.voice = SpeechLanguage.voice(for: response)
 
         let synthesizer = AVSpeechSynthesizer()
         synthesizer.speak(utterance)

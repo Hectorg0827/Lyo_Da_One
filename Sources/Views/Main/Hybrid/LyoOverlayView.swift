@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct LyoOverlayView: View {
     @Binding var isPresented: Bool
@@ -193,7 +195,6 @@ struct LyoOverlayView: View {
                 }
             }
             .padding(.top, 60)
-            .padding(.horizontal, 8)
             .padding(.bottom, 20)
         }
     }
@@ -607,7 +608,8 @@ struct LyoOverlayView: View {
     }
 
     private func submitText() {
-        guard !viewModel.inputText.isEmpty else { return }
+        guard !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !viewModel.attachments.isEmpty else { return }
         
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
@@ -690,8 +692,15 @@ struct HybridInputBar: View {
     
     @EnvironmentObject var viewModel: LyoAIViewModel
     @StateObject var audioService = AudioPlaybackService.shared
+    @StateObject private var mediaService = MediaPickerService.shared
     
     @State private var showModeSelector = false
+    @State private var showAttachmentMenu = false
+    @State private var showPhotoPicker = false
+    @State private var showDocumentPicker = false
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var isUploading = false
+    @State private var attachmentError: String?
     @State private var gradientRotation = 0.0
     
     var isSpeaking: Bool { audioService.isPlaying }
@@ -700,11 +709,43 @@ struct HybridInputBar: View {
     private let thinkingColors = [Color(hex: "6366F1"), Color(hex: "8B5CF6"), Color(hex: "EC4899")]
     private let respondingColors = [Color(hex: "10B981"), Color(hex: "34D399"), Color(hex: "6EE7B7")]
     private let idleColors = [Color.white.opacity(0.2), Color.white.opacity(0.1)]
+
+    private var canSend: Bool {
+        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !mediaService.selectedMedia.isEmpty)
+            && !isThinking
+            && !isUploading
+            && !mediaService.isLoading
+    }
     
     var body: some View {
         ZStack {
             // Island Container
             VStack(spacing: 0) {
+                if !mediaService.selectedMedia.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(mediaService.selectedMedia) { media in
+                                MediaPreviewChip(media: media) {
+                                    mediaService.removeMedia(media)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                    }
+                }
+
+                if let attachmentError {
+                    Text(attachmentError)
+                        .font(.caption2)
+                        .foregroundColor(.red.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        .accessibilityLabel("Attachment error: \(attachmentError)")
+                }
+
                 // Top Line: Text Input
                 TextField("Message Lyo...", text: $text, axis: .vertical)
                     .lineLimit(1...3) // Dynamic height, max 3 lines
@@ -723,14 +764,26 @@ struct HybridInputBar: View {
                     // LEFT: Add & Mode
                     HStack(spacing: 8) {
                         // Add Button
-                        Button(action: { /* Show attachments */ }) {
-                            Image(systemName: "plus")
+                        Button(action: { showAttachmentMenu = true }) {
+                            Image(systemName: (isUploading || mediaService.isLoading) ? "arrow.triangle.2.circlepath" : "plus")
                                 .font(.system(size: 18, weight: .light))
                                 .foregroundColor(.white.opacity(0.8))
                                 .frame(width: 32, height: 32)
                                 .background(Color.white.opacity(0.1))
                                 .clipShape(Circle())
+                                .rotationEffect(.degrees((isUploading || mediaService.isLoading) ? 360 : 0))
+                                .animation(
+                                    (isUploading || mediaService.isLoading)
+                                        ? .linear(duration: 1).repeatForever(autoreverses: false)
+                                        : .default,
+                                    value: isUploading || mediaService.isLoading
+                                )
                         }
+                        .disabled(
+                            isThinking || isUploading || mediaService.isLoading
+                                || mediaService.selectedMedia.count >= mediaService.maxAttachmentCount
+                        )
+                        .accessibilityLabel("Attach an image or document")
                         
                         // Mode Button
                         Button(action: { showModeSelector = true }) {
@@ -752,7 +805,7 @@ struct HybridInputBar: View {
                     
                     // RIGHT: Mic, Live, Send
                     HStack(spacing: 8) {
-                        if !text.isEmpty {
+                        if canSend {
                             // Send Button
                             Button(action: submitAction) {
                                 Image(systemName: "arrow.up")
@@ -762,6 +815,7 @@ struct HybridInputBar: View {
                                     .background(Color.white)
                                     .clipShape(Circle())
                             }
+                            .disabled(!canSend)
                             .transition(.scale.combined(with: .opacity))
                         } else {
                             // Mic (TTS)
@@ -807,6 +861,53 @@ struct HybridInputBar: View {
                 gradientRotation = 360
             }
         }
+        .confirmationDialog("Add to chat", isPresented: $showAttachmentMenu) {
+            Button("Photo Library") { showPhotoPicker = true }
+            Button("Files") { showDocumentPicker = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Attach up to four images, PDFs, or text documents.")
+        }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $photoItems,
+            maxSelectionCount: max(1, mediaService.maxAttachmentCount - mediaService.selectedMedia.count),
+            matching: .images
+        )
+        .onChange(of: photoItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
+            Task { @MainActor in
+                attachmentError = nil
+                await mediaService.processPhotoPickerItems(newItems)
+                if let error = mediaService.error {
+                    attachmentError = error.localizedDescription
+                }
+                photoItems = []
+            }
+        }
+        .fileImporter(
+            isPresented: $showDocumentPicker,
+            allowedContentTypes: mediaService.supportedDocTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            Task { @MainActor in
+                attachmentError = nil
+                do {
+                    let urls = try result.get()
+                    let remaining = max(
+                        0, mediaService.maxAttachmentCount - mediaService.selectedMedia.count
+                    )
+                    for url in urls.prefix(remaining) {
+                        _ = try await mediaService.processDocumentURL(url)
+                    }
+                    if urls.count > remaining {
+                        attachmentError = "You can attach up to four files."
+                    }
+                } catch {
+                    attachmentError = error.localizedDescription
+                }
+            }
+        }
         .confirmationDialog("Select Mode", isPresented: $showModeSelector) {
             ForEach(ChatMode.allCases, id: \.self) { mode in
                 Button {
@@ -819,9 +920,35 @@ struct HybridInputBar: View {
     }
     
     private func submitAction() {
+        guard canSend else { return }
         // Close keyboard
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        onSubmit()
+
+        guard !mediaService.selectedMedia.isEmpty else {
+            onSubmit()
+            return
+        }
+
+        Task { @MainActor in
+            isUploading = true
+            attachmentError = nil
+            do {
+                var uploaded: [MessageAttachment] = []
+                for media in mediaService.selectedMedia {
+                    uploaded.append(try await mediaService.uploadMedia(media))
+                }
+                uploaded.forEach { attachment in
+                    viewModel.addAttachment(attachment)
+                }
+                mediaService.clearSelection()
+                isUploading = false
+                onSubmit()
+            } catch {
+                attachmentError = error.localizedDescription
+                isUploading = false
+                HapticManager.shared.playError()
+            }
+        }
     }
 }
 

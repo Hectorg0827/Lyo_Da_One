@@ -1,0 +1,571 @@
+import Foundation
+import SwiftUI
+import AVFoundation
+import Combine
+import os
+
+@MainActor
+class ClassroomViewModel: NSObject, ObservableObject {
+    // MARK: - Published State
+    @Published var session: ClassroomSession?
+    @Published var currentModuleIndex: Int = 0
+    @Published var currentSlideIndex: Int = 0
+    @Published var state: ClassroomState = .loading
+    @Published var settings: ClassroomSettings = ClassroomSettings()
+    @Published var controlsVisible: Bool = false
+    @Published var showModuleGrid: Bool = false
+    @Published var currentQuickCheck: QuickCheck?
+    @Published var showReteach: Bool = false
+    @Published var reteachContent: ReteachContent?
+    @Published var isRequestingHelp: Bool = false
+    @Published var errorMessage: String?
+    
+    // TTS State
+    @Published var isNarrating: Bool = false
+    @Published var narrationProgress: Double = 0.0
+    @Published var currentWordRange: NSRange?
+    
+    // Progress
+    @Published var slideProgress: Double = 0.0
+    @Published var moduleProgress: Double = 0.0
+    
+    private let speechSynthesizer = AVSpeechSynthesizer()
+    private var currentUtterance: AVSpeechUtterance?
+    private var controlsHideTimer: Timer?
+    private var narrationTimer: Timer?
+    private let repository = LyoRepository.shared
+    /// Stores the requested session ID so retry works even if initial load fails
+    private var lastRequestedSessionId: String?
+    /// Identifies the in-flight help request so a response that arrives after
+    /// the learner closed the panel (or moved to another check) is discarded
+    /// instead of overwriting whatever they're looking at now.
+    private var helpRequestToken: UUID?
+    
+    override init() {
+        super.init()
+        speechSynthesizer.delegate = self
+    }
+    
+    // MARK: - Session Management
+    
+    func loadSession(sessionId: String) async {
+        lastRequestedSessionId = sessionId
+        state = .loading
+        errorMessage = nil
+        
+        do {
+            let session = try await repository.getClassroomSession(id: sessionId)
+            self.session = session
+            self.settings = session.settings
+            
+            // Restore progress
+            if let moduleId = session.modules.first?.id,
+               let progress = session.progress.moduleProgress[moduleId] {
+                self.currentSlideIndex = progress.currentSlideIndex
+                self.narrationProgress = progress.narrationPosition
+            }
+            
+            state = .ready
+            
+            Log.classroom.info("Session loaded successfully: \(session.modules.count) modules")
+            
+            // Auto-start narration if enabled
+            if settings.autoplayNarration {
+                startNarration()
+            }
+            
+        } catch {
+            Log.classroom.error("Failed to load session: \(error.localizedDescription)")
+            errorMessage = "Failed to load lesson. Please check your internet connection and try again."
+            state = .error
+        }
+    }
+    
+    func retryLoadSession() async {
+        // Use stored ID so retry works even when initial load failed (session is nil)
+        guard let sessionId = lastRequestedSessionId ?? session?.id else {
+            Log.classroom.warning("No session ID available for retry")
+            return
+        }
+        await loadSession(sessionId: sessionId)
+    }
+    
+    // MARK: - Navigation
+    
+    func nextSlide() {
+        guard let session = session else { return }
+        let currentModule = session.modules[currentModuleIndex]
+        
+        if currentSlideIndex < currentModule.slides.count - 1 {
+            currentSlideIndex += 1
+            saveProgress()
+            
+            Log.classroom.info("📄 Advanced to slide \(self.currentSlideIndex + 1)/\(currentModule.slides.count)")
+            
+            // Check if we should show a quick check
+            if shouldShowQuickCheck() {
+                Log.classroom.info("Quick check triggered!")
+                showQuickCheck()
+            } else if settings.autoplayNarration {
+                startNarration()
+            }
+        } else {
+            // Move to next module
+            Log.classroom.info("📚 Reached end of module, moving to next...")
+            nextModule()
+        }
+    }
+    
+    func previousSlide() {
+        if currentSlideIndex > 0 {
+            currentSlideIndex -= 1
+            saveProgress()
+            if settings.autoplayNarration {
+                startNarration()
+            }
+        }
+    }
+    
+    func nextModule() {
+        guard let session = session else { return }
+        
+        if currentModuleIndex < session.modules.count - 1 {
+            currentModuleIndex += 1
+            currentSlideIndex = 0
+            saveProgress()
+            if settings.autoplayNarration {
+                startNarration()
+            }
+        } else {
+            completeLesson()
+        }
+    }
+    
+    func previousModule() {
+        if currentModuleIndex > 0 {
+            currentModuleIndex -= 1
+            currentSlideIndex = 0
+            saveProgress()
+            if settings.autoplayNarration {
+                startNarration()
+            }
+        }
+    }
+    
+    func jumpToSlide(moduleIndex: Int, slideIndex: Int) {
+        currentModuleIndex = moduleIndex
+        currentSlideIndex = slideIndex
+        showModuleGrid = false
+        saveProgress()
+        if settings.autoplayNarration {
+            startNarration()
+        }
+    }
+    
+    // MARK: - TTS Control
+    
+    func startNarration() {
+        guard let session = session else { 
+            Log.classroom.warning("Cannot start narration: No session loaded")
+            return 
+        }
+        let currentModule = session.modules[currentModuleIndex]
+        let currentSlide = currentModule.slides[currentSlideIndex]
+        
+        Log.classroom.info("Starting narration for slide \(self.currentSlideIndex + 1): \(currentSlide.content.title)")
+        
+        stopNarration()
+        
+        let utterance = AVSpeechUtterance(string: currentSlide.narration)
+        utterance.voice = SpeechLanguage.voice(for: currentSlide.narration)
+        utterance.rate = settings.playbackSpeed * 0.5 // AVSpeechUtterance rate is 0.0-1.0
+        
+        currentUtterance = utterance
+        speechSynthesizer.speak(utterance)
+        isNarrating = true
+        state = .playing
+        
+        Log.classroom.info("Narration started. Voice bubble should be visible.")
+    }
+    
+    func stopNarration() {
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        isNarrating = false
+        narrationProgress = 0.0
+        if state == .playing {
+            state = .paused
+        }
+    }
+    
+    func pauseNarration() {
+        speechSynthesizer.pauseSpeaking(at: .word)
+        isNarrating = false
+        state = .paused
+    }
+    
+    func resumeNarration() {
+        speechSynthesizer.continueSpeaking()
+        isNarrating = true
+        state = .playing
+    }
+    
+    func togglePlayPause() {
+        if isNarrating {
+            pauseNarration()
+        } else if state == .paused {
+            resumeNarration()
+        } else {
+            startNarration()
+        }
+    }
+    
+    func changeSpeed(_ newSpeed: Float) {
+        let oldSpeed = settings.playbackSpeed
+        settings.playbackSpeed = newSpeed
+        
+        // Restart narration at new speed if currently playing
+        if isNarrating {
+            let _ = narrationProgress
+            startNarration()
+            // TODO: Seek to saved position
+        }
+        
+        // Analytics
+        Log.classroom.info("Speed changed from \(oldSpeed)x to \(newSpeed)x")
+    }
+    
+    func skipForward() {
+        // AVSpeechSynthesizer does not support seeking — advance to next slide instead
+        HapticManager.shared.light()
+        nextSlide()
+    }
+    
+    func skipBackward() {
+        // AVSpeechSynthesizer does not support seeking — go to previous slide instead
+        HapticManager.shared.light()
+        previousSlide()
+    }
+    
+    // MARK: - Controls
+    
+    func showControls() {
+        controlsVisible = true
+        resetControlsTimer()
+    }
+    
+    func hideControls() {
+        controlsVisible = false
+    }
+    
+    func toggleControls() {
+        if controlsVisible {
+            hideControls()
+        } else {
+            showControls()
+        }
+    }
+    
+    private func resetControlsTimer() {
+        controlsHideTimer?.invalidate()
+        controlsHideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.hideControls()
+            }
+        }
+    }
+    
+    // MARK: - Quick Checks
+    
+    private func shouldShowQuickCheck() -> Bool {
+        guard let session,
+              session.modules.indices.contains(currentModuleIndex),
+              session.modules[currentModuleIndex].slides.indices.contains(currentSlideIndex),
+              let check = session.modules[currentModuleIndex].slides[currentSlideIndex].quickCheck,
+              check.type.isSupported else {
+            return false
+        }
+
+        // Respect the learner's frequency only when this slide has an authored check.
+        let frequency = settings.checkFrequency
+        
+        switch frequency {
+        case .fewer: 
+            return currentSlideIndex == 1 || currentSlideIndex % 4 == 1
+        case .standard: 
+            return currentSlideIndex == 1 || currentSlideIndex % 3 == 1
+        case .more: 
+            return currentSlideIndex > 0 && currentSlideIndex % 2 == 0
+        }
+    }
+    
+    private func showQuickCheck() {
+        guard let session,
+              session.modules.indices.contains(currentModuleIndex),
+              session.modules[currentModuleIndex].slides.indices.contains(currentSlideIndex),
+              let check = session.modules[currentModuleIndex].slides[currentSlideIndex].quickCheck,
+              check.type.isSupported else {
+            currentQuickCheck = nil
+            state = .ready
+            return
+        }
+        currentQuickCheck = check
+        state = .quickCheck
+    }
+    
+    func answerCheck(_ answer: String) {
+        guard let check = currentQuickCheck else { return }
+        
+        if answer == check.correctAnswer {
+            recordCheckOutcome(check, outcome: "correct", passed: true)
+            // Correct answer
+            Log.classroom.info("Check passed: \(check.id)")
+            currentQuickCheck = nil
+            state = .ready
+            
+            // Continue to next slide
+            if settings.autoAdvanceAfterNarration {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.nextSlide()
+                }
+            }
+        } else {
+            recordCheckOutcome(check, outcome: "incorrect", passed: false)
+            // Wrong answer - show reteach
+            if let reteach = check.reteachContent {
+                reteachContent = reteach
+                showReteach = true
+                state = .reteach
+            }
+        }
+    }
+    
+    func dismissReteach() {
+        showReteach = false
+        reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
+        currentQuickCheck = nil
+        state = .ready
+
+        // Continue to next slide
+        if settings.autoAdvanceAfterNarration {
+            nextSlide()
+        }
+    }
+
+    /// Returns from the reteach panel to the check the learner was working on.
+    /// Deliberately does not go through `dismissReteach()`, which advances the
+    /// lesson when `autoAdvanceAfterNarration` is set — "Try Again" must
+    /// re-present the same question on the same slide.
+    func retryCheck() {
+        guard currentQuickCheck != nil else { return }
+        showReteach = false
+        reteachContent = nil
+        isRequestingHelp = false
+        helpRequestToken = nil
+        state = .quickCheck
+    }
+
+    /// Explicitly skips the current check. Unlike a wrong answer, this does
+    /// not force the reteach walkthrough — it just records that the learner
+    /// passed on this question and moves the lesson forward, so a confused
+    /// learner is never trapped behind a question they can't answer.
+    func skipCheck() {
+        guard let check = currentQuickCheck else { return }
+        Log.classroom.info("Check skipped: \(check.id)")
+        recordCheckOutcome(check, outcome: "skipped", passed: nil)
+        currentQuickCheck = nil
+        state = .ready
+
+        if settings.autoAdvanceAfterNarration {
+            nextSlide()
+        }
+    }
+
+    /// Asks the AI tutor to explain the current question a different way,
+    /// using a real backend response instead of the check's static reteach
+    /// text (which is only ever the same canned copy for a given question).
+    func requestHelp() {
+        guard let check = currentQuickCheck else { return }
+        let token = UUID()
+        helpRequestToken = token
+        isRequestingHelp = true
+        reteachContent = nil
+        showReteach = true
+        state = .reteach
+        recordCheckOutcome(check, outcome: "help_requested", passed: nil)
+
+        Task { @MainActor in
+            let languageCode = SpeechLanguage.dominantLanguageCode(for: check.question) ?? "en"
+            let prompt = """
+            A learner needs help with this classroom question: "\(check.question)"
+            Explain it a different way with one simple analogy. Reply entirely in
+            the question's language (ISO language code: \(languageCode)).
+            """
+            let content: ReteachContent
+            do {
+                let response = try await repository.sendLyoMessage(message: prompt)
+                content = ReteachContent(
+                    explanation: response.message.content,
+                    analogy: nil,
+                    diagram: nil,
+                    alternativeApproach: nil
+                )
+            } catch {
+                Log.classroom.error("requestHelp failed: \(error.localizedDescription)")
+                // Fall back to the question's own canned explanation rather
+                // than leaving the help panel empty.
+                content = check.reteachContent ?? ReteachContent(
+                    explanation: check.explanation,
+                    analogy: nil,
+                    diagram: nil,
+                    alternativeApproach: nil
+                )
+            }
+
+            // The learner may have closed the panel or moved to another check
+            // while this was in flight — in that case the response is stale.
+            guard helpRequestToken == token else { return }
+            reteachContent = content
+            isRequestingHelp = false
+            helpRequestToken = nil
+        }
+    }
+
+    private func recordCheckOutcome(
+        _ check: QuickCheck,
+        outcome: String,
+        passed: Bool?
+    ) {
+        guard var activeSession = session,
+              activeSession.modules.indices.contains(currentModuleIndex) else { return }
+        let module = activeSession.modules[currentModuleIndex]
+        var progress = activeSession.progress
+        var moduleProgress = progress.moduleProgress[module.id] ?? ModuleProgress(
+            moduleId: module.id,
+            currentSlideIndex: currentSlideIndex,
+            completedSlides: [],
+            checkResults: [:],
+            checkOutcomes: [:],
+            narrationPosition: narrationProgress,
+            confidenceLevels: [:],
+            lastUpdated: Date()
+        )
+        moduleProgress.currentSlideIndex = currentSlideIndex
+        moduleProgress.checkOutcomes = moduleProgress.checkOutcomes ?? [:]
+        moduleProgress.checkOutcomes?[check.id] = outcome
+        if let passed {
+            moduleProgress.checkResults[check.id] = passed
+        }
+        moduleProgress.lastUpdated = Date()
+        progress.moduleProgress[module.id] = moduleProgress
+        progress.lastAccessedAt = Date()
+        activeSession.progress = progress
+        session = activeSession
+
+        Task {
+            do {
+                try await repository.trackClassroomCheckOutcome(
+                    checkId: check.id,
+                    question: check.question,
+                    outcome: outcome,
+                    isCorrect: passed
+                )
+            } catch {
+                Log.classroom.warning(
+                    "Failed to save check outcome: \(error.localizedDescription)"
+                )
+            }
+        }
+    }
+    
+    // MARK: - Progress
+    
+    private func saveProgress() {
+        guard let session = session else { return }
+        
+        // Update progress locally
+        slideProgress = Double(currentSlideIndex + 1) / Double(session.modules[currentModuleIndex].slides.count)
+        
+        let totalSlides = session.modules.reduce(0) { $0 + $1.slides.count }
+        let completedSlides = session.modules.prefix(currentModuleIndex).reduce(0) { $0 + $1.slides.count } + currentSlideIndex + 1
+        moduleProgress = Double(completedSlides) / Double(totalSlides)
+        
+        // Persist to backend (fire-and-forget; errors are non-fatal)
+        Task {
+            do {
+                var progress = session.progress
+                progress.overallProgress = moduleProgress
+                progress.lastAccessedAt = Date()
+                try await repository.saveClassroomProgress(sessionId: session.id, progress: progress)
+            } catch {
+                Log.classroom.warning("Failed to save progress to backend: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func completeLesson() {
+        state = .complete
+        guard let session = session else {
+            Log.classroom.info("Lesson completed!")
+            return
+        }
+        Task {
+            do {
+                var progress = session.progress
+                progress.overallProgress = 1.0
+                progress.completedAt = Date()
+                progress.lastAccessedAt = Date()
+                try await repository.saveClassroomProgress(sessionId: session.id, progress: progress)
+                Log.classroom.info("Lesson completed and saved to backend!")
+            } catch {
+                Log.classroom.warning("Lesson completed locally but failed to save: \(error.localizedDescription)")
+            }
+        }
+    }
+}
+
+// MARK: - AVSpeechSynthesizerDelegate
+
+extension ClassroomViewModel: AVSpeechSynthesizerDelegate {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            isNarrating = true
+        }
+    }
+    
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            isNarrating = false
+            narrationProgress = 1.0
+            
+            // Auto-advance if enabled
+            if settings.autoAdvanceAfterNarration {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.nextSlide()
+                }
+            }
+        }
+    }
+    
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            isNarrating = false
+        }
+    }
+    
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didContinue utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            isNarrating = true
+        }
+    }
+    
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            currentWordRange = characterRange
+            // Update progress based on character position
+            let progress = Double(characterRange.location) / Double(utterance.speechString.count)
+            narrationProgress = progress
+        }
+    }
+}

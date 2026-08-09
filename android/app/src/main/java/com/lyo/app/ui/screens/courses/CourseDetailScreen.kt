@@ -205,11 +205,19 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                             totalLessons = totalLessons,
                             progressPercent = progressPercent,
                             onStartClass = {
-                                nav.navigate(
-                                    Routes.classroom(topic = course?.title ?: "Course", courseId = courseId),
-                                )
+                                nav.navigate(Routes.classroom(courseId))
                             },
                         )
+                    }
+
+                    item {
+                        Button(
+                            onClick = { nav.navigate(Routes.classroom(courseId)) },
+                            colors = ButtonDefaults.buttonColors(containerColor = LyoPurple),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Start AI Classroom")
+                        }
                     }
 
                     progressWarning?.let { warning ->

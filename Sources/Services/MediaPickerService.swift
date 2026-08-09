@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -36,10 +37,23 @@ class MediaPickerService: ObservableObject {
     // MARK: - Configuration
     let maxImageSize: Int64 = 10 * 1024 * 1024 // 10 MB
     let maxVideoSize: Int64 = 100 * 1024 * 1024 // 100 MB
-    let maxFileSize: Int64 = 50 * 1024 * 1024 // 50 MB
+    let maxFileSize: Int64 = 10 * 1024 * 1024 // 10 MB in AI chat
+    let maxTotalSize: Int64 = 20 * 1024 * 1024 // 20 MB per message
+    let maxAttachmentCount = 4
     let supportedImageTypes: [UTType] = [.image, .jpeg, .png, .heic, .gif, .webP]
     let supportedVideoTypes: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
-    let supportedDocTypes: [UTType] = [.pdf, .plainText, .json, .data]
+    let supportedDocTypes: [UTType] = [
+        .pdf,
+        .plainText,
+        .commaSeparatedText,
+        .json,
+        UTType(filenameExtension: "md") ?? .plainText,
+    ]
+
+    private let supportedChatMimeTypes: Set<String> = [
+        "image/jpeg", "image/png", "image/webp", "image/heic",
+        "application/pdf", "text/plain", "text/markdown", "text/csv", "application/json",
+    ]
     
     private init() {}
     
@@ -52,13 +66,18 @@ class MediaPickerService: ObservableObject {
         
         for item in items {
             do {
+                guard selectedMedia.count < maxAttachmentCount else {
+                    throw MediaPickerError.tooManyFiles
+                }
                 if let media = try await processPhotoPickerItem(item) {
+                    try validateSelectionCapacity(for: media.data.count)
                     selectedMedia.append(media)
                     HapticManager.shared.playAttachmentAdded()
                 }
             } catch {
                 Log.net.error("Failed to process photo picker item: \(error)")
-                self.error = .processingFailed(error.localizedDescription)
+                self.error = (error as? MediaPickerError)
+                    ?? .processingFailed(error.localizedDescription)
             }
         }
         
@@ -67,13 +86,15 @@ class MediaPickerService: ObservableObject {
     
     private func processPhotoPickerItem(_ item: PhotosPickerItem) async throws -> PickedMedia? {
         // Try to load as image first
-        if let imageData = try? await item.loadTransferable(type: Data.self) {
-            // Check size
-            guard imageData.count <= maxImageSize else {
+        if item.supportedContentTypes.contains(where: { $0.conforms(to: .image) }),
+           let rawData = try? await item.loadTransferable(type: Data.self),
+           let image = UIImage(data: rawData),
+           let imageData = image.jpegData(compressionQuality: 0.88) {
+            guard Int64(imageData.count) <= maxImageSize else {
                 throw MediaPickerError.fileTooLarge
             }
             
-            let thumbnail = UIImage(data: imageData)?.thumbnail(maxSize: 200)
+            let thumbnail = image.thumbnail(maxSize: 200)
             let filename = "image_\(UUID().uuidString.prefix(8)).jpg"
             
             return PickedMedia(
@@ -88,7 +109,7 @@ class MediaPickerService: ObservableObject {
         
         // Try to load as video
         if let videoData = try? await loadVideo(from: item) {
-            guard videoData.count <= maxVideoSize else {
+            guard Int64(videoData.count) <= maxVideoSize else {
                 throw MediaPickerError.fileTooLarge
             }
             
@@ -127,11 +148,15 @@ class MediaPickerService: ObservableObject {
         
         let data = try Data(contentsOf: url)
         
-        guard data.count <= maxFileSize else {
+        guard Int64(data.count) <= maxFileSize else {
             throw MediaPickerError.fileTooLarge
         }
         
         let mimeType = mimeTypeForURL(url)
+        guard supportedChatMimeTypes.contains(mimeType) else {
+            throw MediaPickerError.unsupportedFormat
+        }
+        try validateSelectionCapacity(for: data.count)
         let mediaType = mediaTypeFromMime(mimeType)
         
         let media = PickedMedia(
@@ -157,9 +182,10 @@ class MediaPickerService: ObservableObject {
             throw MediaPickerError.processingFailed("Failed to compress image")
         }
         
-        guard data.count <= maxImageSize else {
+        guard Int64(data.count) <= maxImageSize else {
             throw MediaPickerError.fileTooLarge
         }
+        try validateSelectionCapacity(for: data.count)
         
         let thumbnail = image.thumbnail(maxSize: 200)
         let filename = "camera_\(UUID().uuidString.prefix(8)).jpg"
@@ -200,28 +226,31 @@ class MediaPickerService: ObservableObject {
     
     /// Upload a single picked media file to the backend
     func uploadMedia(_ media: PickedMedia) async throws -> MessageAttachment {
-        // Use LyoRepository to upload
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(media.filename)
-        
-        // Write data to temp file
-        if !media.data.isEmpty {
-            try media.data.write(to: tempURL)
-        } else if let sourceURL = media.originalURL {
-            // Copy from source URL
-            if FileManager.default.fileExists(atPath: tempURL.path) {
-                try FileManager.default.removeItem(at: tempURL)
-            }
-            try FileManager.default.copyItem(at: sourceURL, to: tempURL)
-        } else {
+        guard !media.data.isEmpty else {
             throw MediaPickerError.noData
         }
-        
-        defer {
-            try? FileManager.default.removeItem(at: tempURL)
+        guard supportedChatMimeTypes.contains(media.mimeType) else {
+            throw MediaPickerError.unsupportedFormat
         }
-        
-        return try await LyoRepository.shared.uploadFile(url: tempURL)
+
+        let result = try await CloudStorageService.shared.uploadFile(
+            data: media.data,
+            filename: media.filename,
+            contentType: media.mimeType,
+            folder: "chat"
+        )
+        guard let publicURL = result.publicURL else {
+            throw MediaPickerError.uploadFailed("The server did not return a file URL")
+        }
+
+        return MessageAttachment(
+            id: result.blobName ?? publicURL,
+            type: media.type == .image ? .image : .document,
+            url: publicURL,
+            filename: media.filename,
+            size: media.data.count,
+            mimeType: media.mimeType
+        )
     }
     
     // MARK: - Clear Selection
@@ -245,17 +274,27 @@ class MediaPickerService: ObservableObject {
         let ext = url.pathExtension.lowercased()
         switch ext {
         case "pdf": return "application/pdf"
-        case "doc", "docx": return "application/msword"
         case "jpg", "jpeg": return "image/jpeg"
         case "png": return "image/png"
-        case "gif": return "image/gif"
-        case "mp4": return "video/mp4"
-        case "mov": return "video/quicktime"
-        case "mp3": return "audio/mpeg"
-        case "m4a": return "audio/m4a"
+        case "webp": return "image/webp"
+        case "heic": return "image/heic"
         case "txt": return "text/plain"
+        case "md", "markdown": return "text/markdown"
+        case "csv": return "text/csv"
         case "json": return "application/json"
         default: return "application/octet-stream"
+        }
+    }
+
+    private func validateSelectionCapacity(for byteCount: Int) throws {
+        guard selectedMedia.count < maxAttachmentCount else {
+            throw MediaPickerError.tooManyFiles
+        }
+        let selectedBytes = selectedMedia.reduce(Int64(0)) { total, item in
+            total + Int64(item.data.count)
+        }
+        guard selectedBytes + Int64(byteCount) <= maxTotalSize else {
+            throw MediaPickerError.totalTooLarge
         }
     }
     
@@ -340,6 +379,8 @@ extension UIImage {
 
 enum MediaPickerError: LocalizedError {
     case fileTooLarge
+    case totalTooLarge
+    case tooManyFiles
     case unsupportedFormat
     case accessDenied
     case noData
@@ -349,7 +390,11 @@ enum MediaPickerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileTooLarge:
-            return "File is too large"
+            return "Each attachment must be 10 MB or smaller"
+        case .totalTooLarge:
+            return "Attachments may total at most 20 MB"
+        case .tooManyFiles:
+            return "You can attach up to 4 files"
         case .unsupportedFormat:
             return "Unsupported file format"
         case .accessDenied:

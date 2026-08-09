@@ -14,7 +14,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         lhs.studentName == rhs.studentName &&
         lhs.question == rhs.question &&
         lhs.options == rhs.options &&
-        lhs.actionIntent == rhs.actionIntent
+        lhs.actionIntent == rhs.actionIntent &&
+        lhs.languageCode == rhs.languageCode
     }
 
     let id: String
@@ -27,9 +28,15 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
     let emotion: String?
     let studentName: String?
     let question: String?
+    let title: String?
+    let placeholder: String?
+    let minWords: Int?
+    let maxWords: Int?
     let options: [SDUIQuizOption]?
     let actionIntent: String?
     let actionPayload: [String: String]?
+    let languageCode: String?
+    let audioURL: String?
 
     // Pass-through carrier for the rich BlockRendererView pipeline.
     // Populated only when type == .lessonBlock.
@@ -47,9 +54,15 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         case emotion
         case studentName = "student_name"
         case question
+        case title
+        case placeholder
+        case minWords = "min_words"
+        case maxWords = "max_words"
         case options
         case actionIntent = "action_intent"
         case actionPayload = "action_payload"
+        case languageCode = "language_code"
+        case audioURL = "audio_url"
         case blockType = "block_type"
         case block
     }
@@ -63,9 +76,15 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         emotion: String? = nil,
         studentName: String? = nil,
         question: String? = nil,
+        title: String? = nil,
+        placeholder: String? = nil,
+        minWords: Int? = nil,
+        maxWords: Int? = nil,
         options: [SDUIQuizOption]? = nil,
         actionIntent: String? = nil,
         actionPayload: [String: String]? = nil,
+        languageCode: String? = nil,
+        audioURL: String? = nil,
         lessonBlock: LiveLessonBlock? = nil
     ) {
         self.id = id
@@ -76,9 +95,15 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         self.emotion = emotion
         self.studentName = studentName
         self.question = question
+        self.title = title
+        self.placeholder = placeholder
+        self.minWords = minWords
+        self.maxWords = maxWords
         self.options = options
         self.actionIntent = actionIntent
         self.actionPayload = actionPayload
+        self.languageCode = languageCode
+        self.audioURL = audioURL
         self.lessonBlock = lessonBlock
     }
 
@@ -106,9 +131,15 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         self.emotion = try container.decodeIfPresent(String.self, forKey: .emotion)
         self.studentName = try container.decodeIfPresent(String.self, forKey: .studentName)
         self.question = try container.decodeIfPresent(String.self, forKey: .question)
+        self.title = try container.decodeIfPresent(String.self, forKey: .title)
+        self.placeholder = try container.decodeIfPresent(String.self, forKey: .placeholder)
+        self.minWords = try container.decodeIfPresent(Int.self, forKey: .minWords)
+        self.maxWords = try container.decodeIfPresent(Int.self, forKey: .maxWords)
         self.options = try container.decodeIfPresent([SDUIQuizOption].self, forKey: .options)
         self.actionIntent = try container.decodeIfPresent(String.self, forKey: .actionIntent)
         self.actionPayload = try container.decodeIfPresent([String: String].self, forKey: .actionPayload)
+        self.languageCode = try container.decodeIfPresent(String.self, forKey: .languageCode)
+        self.audioURL = try container.decodeIfPresent(String.self, forKey: .audioURL)
 
         // Decode the rich-block payload carried by LessonBlock components.
         // The backend's LessonBlock has fields: { block_type: String, block: { ...LiveLessonBlock fields... } }
@@ -132,9 +163,15 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(emotion, forKey: .emotion)
         try container.encodeIfPresent(studentName, forKey: .studentName)
         try container.encodeIfPresent(question, forKey: .question)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encodeIfPresent(placeholder, forKey: .placeholder)
+        try container.encodeIfPresent(minWords, forKey: .minWords)
+        try container.encodeIfPresent(maxWords, forKey: .maxWords)
         try container.encodeIfPresent(options, forKey: .options)
         try container.encodeIfPresent(actionIntent, forKey: .actionIntent)
         try container.encodeIfPresent(actionPayload, forKey: .actionPayload)
+        try container.encodeIfPresent(languageCode, forKey: .languageCode)
+        try container.encodeIfPresent(audioURL, forKey: .audioURL)
     }
 
     enum ComponentType: String, Codable {
@@ -145,6 +182,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         case textBlock = "TextBlock"
         case codeBlock = "CodeBlock"
         case progressBar = "ProgressBar"
+        case inputField = "InputField"
+        case exampleBlock = "ExampleBlock"
         case lessonBlock = "LessonBlock"
         // Fallback for unknown types
         case unknown

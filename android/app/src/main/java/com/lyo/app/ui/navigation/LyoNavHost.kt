@@ -37,11 +37,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lyo.app.data.RecentCourseStore
 import com.lyo.app.data.Session
-import com.lyo.app.data.StackRepository
-import com.lyo.app.ui.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
+import com.lyo.app.ui.screens.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.ReliableCommunityScreen
@@ -83,33 +82,22 @@ object Routes {
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
+    // Deliberately NOT added to bottomItems below — any route not in that
+    // list already renders full-screen with no bottom nav bar, which is
+    // exactly the chrome-free canvas the Netflix/YouTube-style classroom
+    // needs, with no further special-casing required.
+    const val CLASSROOM = "classroom/{courseId}"
     const val DISCOVER = "discover"
     const val PROFILE = "profile"
     const val USER_PROFILE = "profile/{userId}"
     const val MESSAGES = "messages"
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
-    // Deliberately NOT added to bottomItems below — any route not in that
-    // list already renders full-screen with no bottom nav bar, which is
-    // exactly the chrome-free canvas the Netflix/YouTube-style classroom
-    // needs, with no further special-casing required.
-    // `courseId` is an optional query param — ad-hoc/topic-only entry
-    // (no real backend course behind it) still works with courseId
-    // absent, in which case ClassroomScreen falls back to using topic as
-    // the id (see its default parameter), same as before this existed.
-    const val CLASSROOM = "classroom/{topic}?courseId={courseId}"
 
     fun postDetail(postId: String) = "community/$postId"
     fun courseDetail(courseId: String) = "courses/$courseId"
+    fun classroom(courseId: String) = "classroom/$courseId"
     fun userProfile(userId: String) = "profile/$userId"
-    fun classroom(topic: String, courseId: String? = null): String {
-        val encodedTopic = java.net.URLEncoder.encode(topic, "UTF-8")
-        return if (courseId.isNullOrBlank()) {
-            "classroom/$encodedTopic"
-        } else {
-            "classroom/$encodedTopic?courseId=${java.net.URLEncoder.encode(courseId, "UTF-8")}"
-        }
-    }
 }
 
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
@@ -213,20 +201,14 @@ private fun LyoNavHost() {
                 CourseDetailScreen(nav, courseId)
             }
             composable(Routes.CLASSROOM) { entry ->
-                val encodedTopic = entry.arguments?.getString("topic") ?: ""
-                val topic = java.net.URLDecoder.decode(encodedTopic, "UTF-8")
-                val courseId = entry.arguments?.getString("courseId")?.takeIf { it.isNotBlank() }
-                if (courseId != null) {
-                    // Same pattern as COURSE_DETAIL's RecentCourseStore.save()
-                    // two blocks up — except this is the real, multi-item,
-                    // device-agnostic replacement: a course only gets a
-                    // Stacks entry once it's actually started in a real
-                    // classroom session, not just previewed.
-                    LaunchedEffect(courseId) {
-                        StackRepository.upsertCourseOnStart(courseId, title = topic)
-                    }
-                }
-                ClassroomScreen(nav, topic = topic, courseId = courseId ?: topic)
+                // Stacks upsert (device- and platform-agnostic — see
+                // StackRepository.upsertCourseOnStart) now happens inside
+                // ClassroomScreen itself, once it resolves the course's
+                // real title, rather than here.
+                ClassroomScreen(
+                    nav = nav,
+                    courseId = entry.arguments?.getString("courseId") ?: "",
+                )
             }
             composable(Routes.DISCOVER) { DiscoverScreen(nav) }
             composable(Routes.PROFILE) { ProfileScreen(nav, userId = null) }

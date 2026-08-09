@@ -221,6 +221,18 @@ enum ActiveLessonAdapter {
                     }
                 }
 
+            case .exampleBlock:
+                if pendingSupporting == nil {
+                    pendingSupporting = .lessonBlock(
+                        LiveLessonBlock(
+                            id: component.id,
+                            type: .callout,
+                            title: component.title ?? "Worked example",
+                            content: component.content
+                        )
+                    )
+                }
+
             case .ctaButton:
                 finalCtaLabel = component.content.isEmpty ? "Continue" : component.content
                 finalCtaIntent = component.actionIntent
@@ -238,6 +250,16 @@ enum ActiveLessonAdapter {
                     pendingSpeakerImageName = nil
                 }
                 pendingSupporting = .classroomQuiz(component)
+
+            case .inputField:
+                if pendingText == nil {
+                    pendingId = "transfer_intro_\(component.id)"
+                    pendingText = component.question ?? "Apply the idea in your own words."
+                    pendingSpeakerName = "Teacher"
+                    pendingSpeakerBadge = "Application check"
+                    pendingSpeakerImageName = nil
+                }
+                pendingSupporting = .classroomInput(component)
 
             // StudentPrompt and lightweight components are folded into the current
             // teaching text or skipped for now. Keeps the screen calm.

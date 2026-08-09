@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
@@ -13,6 +13,8 @@ import { useChatStore } from '@/stores/chat-store';
 interface MessageBubbleProps {
   message: ChatMessage;
 }
+
+const ASSISTANT_RESPONSE_WIDTH_CLASS = 'w-[99%]';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -104,6 +106,7 @@ const markdownComponents = {
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [hovered, setHovered] = useState(false);
+  const attachments = message.attachments ?? [];
   
   const { isGenerating, generationProgress, getActiveConversation } = useChatStore();
 
@@ -208,14 +211,14 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={cn(
         'flex w-full group',
-        isUser ? 'flex-row-reverse items-end gap-3' : 'flex-col'
+        isUser ? 'flex-row-reverse items-end gap-3 px-4' : 'flex-col'
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Header – assistant only (mirrors iOS: mascot + "Lyo" name) */}
       {!isUser && (
-        <div className="flex items-center gap-2 mb-1.5">
+        <div className={cn('flex items-center gap-2 mb-1.5 mx-auto', ASSISTANT_RESPONSE_WIDTH_CLASS)}>
           <MascotAvatar
             thinking={isLatestMessage && isGenerating}
             size={32}
@@ -227,9 +230,10 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       {/* Bubble */}
       <div
         className={cn(
-          'relative max-w-[78%] md:max-w-[68%]',
-          isUser ? 'items-end' : 'items-start pl-10',
-          'flex flex-col gap-1'
+          'relative flex flex-col gap-1',
+          isUser
+            ? 'max-w-[78%] md:max-w-[68%] items-end'
+            : cn(ASSISTANT_RESPONSE_WIDTH_CLASS, 'max-w-none mx-auto items-start')
         )}
       >
         {/* Course proposal card */}
@@ -242,17 +246,51 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         )}
 
         {/* Regular text bubble */}
-        {(displayType === 'text' || !displayType) && displayContent && (
+        {(displayType === 'text' || !displayType) && (displayContent || (isUser && attachments.length > 0)) && (
           <div
             className={cn(
               'px-4 py-3 rounded-2xl text-sm leading-relaxed',
+              !isUser && 'w-full',
               isUser
                 ? 'bg-gradient-to-br from-accent-purple to-lyo-500 text-white rounded-br-sm shadow-lg shadow-lyo-900/30'
                 : 'bg-white/5 border border-white/10 text-white/80 rounded-bl-sm backdrop-blur-sm'
             )}
           >
             {isUser ? (
-              <p className="whitespace-pre-wrap">{displayContent}</p>
+              <div className="space-y-2.5">
+                {attachments.length > 0 && (
+                  <div className={cn(
+                    'grid gap-2',
+                    attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
+                  )}>
+                    {attachments.map((attachment) => (
+                      <a
+                        key={`${attachment.url}-${attachment.name}`}
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block min-w-0 rounded-xl overflow-hidden bg-black/20 border border-white/15 hover:border-white/30 transition-colors"
+                        title={`Open ${attachment.name}`}
+                      >
+                        {attachment.kind === 'image' ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={attachment.url}
+                            alt={attachment.name}
+                            className="w-full max-h-64 object-cover"
+                          />
+                        ) : (
+                          <span className="flex items-center gap-2 px-3 py-3 min-w-0">
+                            <FileText className="w-5 h-5 shrink-0" />
+                            <span className="text-xs font-medium truncate">{attachment.name}</span>
+                          </span>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {displayContent && <p className="whitespace-pre-wrap">{displayContent}</p>}
+              </div>
             ) : (
               <div className="prose-invert prose-sm max-w-none">
                 <ReactMarkdown components={markdownComponents}>

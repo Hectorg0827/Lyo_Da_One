@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import NaturalLanguage
 import os
 
 @MainActor
@@ -10,7 +11,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     var onSpeechFinished: (() -> Void)?
 
     private let repository: TTSRepository = DefaultTTSRepository()
-    private var speechQueue: [String] = []
+    private var speechQueue: [(text: String, language: String)] = []
     private var playbackTask: Task<Void, Never>?
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
@@ -18,6 +19,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     private var playbackContinuation: CheckedContinuation<Void, Error>?
     private var currentVoice: TTSVoice = .nova
     private var currentSpeed: Double = 0.96
+    private let deviceFallbackSynthesizer = AVSpeechSynthesizer()
 
     override init() {
         super.init()
@@ -49,16 +51,16 @@ class TextToSpeechService: NSObject, ObservableObject {
         }
     }
 
-    func speak(text: String) {
+    func speak(text: String, language: String = "auto") {
         stop()
-        enqueue(text)
+        enqueue(text, language: language)
     }
 
-    func enqueue(_ text: String) {
+    func enqueue(_ text: String, language: String = "auto") {
         let cleanText = prepareSpeechText(text)
         guard !cleanText.isEmpty else { return }
 
-        speechQueue.append(cleanText)
+        speechQueue.append((cleanText, language))
         startPlaybackIfNeeded()
     }
 
@@ -67,6 +69,7 @@ class TextToSpeechService: NSObject, ObservableObject {
         playbackTask?.cancel()
         playbackTask = nil
         cancelActivePlayback()
+        deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
 
         do {
@@ -90,15 +93,24 @@ class TextToSpeechService: NSObject, ObservableObject {
         while !Task.isCancelled {
             guard !speechQueue.isEmpty else { break }
 
-            let text = speechQueue.removeFirst()
+            let item = speechQueue.removeFirst()
             isSpeaking = true
 
             do {
-                try await playGeneratedSpeech(for: text)
+                try await playGeneratedSpeech(for: item.text, language: item.language)
             } catch is CancellationError {
                 break
             } catch {
                 Log.audio.error("Backend TTS playback failed: \(error)")
+                guard !Task.isCancelled else { break }
+                do {
+                    try await playLocalizedDeviceFallback(
+                        text: item.text,
+                        language: item.language
+                    )
+                } catch {
+                    Log.audio.error("Localized device TTS fallback failed: \(error)")
+                }
             }
         }
 
@@ -111,12 +123,13 @@ class TextToSpeechService: NSObject, ObservableObject {
         }
     }
 
-    private func playGeneratedSpeech(for text: String) async throws {
+    private func playGeneratedSpeech(for text: String, language: String) async throws {
         let result = try await repository.generate(
             text: text,
             voice: currentVoice,
             speed: currentSpeed,
-            withTimings: false
+            withTimings: false,
+            language: language
         )
 
         guard !Task.isCancelled else { throw CancellationError() }
@@ -124,6 +137,11 @@ class TextToSpeechService: NSObject, ObservableObject {
             throw LyoError.network(.invalidURL)
         }
 
+        defer {
+            if url.isFileURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
         try await playAudio(url: url)
     }
 
@@ -159,6 +177,40 @@ class TextToSpeechService: NSObject, ObservableObject {
         })
 
         cleanupPlayer(keepSessionActive: true)
+    }
+
+    private func playLocalizedDeviceFallback(
+        text: String,
+        language: String
+    ) async throws {
+        let detectedFamily = NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue
+        let family = language.lowercased() == "auto"
+            ? detectedFamily
+            : language.split(separator: "-").first.map(String.init)
+        let localeByFamily = [
+            "en": "en-US",
+            "es": "es-US",
+            "fr": "fr-FR",
+            "it": "it-IT",
+            "pt": "pt-BR",
+        ]
+        let resolvedLanguage = localeByFamily[family ?? "en"] ?? language
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: resolvedLanguage)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(currentSpeed)
+        utterance.pitchMultiplier = 1.0
+        try Task.checkCancellation()
+        deviceFallbackSynthesizer.speak(utterance)
+
+        do {
+            while deviceFallbackSynthesizer.isSpeaking {
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        } catch {
+            deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
+            throw error
+        }
     }
 
     private func resumePlaybackContinuation() {

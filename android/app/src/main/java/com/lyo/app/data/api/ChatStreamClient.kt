@@ -22,6 +22,15 @@ sealed class ChatStreamEvent {
     data class Error(val message: String) : ChatStreamEvent()
 }
 
+/** Structured media metadata consumed by RouterRequest.media on the backend. */
+data class ChatMediaRef(
+    val modality: String,
+    val uri: String,
+    val mimeType: String,
+    val name: String,
+    val sizeBytes: Long,
+)
+
 /**
  * SSE client for POST /api/v1/lyo2/chat/stream — reads `data: {json}` lines
  * until `data: [DONE]`, mirroring the web client's api.chat.stream().
@@ -32,14 +41,27 @@ object ChatStreamClient {
         text: String,
         conversationId: String,
         clientMessageId: String,
+        media: List<ChatMediaRef> = emptyList(),
     ): Flow<ChatStreamEvent> = callbackFlow {
+        val requestFields = mutableMapOf<String, Any?>(
+            "text" to text,
+            "conversation_id" to conversationId,
+            "device_id" to "android",
+            "client_message_id" to clientMessageId,
+        )
+        if (media.isNotEmpty()) {
+            requestFields["media"] = media.map { item ->
+                mapOf(
+                    "modality" to item.modality,
+                    "uri" to item.uri,
+                    "mime_type" to item.mimeType,
+                    "name" to item.name,
+                    "size_bytes" to item.sizeBytes,
+                )
+            }
+        }
         val payload = ApiClient.gson.toJson(
-            mapOf(
-                "text" to text,
-                "conversation_id" to conversationId,
-                "device_id" to "android",
-                "client_message_id" to clientMessageId,
-            )
+            requestFields,
         ).toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()
@@ -97,6 +119,10 @@ object ChatStreamClient {
     private fun parseChunk(data: String): ChatStreamEvent? = try {
         val obj: JsonObject = JsonParser.parseString(data).asJsonObject
         when {
+            obj.get("type")?.asString == "error" ->
+                ChatStreamEvent.Error(
+                    obj.get("message")?.asString ?: "The response could not be generated.",
+                )
             obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
                 ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
             obj.get("type")?.asString == "answer" && obj.has("block") -> {

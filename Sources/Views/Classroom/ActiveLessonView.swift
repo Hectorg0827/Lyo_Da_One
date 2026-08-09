@@ -19,7 +19,10 @@ struct ActiveLessonView: View {
     var onAdvance: (LessonStep) -> Void = { _ in }
     var onAskLyo: (LessonStep) -> Void = { _ in }
     var onExplainEasier: (LessonStep) -> Void = { _ in }
-    var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Void = { _, _ in }
+    var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Bool = { _, _ in false }
+    var onTransferSubmit: (SDUIComponent, String) -> Bool = { _, _ in false }
+    var onHint: (SDUIComponent) -> Bool = { _ in false }
+    var onSkip: (SDUIComponent) -> Bool = { _ in false }
     /// Fired when the learner answers a `user_prompt` checkpoint — either by
     /// tapping one of its options or by submitting an open response. This is
     /// what makes a mid-lesson question a real, backend-visible exchange
@@ -63,6 +66,7 @@ struct ActiveLessonView: View {
             case comparison(ConceptComparisonModel)
             case lessonBlock(LiveLessonBlock)
             case classroomQuiz(SDUIComponent)
+            case classroomInput(SDUIComponent)
         }
 
         struct KeyTerm {
@@ -85,6 +89,8 @@ struct ActiveLessonView: View {
 
     @State private var currentIndex: Int = 0
     @State private var quizSelections: [String: String] = [:]
+    @State private var submittedTransferIds: Set<String> = []
+    @State private var skippedInteractionIds: Set<String> = []
     @State private var reflectionText: String = ""
     // Keyed by LessonStep.id — the learner's answer to a user_prompt
     // checkpoint (tapped option or typed/spoken open response), separate
@@ -155,6 +161,9 @@ struct ActiveLessonView: View {
         if case .classroomQuiz = step.supporting {
             return true
         }
+        if case .classroomInput = step.supporting {
+            return true
+        }
         if step.promptOptions?.isEmpty == false || step.requiresOpenResponse {
             return true
         }
@@ -165,6 +174,11 @@ struct ActiveLessonView: View {
         guard let step = currentStep else { return true }
         if case .classroomQuiz(let component) = step.supporting {
             return quizSelections[component.id] != nil
+                || skippedInteractionIds.contains(component.id)
+        }
+        if case .classroomInput(let component) = step.supporting {
+            return submittedTransferIds.contains(component.id)
+                || skippedInteractionIds.contains(component.id)
         }
         if step.promptOptions?.isEmpty == false || step.requiresOpenResponse {
             return promptResponses[step.id] != nil
@@ -178,13 +192,7 @@ struct ActiveLessonView: View {
     }
 
     private var actualTeacherName: String {
-        switch teacherIndex {
-        case 1: return "Mr. Newton"
-        case 2: return "Dr. Saria"
-        case 3: return "Prof. Chen"
-        case 4: return "Mr. Davis"
-        default: return "Teacher"
-        }
+        "Lyo"
     }
 
     // MARK: - Body
@@ -269,11 +277,24 @@ struct ActiveLessonView: View {
                             promptResponses: promptResponses,
                             reflectionText: $reflectionText,
                             isTappedToComplete: $isBoardTappedToComplete,
+                            interactionCompleted: isInteractionCompleted,
                             onOptionSelected: { component, option in
+                                guard onQuizAnswer(component, option) else { return false }
                                 quizSelections[component.id] = option.id
-                                onQuizAnswer(component, option)
-                                resetChromeTimer()
-                                unlockAndAdvanceSoftly(step)
+                                return true
+                            },
+                            onTransferSubmit: { component, response in
+                                guard onTransferSubmit(component, response) else { return false }
+                                submittedTransferIds.insert(component.id)
+                                return true
+                            },
+                            onHint: { component in
+                                onHint(component)
+                            },
+                            onSkip: { component in
+                                guard onSkip(component) else { return false }
+                                skippedInteractionIds.insert(component.id)
+                                return true
                             },
                             onPromptSubmit: { response in
                                 let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -281,8 +302,6 @@ struct ActiveLessonView: View {
                                 promptResponses[step.id] = trimmed
                                 reflectionText = ""
                                 onPromptAnswer(step, trimmed)
-                                resetChromeTimer()
-                                unlockAndAdvanceSoftly(step)
                             }
                         )
                         .offset(x: shakeOffset)
@@ -443,15 +462,6 @@ struct ActiveLessonView: View {
             if currentIndex > 0 {
                 currentIndex -= 1
                 isBoardTappedToComplete = false
-            }
-        }
-    }
-
-    private func unlockAndAdvanceSoftly(_ step: LessonStep) {
-        // Auto advance after short delay if appropriate, or let user swipe
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            if let current = currentStep, current.id == step.id {
-                goToNextScene()
             }
         }
     }
@@ -623,7 +633,11 @@ struct LyoBoardView: View {
     let promptResponses: [String: String]
     @Binding var reflectionText: String
     @Binding var isTappedToComplete: Bool
-    var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Void
+    let interactionCompleted: Bool
+    var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Bool
+    var onTransferSubmit: (SDUIComponent, String) -> Bool
+    var onHint: (SDUIComponent) -> Bool
+    var onSkip: (SDUIComponent) -> Bool
     var onPromptSubmit: (String) -> Void = { _ in }
 
     var body: some View {
@@ -647,6 +661,9 @@ struct LyoBoardView: View {
                 switch step.supporting {
                 case .classroomQuiz(let component):
                     quizContent(component)
+
+                case .classroomInput(let component):
+                    transferContent(component)
 
                 case .comparison(let model):
                     comparisonContent(model)
@@ -793,7 +810,7 @@ struct LyoBoardView: View {
                     ForEach(options) { option in
                         let selected = quizSelections[component.id] == option.id
                         Button {
-                            onOptionSelected(component, option)
+                            _ = onOptionSelected(component, option)
                         } label: {
                             HStack {
                                 Circle()
@@ -809,10 +826,92 @@ struct LyoBoardView: View {
                             .background(selected ? ClassroomTokens.accent.opacity(0.12) : Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? ClassroomTokens.accent : Color.white.opacity(0.06), lineWidth: 1))
                         }
+                        .disabled(interactionCompleted)
                     }
                 }
             }
+            checkpointSupportActions(component)
         }
+    }
+
+    private func transferContent(_ component: SDUIComponent) -> some View {
+        let minimum = max(component.minWords ?? 6, 1)
+        let wordCount = reflectionText
+            .split(whereSeparator: \.isWhitespace)
+            .count
+        let isSpanish = component.languageCode?.lowercased().hasPrefix("es") == true
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(isSpanish ? "Comprobación de aplicación" : "Application Check")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.accent)
+
+            Text(component.question ?? component.content)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textPrimary)
+
+            TextEditor(text: $reflectionText)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textPrimary)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 90)
+                .padding(10)
+                .background(
+                    Color.white.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .disabled(interactionCompleted)
+
+            HStack {
+                Text(
+                    isSpanish
+                        ? "\(wordCount)/\(minimum) palabras como mínimo"
+                        : "\(wordCount)/\(minimum) words minimum"
+                )
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ClassroomTokens.textTertiary)
+                Spacer()
+                Button(isSpanish ? "Enviar" : "Submit") {
+                    let response = reflectionText.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    _ = onTransferSubmit(component, response)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(ClassroomTokens.accent)
+                .disabled(wordCount < minimum || interactionCompleted)
+            }
+            checkpointSupportActions(component)
+        }
+    }
+
+    private func checkpointSupportActions(_ component: SDUIComponent) -> some View {
+        let isSpanish = component.languageCode?.lowercased().hasPrefix("es") == true
+        return HStack(spacing: 10) {
+            Button {
+                _ = onHint(component)
+            } label: {
+                Label(
+                    isSpanish ? "Pedir ayuda" : "Ask for help",
+                    systemImage: "lightbulb"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                _ = onSkip(component)
+            } label: {
+                Text(isSpanish ? "Omitir por ahora" : "Skip for now")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(ClassroomTokens.textTertiary)
+        }
+        .font(.system(size: 12, weight: .semibold, design: .rounded))
+        .disabled(interactionCompleted)
+        .opacity(interactionCompleted ? 0.55 : 1)
     }
 
     private func comparisonContent(_ model: ActiveLessonView.ConceptComparisonModel) -> some View {

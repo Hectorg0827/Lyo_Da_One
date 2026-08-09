@@ -190,11 +190,12 @@ final class LivingClassroomEngine {
         - Roughly every second scene, include ONE multiple-choice checkpoint that
           tests the idea you just taught (4 options, exactly one correct).
         - Keep narration warm and conversational, like a great human tutor.
+        - Use the same language as the topic and lesson.
 
         Return ONLY strict JSON in this shape:
         {
           "scene_type": "concept | example | checkpoint | recap",
-          "narration": "what the tutor says out loud (2-4 sentences)",
+          "narration": "what the tutor says out loud (28-55 words, at most 2 sentences)",
           "blocks": [
             {"kind": "text", "content": "markdown explanation"},
             {"kind": "code", "language": "swift", "content": "optional code"},
@@ -216,7 +217,7 @@ final class LivingClassroomEngine {
 
         guard let response = try? await OpenAIService.shared.sendMessage(
             message: prompt,
-            systemPrompt: "You are Lyo, a world-class AI tutor. Output strict JSON only — no prose, no markdown fences."
+            systemPrompt: "You are Lyo, a world-class AI tutor. Match the lesson's language. Output strict JSON only — no prose, no markdown fences."
         ), let json = Self.parseObject(response) else {
             // Graceful degradation: emit a minimal but real scene so the lesson
             // continues instead of dead-ending.
@@ -260,13 +261,13 @@ final class LivingClassroomEngine {
         Answer clearly and concisely as their tutor. Connect the answer back to the
         lesson. Return ONLY strict JSON:
         {
-          "narration": "spoken answer (2-3 sentences)",
+          "narration": "spoken answer (28-55 words, at most 2 sentences)",
           "blocks": [{"kind": "text", "content": "fuller markdown answer"}]
         }
         """
         let response = (try? await OpenAIService.shared.sendMessage(
             message: prompt,
-            systemPrompt: "You are Lyo, a precise and encouraging AI tutor. Output strict JSON only."
+            systemPrompt: "You are Lyo, a precise and encouraging AI tutor. Match the learner's language and output strict JSON only."
         )) ?? ""
 
         if let json = Self.parseObject(response) {
@@ -294,7 +295,7 @@ final class LivingClassroomEngine {
         Write an encouraging recap that consolidates the key takeaways and suggests
         one concrete next step to keep practicing. Return ONLY strict JSON:
         {
-          "narration": "spoken recap (2-3 sentences)",
+          "narration": "spoken recap (28-55 words, at most 2 sentences)",
           "blocks": [{"kind": "text", "content": "bulleted key takeaways + a next step"}]
         }
         """
@@ -338,12 +339,17 @@ final class LivingClassroomEngine {
 
         func nextDelay() -> Int { defer { delay += step }; return delay }
 
-        if let narration = json["narration"] as? String, !narration.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let narration = json["narration"] as? String,
+           !narration.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let spokenTurn = narration
+                .split(whereSeparator: \.isWhitespace)
+                .prefix(55)
+                .joined(separator: " ")
             components.append(
                 SDUIComponent(
                     id: "\(sceneId)_narration",
                     type: .teacherMessage,
-                    content: narration,
+                    content: spokenTurn,
                     delayMs: nextDelay()
                 )
             )

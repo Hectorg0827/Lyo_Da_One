@@ -1,21 +1,25 @@
 import { create } from 'zustand';
 import toast from 'react-hot-toast';
-import type { ChatMessage, ChatConversation } from '@/types';
+import type { ChatMessage, ChatConversation, ChatAttachment } from '@/types';
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { parseCanonicalChatContent } from '@/lib/chat-attachments';
+
+export type GenerationActivity = 'thinking' | 'response' | 'course';
 
 interface ChatStore {
   conversations: ChatConversation[];
   activeConversationId: string | null;
   isGenerating: boolean;
   generationProgress: number;
+  generationActivity: GenerationActivity;
   isHydrating: boolean;
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
   hydrate: () => Promise<void>;
   loadConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
 }
@@ -25,6 +29,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeConversationId: null,
   isGenerating: false,
   generationProgress: 0,
+  generationActivity: 'thinking',
   isHydrating: false,
 
   createConversation: () => {
@@ -74,13 +79,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return;
     }
     const detail = await api.chat.conversation(id);
-    const messages: ChatMessage[] = detail.messages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      type: 'text',
-      createdAt: message.created_at,
-    }));
+    const messages: ChatMessage[] = detail.messages.map((message) => {
+      const parsed = message.role === 'user'
+        ? parseCanonicalChatContent(message.content)
+        : { text: message.content, attachments: [] };
+      return {
+        id: message.id,
+        role: message.role,
+        content: parsed.text,
+        type: 'text',
+        attachments: parsed.attachments,
+        createdAt: message.created_at,
+      };
+    });
     set((state) => ({
       activeConversationId: id,
       conversations: state.conversations.map((conversation) =>
@@ -97,9 +108,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
-  sendMessage: async (content: string) => {
+  sendMessage: async (content: string, attachments: ChatAttachment[] = []) => {
     const state = get();
     let convoId = state.activeConversationId;
+    const trimmedContent = content.trim();
+    const titleSeed = trimmedContent || attachments[0]?.name || 'New Chat';
 
     if (!convoId) {
       convoId = get().createConversation();
@@ -108,7 +121,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (convoId.startsWith('local-')) {
       const localId = convoId;
       try {
-        const remote = await api.chat.createConversation(content.slice(0, 80));
+        const remote = await api.chat.createConversation(titleSeed.slice(0, 80));
         convoId = remote.id;
         set((current) => ({
           activeConversationId: remote.id,
@@ -136,8 +149,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const userMessage: ChatMessage = {
       id: generateId(),
       role: 'user',
-      content,
+      content: trimmedContent,
       type: 'text',
+      attachments,
       createdAt: new Date().toISOString(),
     };
 
@@ -146,7 +160,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         c.id === convoId
           ? {
               ...c,
-              title: c.messages.length === 0 ? content.slice(0, 50) : c.title,
+              title: c.messages.length === 0 ? titleSeed.slice(0, 50) : c.title,
               messages: [...c.messages, userMessage],
               updatedAt: new Date().toISOString(),
             }
@@ -154,6 +168,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
       isGenerating: true,
       generationProgress: 10,
+      generationActivity: 'thinking',
     }));
 
     // The server is the source of truth for history. Sending only the current
@@ -194,12 +209,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           };
         }),
         generationProgress: Math.min(90, get().generationProgress + 5),
+        generationActivity: s.generationActivity === 'course' ? 'course' : 'response',
       }));
     };
 
     try {
       api.chat.stream(
-        content,
+        trimmedContent,
         history,
         (chunk) => {
           const block = chunk.block as Record<string, unknown> | undefined;
@@ -251,6 +267,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
 
               set((s) => ({
+                generationActivity: 'course',
                 conversations: s.conversations.map((c) => {
                   if (c.id !== convoId) return c;
                   const existing = c.messages.find((m) => m.id === aiMessageId);
@@ -298,21 +315,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (!accumulated) {
             recoverCanonicalConversation(convoId!);
           } else {
-            set({ isGenerating: false, generationProgress: 0 });
+            set({
+              isGenerating: false,
+              generationProgress: 0,
+              generationActivity: 'thinking',
+            });
           }
         },
         () => {
           recoverCanonicalConversation(convoId!);
         },
         convoId,
-        userMessage.id
+        userMessage.id,
+        attachments.map((attachment) => ({
+          modality: attachment.kind === 'image' ? 'IMAGE' as const : 'DOCUMENT' as const,
+          uri: attachment.url,
+          mime_type: attachment.mimeType,
+          name: attachment.name,
+          size_bytes: attachment.size,
+        }))
       );
     } catch {
       recoverCanonicalConversation(convoId!);
     }
 
     async function recoverCanonicalConversation(cId: string) {
-      set({ isGenerating: false, generationProgress: 0 });
+      set({
+        isGenerating: false,
+        generationProgress: 0,
+        generationActivity: 'thinking',
+      });
       try {
         // A broken SSE connection does not imply the server failed. Reload the
         // canonical thread so a completed answer is recovered without creating
@@ -341,3 +373,4 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     );
   },
 }));
+

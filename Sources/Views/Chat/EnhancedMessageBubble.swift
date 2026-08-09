@@ -13,6 +13,8 @@ import os
 import LaTeXSwiftUI
 #endif
 
+private let assistantResponseWidthFraction: CGFloat = 0.99
+
 struct EnhancedMessageBubble: View {
     let message: MultimodalMessage
     let onTTSToggle: (() -> Void)?
@@ -176,8 +178,9 @@ struct EnhancedMessageBubble: View {
             .padding(.vertical, 14)
             .background(Color.clear)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 1) // Near edge-to-edge
+        .containerRelativeFrame(.horizontal) { width, _ in
+            width * assistantResponseWidthFraction
+        }
         .fullScreenCover(isPresented: $showFullImage) {
             FullImageView(url: selectedImageURL) {
                 showFullImage = false

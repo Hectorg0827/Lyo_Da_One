@@ -752,7 +752,7 @@ enum Endpoints {
 
     // MARK: - TTS
     enum TTS: Endpoint {
-        case generate(text: String, voice: TTSVoice, speed: Double, withTimings: Bool)
+        case generate(text: String, voice: TTSVoice, speed: Double, withTimings: Bool, language: String)
         case batch(texts: [String], voice: TTSVoice)
         case getAudio(id: String)
         case getTimings(id: String)
@@ -760,11 +760,11 @@ enum Endpoints {
 
         var path: String {
             switch self {
-            case .generate: return "/api/tts/generate"
+            case .generate: return "/api/v1/tts/synthesize"
             case .batch: return "/api/tts/batch"
             case .getAudio(let id): return "/api/tts/audio/\(id)"
             case .getTimings(let id): return "/api/tts/timings/\(id)"
-            case .voices: return "/api/tts/voices"
+            case .voices: return "/api/v1/tts/voices"
             }
         }
 
@@ -777,14 +777,23 @@ enum Endpoints {
 
         var body: Encodable? {
             switch self {
-            case .generate(let text, let voice, let speed, let withTimings):
+            case .generate(let text, let voice, let speed, _, let language):
                 struct TTSRequest: Encodable {
                     let text: String
                     let voice: String
                     let speed: Double
-                    let with_timings: Bool
+                    let format: String
+                    let content_type: String
+                    let language: String
                 }
-                return TTSRequest(text: text, voice: voice.rawValue, speed: speed, with_timings: withTimings)
+                return TTSRequest(
+                    text: text,
+                    voice: voice.rawValue,
+                    speed: speed,
+                    format: "mp3",
+                    content_type: "explanation",
+                    language: language
+                )
 
             case .batch(let texts, let voice):
                 struct TTSBatchRequest: Encodable {
