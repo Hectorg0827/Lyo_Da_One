@@ -48,6 +48,31 @@ const contracts = [
     forbidden: ["'relative max-w-[78%] md:max-w-[68%]'"],
   },
   {
+    name: 'web response reading canvas',
+    path: 'web/src/components/chat/MessageBubble.tsx',
+    needles: [
+      "rounded-[24px] border border-white/[0.11]",
+      "max-w-[88ch] text-[15px] sm:text-base",
+      "label={copied ? 'Copied' : 'Copy'}",
+      "label={speechState === 'playing' ? 'Stop' : 'Listen'}",
+      'label="Try again"',
+      'label="Save"',
+      'api.tts.synthesize',
+      'MAX_SPEECH_CHUNK_LENGTH = 1100',
+      'remarkPlugins={[remarkGfm]}',
+    ],
+  },
+  {
+    name: 'web shared response voice',
+    path: 'web/src/lib/api.ts',
+    needles: [
+      '/api/v1/tts/synthesize/stream',
+      "language: 'auto'",
+      "format: 'mp3'",
+      'signal?: AbortSignal',
+    ],
+  },
+  {
     name: 'web full-width chat viewport',
     path: 'web/src/components/chat/ChatInterface.tsx',
     needles: ['flex flex-col gap-6 py-6 w-full'],
@@ -124,6 +149,31 @@ const contracts = [
     ],
   },
   {
+    name: 'Android response reading canvas',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
+    needles: [
+      'Color.White.copy(alpha = 0.055f)',
+      'bodyLarge.copy(lineHeight = 28.sp)',
+      'private fun RowScope.ResponseAction(',
+      'label = "Copy"',
+      'label = if (speaking) "Stop" else "Listen"',
+      'label = "Try again"',
+      'label = "Save"',
+      'ApiClient.api.synthesizeSpeech(',
+      'ActivityResultContracts.CreateDocument("text/markdown")',
+      'private fun splitSpeechText(raw: String, limit: Int = 1_100)',
+    ],
+  },
+  {
+    name: 'Android shared response voice API',
+    path: 'android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt',
+    needles: [
+      'api/v1/tts/synthesize/stream',
+      'suspend fun synthesizeSpeech',
+      'TtsSynthesizeRequest',
+    ],
+  },
+  {
     name: 'iOS adaptive AI response width',
     path: 'Sources/Views/Chat/EnhancedMessageBubble.swift',
     needles: [
@@ -132,6 +182,38 @@ const contracts = [
       'width * assistantResponseWidthFraction',
     ],
     forbidden: ['.padding(.horizontal, 1) // Near edge-to-edge'],
+  },
+  {
+    name: 'iOS response reading canvas',
+    path: 'Sources/Views/Chat/EnhancedMessageBubble.swift',
+    needles: [
+      'RoundedRectangle(cornerRadius: 24, style: .continuous)',
+      'private func responseActionButton(',
+      'didCopy ? "Copied" : "Copy"',
+      'isSpeaking ? "Stop" : "Listen"',
+      'title: "Try again"',
+      'title: "Save"',
+      'saveResponseToFiles()',
+    ],
+    forbidden: ['@StateObject private var audioService = AudioPlaybackService.shared'],
+  },
+  {
+    name: 'iOS wired shared response voice',
+    path: 'Sources/Views/Main/Hybrid/LyoOverlayView.swift',
+    needles: [
+      'viewModel.toggleMessageAudio(messageId: message.id, text: message.content)',
+      'isSpeaking: viewModel.currentlyPlayingMessageId == message.id',
+      'canRegenerate: !isThinking && viewModel.messages.last?.id == message.id',
+    ],
+    forbidden: ['onTTSToggle: nil'],
+  },
+  {
+    name: 'iOS long response voice chunks',
+    path: 'Sources/Services/TextToSpeechService.swift',
+    needles: [
+      'speechChunks(cleanText)',
+      'private func speechChunks(_ text: String, limit: Int = 1_100)',
+    ],
   },
   {
     name: 'iOS full-width chat viewport',
@@ -215,4 +297,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, adaptive 99% AI response width, structured image/document uploads, and context-aware generation status.');
+console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, adaptive 99% reading canvases, working response actions, shared response voice, structured image/document uploads, and context-aware generation status.');

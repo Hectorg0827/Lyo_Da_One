@@ -354,6 +354,41 @@ export const api = {
     },
   },
 
+  // ── Shared Lyo voice ──
+  tts: {
+    async synthesize(text: string, signal?: AbortSignal) {
+      const token = getAccessToken();
+      const makeRequest = (includeToken: boolean) =>
+        fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(includeToken && token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            text,
+            language: 'auto',
+            format: 'mp3',
+            speed: 0.98,
+          }),
+          signal,
+        });
+
+      // The endpoint supports guests. If a stale access token is present,
+      // retry anonymously instead of turning a Listen tap into a logout.
+      let response = await makeRequest(Boolean(token));
+      if (response.status === 401 && token) response = await makeRequest(false);
+
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null) as
+          | { detail?: string }
+          | null;
+        throw new ApiError(detail?.detail || 'Lyo voice is temporarily unavailable', response.status);
+      }
+      return response.blob();
+    },
+  },
+
   // ── Feed / Community ──
   feed: {
     async list(page = 1, perPage = 20) {
