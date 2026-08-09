@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { listCourseStacks, postCourseToCommunity, courseShareUrl } from '@/lib/stack';
 
 // ── Daily challenges (TODO: wire to gamification challenges when endpoint available) ──
 
@@ -194,6 +195,113 @@ function MiniAvatar({
   );
 }
 
+/** Real share (Web Share API, falling back to clipboard — the same idiom
+ *  PostCard.tsx's handleShare already uses) + post-to-Community actions
+ *  for a Stacks course card. Mirrors Android's HomeScreen StackCourseCard
+ *  dropdown ("Share…" / "Post to Community"). Stops the click from
+ *  bubbling to the card's wrapping <Link> so opening the menu doesn't
+ *  also navigate into the course. */
+function ShareOrPostMenu({
+  courseId,
+  title,
+  progressPercent,
+  dark = false,
+  showShareItem = true,
+}: {
+  courseId: string;
+  title: string;
+  progressPercent: number;
+  dark?: boolean;
+  /** Omit the "Share…" menu item when the card already has its own
+   *  dedicated Share button next to this menu (the hero card), so the
+   *  same action isn't offered twice. */
+  showShareItem?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'copied' | 'posted' | 'error'>('idle');
+
+  const flash = (next: 'copied' | 'posted' | 'error') => {
+    setStatus(next);
+    setTimeout(() => setStatus('idle'), 2200);
+  };
+
+  const handleShare = async () => {
+    setOpen(false);
+    const url = courseShareUrl(courseId);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `${title} — LYO`, text: `Check out "${title}" on Lyo`, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        flash('copied');
+      }
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') console.error('Unable to share course', error);
+    }
+  };
+
+  const handlePost = async () => {
+    setOpen(false);
+    const ok = await postCourseToCommunity(courseId, title, progressPercent);
+    flash(ok ? 'posted' : 'error');
+  };
+
+  return (
+    <div
+      className="relative"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Course options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          'w-8 h-8 rounded-full backdrop-blur-md flex items-center justify-center transition-colors',
+          dark ? 'bg-black/25 text-white hover:bg-black/40' : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white',
+        )}
+      >
+        <MoreHorizontal size={15} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            role="menu"
+            aria-label="Course options"
+            className="absolute right-0 top-full z-20 mt-1.5 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#151b30] shadow-2xl"
+          >
+            {showShareItem && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleShare}
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] text-white/80 hover:bg-white/10 hover:text-white"
+              >
+                <Share size={13} /> Share…
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handlePost}
+              className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <Users size={13} /> Post to Community
+            </button>
+          </div>
+        </>
+      )}
+      {status !== 'idle' && (
+        <div className="absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-lg bg-black/85 px-2.5 py-1 text-[11px] text-white">
+          {status === 'copied' ? 'Link copied' : status === 'posted' ? 'Posted to Community' : 'Could not post'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
@@ -203,6 +311,11 @@ export default function HomePage() {
   const { data: gamification } = useApi(() => api.gamification.overview(), []);
   const { data: courses } = useApi(() => api.courses.list(0, 4), []);
   const { data: feedData } = useApi(() => api.feed.publicFeed(1, 3), []);
+  // Device- and platform-agnostic Stacks: courses this learner has actually
+  // started, synced via the real backend (not a single-slot local pointer) —
+  // this is what the hero card and "Your Stacks" section below are sourced
+  // from now, mirroring Android's HomeScreen "Your Stacks" LazyRow.
+  const { data: stackItems } = useApi(() => listCourseStacks(), []);
 
   useEffect(() => {
     setMounted(true);
@@ -254,15 +367,25 @@ export default function HomePage() {
     },
   ];
 
-  // Map API courses to display format
-  const inProgressCourses = (courses || []).map((c: Record<string, unknown>, i: number) => ({
-    id: String(c.id ?? i),
-    title: (c.title as string) || 'Untitled Course',
-    category: (c.subject as string) || (c.category as string) || 'General',
-    progress: (c.progress as number) || 0,
+  // Map real Stack items — device- and platform-agnostic, backend-synced,
+  // sourced from every course a course card's Start action has actually
+  // saved (see /classroom's upsertCourseOnStart effect and CoursePlayer's
+  // progress sync) — NOT the generic catalog list used below for
+  // Recommended For You.
+  const STATUS_LABEL: Record<string, string> = {
+    not_started: 'Not started',
+    in_progress: 'In progress',
+    completed: 'Completed',
+    paused: 'Paused',
+  };
+  const stackCourses = (stackItems || []).map((item, i) => ({
+    id: item.content_id || String(item.id),
+    title: item.title,
+    category: STATUS_LABEL[item.status] || 'Course',
+    progress: Math.round((item.progress || 0) * 100),
     color: courseColors[i % courseColors.length],
     emoji: courseEmojis[i % courseEmojis.length],
-    timeLeft: c.estimated_duration ? `${c.estimated_duration}h total` : '',
+    timeLeft: '',
   }));
 
   // Map API courses to recommended format
@@ -326,8 +449,20 @@ export default function HomePage() {
       {/* ── Hero course card (matches iOS FocusCourseCardView) ── */}
       <motion.div variants={itemVariants}>
         {(() => {
-          const hero = inProgressCourses[0];
+          const hero = stackCourses[0];
           const heroHref = hero ? `/courses/${hero.id}` : '/discover';
+          const heroShare = async () => {
+            const url = courseShareUrl(hero.id);
+            try {
+              if (navigator.share) {
+                await navigator.share({ title: `${hero.title} — LYO`, text: `Check out "${hero.title}" on Lyo`, url });
+              } else {
+                await navigator.clipboard.writeText(url);
+              }
+            } catch (error) {
+              if ((error as DOMException).name !== 'AbortError') console.error('Unable to share course', error);
+            }
+          };
           return (
             <div className="relative overflow-hidden rounded-[32px] ios-card-gradient p-6 sm:p-8 flex flex-col min-h-[380px] sm:min-h-[420px] shadow-[0_8px_20px_rgba(0,0,0,0.3)] border border-white/20">
               {/* Glass glare */}
@@ -340,22 +475,29 @@ export default function HomePage() {
 
               {/* Top buttons */}
               <div className="relative flex items-center justify-between mb-5">
-                <button
-                  className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white"
-                  aria-label="Share course"
-                >
-                  <Share size={16} />
-                </button>
-                <button
-                  className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white"
-                  aria-label="Course options"
-                >
-                  <MoreHorizontal size={16} />
-                </button>
+                {hero ? (
+                  <button
+                    onClick={heroShare}
+                    className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white transition-colors hover:bg-white/25"
+                    aria-label="Share course"
+                  >
+                    <Share size={16} />
+                  </button>
+                ) : <span />}
+                {hero ? (
+                  <ShareOrPostMenu
+                    courseId={hero.id}
+                    title={hero.title}
+                    progressPercent={hero.progress}
+                    showShareItem={false}
+                  />
+                ) : (
+                  <span />
+                )}
               </div>
 
               <p className="relative text-xs font-bold tracking-[0.2em] text-white/60 uppercase">
-                {hero ? 'In Progress' : 'Start New'}
+                {hero ? hero.category : 'Start New'}
               </p>
               <h2 className="relative font-rounded text-[32px] font-extrabold text-white leading-tight mt-2 max-w-[260px]">
                 {hero ? hero.title : 'Begin your learning journey'}
@@ -440,27 +582,37 @@ export default function HomePage() {
         </div>
       </motion.div>
 
-      {/* ── Continue Learning ─────────────────────────────────── */}
+      {/* ── Your Stacks — every course this learner has started, synced via
+          the real backend so it shows up the same way on any device or
+          platform they're signed into (see lib/stack.ts). Replaces the old
+          single-slot "Continue Learning" list, which re-rendered the
+          generic course catalog rather than what the learner actually
+          started. ── */}
       <motion.div variants={itemVariants}>
-        <SectionHeader title="Continue Learning" href="/courses" icon={BookOpen} />
-        {inProgressCourses.length === 0 ? (
+        <SectionHeader title="Your Stacks" href="/courses" icon={Layers} />
+        {stackCourses.length === 0 ? (
           <Link
             href="/discover"
             className="glass-card p-6 flex flex-col items-center gap-2 text-center transition-all duration-200 hover:bg-white/[0.07]"
           >
-            <BookOpen size={28} className="text-secondary" />
-            <p className="text-sm font-semibold text-primary">Start learning</p>
-            <p className="text-xs text-secondary">Browse courses and begin your journey</p>
+            <Layers size={28} className="text-secondary" />
+            <p className="text-sm font-semibold text-primary">No courses in your Stacks yet</p>
+            <p className="text-xs text-secondary">
+              Start a course from Explore and it&apos;ll show up here — and on any other device you sign into.
+            </p>
           </Link>
         ) : (
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 sm:overflow-visible">
-            {inProgressCourses.map((course) => (
+            {stackCourses.map((course) => (
               <Link
                 key={course.id}
                 href={`/courses/${course.id}`}
-                className="glass-card p-4 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.02] hover:bg-white/[0.07] shrink-0 w-52 sm:w-auto"
+                className="relative glass-card p-4 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.02] hover:bg-white/[0.07] shrink-0 w-52 sm:w-auto"
               >
-                <div className="flex items-start gap-3">
+                <div className="absolute right-2 top-2 z-10">
+                  <ShareOrPostMenu courseId={course.id} title={course.title} progressPercent={course.progress} />
+                </div>
+                <div className="flex items-start gap-3 pr-7">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
                     style={{ backgroundColor: `${course.color}20`, border: `1px solid ${course.color}30` }}
@@ -477,7 +629,6 @@ export default function HomePage() {
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] text-secondary">{course.progress}% complete</span>
-                    <span className="text-[11px] text-secondary">{course.timeLeft}</span>
                   </div>
                   <ProgressBar value={course.progress} color={course.color} height={4} />
                 </div>

@@ -13,6 +13,12 @@ final class UIStackStore: ObservableObject {
     private let userDefaultsKey = "lyo_ui_stack_items"
     private let repository = LyoRepository.shared
 
+    /// courseId (== the backend's content_id) → the real backend row id,
+    /// populated as items are created/discovered this session. Lets
+    /// `syncCourseProgressToBackend` PUT without doing a lookup on every
+    /// single progress tick.
+    private var backendItemIdsByCourseId: [String: Int] = [:]
+
     private init() {
         loadFromDisk()
     }
@@ -52,6 +58,11 @@ final class UIStackStore: ObservableObject {
     /// Refreshes canonical server progress first, then asks the personalization
     /// engine whether spaced-repetition reviews are due.
     func refreshDueReviews() async {
+        // Pull first: surfaces courses started on another device/platform
+        // that this device has never seen locally. refreshCourseProgressFromBackend
+        // below only refreshes items already known locally, so without this
+        // a course started elsewhere would never appear here.
+        await mergeCourseStacksFromBackend()
         await refreshCourseProgressFromBackend()
 
         // Fetch the profile first — it also powers the weekly weakness quest,
@@ -114,6 +125,7 @@ final class UIStackStore: ObservableObject {
             completedLessons: completedLessons ?? existing?.completedLessons
         )
         upsert(item)
+        syncCourseUpsertToBackend(courseId: courseId, title: title)
     }
 
     /// Add or update a tutor card (linked to a specific lesson).
@@ -190,9 +202,13 @@ final class UIStackStore: ObservableObject {
         upsert(item)
     }
 
-    /// Updates the local presentation immediately. Server writes must happen
-    /// through an explicit lesson-completion endpoint; a GET request is never
-    /// treated as a successful progress write.
+    /// Updates the local presentation immediately, then fires a non-
+    /// blocking sync of this course's stack progress to the real backend
+    /// (see syncCourseProgressToBackend below) — this is a separate write
+    /// from the authoritative per-lesson completion endpoint
+    /// (/learning/lesson-completions), which remains the source of truth
+    /// for XP/mastery; this one only keeps the Stacks card's progress bar
+    /// in sync across devices.
     func updateCourseProgress(courseId: String, progress: Double, completedLessons: Int? = nil) {
         guard let index = items.firstIndex(where: { $0.type == .course && $0.courseId == courseId }) else {
             return
@@ -207,6 +223,7 @@ final class UIStackStore: ObservableObject {
         items[index] = item
         sortByRecency()
         saveToDisk()
+        syncCourseProgressToBackend(courseId: courseId, progress: item.progress ?? 0)
     }
 
     // MARK: - Backend Hydration
@@ -252,6 +269,99 @@ final class UIStackStore: ObservableObject {
                 // Offline or unavailable progress must not erase the local state.
                 print("UIStackStore: Server progress unavailable for \(courseId): \(error.localizedDescription)")
             }
+        }
+    }
+
+    // MARK: - Real Backend Sync (device- and platform-agnostic)
+    //
+    // UIStackStore's UserDefaults-backed `items` list is the fast, always-
+    // available local presentation layer. These functions mirror course
+    // items to/from the real, auth-gated `/api/v1/stack/items` backend —
+    // the same contract Android's StackRepository.kt and web's
+    // lib/stack.ts already sync against — so a course started on one
+    // device/platform shows up on any other. Every call here is fire-and-
+    // forget from the caller's perspective and swallows its own errors: a
+    // failed sync must never crash or block the local UI, matching this
+    // file's existing resilience pattern (refreshCourseProgressFromBackend
+    // above already does the same).
+
+    /// Pulls every course stack item this user has on the backend and
+    /// merges any not already known locally into `items` — the actual
+    /// cross-device surface. Without this, a course started on another
+    /// device/platform would never appear here, since
+    /// refreshCourseProgressFromBackend above only ever refreshes items it
+    /// already knows about locally.
+    func mergeCourseStacksFromBackend() async {
+        guard let remoteItems = try? await repository.fetchCourseStackItems() else { return }
+
+        await MainActor.run {
+            for remote in remoteItems {
+                guard let contentId = remote.contentId, !contentId.isEmpty else { continue }
+                backendItemIdsByCourseId[contentId] = remote.id
+
+                if let index = items.firstIndex(where: { $0.type == .course && $0.courseId == contentId }) {
+                    var item = items[index]
+                    item.progress = max(item.progress ?? 0, remote.progress)
+                    if let updatedAt = remote.updatedAt, updatedAt > item.updatedAt {
+                        item.updatedAt = updatedAt
+                    }
+                    items[index] = item
+                } else {
+                    // A course started on another device/platform, never
+                    // seen locally before now.
+                    items.append(UIStackItem(
+                        type: .course,
+                        title: remote.title,
+                        updatedAt: remote.updatedAt ?? Date(),
+                        progress: remote.progress,
+                        courseId: contentId
+                    ))
+                }
+            }
+            sortByRecency()
+            saveToDisk()
+        }
+    }
+
+    /// Fire-and-forget: creates the backend stack item for this course if
+    /// one doesn't already exist. The backend has no upsert-by-course
+    /// semantics (`POST /items` always inserts — confirmed directly
+    /// against lyo_app/stack/crud.py), so this does its own client-side
+    /// "does one already exist" check first, exactly like Android's
+    /// StackRepository.upsertCourseOnStart and web's lib/stack.ts's
+    /// upsertCourseOnStart. Skips placeholder spaced-repetition review
+    /// cards (courseId prefixed "GENERATE:"), which don't have a real
+    /// backend course id yet — the same exclusion
+    /// refreshCourseProgressFromBackend above already applies.
+    private func syncCourseUpsertToBackend(courseId: String, title: String) {
+        let trimmed = courseId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("GENERATE:") else { return }
+
+        Task {
+            let alreadyKnown = await MainActor.run { backendItemIdsByCourseId[trimmed] != nil }
+            if alreadyKnown { return }
+
+            if let existing = try? await repository.fetchCourseStackItems().first(where: { $0.contentId == trimmed }) {
+                await MainActor.run { backendItemIdsByCourseId[trimmed] = existing.id }
+                return
+            }
+
+            guard let created = try? await repository.createCourseStackItem(title: title, contentId: trimmed) else { return }
+            await MainActor.run { backendItemIdsByCourseId[trimmed] = created.id }
+        }
+    }
+
+    /// Fire-and-forget progress sync. No-ops if this course's backend item
+    /// id isn't known yet (the upsert above hasn't resolved) — the next
+    /// mergeCourseStacksFromBackend or upsertCourse call catches it up;
+    /// this never blocks or queues, matching every other sync path here.
+    private func syncCourseProgressToBackend(courseId: String, progress: Double) {
+        let trimmed = courseId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("GENERATE:") else { return }
+
+        Task {
+            guard let backendId = await MainActor.run(body: { backendItemIdsByCourseId[trimmed] }) else { return }
+            _ = try? await repository.updateCourseStackItemProgress(id: backendId, progress: progress)
         }
     }
 

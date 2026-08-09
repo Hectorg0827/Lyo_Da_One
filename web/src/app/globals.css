@@ -467,3 +467,29 @@
     text-wrap: balance;
   }
 }
+
+/* ============================================================
+   Classroom — Netflix/YouTube-style forced landscape fallback
+   ============================================================ */
+/* The classroom page tries a real `screen.orientation.lock('landscape')` +
+   `requestFullscreen()` on mobile first (see classroom/page.tsx). That works
+   on Chrome/Android. iOS Safari implements neither API, so this scoped rule
+   is the fallback: on a narrow *portrait* viewport, rotate the whole
+   classroom shell 90° with the width/height swapped so it visually renders
+   landscape without ever needing a real OS orientation change.
+
+   Self-selecting: once the device is actually landscape (whether the user
+   rotated it or the real API above succeeded), `(orientation: portrait)`
+   stops matching and this rule does nothing — no JS/CSS coordination
+   needed. */
+@media screen and (max-width: 900px) and (orientation: portrait) {
+  .classroom-landscape-shell {
+    position: fixed;
+    top: 0;
+    left: 100%;
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: 0 0;
+    transform: rotate(90deg);
+  }
+}

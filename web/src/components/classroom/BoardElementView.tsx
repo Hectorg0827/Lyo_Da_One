@@ -68,6 +68,37 @@ function MermaidView({ source }: { source: string }) {
   );
 }
 
+/** The Teacher circling/underlining a term on the board — a chalk ellipse
+    draws itself around the word, mirroring "circle or color the variable"
+    instead of the board sitting inert while it's discussed. */
+function HighlightView({ term }: { term: string }) {
+  return (
+    <div className="flex justify-center py-1">
+      <div className="relative inline-flex items-center justify-center">
+        <svg
+          viewBox="0 0 220 84"
+          className="pointer-events-none absolute -inset-3 h-[calc(100%+24px)] w-[calc(100%+24px)]"
+          preserveAspectRatio="none"
+        >
+          <motion.ellipse
+            cx={110} cy={42} rx={104} ry={34}
+            fill="none"
+            stroke="#FBBF24"
+            strokeWidth={4}
+            strokeLinecap="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+          />
+        </svg>
+        <span className="relative z-10 px-5 py-2 text-xl font-black text-accent-gold [text-shadow:0_0_16px_rgba(251,191,36,0.5)]">
+          {term}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function LatexView({ latex }: { latex: string }) {
   let html = '';
   try {
@@ -524,6 +555,8 @@ export function BoardElementView({
       className="board-element"
     >
       {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
+
+      {el.kind === 'highlight' && <HighlightView term={el.term} />}
 
       {el.kind === 'latex' && <LatexView latex={el.latex} />}
 

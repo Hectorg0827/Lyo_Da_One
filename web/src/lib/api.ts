@@ -289,59 +289,77 @@ export const api = {
       }>
     ): AbortController {
       const controller = new AbortController();
-      const token = getAccessToken();
 
-      fetch(`${API_URL}/api/v1/lyo2/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          text,
-          conversation_id: conversationId,
-          conversation_history: history,
-          device_id: getOrCreateChatDeviceId(),
-          client_message_id: clientMessageId,
-          media,
-        }),
-        signal: controller.signal,
-      })
-        .then(async (res) => {
-          if (!res.ok) throw new Error(`Stream failed: ${res.status}`);
-          const reader = res.body?.getReader();
-          if (!reader) throw new Error('No response body');
-          const decoder = new TextDecoder();
-          let buffer = '';
+      const doFetch = (authToken: string | null) =>
+        fetch(`${API_URL}/api/v1/lyo2/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify({
+            text,
+            conversation_id: conversationId,
+            conversation_history: history,
+            device_id: getOrCreateChatDeviceId(),
+            client_message_id: clientMessageId,
+            media,
+          }),
+          signal: controller.signal,
+        });
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
+      const readStream = async (res: Response) => {
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No response body');
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
 
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith('data:')) continue;
-              const payload = trimmed.slice(5).trim();
-              if (payload === '[DONE]') {
-                onDone();
-                return;
-              }
-              try {
-                onChunk(JSON.parse(payload));
-              } catch {
-                // skip malformed JSON
-              }
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === '[DONE]') {
+              onDone();
+              return;
+            }
+            try {
+              onChunk(JSON.parse(payload));
+            } catch {
+              // skip malformed JSON
             }
           }
-          onDone();
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') onError(err);
-        });
+        }
+        onDone();
+      };
+
+      (async () => {
+        try {
+          let res = await doFetch(getAccessToken());
+          // Unlike request()'s generic wrapper, this raw fetch had no 401
+          // retry — once an access token expired, every chat message failed
+          // silently into the "response was interrupted" recovery path,
+          // forever, until the user logged out and back in. Refresh once,
+          // exactly like request() already does.
+          if (res.status === 401) {
+            const refreshed = await tryRefreshToken();
+            if (refreshed) {
+              res = await doFetch(getAccessToken());
+            }
+          }
+          if (!res.ok) throw new Error(`Stream failed: ${res.status}`);
+          await readStream(res);
+        } catch (err) {
+          if ((err as Error).name !== 'AbortError') onError(err as Error);
+        }
+      })();
 
       return controller;
     },

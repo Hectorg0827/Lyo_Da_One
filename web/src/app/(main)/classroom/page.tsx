@@ -20,6 +20,7 @@ import {
   type HintLevel,
 } from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
+import { upsertCourseOnStart } from '@/lib/stack';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,16 @@ function ClassroomStage() {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
     return () => recognitionRef.current?.stop();
   }, []);
+
+  // Save this course into the learner's device- and platform-agnostic
+  // Stacks list the moment the classroom opens (both the chat-proposal
+  // "Start Learning" path and the catalog "/courses/[id]" path land here),
+  // mirroring Android's LyoNavHost Routes.CLASSROOM wiring. No-ops silently
+  // if the visitor isn't signed in or the sync fails — never blocks class.
+  useEffect(() => {
+    void upsertCourseOnStart(courseId, topic);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, topic]);
 
   useEffect(() => {
     if (viewingBoard === -1) {
@@ -459,7 +470,7 @@ function ClassroomStage() {
             className="px-6 py-1.5 flex flex-wrap items-center justify-center gap-2"
           >
             <Hand className="w-4 h-4 text-accent-gold animate-bounce" />
-            {prompt.options.map((opt) => (
+            {(prompt.options ?? []).map((opt) => (
               <button
                 key={opt}
                 onClick={() => answerPrompt(opt)}

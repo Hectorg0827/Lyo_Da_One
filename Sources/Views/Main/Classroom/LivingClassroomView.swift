@@ -314,6 +314,7 @@ struct LivingClassroomView: View {
         .preferredColorScheme(.dark)
         .navigationBarHidden(true)
         .statusBar(hidden: true)
+        .persistentSystemOverlays(.hidden) // Hide home indicator — Netflix/YouTube-style full-bleed classroom
         .task {
             service.connect(
                 sessionId: courseId,
@@ -328,6 +329,13 @@ struct LivingClassroomView: View {
             if voiceInput.isRecording { voiceInput.stopRecording() }
             service.disconnect()
             sessionTimer.stop()
+
+            // Restore orientation freedom — this is the actual pushed screen
+            // (ActiveLessonView is a child with no independent lifecycle hook
+            // into AppDelegate), so the lock/unlock pair lives here. Every
+            // `.landscape` lock below is matched by this `.all` on disappear
+            // so the app can never get stranded in forced landscape.
+            AppDelegate.orientationLock = .all
         }
         .onAppear {
             uiStackStore.upsertCourse(
@@ -335,6 +343,13 @@ struct LivingClassroomView: View {
                 title: courseTitle,
                 subtitle: "AI Classroom"
             )
+
+            // Netflix/YouTube-style classroom: default to landscape
+            // full-screen, matching the web classroom's behavior.
+            AppDelegate.orientationLock = .landscape
+            if UIDevice.current.orientation != .landscapeLeft && UIDevice.current.orientation != .landscapeRight {
+                UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
+            }
         }
         .onChange(of: service.renderedComponents.count) { _, _ in
             handleNewComponent()
@@ -437,6 +452,17 @@ struct LivingClassroomView: View {
                     actionIntent: "skip_question",
                     componentId: component.id,
                     actionData: ["reason": "unsure"]
+                )
+            },
+            onPromptAnswer: { step, response in
+                // Route through the same "user_message" path chat uses, so
+                // the backend's hesitation detection and learner_signal
+                // handling apply here too — a mid-lesson checkpoint answer
+                // is a real message, not a decorative tap.
+                service.sendUserAction(
+                    actionIntent: "user_message",
+                    componentId: step.id,
+                    actionData: ["message": response]
                 )
             },
             onBack: { dismiss() },

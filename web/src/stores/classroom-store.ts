@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
+import { updateCourseProgress } from '@/lib/stack';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -91,7 +92,8 @@ export interface DirectorTurn {
 // ─── Board model — the main attraction ───────────────────────────────────────
 
 export type BoardElement =
-  | { id: string; kind: 'chalk'; text: string }
+  | { id: string; kind: 'chalk'; text: string; highlightedTerm?: string }
+  | { id: string; kind: 'highlight'; term: string }
   | { id: string; kind: 'latex'; latex: string }
   | { id: string; kind: 'mermaid'; source: string }
   | { id: string; kind: 'code'; code: string }
@@ -115,7 +117,12 @@ export interface ActivePrompt {
   id: string;
   speaker: string;
   text: string;
-  options: string[];
+  /** Only set when the question is genuinely multiple-choice — real,
+      question-specific options from the director script. Absent for
+      open-ended questions ("what do you think...", "give me an
+      example..."), which expect a typed/spoken answer instead. Never
+      defaulted to a generic yes/no pair. */
+  options?: string[];
 }
 
 export interface Caption {
@@ -159,6 +166,7 @@ interface ClassroomStore {
   soundOn: boolean;
   voiceOn: boolean;
   speechRate: number;
+  isPaused: boolean;        // the single most accessible control: stop the class
 
   connect: (connection: ClassroomConnection) => void;
   disconnect: () => void;
@@ -174,6 +182,7 @@ interface ClassroomStore {
   continueLesson: () => void;
   toggleSound: () => void;
   toggleVoice: () => void;
+  togglePause: () => void;
   setSpeechRate: (rate: number) => void;
   viewBoard: (index: number) => void; // -1 = live
 }
@@ -491,6 +500,38 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
   }
 
+  /** Wire the current spoken emphasis onto the board: mark the term inline
+      in the most recent chalk block if it appears there — e.g. highlighting
+      "3x" while the Teacher explains the coefficient — and always drop a
+      circled "spotlight" element too, so highlighting still shows up even
+      when the term lives inside a diagram/LaTeX block instead of plain
+      chalk text. */
+  function highlightBoardTerm(term: string) {
+    set((s) => {
+      const board = [...s.board];
+      const lastChalkIndex = board.map((b) => b.kind).lastIndexOf('chalk');
+      if (lastChalkIndex !== -1) {
+        const el = board[lastChalkIndex];
+        if (el.kind === 'chalk' && el.text.toLowerCase().includes(term.toLowerCase())) {
+          board[lastChalkIndex] = { ...el, highlightedTerm: term };
+        }
+      }
+      return { board };
+    });
+    // Auto-clear the inline mark after a few seconds — it reflects what's
+    // being discussed right now, not a permanent decoration. A plain timer,
+    // not `playTimer`, which drives turn sequencing and must not be
+    // hijacked by an unrelated cleanup callback.
+    setTimeout(() => {
+      set((s) => ({
+        board: s.board.map((b) => (
+          b.kind === 'chalk' && b.highlightedTerm === term ? { ...b, highlightedTerm: undefined } : b
+        )),
+      }));
+    }, 5000);
+    addBoardElement({ id: nextId(), kind: 'highlight', term });
+  }
+
   function addSources(labels?: string[]) {
     const clean = Array.from(
       new Set((labels ?? []).map((label) => label.trim()).filter(Boolean)),
@@ -527,7 +568,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function playNext() {
-    if (!playing) return;
+    if (!playing || get().isPaused) return;
     const turn = turnQueue.shift();
     if (!turn) {
       playing = false;
@@ -552,10 +593,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const text = (turn.text ?? '').trim();
         const speaker = turn.speaker || 'Teacher';
         const promptId = nextId();
+        // Never default to a generic yes/no pair — that's the exact bug
+        // that made "can you give me an example?" show Yes/No buttons.
+        // Only set `options` when the director actually sent real,
+        // question-specific ones; otherwise the UI renders an open text
+        // input instead.
         set({
           caption: { speaker, text },
           activeSpeaker: speaker,
-          prompt: { id: promptId, speaker, text, options: turn.options?.length ? turn.options : ['Yes', 'No'] },
+          prompt: {
+            id: promptId, speaker, text,
+            options: turn.options?.length ? turn.options : undefined,
+          },
         });
         pushTranscript(speaker, `${text} (asks you)`);
         if (get().voiceOn) speakLine(speaker, text, () => undefined);
@@ -611,6 +660,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           });
           playTimer = setTimeout(playNext, 2000);
           return;
+        }
+        if (action === 'highlight') {
+          const term = (turn.content ?? '').trim();
+          if (term) {
+            highlightBoardTerm(term);
+            playTimer = setTimeout(playNext, 1600);
+            return;
+          }
         }
         const content = (turn.content ?? '').trim();
         if (content) {
@@ -720,12 +777,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           addSources(comp.block.source_attributions);
         }
         break;
-      case 'ProgressBar':
-        set({
-          progressCurrent: Math.max(0, comp.current ?? 0),
-          progressTotal: Math.max(1, comp.total ?? 1),
-        });
+      case 'ProgressBar': {
+        const current = Math.max(0, comp.current ?? 0);
+        const total = Math.max(1, comp.total ?? 1);
+        set({ progressCurrent: current, progressTotal: total });
+        // Keep this course's Stacks entry in sync with the backend's own
+        // authoritative mastery-progress signal — non-blocking, mirrors
+        // Android's ClassroomEngine.syncStackProgress. sessionId equals
+        // the real course id once the classroom route passes a real
+        // courseId (falls back to topic otherwise, same as upsert).
+        void updateCourseProgress(get().sessionId, current / total);
         break;
+      }
       case 'CTAButton':
         set({
           canContinue: true,
@@ -835,6 +898,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     soundOn: false,
     voiceOn: true,
     speechRate: 1,
+    isPaused: false,
 
     connect: (connection: ClassroomConnection) => {
       get().disconnect();
@@ -1070,6 +1134,22 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (playTimer) { clearTimeout(playTimer); playTimer = null; }
         stopSpeech();
         if (playing) playNext();
+      }
+    },
+    // The single most accessible control: stop the class right where it
+    // is. Pausing cancels the turn currently speaking/animating and holds
+    // the turn queue — it does not lose anything already on the board or
+    // in the transcript. Resuming continues with the NEXT turn (the
+    // interrupted line doesn't replay from the top; browser TTS
+    // pause/resume-mid-utterance is unreliable enough across engines that
+    // a clean stop-and-continue is the more trustworthy behavior).
+    togglePause: () => {
+      if (get().isPaused) {
+        set({ isPaused: false });
+        resumePlayer();
+      } else {
+        stopPlayer();
+        set({ isPaused: true, activeSpeaker: null });
       }
     },
     setSpeechRate: (rate: number) => set({

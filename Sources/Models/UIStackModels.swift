@@ -83,13 +83,3 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         lhs.id == rhs.id
     }
 }
-
-// MARK: - Stack Navigation Action
-
-/// Actions that can be triggered from tapping a stack card
-enum StackNavigationAction {
-    case openCourse(courseId: String)
-    case openTutor(courseId: String, lessonId: String)
-    case openCollab(roomId: String)
-    case openChat(chatKey: String?)
-}

@@ -82,6 +82,10 @@ object Routes {
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
+    // Deliberately NOT added to bottomItems below — any route not in that
+    // list already renders full-screen with no bottom nav bar, which is
+    // exactly the chrome-free canvas the Netflix/YouTube-style classroom
+    // needs, with no further special-casing required.
     const val CLASSROOM = "classroom/{courseId}"
     const val DISCOVER = "discover"
     const val PROFILE = "profile"
@@ -197,6 +201,10 @@ private fun LyoNavHost() {
                 CourseDetailScreen(nav, courseId)
             }
             composable(Routes.CLASSROOM) { entry ->
+                // Stacks upsert (device- and platform-agnostic — see
+                // StackRepository.upsertCourseOnStart) now happens inside
+                // ClassroomScreen itself, once it resolves the course's
+                // real title, rather than here.
                 ClassroomScreen(
                     nav = nav,
                     courseId = entry.arguments?.getString("courseId") ?: "",

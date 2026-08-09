@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertCircle,
@@ -21,6 +22,7 @@ import {
   markLessonComplete,
   normalizeProgressPercent,
 } from '@/lib/learning-progress';
+import { updateCourseProgress } from '@/lib/stack';
 import LessonView from './LessonView';
 
 interface CoursePlayerProps {
@@ -57,6 +59,7 @@ function errorMessage(reason: unknown): string {
 }
 
 export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
+  const router = useRouter();
   const [activeModuleIndex, setActiveModuleIndex] = useState(0);
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [expandedModules, setExpandedModules] = useState<Set<number>>(
@@ -107,6 +110,18 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
 
   const overallProgress = Math.max(localProgressPercent, serverProgressPercent ?? 0);
 
+  // Enter the same live AI classroom the chat-proposal "Start Learning"
+  // path opens (CourseGenerationCard.handleStart) — this is where the
+  // course actually gets saved into the learner's Stacks (see the
+  // classroom page's upsertCourseOnStart effect), mirroring Android's
+  // "Start Class"/"Resume in Classroom" button on CourseDetailScreen.
+  const enterClassroom = () => {
+    const objective = course.description?.slice(0, 240) || `Understand and apply ${course.title}`;
+    const query = new URLSearchParams({ topic: course.title, objective, courseId: course.id });
+    if (course.difficulty) query.set('difficulty', course.difficulty);
+    router.push(`/classroom?${query.toString()}`);
+  };
+
   const goToLesson = (moduleIndex: number, lessonIndex: number) => {
     setActiveModuleIndex(moduleIndex);
     setActiveLessonIndex(lessonIndex);
@@ -143,6 +158,13 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
 
     try {
       await markLessonComplete(activeLesson.id);
+
+      // Keep this course's Stacks entry in sync too — the old reader path
+      // (this component) needs the same sync the new Classroom path gets
+      // from ClassroomEngine's ProgressBar hook, so "Your Stacks" reflects
+      // progress made either way. Non-blocking, never rolls back the
+      // lesson completion above on failure.
+      void updateCourseProgress(course.id, optimisticCompletedIds.size / flatLessons.length);
 
       try {
         const progress = await getCourseProgress(course.id);
@@ -190,7 +212,7 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
           <div className="h-4 w-px bg-white/10" />
           <h1 className="flex-1 truncate text-sm font-semibold text-white">{course.title}</h1>
 
-          <div className="flex flex-shrink-0 items-center gap-2">
+          <div className="flex flex-shrink-0 items-center gap-3">
             <span className="text-xs text-white/40">{overallProgress}%</span>
             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
               <div
@@ -198,6 +220,14 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
                 style={{ width: `${overallProgress}%` }}
               />
             </div>
+            <button
+              type="button"
+              onClick={enterClassroom}
+              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-lyo-600 to-accent-purple px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              <Play className="h-3.5 w-3.5" />
+              {overallProgress > 0 ? 'Resume in Classroom' : 'Start Class'}
+            </button>
           </div>
         </div>
 

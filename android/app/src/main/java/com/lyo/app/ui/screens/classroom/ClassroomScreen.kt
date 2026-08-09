@@ -53,6 +53,7 @@ import androidx.navigation.NavHostController
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.lyo.app.BuildConfig
+import com.lyo.app.data.StackRepository
 import com.lyo.app.data.TokenManager
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.ui.components.GlassCard
@@ -514,6 +515,14 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
         val course = runCatching { ApiClient.api.course(courseId) }.getOrNull()
         title = course?.title ?: "AI Classroom"
         controller.connect(title)
+        // Save this course into the learner's device- and platform-agnostic
+        // Stacks list the moment the classroom opens, mirroring web's
+        // /classroom page upsertCourseOnStart effect and iOS's
+        // UIStackStore.upsertCourse call — every entry point that lands
+        // here (CourseHeader's "Start Class" and the standalone "Start AI
+        // Classroom" button) gets this for free. No-ops silently if the
+        // learner isn't signed in or the sync fails.
+        StackRepository.upsertCourseOnStart(courseId, title = title)
     }
     DisposableEffect(controller) {
         onDispose { controller.close() }

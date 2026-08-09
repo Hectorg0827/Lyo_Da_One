@@ -66,6 +66,42 @@ export function MobileNav() {
   const isItemActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
 
+  // Focused classroom layout: the tab icons, search-adjacent chrome, and
+  // Create button go away — but Lyo is the user's persistent companion who
+  // "attends every class with them," so the main mascot FAB stays, just
+  // without the bar it used to ride in.
+  if (pathname.startsWith('/classroom')) {
+    return (
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-[calc(env(safe-area-inset-bottom)+10px)] pointer-events-none"
+        aria-label="Lyo"
+      >
+        <Link
+          href="/chat"
+          aria-label="LYO AI"
+          className="relative flex items-center justify-center pointer-events-auto"
+        >
+          <span className="absolute w-28 h-28 rounded-full mascot-fab-glow pointer-events-none" />
+          <div
+            className={cn(
+              'relative w-[70px] h-[70px] rounded-full flex items-center justify-center',
+              'animate-breathe transition-transform duration-200 active:scale-95',
+              'drop-shadow-[0_5px_10px_rgba(167,139,250,0.6)]',
+            )}
+          >
+            <motion.div
+              layoutId={LYO_MASCOT_LAYOUT_ID}
+              transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
+              className="flex items-center justify-center"
+            >
+              <MascotAvatar idle size={64} />
+            </motion.div>
+          </div>
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <nav
       className={cn(
