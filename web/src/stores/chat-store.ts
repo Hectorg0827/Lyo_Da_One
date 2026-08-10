@@ -7,6 +7,14 @@ import { parseCanonicalChatContent } from '@/lib/chat-attachments';
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
 
+// Module-scoped, not store state: this must survive ChatInterface
+// remounting (tabbing away and back within the same app session) but reset
+// to false whenever the app is actually reopened — a fresh page load/PWA
+// launch re-evaluates this module from scratch, which is exactly the
+// "was the app closed" signal ChatGPT/Claude-style "always open on a new
+// chat" behavior needs. See hydrate() below.
+let hasHydratedThisSession = false;
+
 interface ChatStore {
   conversations: ChatConversation[];
   activeConversationId: string | null;
@@ -62,12 +70,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         createdAt: conversation.created_at,
         updatedAt: conversation.updated_at,
       }));
-      const activeConversationId =
-        get().activeConversationId && conversations.some((c) => c.id === get().activeConversationId)
-          ? get().activeConversationId
-          : conversations[0]?.id ?? null;
-      set({ conversations, activeConversationId, isHydrating: false });
-      if (activeConversationId) await get().loadConversation(activeConversationId);
+
+      if (hasHydratedThisSession) {
+        // hydrate() runs again every time ChatInterface remounts (e.g. the
+        // learner tabs away to Community and back) — that must not disturb
+        // whatever conversation is currently open, only refresh the
+        // sidebar's history list. A not-yet-synced "New Chat" (a local-
+        // only id, absent from the server's list) is kept in front of it.
+        const active = get().conversations.find((c) => c.id === get().activeConversationId);
+        set({
+          conversations: active?.id.startsWith('local-') ? [active, ...conversations] : conversations,
+          isHydrating: false,
+        });
+        return;
+      }
+      hasHydratedThisSession = true;
+
+      // The first hydrate since the app was actually opened (a fresh page
+      // load — reopening a closed tab/PWA re-runs this module from
+      // scratch): behave like ChatGPT/Claude and land on a brand-new
+      // conversation rather than silently resuming whatever was last open.
+      // Nothing is deleted — every past conversation is fetched above and
+      // stays one click away in the sidebar.
+      set({ conversations, activeConversationId: null, isHydrating: false });
+      get().createConversation();
     } catch {
       set({ isHydrating: false });
     }
