@@ -3,12 +3,22 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Copy, Check, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
 import MascotAvatar from './MascotAvatar';
 import { useChatStore } from '@/stores/chat-store';
+
+// Renders $inline$ and $$block$$ (also \(...\) / \[...\]) LaTeX the model
+// writes for math — same katex engine the classroom board already uses
+// (BoardElementView.tsx's LatexView), so a formula reads the same whether
+// the learner sees it in chat or on the board. Without this, react-markdown
+// has no idea `$x^2$` means anything and prints the dollar signs verbatim.
+const MARKDOWN_MATH_PLUGINS = { remarkPlugins: [remarkMath], rehypePlugins: [rehypeKatex] };
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -293,7 +303,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
               </div>
             ) : (
               <div className="prose-invert prose-sm max-w-none">
-                <ReactMarkdown components={markdownComponents}>
+                <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
                   {displayContent}
                 </ReactMarkdown>
               </div>
@@ -316,7 +326,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-4 w-80">
             <p className="text-sm text-white/60 mb-2 font-medium">Quick Quiz</p>
             <div className="text-white/80 text-sm">
-              <ReactMarkdown components={markdownComponents}>
+              <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
                 {message.content}
               </ReactMarkdown>
             </div>
