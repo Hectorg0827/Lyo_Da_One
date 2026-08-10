@@ -247,6 +247,16 @@ data class GenerateCourseRequest(
     @SerializedName("include_assessments") val includeAssessments: Boolean = true,
 )
 
+data class AiGenerateRequest(
+    val prompt: String,
+    @SerializedName("task_type") val taskType: String = "EDUCATIONAL_EXPLANATION",
+)
+
+data class AiGenerateResponse(
+    val response: String? = null,
+    @SerializedName("model_used") val modelUsed: String? = null,
+)
+
 // ── Community ────────────────────────────────────────────────────────────────
 
 data class GroupDto(

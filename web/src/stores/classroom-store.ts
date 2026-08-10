@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { api } from '@/lib/api';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
 import type {
@@ -164,6 +165,7 @@ interface ClassroomStore {
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
+  skipLesson: () => void;
   toggleSound: () => void;
   toggleVoice: () => void;
   setSpeechRate: (rate: number) => void;
@@ -176,8 +178,14 @@ let ws: WebSocket | null = null;
 let turnQueue: DirectorTurn[] = [];
 let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
+let continueWatchdog: ReturnType<typeof setTimeout> | null = null;
 let idCounter = 0;
 let pendingErase = false; // erase lazily when the NEW scene's content arrives
+let localOutline: string[] = [];
+let localSectionIndex = 0;
+let localSceneNumber = 0;
+let localContinuationBatch = 0;
+let localContinuationTask: Promise<void> | null = null;
 const nextId = () => `cf_${++idCounter}`;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoapp.com';
@@ -188,6 +196,83 @@ function wsUrl(connection: ClassroomConnection, token: string | null): string {
 
 function speechDelay(text: string): number {
   return Math.min(Math.max(text.length * 34, 1400), 7000);
+}
+
+function normalizeContinueLabel(label?: string): string {
+  const clean = (label ?? '').trim();
+  if (!clean || /check understanding/i.test(clean)) return 'Continue lesson';
+  return clean;
+}
+
+function parseStringArray(text: string): string[] | null {
+  const trimmed = text.trim();
+  const start = trimmed.indexOf('[');
+  const end = trimmed.lastIndexOf(']');
+  if (start < 0 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(trimmed.slice(start, end + 1));
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizedTitle(title: string): string {
+  return title.toLowerCase().replace(/[\s:.-]/g, '');
+}
+
+function fallbackOutline(topic: string, objective: string): string[] {
+  const cleanTopic = topic.trim() || 'this topic';
+  const goal = objective.trim() || `understand and apply ${cleanTopic}`;
+  return [
+    `Lesson 1: What ${cleanTopic} means`,
+    `Lesson 2: Why ${cleanTopic} matters for ${goal}`,
+    `Lesson 3: A worked example with ${cleanTopic}`,
+    `Lesson 4: Common mistakes in ${cleanTopic}`,
+    `Lesson 5: Applying ${cleanTopic} in a new situation`,
+    `Lesson 6: Guided practice with feedback`,
+  ];
+}
+
+function fallbackContinuationSections(topic: string, batch: number): string[] {
+  const cleanTopic = topic.trim() || 'this topic';
+  return [
+    `Lesson ${batch * 4 + 1}: Applying ${cleanTopic} in a new situation`,
+    `Lesson ${batch * 4 + 2}: Common edge cases in ${cleanTopic}`,
+    `Lesson ${batch * 4 + 3}: Guided practice with feedback`,
+    `Lesson ${batch * 4 + 4}: Building fluency with ${cleanTopic}`,
+  ];
+}
+
+function localBoardLines(section: string, topic: string): string[] {
+  const cleanTopic = topic.trim() || 'this topic';
+  return [
+    section.replace(/^Lesson\s+\d+:\s*/i, ''),
+    `Look for the one decision this changes when you work with ${cleanTopic}.`,
+    'Check yourself with a quick multiple-choice choice before moving on.',
+  ];
+}
+
+function localNarration(section: string, topic: string): string {
+  const cleanTopic = topic.trim() || 'this topic';
+  const focus = section.replace(/^Lesson\s+\d+:\s*/i, '').toLowerCase();
+  return `Focus on the board first. This part is about ${focus}; I want you to connect it to ${cleanTopic} by naming the decision it helps you make.`;
+}
+
+function localQuiz(section: string, topic: string): ClassroomComponent {
+  const cleanTopic = topic.trim() || 'this topic';
+  return {
+    component_id: `local_quiz_${nextId()}`,
+    type: 'QuizCard',
+    question: `What is the best next move for learning ${cleanTopic} from this board?`,
+    options: [
+      { id: 'a', label: 'Memorize the words exactly as written' },
+      { id: 'b', label: `Explain how "${section.replace(/^Lesson\s+\d+:\s*/i, '')}" changes what you do next`, is_correct: true },
+      { id: 'c', label: 'Skip practice until the end' },
+      { id: 'd', label: 'Only reread the same sentence' },
+    ],
+    action_intent: 'submit_answer',
+  };
 }
 
 // Distinct voices for the cast (browser SpeechSynthesis).
@@ -335,10 +420,105 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   // ── turn player ──
 
-  function stopPlayer() {
-    playing = false;
-    if (playTimer) { clearTimeout(playTimer); playTimer = null; }
-    stopSpeech();
+	  function stopPlayer() {
+	    playing = false;
+	    if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+	    stopSpeech();
+	  }
+
+  function clearContinueWatchdog() {
+    if (continueWatchdog) {
+      clearTimeout(continueWatchdog);
+      continueWatchdog = null;
+    }
+  }
+
+  async function extendLocalOutlineIfNeeded(force = false) {
+    const remaining = localOutline.length - localSectionIndex;
+    if (!force && remaining > 2) return;
+    if (localContinuationTask) {
+      await localContinuationTask;
+      return;
+    }
+
+    localContinuationTask = (async () => {
+      const nextBatch = localContinuationBatch + 1;
+      const topic = get().topic || 'General Learning';
+      const prompt = [
+        `TOPIC: ${topic}`,
+        `OBJECTIVE: ${get().objective || `Understand and apply ${topic}`}`,
+        `CURRENT OUTLINE: ${localOutline.map((title, index) => `${index + 1}. ${title}`).join(' | ')}`,
+        'Continue this course by returning ONLY a JSON array of the NEXT 4 section titles.',
+        'They should build naturally from the current outline and avoid recap titles.',
+      ].join('\n');
+
+      const generated = await api.ai.generate(prompt, 'EDUCATIONAL_EXPLANATION')
+        .then((result) => parseStringArray(result.response))
+        .catch(() => null);
+      const existing = new Set(localOutline.map(normalizedTitle));
+      const next = (generated ?? [])
+        .map((title) => title.trim())
+        .filter((title) => title && !existing.has(normalizedTitle(title)))
+        .slice(0, 4);
+
+      localOutline.push(...(next.length ? next : fallbackContinuationSections(topic, nextBatch)));
+      localContinuationBatch = nextBatch;
+    })().finally(() => {
+      localContinuationTask = null;
+    });
+
+    await localContinuationTask;
+  }
+
+  function prewarmLocalContinuationIfNeeded() {
+    if (localOutline.length - localSectionIndex > 2 || localContinuationTask) return;
+    void extendLocalOutlineIfNeeded(false);
+  }
+
+  async function produceLocalScene(reason: string = 'continue') {
+    clearContinueWatchdog();
+    stopPlayer();
+
+    const topic = get().topic || 'General Learning';
+    const objective = get().objective || `Understand and apply ${topic}`;
+    if (!localOutline.length) {
+      localOutline = fallbackOutline(topic, objective);
+    }
+    await extendLocalOutlineIfNeeded(localSectionIndex >= localOutline.length);
+
+    const section = localOutline[localSectionIndex] ?? fallbackContinuationSections(topic, localContinuationBatch + 1)[0];
+    localSectionIndex += 1;
+    localSceneNumber += 1;
+    pendingErase = true;
+
+    const narration = localNarration(section, topic);
+    addBoardElement({ id: nextId(), kind: 'bullets', items: localBoardLines(section, topic) });
+    set({
+      status: 'live',
+      waitingForScene: false,
+      continueLabel: 'Continue lesson',
+      nextActionIntent: 'continue',
+      caption: { speaker: 'Teacher', text: narration },
+      activeSpeaker: 'Teacher',
+      lyoState: reason === 'skip' ? 'curious' : 'reading',
+    });
+    pushTranscript('Teacher', narration);
+    speakLine('Teacher', narration, () => set({ activeSpeaker: null }));
+
+    if (localSceneNumber % 2 === 0) {
+      addBoardElement({ id: nextId(), kind: 'quiz', quiz: localQuiz(section, topic) });
+      set({ canContinue: false });
+    } else {
+      set({ canContinue: true });
+    }
+    prewarmLocalContinuationIfNeeded();
+  }
+
+  function startContinueWatchdog(reason: string) {
+    clearContinueWatchdog();
+    continueWatchdog = setTimeout(() => {
+      if (get().waitingForScene) void produceLocalScene(reason);
+    }, 8000);
   }
 
   function playNext() {
@@ -351,8 +531,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
 
     switch (turn.type) {
-      case 'speech': {
-        const text = (turn.text ?? '').trim();
+	      case 'speech': {
+	        const text = (turn.text ?? '').trim();
         if (text) {
           const speaker = turn.speaker || 'Teacher';
           set({ caption: { speaker, text }, activeSpeaker: speaker });
@@ -485,6 +665,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // ── incoming protocol ──
 
   function handleComponent(comp: ClassroomComponent) {
+    clearContinueWatchdog();
     switch (comp.type) {
       case 'TeacherMessage': {
         const text = (comp.text ?? '').trim();
@@ -512,8 +693,23 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         set({ canContinue: false });
         break;
       case 'InputField':
-        addBoardElement({ id: nextId(), kind: 'transfer', input: comp });
-        pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+        addBoardElement({
+          id: nextId(),
+          kind: 'quiz',
+          quiz: {
+            ...comp,
+            type: 'QuizCard',
+            question: comp.question || comp.text || 'What should you do next?',
+            options: comp.options?.length ? comp.options : [
+              { id: 'a', label: 'I can explain the main idea', is_correct: true },
+              { id: 'b', label: 'Show me a simpler example' },
+              { id: 'c', label: 'Give me the first step' },
+              { id: 'd', label: 'Skip this for now' },
+            ],
+            action_intent: comp.action_intent || 'submit_answer',
+          },
+        });
+        pushTranscript('Teacher', `📝 Multiple-choice check: ${comp.question ?? comp.text ?? ''}`);
         addSources(comp.source_attributions);
         set({ canContinue: false, waitingForScene: false });
         break;
@@ -548,7 +744,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'CTAButton':
         set({
           canContinue: true,
-          continueLabel: comp.label || 'Continue',
+          continueLabel: normalizeContinueLabel(comp.label),
           nextActionIntent: comp.action_intent || 'continue',
           waitingForScene: false,
         });
@@ -569,8 +765,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (comp?.type) handleComponent(comp);
         break;
       }
-      case 'scene_start':
-        // Mark for erase, but keep the current board up while the teacher
+	      case 'scene_start':
+        clearContinueWatchdog();
+	        // Mark for erase, but keep the current board up while the teacher
         // "prepares" — it only wipes when the new content arrives.
         pendingErase = true;
         set({ waitingForScene: true, canContinue: false });
@@ -599,7 +796,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     ws.send(JSON.stringify(payload));
   }
 
-  return {
+	  return {
     status: 'idle',
     topic: '',
     sessionId: '',
@@ -616,7 +813,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     canContinue: false,
     progressCurrent: 0,
     progressTotal: 1,
-    continueLabel: 'Check understanding',
+	    continueLabel: 'Continue lesson',
     nextActionIntent: 'continue',
     error: null,
     soundOn: false,
@@ -637,6 +834,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       idCounter = 0;
       turnQueue = [];
       pendingErase = false;
+      localOutline = fallbackOutline(connection.topic, connection.objective || '');
+      localSectionIndex = 0;
+      localSceneNumber = 0;
+      localContinuationBatch = 0;
+      localContinuationTask = null;
+      clearContinueWatchdog();
       const sessionId = connection.sessionId || connection.topic;
       set({
         status: 'connecting',
@@ -647,27 +850,36 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, canContinue: false,
         progressCurrent: 0, progressTotal: 1,
-        continueLabel: 'Check understanding', nextActionIntent: 'continue', error: null,
-      });
+	        continueLabel: 'Continue lesson', nextActionIntent: 'continue', error: null,
+	      });
+      prewarmLocalContinuationIfNeeded();
 
       const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
       ws = socket;
       socket.onopen = () => set({ status: 'live' });
       socket.onmessage = (e) => handleMessage(String(e.data));
-      socket.onerror = () => {
-        if (ws === socket) set({ status: 'error', error: 'Connection to the classroom failed.' });
-      };
-      socket.onclose = () => {
-        if (ws === socket) {
-          set((s) => ({ status: s.transcript.length > 0 ? 'ended' : s.status === 'error' ? 'error' : 'ended' }));
-          ws = null;
+	      socket.onerror = () => {
+	        if (ws === socket) {
+          set({ status: 'error', error: 'Connection to the classroom failed.', canContinue: true, continueLabel: 'Continue lesson' });
         }
-      };
+	      };
+	      socket.onclose = () => {
+	        if (ws === socket) {
+	          set((s) => ({
+            status: s.transcript.length > 0 ? 'ended' : s.status === 'error' ? 'error' : 'ended',
+            waitingForScene: false,
+            canContinue: s.transcript.length > 0 || s.board.length > 0,
+            continueLabel: 'Continue lesson',
+          }));
+	          ws = null;
+	        }
+	      };
     },
 
-    disconnect: () => {
-      stopPlayer();
-      turnQueue = [];
+	    disconnect: () => {
+	      stopPlayer();
+      clearContinueWatchdog();
+	      turnQueue = [];
       if (ws) { try { ws.close(); } catch { /* noop */ } ws = null; }
       set({ status: 'idle' });
     },
@@ -681,23 +893,33 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       resumePlayer();
     },
 
-    answerQuiz: (elementId, option) => {
-      const el = get().board.find((b) => b.id === elementId);
-      if (!el || el.kind !== 'quiz' || el.answered) return;
-      set((state) => ({
-        board: state.board.map((item) =>
-          item.id === elementId && item.kind === 'quiz'
-            ? { ...item, answered: option.label }
-            : item),
-        lyoState: 'thinking',
-        waitingForScene: true,
-      }));
-      pushTranscript('You', option.label);
-      sendAction('submit_answer', el.quiz.component_id, {
-        selected_option_id: option.id,
-        selected_option_label: option.label,
-      });
-    },
+	    answerQuiz: (elementId, option) => {
+	      const el = get().board.find((b) => b.id === elementId);
+	      if (!el || el.kind !== 'quiz' || el.answered) return;
+      const usesBackend = !!ws && ws.readyState === WebSocket.OPEN && !String(el.quiz.component_id).startsWith('local_');
+      const wasCorrect = option.is_correct === true ? true : option.is_correct === false ? false : undefined;
+      const feedback = wasCorrect === true
+        ? (option.feedback_correct || 'Correct. Keep going.')
+        : wasCorrect === false
+          ? (option.feedback_incorrect || option.remediation_hint || 'Not quite. The teacher will adjust the next board.')
+          : undefined;
+	      set((state) => ({
+	        board: state.board.map((item) =>
+	          item.id === elementId && item.kind === 'quiz'
+	            ? { ...item, answered: option.label, wasCorrect, feedback }
+	            : item),
+	        lyoState: 'thinking',
+	        waitingForScene: usesBackend,
+        canContinue: !usesBackend,
+        continueLabel: 'Continue lesson',
+	      }));
+	      pushTranscript('You', option.label);
+	      sendAction(el.quiz.action_intent || 'submit_answer', el.quiz.component_id, {
+	        selected_option_id: option.id,
+	        selected_option_label: option.label,
+	      });
+      if (usesBackend) startContinueWatchdog('quiz answer');
+	    },
 
     answerTransfer: (elementId: string, response: string) => {
       const el = get().board.find((b) => b.id === elementId);
@@ -747,15 +969,40 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       sendAction('request_hint', 'web_hint', { hint_level: level });
     },
 
-    continueLesson: () => {
-      const actionIntent = get().nextActionIntent || 'continue';
+	    continueLesson: () => {
+	      const actionIntent = get().nextActionIntent || 'continue';
+      const canUseBackend = !!ws && ws.readyState === WebSocket.OPEN && get().status === 'live';
+	      set({
+	        canContinue: false,
+	        waitingForScene: true,
+	        continueLabel: 'Continue lesson',
+	        nextActionIntent: 'continue',
+	      });
+      if (canUseBackend) {
+        sendAction(actionIntent, 'web_continue');
+        startContinueWatchdog('continue');
+      } else {
+        void produceLocalScene('continue');
+      }
+	    },
+
+    skipLesson: () => {
+      const canUseBackend = !!ws && ws.readyState === WebSocket.OPEN && get().status === 'live';
+      pushTranscript('You', 'Skipped ahead');
       set({
+        prompt: null,
         canContinue: false,
         waitingForScene: true,
-        continueLabel: 'Check understanding',
+        continueLabel: 'Continue lesson',
         nextActionIntent: 'continue',
+        lyoState: 'curious',
       });
-      sendAction(actionIntent, 'web_continue');
+      if (canUseBackend) {
+        sendAction('skip', 'web_skip');
+        startContinueWatchdog('skip');
+      } else {
+        void produceLocalScene('skip');
+      }
     },
 
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),

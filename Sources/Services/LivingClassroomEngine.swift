@@ -57,6 +57,9 @@ final class LivingClassroomEngine {
     private var pendingSignal: LearnerSignal?
 
     private let maxScenesPerSection = 4
+    private let continuationPrefetchWindow = 2
+    private var isExtendingOutline = false
+    private var continuationBatch = 0
     private let logger = Logger(subsystem: "com.lyo.app", category: "ClassroomEngine")
 
     // MARK: - Persisted learner context
@@ -94,6 +97,8 @@ final class LivingClassroomEngine {
         self.taughtSummary = []
         self.pendingSignal = nil
         self.isComplete = false
+        self.isExtendingOutline = false
+        self.continuationBatch = 0
 
         let prompt = """
         You are designing a focused micro-course on: "\(topic)".
@@ -145,6 +150,13 @@ final class LivingClassroomEngine {
     /// Whether the current section pointer is past the end of the outline.
     private var hasMoreSections: Bool { sectionIndex < outline.count }
 
+    /// True when the engine is close enough to the end that the service should
+    /// start generating the next set of sections in the background.
+    var needsContinuationPrefetch: Bool {
+        guard isReady, !isExtendingOutline else { return false }
+        return outline.count - sectionIndex <= continuationPrefetchWindow
+    }
+
     /// One-line summaries of everything taught this session — powers the
     /// shareable lesson recap.
     var recapPoints: [String] { taughtSummary }
@@ -163,11 +175,18 @@ final class LivingClassroomEngine {
             return await generateAnswerScene(question: q)
         }
 
-        // Curriculum finished → deliver one recap, then end.
+        if needsContinuationPrefetch {
+            Task { await extendOutlineIfNeeded(reason: "near end") }
+        }
+
+        // Curriculum reached the generated edge. Extend immediately so the
+        // classroom keeps teaching instead of presenting a terminal state.
         if !hasMoreSections {
-            if isComplete { return nil }
-            isComplete = true
-            return await generateRecapScene()
+            await extendOutlineIfNeeded(reason: "at generated edge", force: true)
+            if !hasMoreSections {
+                outline.append(contentsOf: Self.fallbackContinuationSections(for: topic, batch: continuationBatch + 1))
+                continuationBatch += 1
+            }
         }
 
         let sectionTitle = outline[sectionIndex]
@@ -187,8 +206,13 @@ final class LivingClassroomEngine {
         Rules:
         - Advance the lesson; never repeat what was already taught.
         - One idea per scene. Be vivid, concrete, and use a real example.
+        - Synchronize board and teacher: each board block is what the learner
+          should look at while the narration explains it. Do not produce a
+          separate transcript that competes with the board.
         - Roughly every second scene, include ONE multiple-choice checkpoint that
           tests the idea you just taught (4 options, exactly one correct).
+        - Checkpoints must be multiple choice. Avoid free-response checks unless
+          the learner explicitly asks for a harder format.
         - Keep narration warm and conversational, like a great human tutor.
 
         Return ONLY strict JSON in this shape:
@@ -248,6 +272,54 @@ final class LivingClassroomEngine {
         }
 
         return scene
+    }
+
+    /// Extend the outline with the next batch of sections so a lesson never
+    /// exhausts itself after the initial generated plan.
+    func extendOutlineIfNeeded(reason: String = "continuation", force: Bool = false) async {
+        guard isReady, !isExtendingOutline else { return }
+        let remaining = outline.count - sectionIndex
+        guard force || remaining <= continuationPrefetchWindow else { return }
+
+        isExtendingOutline = true
+        defer { isExtendingOutline = false }
+
+        let nextBatch = continuationBatch + 1
+        let prompt = """
+        TOPIC: \(topic)
+        LEARNER LEVEL: \(level)
+        \(masteryNote)
+        CURRENT OUTLINE: \(outline.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: " | "))
+        RECENTLY TAUGHT: \(taughtSummary.suffix(8).joined(separator: " • ").ifEmptyShow("nothing recorded"))
+
+        Continue this course by designing the NEXT 4 section titles. These are
+        continuation lessons, not a recap. Make them build naturally from the
+        existing outline and move toward deeper competence.
+
+        Return ONLY a JSON array of 4 strings. No markdown, no numbering.
+        """
+
+        if let response = try? await OpenAIService.shared.sendMessage(
+            message: prompt,
+            systemPrompt: "You are an expert curriculum architect. Output strict JSON only."
+        ), let parsed = Self.parseStringArray(response) {
+            let existing = Set(outline.map { Self.normalizedTitle($0) })
+            let next = parsed
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && !existing.contains(Self.normalizedTitle($0)) }
+                .prefix(4)
+
+            if !next.isEmpty {
+                outline.append(contentsOf: next)
+                continuationBatch = nextBatch
+                logger.info("Extended outline with \(next.count) sections (\(reason))")
+                return
+            }
+        }
+
+        outline.append(contentsOf: Self.fallbackContinuationSections(for: topic, batch: nextBatch))
+        continuationBatch = nextBatch
+        logger.warning("Extended outline with fallback sections (\(reason))")
     }
 
     /// Produce an immediate answer to a learner question, then return to the lesson.
@@ -573,6 +645,23 @@ final class LivingClassroomEngine {
             "Putting \(topic) together: a small project",
             "Where to go next with \(topic)"
         ]
+    }
+
+    private static func fallbackContinuationSections(for topic: String, batch: Int) -> [String] {
+        [
+            "Lesson \(batch * 4 + 1): Applying \(topic) in a new situation",
+            "Lesson \(batch * 4 + 2): Common edge cases in \(topic)",
+            "Lesson \(batch * 4 + 3): Guided practice with feedback on \(topic)",
+            "Lesson \(batch * 4 + 4): Building fluency with \(topic)"
+        ]
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        title
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: ":", with: "")
     }
 }
 

@@ -89,6 +89,8 @@ class LivingClassroomService: ObservableObject {
     private var stallTask: Task<Void, Never>?
     /// Marks the can-continue state after a scene's staggered reveal finishes.
     private var revealTask: Task<Void, Never>?
+    /// Generates the next outline segment before the current one runs out.
+    private var continuationPrefetchTask: Task<Void, Never>?
 
     /// How long to wait for the backend to deliver the *first* scene before the
     /// on-device engine takes over.
@@ -233,6 +235,8 @@ class LivingClassroomService: ObservableObject {
         stallTask = nil
         revealTask?.cancel()
         revealTask = nil
+        continuationPrefetchTask?.cancel()
+        continuationPrefetchTask = nil
         cancelHesitationWatch()
         consecutiveWrongAnswers = 0
         lastInterventionAt = nil
@@ -349,7 +353,8 @@ class LivingClassroomService: ObservableObject {
             // Determine correctness from the component's known answer, if present.
             var correct = false
             if let component = renderedComponents.first(where: { $0.id == componentId }),
-                let answerId = component.actionPayload?["answer_option_id"] {
+                let answerId = component.actionPayload?["answer_option_id"]
+                    ?? component.actionPayload?["correct_option_id"] {
                 correct = (answerId == selectedId)
             }
             recordLearnerSignal(
@@ -725,6 +730,7 @@ class LivingClassroomService: ObservableObject {
         revealNextComponent()
         // Once the staggered reveal completes, allow the learner to continue.
         scheduleCanContinue(after: scene)
+        prewarmLocalContinuationIfNeeded()
     }
 
     /// Computes when the last component will have appeared and flips `canContinue`.
@@ -884,7 +890,7 @@ class LivingClassroomService: ObservableObject {
                         SDUIQuizOption(id: "d", label: "Waiting until the test to practice")
                     ],
                     actionIntent: "submit_answer",
-                    actionPayload: ["correct_option_id": "b"]
+                    actionPayload: ["answer_option_id": "b"]
                 )
             )
         }
@@ -944,7 +950,7 @@ class LivingClassroomService: ObservableObject {
                     SDUIQuizOption(id: "d", label: "Skip practice until the final test")
                 ],
                 actionIntent: "submit_answer",
-                actionPayload: ["correct_option_id": "b", "source": "local_quick_check"]
+                actionPayload: ["answer_option_id": "b", "source": "local_quick_check"]
             ),
             SDUIComponent(
                 id: "\(prefix)_continue",
@@ -1046,12 +1052,24 @@ class LivingClassroomService: ObservableObject {
         if let scene = await engine.generateNextScene() {
             startSceneRender(scene)
         } else {
-            // Curriculum complete.
-            isGenerating = false
-            canContinue = false
-            lessonComplete = true
-            statusText = nil
-            logger.info("On-device lesson complete for topic: \(self.topic)")
+            // The classroom should not terminally end. If generation returns no
+            // scene, fall back to a local segment and keep the session alive.
+            localFallbackSceneIndex += 1
+            logger.warning("Engine returned no scene; continuing with fallback segment")
+            startSceneRender(makeLocalFallbackScene(topic: topic, sceneIndex: localFallbackSceneIndex))
+        }
+    }
+
+    private func prewarmLocalContinuationIfNeeded() {
+        guard usingLocalEngine,
+              continuationPrefetchTask == nil,
+              engine.needsContinuationPrefetch
+        else { return }
+
+        continuationPrefetchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.engine.extendOutlineIfNeeded(reason: "background prefetch")
+            self.continuationPrefetchTask = nil
         }
     }
 
@@ -1072,6 +1090,7 @@ class LivingClassroomService: ObservableObject {
             let questionText = component.question ?? component.content
             guard !questionText.isEmpty else { return nil }
             let answerId = component.actionPayload?["answer_option_id"]
+                ?? component.actionPayload?["correct_option_id"]
             let answerIndex = options.firstIndex(where: { $0.id == answerId }) ?? 0
             return ChallengeQuestion(
                 question: questionText,

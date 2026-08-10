@@ -215,9 +215,54 @@ enum ActiveLessonAdapter {
                 }
                 pendingSupporting = .classroomQuiz(component)
 
+            case .textBlock:
+                let content = component.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !content.isEmpty else { continue }
+                if pendingText == nil {
+                    pendingId = "board_intro_\(component.id)"
+                    pendingText = "Let's work from the board."
+                    pendingSpeakerName = "Teacher"
+                    pendingSpeakerBadge = "AI Teacher ✨"
+                    pendingSpeakerImageName = nil
+                }
+                if pendingSupporting == nil {
+                    pendingSupporting = .lessonBlock(
+                        LiveLessonBlock(
+                            id: component.id,
+                            type: .callout,
+                            title: "Board Focus",
+                            content: content
+                        )
+                    )
+                }
+
+            case .codeBlock:
+                let code = component.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !code.isEmpty else { continue }
+                if pendingText == nil {
+                    pendingId = "code_intro_\(component.id)"
+                    pendingText = "Let's inspect this example on the board."
+                    pendingSpeakerName = "Teacher"
+                    pendingSpeakerBadge = "AI Teacher ✨"
+                    pendingSpeakerImageName = nil
+                }
+                if pendingSupporting == nil {
+                    pendingSupporting = .lessonBlock(
+                        LiveLessonBlock(
+                            id: component.id,
+                            type: .code,
+                            title: "Board Example",
+                            content: code,
+                            code: code,
+                            language: component.actionPayload?["language"] ?? "text",
+                            isRunnable: false
+                        )
+                    )
+                }
+
             // StudentPrompt and lightweight components are folded into the current
             // teaching text or skipped for now. Keeps the screen calm.
-            case .studentPrompt, .textBlock, .codeBlock, .progressBar, .unknown:
+            case .studentPrompt, .progressBar, .unknown:
                 continue
             }
         }

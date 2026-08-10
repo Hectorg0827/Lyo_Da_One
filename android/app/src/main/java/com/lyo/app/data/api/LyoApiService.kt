@@ -96,6 +96,9 @@ interface LyoApiService {
     @POST("api/v1/learning/courses/generate")
     suspend fun generateCourse(@Body body: GenerateCourseRequest): JsonObject
 
+    @POST("api/v1/ai/generate")
+    suspend fun aiGenerate(@Body body: AiGenerateRequest): AiGenerateResponse
+
     // ── Clips ── (same /api/v1 paths as web api.ts and iOS Endpoints)
     @GET("api/v1/clips")
     suspend fun clips(

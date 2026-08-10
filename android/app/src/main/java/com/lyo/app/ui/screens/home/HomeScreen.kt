@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
@@ -58,6 +59,7 @@ import com.lyo.app.ui.components.SectionHeader
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.LyoAmber
 import com.lyo.app.ui.theme.LyoBlue
+import com.lyo.app.ui.theme.LyoGold
 import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
@@ -268,8 +270,22 @@ fun HomeScreen(nav: NavHostController) {
             SectionHeader("Learning Actions")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 QuickActionCard(
+                    icon = Icons.Filled.School,
+                    label = "AI Class",
+                    tint = LyoGold,
+                    onClick = {
+                        nav.navigate(
+                            Routes.classroom(
+                                topic = recentCourse?.title ?: "General Learning",
+                                courseId = recentCourseId.orEmpty(),
+                            ),
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                QuickActionCard(
                     icon = Icons.Filled.MenuBook,
-                    label = "Browse Courses",
+                    label = "Courses",
                     tint = LyoPurple,
                     onClick = { nav.navigate(Routes.COURSES) },
                     modifier = Modifier.weight(1f),

@@ -1,5 +1,6 @@
 package com.lyo.app.ui.navigation
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,15 +32,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.lyo.app.data.RecentCourseStore
 import com.lyo.app.data.Session
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
+import com.lyo.app.ui.screens.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
 import com.lyo.app.ui.screens.community.ReliableCommunityScreen
@@ -79,6 +83,7 @@ object Routes {
     const val CREATE_GROUP = "create/group"
     const val CREATE_EVENT = "create/event"
     const val STORIES = "stories"
+    const val CLASSROOM = "classroom?topic={topic}&courseId={courseId}"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
     const val DISCOVER = "discover"
@@ -90,6 +95,8 @@ object Routes {
 
     fun postDetail(postId: String) = "community/$postId"
     fun courseDetail(courseId: String) = "courses/$courseId"
+    fun classroom(topic: String, courseId: String = "") =
+        "classroom?topic=${Uri.encode(topic)}&courseId=${Uri.encode(courseId)}"
     fun userProfile(userId: String) = "profile/$userId"
 }
 
@@ -184,6 +191,25 @@ private fun LyoNavHost() {
                 CreateCommunityItemScreen(nav = nav, createGroup = false)
             }
             composable(Routes.STORIES) { StoriesScreen(nav) }
+            composable(
+                route = Routes.CLASSROOM,
+                arguments = listOf(
+                    navArgument("topic") {
+                        type = NavType.StringType
+                        defaultValue = "General Learning"
+                    },
+                    navArgument("courseId") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { entry ->
+                ClassroomScreen(
+                    nav = nav,
+                    topic = entry.arguments?.getString("topic") ?: "General Learning",
+                    courseId = entry.arguments?.getString("courseId"),
+                )
+            }
             composable(Routes.COURSES) { CoursesScreen(nav) }
             composable(Routes.COURSE_DETAIL) { entry ->
                 val courseId = entry.arguments?.getString("courseId") ?: ""

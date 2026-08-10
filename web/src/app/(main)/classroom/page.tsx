@@ -6,7 +6,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
   NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
-  Accessibility, Gauge, Settings2, Timer,
+  Accessibility, Gauge, Settings2, Timer, ArrowRight, SkipForward,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -84,10 +84,10 @@ function ClassroomStage() {
 
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
-    transcript, lyoState, waitingForScene, canContinue, continueLabel,
+    transcript, lyoState, waitingForScene, continueLabel,
     progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, askQuestion, signal,
-    requestHint, continueLesson, toggleSound, toggleVoice, setSpeechRate, viewBoard,
+    requestHint, continueLesson, skipLesson, toggleSound, toggleVoice, setSpeechRate, viewBoard,
   } = useClassroomStore();
 
   const [question, setQuestion] = useState('');
@@ -95,6 +95,7 @@ function ClassroomStage() {
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
+  const [choiceNudge, setChoiceNudge] = useState(false);
   const boardEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,9 +115,28 @@ function ClassroomStage() {
 
   const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
   const totalBoards = boardHistory.length;
-  const visibleCast = mode === 'classroom'
-    ? CAST
-    : CAST.filter((member) => member.name === 'Teacher');
+  const needsChoice = viewingBoard === -1 && (
+    !!prompt || board.some((el) => el.kind === 'quiz' && !el.answered)
+  );
+  const primaryLabel = needsChoice
+    ? 'Choose an answer'
+    : waitingForScene
+      ? 'Preparing…'
+      : continueLabel && !/check understanding/i.test(continueLabel)
+        ? continueLabel
+        : 'Continue lesson';
+  const canGoPreviousBoard = totalBoards > 0 && viewingBoard !== 0;
+  const goPreviousBoard = () => {
+    if (!canGoPreviousBoard) return;
+    viewBoard(viewingBoard === -1 ? totalBoards - 1 : Math.max(viewingBoard - 1, 0));
+  };
+  const handlePrimary = () => {
+    if (needsChoice) {
+      setChoiceNudge(true);
+      return;
+    }
+    continueLesson();
+  };
   const hintOptions: { level: HintLevel; label: string }[] = [
     { level: 'nudge', label: 'Small nudge' },
     { level: 'principle', label: 'Show the principle' },
@@ -263,17 +283,22 @@ function ClassroomStage() {
         </div>
       )}
 
-      {/* ── THE BOARD — the main attraction ── */}
+      {/* ── THE BOARD — the main classroom focus ── */}
       <div className="relative flex-1 min-h-0 mx-4">
         <div className={cn(
-          'h-full rounded-2xl border-[3px] border-[#3a3323] overflow-hidden',
+          'relative flex h-full flex-col rounded-2xl border-[3px] border-[#3a3323] overflow-hidden',
           'bg-[radial-gradient(ellipse_at_top,#17203f_0%,#0d142e_55%,#0a0f24_100%)]',
           'shadow-[inset_0_0_60px_rgba(0,0,0,0.55),0_10px_40px_rgba(0,0,0,0.4)]',
         )}>
           {/* chalk tray */}
           <div className="absolute bottom-0 inset-x-6 h-1.5 rounded-t bg-[#3a3323]/80 z-10" />
 
-          <div className="h-full overflow-y-auto px-6 py-5 space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5 md:px-6 md:py-5">
+            <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-lyo-300 uppercase">
+              <span className="h-1.5 w-1.5 rounded-full bg-lyo-300" />
+              LYO Board
+              <span className="ml-auto text-white/35">{needsChoice ? 'Practice' : 'Live'}</span>
+            </div>
             {shownBoard.length === 0 && !waitingForScene && (
               <div className="h-full flex items-center justify-center text-white/20 text-sm italic">
                 a clean board…
@@ -288,6 +313,9 @@ function ClassroomStage() {
                 reducedMotion={animationsOff}
               />
             ))}
+            {prompt && viewingBoard === -1 && (
+              <BoardPrompt prompt={prompt} onAnswer={answerPrompt} />
+            )}
             {waitingForScene && viewingBoard === -1 && (
               <div className="flex items-center gap-2 text-white/35 text-sm py-3">
                 <motion.span
@@ -307,6 +335,8 @@ function ClassroomStage() {
             )}
             <div ref={boardEndRef} />
           </div>
+
+          <BoardTeacherCaption caption={caption} activeSpeaker={activeSpeaker} lyoState={lyoState} />
         </div>
 
         {/* board history flip */}
@@ -334,112 +364,21 @@ function ClassroomStage() {
           </div>
         )}
 
-        {/* Lyo at their corner desk */}
-        <motion.img
-          key={lyoState}
-          src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
-          alt={`Lyo is ${lyoState}`}
-          className="absolute -bottom-3 right-3 w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20"
-          initial={animationsOff ? false : { scale: 0.7 }}
-          animate={animationsOff
-            ? { scale: 1, rotate: 0, y: 0 }
-            : lyoState === 'celebrating'
-              ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
-              : { scale: 1, rotate: 0, y: 0 }}
-          transition={{ duration: animationsOff ? 0 : 0.6 }}
-        />
-      </div>
-
-      {/* ── Teacher's voice — one live caption line ── */}
-      <div className="px-6 pt-3 pb-1 min-h-[3.4rem]">
-        <AnimatePresence mode="wait">
-          {caption && (
-            <motion.p
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              key={caption.speaker + caption.text.slice(0, 24)}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="text-[15px] leading-snug text-white/90 text-center"
-            >
-              <span className={cn('font-bold mr-2',
-                CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
-                {caption.speaker}:
-              </span>
-              “{caption.text}”
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* ── Cold-call answer strip ── */}
-      <AnimatePresence>
-        {prompt && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className="px-6 py-1.5 flex flex-wrap items-center justify-center gap-2"
-          >
-            <Hand className="w-4 h-4 text-accent-gold animate-bounce" />
-            {prompt.options.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => answerPrompt(opt)}
-                className="px-4 py-2 rounded-full text-sm font-semibold bg-accent-gold/15 border border-accent-gold/40 text-white hover:bg-accent-gold/30 transition-colors"
-              >
-                {opt}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── The class, seated ── */}
-      <div className="flex items-end justify-center gap-5 px-4 pt-1 pb-2">
-        {visibleCast.map((member, i) => {
-          const speaking = activeSpeaker === member.name;
-          return (
-            <motion.div
-              key={member.name}
-              className="flex flex-col items-center gap-0.5"
-              animate={{ y: speaking ? -4 : 0 }}
-            >
-              <motion.div
-                className={cn(
-                  'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow',
-                  speaking ? `${member.accent.split(' ')[0]} shadow-[0_0_18px_rgba(139,92,246,0.45)]` : 'ring-white/10',
-                )}
-                animate={speaking
-                  ? { scale: [1, 1.07, 1] }
-                  : { y: [0, i % 2 === 0 ? 1.5 : -1.5, 0] }}
-                transition={speaking
-                  ? { duration: 0.7, repeat: Infinity }
-                  : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                {member.emoji}
-              </motion.div>
-              <span className={cn('text-[9.5px] font-bold',
-                speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
-                {member.name}
-              </span>
-            </motion.div>
-          );
-        })}
       </div>
 
       {/* ── Your desk ── */}
-      <div className="px-4 pb-3 pt-1 space-y-2">
-        {canContinue && (
-          <button
-            onClick={continueLesson}
-            className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all"
-          >
-            {continueLabel} →
-          </button>
+      <div className="px-4 pb-3 pt-2 space-y-2">
+        {choiceNudge && needsChoice && (
+          <p className="text-center text-xs font-semibold text-red-300">Choose an answer on the board to continue.</p>
         )}
+        <ClassroomTransport
+          canGoPrevious={canGoPreviousBoard}
+          primaryLabel={primaryLabel}
+          primaryDisabled={waitingForScene}
+          onPrevious={goPreviousBoard}
+          onPrimary={handlePrimary}
+          onSkip={skipLesson}
+        />
         <div className="flex items-center gap-2">
           <div className="relative shrink-0">
             <button
@@ -547,6 +486,130 @@ function ClassroomStage() {
           </>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function BoardTeacherCaption({
+  caption,
+  activeSpeaker,
+  lyoState,
+}: {
+  caption: { speaker: string; text: string } | null;
+  activeSpeaker: string | null;
+  lyoState: string;
+}) {
+  const speaker = caption?.speaker || activeSpeaker || 'Teacher';
+  const castMember = CAST.find((member) => member.name === speaker) ?? CAST[0];
+  return (
+    <div className="relative z-20 border-t border-white/10 bg-black/25 px-3 py-3 backdrop-blur md:px-4">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={`${speaker}-${caption?.text?.slice(0, 24) ?? lyoState}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          className="flex items-center gap-3"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-lyo-300/35 bg-white/10 text-xl">
+            {castMember.emoji}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 text-xs font-bold text-white">
+              <span>{speaker}</span>
+              <span className={cn('text-[10px]', castMember.accent.split(' ')[1])}>AI Teacher</span>
+            </p>
+            <p className="max-h-10 overflow-hidden text-[13px] leading-tight text-white/75">
+              {caption?.text || 'The teacher is preparing the next board.'}
+            </p>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
+            alt={`Lyo is ${lyoState}`}
+            className="hidden h-10 w-10 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.45)] sm:block"
+          />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function BoardPrompt({
+  prompt,
+  onAnswer,
+}: {
+  prompt: { text: string; options: string[] };
+  onAnswer: (option: string) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-xl border border-accent-gold/25 bg-accent-gold/10 p-4">
+      <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-accent-gold">
+        <Hand className="h-3.5 w-3.5" /> Quick choice
+      </p>
+      <p className="text-base font-semibold text-white">{prompt.text}</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {prompt.options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onAnswer(option)}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-left text-sm font-semibold text-white/85 transition-colors hover:border-accent-gold/45 hover:bg-accent-gold/15"
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClassroomTransport({
+  canGoPrevious,
+  primaryLabel,
+  primaryDisabled,
+  onPrevious,
+  onPrimary,
+  onSkip,
+}: {
+  canGoPrevious: boolean;
+  primaryLabel: string;
+  primaryDisabled: boolean;
+  onPrevious: () => void;
+  onPrimary: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={!canGoPrevious}
+        onClick={onPrevious}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 disabled:opacity-30"
+        title="Previous board"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={primaryDisabled}
+        onClick={onPrimary}
+        className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple px-4 text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-45"
+      >
+        <span className="truncate">{primaryLabel}</span>
+        <ArrowRight className="h-4 w-4 shrink-0" />
+      </button>
+      <button
+        type="button"
+        onClick={onSkip}
+        className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-bold text-white/80 transition-colors hover:bg-white/10 sm:w-24"
+      >
+        <SkipForward className="h-4 w-4" />
+        <span>Skip</span>
+      </button>
     </div>
   );
 }

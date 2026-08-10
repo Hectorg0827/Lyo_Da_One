@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00FC9925402B87326A07CEBF /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5072328A04C620F7E85CA07F /* CameraPreview.swift */; };
+		A91B2C3D4E5F678901234568 /* CreateCameraController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91B2C3D4E5F678901234567 /* CreateCameraController.swift */; };
 		01B31E74773604890DF43991 /* Community.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363CFDA6D1153271F3050044 /* Community.swift */; };
 		01D132B07B2975A1EBB24F6C /* StreamingResponseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66315549DD0DF6BF1EF6B47 /* StreamingResponseManager.swift */; };
 		0247300F5C6EAEA5AAFC994E /* LearningModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1880BA6E7FEC86C12C48E49 /* LearningModels.swift */; };
@@ -666,6 +667,7 @@
 		5004B8458934FF689A0B295D /* MascotParticles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotParticles.swift; sourceTree = "<group>"; };
 		5012C6FDF0232EF62E0FA6C0 /* UsageAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageAnalyticsView.swift; sourceTree = "<group>"; };
 		5072328A04C620F7E85CA07F /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
+		A91B2C3D4E5F678901234567 /* CreateCameraController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateCameraController.swift; sourceTree = "<group>"; };
 		517DAF390C898C9C8DF37AB4 /* OfflineQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueueManager.swift; sourceTree = "<group>"; };
 		51A3A444E9CB775199AA1726 /* OfflineIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineIndicator.swift; sourceTree = "<group>"; };
 		52031AAE8354B3F9D8DFBDCD /* TutorModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorModeView.swift; sourceTree = "<group>"; };
@@ -1258,6 +1260,7 @@
 			isa = PBXGroup;
 			children = (
 				5072328A04C620F7E85CA07F /* CameraPreview.swift */,
+				A91B2C3D4E5F678901234567 /* CreateCameraController.swift */,
 				BF6B863BBECE8C95283462B4 /* ClipMetadataSheet.swift */,
 				1CAFEB4195016E070966984F /* ClipsRecordingView.swift */,
 				65B69F1CC73F360A30729D1F /* CreateHubView.swift */,
@@ -2248,6 +2251,7 @@
 				7D48CAE59A4F83A7F44F5EBF /* CalendarService.swift in Sources */,
 				A7B472ED97DCF14FAE6F22E0 /* CameraManager.swift in Sources */,
 				00FC9925402B87326A07CEBF /* CameraPreview.swift in Sources */,
+				A91B2C3D4E5F678901234568 /* CreateCameraController.swift in Sources */,
 				3C3247C44F956869E3AB24CB /* CampusItemDetailSheet.swift in Sources */,
 				BD0B6437FDD2D035C5010CA9 /* CampusModels.swift in Sources */,
 				B009EDFDB8DD88E0912DBA6F /* CampusView.swift in Sources */,

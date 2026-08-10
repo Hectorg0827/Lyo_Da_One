@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +61,7 @@ import com.lyo.app.data.api.LessonDto
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
+import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
@@ -201,6 +203,14 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                             completedLessons = safeCompletedCount,
                             totalLessons = totalLessons,
                             progressPercent = progressPercent,
+                            onOpenClassroom = {
+                                nav.navigate(
+                                    Routes.classroom(
+                                        topic = course?.title ?: activeItem.lesson.title ?: "Course",
+                                        courseId = courseId,
+                                    ),
+                                )
+                            },
                         )
                     }
 
@@ -376,6 +386,7 @@ private fun CourseHeader(
     completedLessons: Int,
     totalLessons: Int,
     progressPercent: Int,
+    onOpenClassroom: () -> Unit,
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -423,6 +434,15 @@ private fun CourseHeader(
                     color = LyoPurple,
                     fontWeight = FontWeight.Bold,
                 )
+            }
+            Button(
+                onClick = onOpenClassroom,
+                colors = ButtonDefaults.buttonColors(containerColor = LyoPurple),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Open AI Classroom")
             }
         }
     }

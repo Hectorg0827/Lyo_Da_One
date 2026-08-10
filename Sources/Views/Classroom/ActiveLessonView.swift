@@ -17,6 +17,7 @@ struct ActiveLessonView: View {
     let header: HeaderModel
     let steps: [LessonStep]
     var onAdvance: (LessonStep) -> Void = { _ in }
+    var onSkip: (LessonStep) -> Void = { _ in }
     var onAskLyo: (LessonStep) -> Void = { _ in }
     var onExplainEasier: (LessonStep) -> Void = { _ in }
     var onQuizAnswer: (SDUIComponent, SDUIQuizOption) -> Void = { _, _ in }
@@ -154,21 +155,16 @@ struct ActiveLessonView: View {
 
                 if let step = currentStep {
                     VStack(spacing: 12) {
-                        // ZONE 2: Classroom Stage & Avatars
-                        ClassroomStageView(
-                            activeSpeaker: step.speakerName,
-                            teacherImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)",
-                            teacherName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName
-                        )
-                        .padding(.horizontal, ClassroomTokens.pagePadding)
-                        .frame(height: 70)
-
-                        // ZONE 3: Lyo Board (Interactive centerpiece)
+                        // ZONE 2: Lyo Board (the single classroom focus)
                         LyoBoardView(
                             step: step,
                             quizSelections: quizSelections,
                             reflectionText: $reflectionText,
                             isTappedToComplete: $isBoardTappedToComplete,
+                            teacherName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName,
+                            speakerBadge: step.speakerBadge,
+                            speakerImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)",
+                            teacherCaption: step.teachingText,
                             onOptionSelected: { component, option in
                                 quizSelections[component.id] = option.id
                                 onQuizAnswer(component, option)
@@ -182,15 +178,6 @@ struct ActiveLessonView: View {
                                 isBoardTappedToComplete = true
                             }
                         }
-
-                        // ZONE 4: Dialogue Card
-                        ClassroomDialogueCard(
-                            speakerName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName,
-                            speakerBadge: step.speakerBadge,
-                            text: step.teachingText,
-                            speakerImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)"
-                        )
-                        .padding(.horizontal, ClassroomTokens.pagePadding)
 
                         Spacer()
                     }
@@ -227,14 +214,20 @@ struct ActiveLessonView: View {
                         .foregroundStyle(Color.red.opacity(0.85))
                         .transition(.opacity.combined(with: .scale))
                         .padding(.bottom, 4)
-                } else {
-                    Text("Swipe left to continue")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(ClassroomTokens.textTertiary)
-                        .padding(.bottom, 4)
                 }
 
-                // ZONE 5: Bottom Dock (Sleek Lens Toolbar)
+                LessonTransportBar(
+                    canGoBack: currentIndex > 0,
+                    primaryLabel: primaryNavigationLabel,
+                    primaryDisabled: requiresInteraction && !isInteractionCompleted,
+                    onPrevious: goToPreviousScene,
+                    onPrimary: { goToNextScene() },
+                    onSkip: skipScene
+                )
+                .padding(.horizontal, ClassroomTokens.pagePadding)
+                .padding(.bottom, 8)
+
+                // ZONE 3: Bottom Dock (Sleek Lens Toolbar)
                 LyoLensDock(
                     onLensTap: { tab in
                         HapticManager.shared.playQuizSelection()
@@ -286,11 +279,25 @@ struct ActiveLessonView: View {
 
     // MARK: - Navigation Gestures
 
-    private func goToNextScene() {
+    private var primaryNavigationLabel: String {
+        if requiresInteraction && !isInteractionCompleted {
+            return "Choose an answer"
+        }
+        if currentIndex < steps.count - 1 {
+            return "Next"
+        }
+        let label = currentStep?.primaryActionLabel.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if label.isEmpty || label.localizedCaseInsensitiveContains("check understanding") {
+            return "Continue lesson"
+        }
+        return label
+    }
+
+    private func goToNextScene(force: Bool = false) {
         guard let step = currentStep else { return }
 
         // Swipe locked if answer is required but not selected
-        if requiresInteraction && !isInteractionCompleted {
+        if !force && requiresInteraction && !isInteractionCompleted {
             triggerShakeNudge()
             return
         }
@@ -308,6 +315,12 @@ struct ActiveLessonView: View {
                 onAdvance(step)
             }
         }
+    }
+
+    private func skipScene() {
+        guard let step = currentStep else { return }
+        onSkip(step)
+        goToNextScene(force: true)
     }
 
     private func goToPreviousScene() {
@@ -509,38 +522,45 @@ struct LyoBoardView: View {
     let quizSelections: [String: String]
     @Binding var reflectionText: String
     @Binding var isTappedToComplete: Bool
+    let teacherName: String
+    let speakerBadge: String
+    let speakerImageName: String
+    let teacherCaption: String
     var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Neon top ambient glowing label
-            HStack {
-                Circle()
-                    .fill(ClassroomTokens.accent)
-                    .frame(width: 6, height: 6)
-                Text("LYO BOARD")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(ClassroomTokens.accent)
-                Spacer()
+        VStack(alignment: .leading, spacing: 16) {
+            boardHeader
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    switch step.supporting {
+                    case .classroomQuiz(let component):
+                        quizContent(component)
+
+                    case .comparison(let model):
+                        comparisonContent(model)
+
+                    case .lessonBlock(let block):
+                        BlockRendererView(block: block)
+                            .padding(4)
+
+                    case .none:
+                        defaultExplanationContent()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            switch step.supporting {
-            case .classroomQuiz(let component):
-                quizContent(component)
-
-            case .comparison(let model):
-                comparisonContent(model)
-
-            case .lessonBlock(let block):
-                BlockRendererView(block: block)
-                    .padding(4)
-
-            case .none:
-                defaultExplanationContent()
-            }
+            TeacherBoardCaption(
+                teacherName: teacherName,
+                speakerBadge: speakerBadge,
+                speakerImageName: speakerImageName,
+                caption: teacherCaption
+            )
         }
         .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color(hex: "0D0E23").opacity(0.92))
@@ -552,19 +572,77 @@ struct LyoBoardView: View {
         )
     }
 
+    private var boardHeader: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(ClassroomTokens.accent)
+                .frame(width: 6, height: 6)
+            Text("LYO BOARD")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ClassroomTokens.accent)
+            Spacer()
+            Text(boardModeLabel)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(ClassroomTokens.textTertiary)
+        }
+    }
+
+    private var boardModeLabel: String {
+        if case .classroomQuiz = step.supporting {
+            return "PRACTICE"
+        }
+        return "LIVE"
+    }
+
     private func defaultExplanationContent() -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Lesson Focus")
+            Text("Board Focus")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(ClassroomTokens.textSecondary)
 
-            Text(step.teachingText)
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(ClassroomTokens.textPrimary)
-                .lineSpacing(5)
-                .opacity(isTappedToComplete ? 1.0 : 0.9)
-                .animation(.easeOut, value: isTappedToComplete)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(boardFocusLines.enumerated()), id: \.offset) { index, line in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(hex: "0D0E23"))
+                            .frame(width: 22, height: 22)
+                            .background(ClassroomTokens.accent, in: Circle())
+
+                        Text(line)
+                            .font(.system(size: 16, weight: index == 0 ? .semibold : .regular, design: .rounded))
+                            .foregroundStyle(index == 0 ? ClassroomTokens.textPrimary : ClassroomTokens.textSecondary)
+                            .lineSpacing(5)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .opacity(isTappedToComplete || index == 0 ? 1.0 : 0.82)
+                }
+            }
+            .animation(.easeOut, value: isTappedToComplete)
         }
+    }
+
+    private var boardFocusLines: [String] {
+        let cleaned = step.teachingText
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let separators = CharacterSet(charactersIn: ".!?")
+        let sentences = cleaned
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let candidates = sentences.isEmpty ? [cleaned] : Array(sentences.prefix(3))
+        return candidates.map { shortBoardLine($0) }
+    }
+
+    private func shortBoardLine(_ text: String) -> String {
+        let limit = 92
+        guard text.count > limit else { return text }
+        let index = text.index(text.startIndex, offsetBy: limit)
+        return String(text[..<index]).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 
     private func quizContent(_ component: SDUIComponent) -> some View {
@@ -646,6 +724,126 @@ struct LyoBoardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+}
+
+@MainActor
+struct TeacherBoardCaption: View {
+    let teacherName: String
+    let speakerBadge: String
+    let speakerImageName: String
+    let caption: String
+
+    private var compactCaption: String {
+        let cleaned = caption
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let limit = 150
+        guard cleaned.count > limit else { return cleaned }
+        let index = cleaned.index(cleaned.startIndex, offsetBy: limit)
+        return String(cleaned[..<index]).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(speakerImageName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 36, height: 36)
+                .background(Color.white.opacity(0.08), in: Circle())
+                .overlay(Circle().stroke(ClassroomTokens.accent.opacity(0.35), lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(teacherName)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(ClassroomTokens.textPrimary)
+                        .lineLimit(1)
+
+                    Text(speakerBadge)
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(ClassroomTokens.accent)
+                        .lineLimit(1)
+                }
+
+                Text(compactCaption)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(ClassroomTokens.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+@MainActor
+struct LessonTransportBar: View {
+    let canGoBack: Bool
+    let primaryLabel: String
+    let primaryDisabled: Bool
+    var onPrevious: () -> Void
+    var onPrimary: () -> Void
+    var onSkip: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onPrevious) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(canGoBack ? ClassroomTokens.textPrimary : ClassroomTokens.textTertiary)
+                    .frame(width: 46, height: 46)
+                    .background(Color.white.opacity(canGoBack ? 0.08 : 0.035), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(!canGoBack)
+            .accessibilityLabel("Previous")
+
+            Button(action: onPrimary) {
+                HStack(spacing: 8) {
+                    Text(primaryLabel)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundStyle(ClassroomTokens.textOnAccent)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .background(
+                    LinearGradient(
+                        colors: primaryDisabled
+                            ? [Color.white.opacity(0.12), Color.white.opacity(0.08)]
+                            : [ClassroomTokens.accentDeep, ClassroomTokens.accent],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 14)
+                )
+            }
+            .accessibilityLabel(primaryLabel)
+
+            Button(action: onSkip) {
+                HStack(spacing: 6) {
+                    Image(systemName: "forward.end.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Skip")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(ClassroomTokens.textPrimary)
+                .frame(width: 82, height: 46)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .accessibilityLabel("Skip")
         }
     }
 }

@@ -402,6 +402,7 @@ struct LivingClassroomView: View {
             ),
             steps: steps,
             onAdvance: { step in handleAdvance(step, isLast: step.id == steps.last?.id) },
+            onSkip: { step in handleSkip(step) },
             onAskLyo: { step in openAskOverlay(for: step) },
             onExplainEasier: { step in explainStepEasier(step) },
             onQuizAnswer: { component, option in
@@ -460,6 +461,11 @@ struct LivingClassroomView: View {
                 return
             }
 
+            if service.usingLocalEngine {
+                service.requestNextScene()
+                return
+            }
+
             let actionData = step.primaryActionPayload?.reduce(into: [String: Any]()) { result, item in
                 result[item.key] = item.value
             }
@@ -476,6 +482,21 @@ struct LivingClassroomView: View {
         // Non-last advances are handled inside ActiveLessonView local state.
     }
 
+    private func handleSkip(_ step: ActiveLessonView.LessonStep) {
+        service.sendUserAction(
+            actionIntent: "skip",
+            componentId: step.id,
+            actionData: [
+                "course_title": courseTitle,
+                "context": step.teachingText,
+            ]
+        )
+        LyoAnalyticsManager.shared.trackEvent(
+            "classroom_scene_skipped",
+            parameters: ["courseId": courseId, "stepId": step.id]
+        )
+    }
+
     private func scheduleContinueFallback(from revision: Int) {
         continueFallbackTask?.cancel()
         continueFallbackTask = Task { @MainActor in
@@ -484,23 +505,13 @@ struct LivingClassroomView: View {
             guard service.sceneRevision == revision else { return }
             guard !service.hasQueuedComponents else { return }
 
-            guard !service.isConnected || service.error != nil else {
-                Log.classroom.warning(
-                    "Classroom live continuation still pending; suppressing local fallback while WebSocket is connected"
-                )
-                LyoAnalyticsManager.shared.trackEvent(
-                    "classroom_live_continuation_pending",
-                    parameters: [
-                        "courseId": courseId,
-                        "courseTitle": courseTitle,
-                        "revision": revision,
-                    ])
-                return
+            if service.usingLocalEngine {
+                service.requestNextScene()
+            } else {
+                service.switchToLocalLesson()
             }
-
-            service.showLocalFallbackScene(topic: courseTitle)
             LyoAnalyticsManager.shared.trackEvent(
-                "classroom_local_fallback_scene_shown",
+                "classroom_continuous_engine_handoff",
                 parameters: [
                     "courseId": courseId,
                     "courseTitle": courseTitle,
