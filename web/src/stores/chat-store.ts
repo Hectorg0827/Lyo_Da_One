@@ -212,7 +212,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   loadConversation: async (id) => {
     // Switching conversations — a real navigation away from whatever
     // new-chat screen was previously active. See newChatScreenGeneration.
-    newChatScreenGeneration++;
+    // Re-selecting the conversation that's already active (the sidebar
+    // re-clicking the current chat, or recoverCanonicalConversation
+    // reloading the same id after a stream error) is not a navigation —
+    // bumping here would fail an in-flight fetchSessionSummary for this
+    // very screen and the recap would never show.
+    if (get().activeConversationId !== id) newChatScreenGeneration++;
     if (id.startsWith('local-')) {
       set({ activeConversationId: id });
       return;
