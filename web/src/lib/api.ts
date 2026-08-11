@@ -1,4 +1,4 @@
-import type { User } from '@/types';
+import type { User, ChatBlock, CheckAnswerResult } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 
@@ -241,6 +241,9 @@ export const api = {
           role: 'user' | 'assistant' | 'system';
           content: string;
           created_at: string;
+          // Structured lesson blocks, when the turn carried them. Restored on
+          // reload so a lesson does not collapse into plain text.
+          blocks?: ChatBlock[] | null;
         }>;
       }>(`/api/v1/chat/conversations/${id}`);
     },
@@ -269,6 +272,32 @@ export const api = {
       return request<{ answer_block: unknown; metadata: unknown }>('/api/v1/lyo2/chat', {
         method: 'POST',
         body: JSON.stringify({ text, history }),
+      });
+    },
+
+    /**
+     * Submit an answer to an in-chat check.
+     *
+     * Sends only WHICH option was picked. Correctness is decided server-side
+     * from the block the server itself emitted — the client never grades, and
+     * never trusts `correct_index` off the wire for that purpose.
+     */
+    async checkAnswer(params: {
+      conversationId: string;
+      blockId: string;
+      selectedIndex: number;
+      timeTakenMs?: number;
+      hintUsed?: boolean;
+    }) {
+      return request<CheckAnswerResult>('/api/v1/lyo2/chat/check', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversation_id: params.conversationId,
+          block_id: params.blockId,
+          selected_index: params.selectedIndex,
+          time_taken_ms: params.timeTakenMs ?? 0,
+          hint_used: params.hintUsed ?? false,
+        }),
       });
     },
 
