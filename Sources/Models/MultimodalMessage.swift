@@ -403,7 +403,14 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
     let timestamp: Date
     var isStreaming: Bool
     var metadata: MessageMetadata?
-    
+    /// v2 unified blocks, when the turn carried them — rendered via
+    /// `UnifiedBlockRenderer` instead of the lossy per-type `contentTypes`
+    /// mapping below, which only ever understood `.quiz`.
+    var smartBlocks: [SmartBlock]?
+    /// Server-graded verdicts for this message's answered checks, keyed by
+    /// block id. See `LyoMessage.checkResults`.
+    var checkResults: [String: CheckAnswerResult]?
+
     enum MessageRole: String, Codable {
         case user
         case assistant
@@ -426,7 +433,9 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
          attachments: [ChatAttachment] = [],
          timestamp: Date = Date(),
          isStreaming: Bool = false,
-         metadata: MessageMetadata? = nil) {
+         metadata: MessageMetadata? = nil,
+         smartBlocks: [SmartBlock]? = nil,
+         checkResults: [String: CheckAnswerResult]? = nil) {
         self.id = id
         self.sessionId = sessionId
         self.role = role
@@ -436,6 +445,8 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
         self.timestamp = timestamp
         self.isStreaming = isStreaming
         self.metadata = metadata
+        self.smartBlocks = smartBlocks
+        self.checkResults = checkResults
     }
     
     var isFromUser: Bool { role == .user }
@@ -487,6 +498,28 @@ struct MultimodalMessage: Identifiable, Equatable, Codable {
         self.timestamp = legacyMessage.timestamp
         self.isStreaming = false
         self.metadata = nil
+        self.smartBlocks = legacyMessage.smartBlocks
+        self.checkResults = legacyMessage.checkResults
+    }
+
+    // Manual Equatable: `SmartBlock` (unlike `CheckAnswerResult`) does not
+    // conform to Equatable, so synthesis is unavailable now that this struct
+    // carries `smartBlocks`. Compares by count for the same reason
+    // `LyoMessage`'s manual `==` does — good enough to drive a SwiftUI
+    // re-render, and full block-content equality is not worth defining
+    // (and instantly stale the moment a check is answered) just for this.
+    static func == (lhs: MultimodalMessage, rhs: MultimodalMessage) -> Bool {
+        lhs.id == rhs.id
+            && lhs.sessionId == rhs.sessionId
+            && lhs.role == rhs.role
+            && lhs.content == rhs.content
+            && lhs.contentTypes == rhs.contentTypes
+            && lhs.attachments == rhs.attachments
+            && lhs.timestamp == rhs.timestamp
+            && lhs.isStreaming == rhs.isStreaming
+            && lhs.metadata == rhs.metadata
+            && lhs.smartBlocks?.count == rhs.smartBlocks?.count
+            && lhs.checkResults?.count == rhs.checkResults?.count
     }
 }
 

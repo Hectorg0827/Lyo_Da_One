@@ -242,6 +242,9 @@ struct LyoOverlayView: View {
             highlights: notebookStore.highlights(for: message.id),
             onTextSelectionAction: { action in
                 handleTextSelectionAction(action, messageId: message.id, isFromUser: message.isFromUser)
+            },
+            onSmartQuizAnswer: { blockId, index in
+                viewModel.answerSmartQuizCheck(messageId: message.id, blockId: blockId, selectedIndex: index)
             }
         )
         .id(message.id)

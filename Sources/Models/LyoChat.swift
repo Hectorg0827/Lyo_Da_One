@@ -46,6 +46,13 @@ struct LyoMessage: Identifiable, Codable, Equatable {
     /// v2 unified block format — decoded from the backend's `smart_blocks` SSE event.
     var smartBlocks: [SmartBlock]?
 
+    /// Server-graded verdicts for this message's answered checks, keyed by
+    /// block id. Populated by `UnifiedChatService.answerCheck`. Ephemeral
+    /// like `smartBlocks` above — excluded from `CodingKeys` — so a reload
+    /// re-fetches the canonical conversation (which persists the verdict on
+    /// the block itself server-side) rather than trusting a stale local copy.
+    var checkResults: [String: CheckAnswerResult]?
+
     // Exclude ephemeral animation state from Codable
     enum CodingKeys: String, CodingKey {
         case id, sessionId, content, isFromUser, timestamp
@@ -70,6 +77,7 @@ struct LyoMessage: Identifiable, Codable, Equatable {
             && lhs.shouldAnimate == rhs.shouldAnimate
             && lhs.isStreaming == rhs.isStreaming
             && lhs.smartBlocks?.count == rhs.smartBlocks?.count
+            && lhs.checkResults?.count == rhs.checkResults?.count
     }
 }
 

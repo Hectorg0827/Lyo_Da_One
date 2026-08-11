@@ -27,6 +27,9 @@ struct EnhancedMessageBubble: View {
     let onSuggestedAction: ((SuggestedActionCard) -> Void)?
     let highlights: [ChatHighlight]
     let onTextSelectionAction: ((TextSelectionAction) -> Void)?
+    /// A v2 SmartBlock quiz was answered — (blockId, selectedIndex). Grading
+    /// is server-authoritative; see `UnifiedChatService.answerCheck`.
+    let onSmartQuizAnswer: ((String, Int) -> Void)?
 
     @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
@@ -42,7 +45,8 @@ struct EnhancedMessageBubble: View {
         onSuggestionSelect: ((String) -> Void)? = nil,
         onSuggestedAction: ((SuggestedActionCard) -> Void)? = nil,
         highlights: [ChatHighlight] = [],
-        onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil
+        onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil,
+        onSmartQuizAnswer: ((String, Int) -> Void)? = nil
     ) {
         self.message = message
         self.onTTSToggle = onTTSToggle
@@ -54,6 +58,7 @@ struct EnhancedMessageBubble: View {
         self.onSuggestedAction = onSuggestedAction
         self.highlights = highlights
         self.onTextSelectionAction = onTextSelectionAction
+        self.onSmartQuizAnswer = onSmartQuizAnswer
     }
     
     /// True when contentTypes contains rich content that should suppress raw text rendering
@@ -132,10 +137,17 @@ struct EnhancedMessageBubble: View {
             // Content Area
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(0..<message.contentTypes.count, id: \.self) { index in
-                        contentView(for: message.contentTypes[index])
+                    if let blocks = message.smartBlocks, !blocks.isEmpty {
+                        // v2 unified blocks — every lesson beat (hook, callout,
+                        // dataViz, flashcard, ...), not just the quiz case the
+                        // legacy `contentTypes` mapping below understood.
+                        smartBlocksSection(blocks)
+                    } else {
+                        ForEach(0..<message.contentTypes.count, id: \.self) { index in
+                            contentView(for: message.contentTypes[index])
+                        }
                     }
-                    
+
                     // Attachments
                     if !message.attachments.isEmpty {
                         attachmentsGrid(message.attachments)
@@ -267,6 +279,23 @@ struct EnhancedMessageBubble: View {
         }
     }
     
+    /// Renders a turn's v2 SmartBlocks in order — the structured-lesson path
+    /// `UnifiedBlockRenderer` was built for but nothing wired up until now.
+    @ViewBuilder
+    private func smartBlocksSection(_ blocks: [SmartBlock]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(blocks) { block in
+                UnifiedBlockRenderer(
+                    block: block,
+                    checkResult: message.checkResults?[block.id],
+                    onQuizAnswer: { index in
+                        onSmartQuizAnswer?(block.id, index)
+                    }
+                )
+            }
+        }
+    }
+
     /// One rendered chunk of a multimodal message. Extracted from the
     /// body's ForEach so the large switch type-checks as its own function
     /// (inlined, it failed generic inference on CI's Xcode).

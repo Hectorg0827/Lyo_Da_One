@@ -1712,6 +1712,30 @@ final class UnifiedChatService: ObservableObject {
         messages.append(msg)
     }
 
+    /// Submit an in-chat check answer for server grading and store the verdict.
+    ///
+    /// Sends only which option was picked — `QuizBlockPayload.correctIndex`
+    /// on the wire is never compared against locally. The verdict this
+    /// returns is what `UnifiedBlockRenderer`'s quiz view renders; there is
+    /// no client-side fallback grade, matching web's `answerCheck`.
+    func answerCheck(messageId: String, blockId: String, selectedIndex: Int) async {
+        do {
+            let result = try await Lyo2ChatService.shared.checkAnswer(
+                CheckAnswerRequest(
+                    conversationId: currentConversationId,
+                    blockId: blockId,
+                    selectedIndex: selectedIndex
+                )
+            )
+            guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return }
+            var results = messages[idx].checkResults ?? [:]
+            results[blockId] = result
+            messages[idx].checkResults = results
+        } catch {
+            Log.ai.error("answerCheck failed for block \(blockId): \(error)")
+        }
+    }
+
     func appendTestPrepBubble(_ content: TestPrepContent) {
         let msg = LyoMessage(
             id: UUID().uuidString,

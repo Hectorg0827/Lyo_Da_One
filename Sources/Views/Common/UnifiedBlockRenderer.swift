@@ -10,27 +10,31 @@ import WebKit
 struct UnifiedBlockRenderer: View {
     let block: SmartBlock
     var context: RenderContext = .chat
-    
+    /// Server verdict for this block, when it's a quiz that has been
+    /// answered — nil while unanswered or pending. Never derived from
+    /// `QuizBlockPayload.correctIndex` locally; see `SmartQuizBlockView`.
+    var checkResult: CheckAnswerResult?
+
     // Callbacks
     var onQuizAnswer: ((Int) -> Void)?
     var onAction: ((String) -> Void)?
-    
+
     enum RenderContext {
         case chat
         case classroom
     }
-    
+
     var body: some View {
         Group {
             switch block.content {
             case .text(let payload):
                 SmartTextBlockView(payload: payload, subtype: block.subtype)
-                
+
             case .code(let payload):
                 SmartCodeBlockView(payload: payload, subtype: block.subtype)
-                
+
             case .quiz(let payload):
-                SmartQuizBlockView(payload: payload, subtype: block.subtype, onAnswer: onQuizAnswer)
+                SmartQuizBlockView(payload: payload, subtype: block.subtype, checkResult: checkResult, onAnswer: onQuizAnswer)
                 
             case .flashcard(let payload):
                 SmartFlashcardBlockView(payload: payload, subtype: block.subtype)
@@ -191,64 +195,86 @@ struct SmartCodeBlockView: View {
 
 // MARK: - Quiz Block
 
+/// An answerable check inside a chat lesson.
+///
+/// The verdict comes from the server (`checkResult`), never from comparing
+/// a selection against `payload.correctIndex` — that field rides on the wire
+/// for the *server's* use, and this view deliberately never reads it. See
+/// web's `CheckBlock.tsx`, which documents the same rule for the same
+/// reason: deciding correctness on the client is the exact failure this
+/// feature exists to remove (chat praising a wrong answer).
 struct SmartQuizBlockView: View {
     let payload: QuizBlockPayload
     let subtype: String?
+    /// The graded verdict, once the server has returned one. nil before
+    /// answering and while `onAnswer` is grading in flight.
+    let checkResult: CheckAnswerResult?
     let onAnswer: ((Int) -> Void)?
-    
-    @State private var selectedIndex: Int?
-    @State private var isSubmitted = false
-    
+
+    @State private var pendingIndex: Int?
+
+    private var answered: Bool { checkResult != nil }
+    private var isGrading: Bool { pendingIndex != nil && checkResult == nil }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             questionHeader
             optionsList
-            submitButton
-            explanationFooter
+            if isGrading {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+            resultFooter
         }
         .padding()
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
-    
+
     private var questionHeader: some View {
         Text(payload.question)
             .font(.body.bold())
     }
-    
+
     private var optionsList: some View {
         ForEach(Array(payload.options.enumerated()), id: \.element.id) { index, option in
             QuizOptionRow(
                 option: option,
                 index: index,
-                correctIndex: payload.correctIndex,
-                selectedIndex: selectedIndex,
-                isSubmitted: isSubmitted
+                checkResult: checkResult,
+                isPending: pendingIndex == index && checkResult == nil
             ) {
-                guard !isSubmitted else { return }
-                selectedIndex = index
+                guard !answered, pendingIndex == nil else { return }
+                pendingIndex = index
+                onAnswer?(index)
             }
+            .disabled(answered || pendingIndex != nil)
         }
     }
-    
+
     @ViewBuilder
-    private var submitButton: some View {
-        if selectedIndex != nil && !isSubmitted {
-            Button("Submit") {
-                isSubmitted = true
-                onAnswer?(selectedIndex ?? 0)
+    private var resultFooter: some View {
+        if let result = checkResult {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result.bailedOut ? "No problem — here it is." : (result.correct ? "Correct." : "Not quite."))
+                    .font(.caption.bold())
+                    .foregroundStyle(result.bailedOut ? .secondary : (result.correct ? .green : .red))
+
+                // Naming the specific confusion is the point — not just "wrong".
+                if !result.correct, let misconception = result.misconception {
+                    Text(misconception)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let explanation = result.explanation {
+                    Text(explanation)
+                        .font(.caption)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .frame(maxWidth: .infinity)
-        }
-    }
-    
-    @ViewBuilder
-    private var explanationFooter: some View {
-        if isSubmitted, let explanation = payload.explanation {
-            Text(explanation)
-                .font(.caption)
-                .padding(10)
-                .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                (result.correct ? Color.green : Color.red).opacity(result.bailedOut ? 0 : 0.1),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
         }
     }
 }
@@ -256,11 +282,10 @@ struct SmartQuizBlockView: View {
 private struct QuizOptionRow: View {
     let option: QuizOptionPayload
     let index: Int
-    let correctIndex: Int
-    let selectedIndex: Int?
-    let isSubmitted: Bool
+    let checkResult: CheckAnswerResult?
+    let isPending: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             HStack {
@@ -278,28 +303,35 @@ private struct QuizOptionRow: View {
             )
         }
     }
-    
+
+    private var isChosen: Bool { checkResult?.selectedIndex == index }
+    private var isCorrectAnswer: Bool { checkResult != nil && checkResult?.correctIndex == index }
+    private var isWrongChoice: Bool {
+        guard let result = checkResult else { return false }
+        return isChosen && !result.correct && !result.bailedOut
+    }
+
     @ViewBuilder
     private var trailingIcon: some View {
-        if isSubmitted {
-            if index == correctIndex {
+        if checkResult != nil {
+            if isCorrectAnswer {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            } else if index == selectedIndex {
+            } else if isWrongChoice {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
             }
-        } else if index == selectedIndex {
+        } else if isPending {
             Image(systemName: "circle.fill").foregroundStyle(Color.accentColor)
         } else {
             Image(systemName: "circle").foregroundStyle(.secondary)
         }
     }
-    
+
     private var backgroundColor: Color {
-        guard isSubmitted else {
-            return index == selectedIndex ? Color.accentColor.opacity(0.1) : Color(.systemGray6)
+        guard checkResult != nil else {
+            return isPending ? Color.accentColor.opacity(0.1) : Color(.systemGray6)
         }
-        if index == correctIndex { return .green.opacity(0.15) }
-        if index == selectedIndex { return .red.opacity(0.15) }
+        if isCorrectAnswer { return .green.opacity(0.15) }
+        if isWrongChoice { return .red.opacity(0.15) }
         return Color(.systemGray6)
     }
 }
