@@ -275,7 +275,11 @@ struct SmartQuizBlockView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.bailedOut ? "No problem — here it is." : (result.correct ? "Correct." : "Not quite."))
                     .font(.caption.bold())
-                    .foregroundStyle(result.bailedOut ? .secondary : (result.correct ? .green : .red))
+                    .foregroundStyle(
+                        result.bailedOut
+                            ? AnyShapeStyle(.secondary)
+                            : AnyShapeStyle(result.correct ? Color.green : Color.red)
+                    )
 
                 // Naming the specific confusion is the point — not just "wrong".
                 if !result.correct, let misconception = result.misconception {
