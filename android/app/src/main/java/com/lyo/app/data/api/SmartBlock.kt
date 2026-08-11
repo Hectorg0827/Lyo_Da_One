@@ -199,10 +199,10 @@ class SmartBlockDeserializer : JsonDeserializer<SmartBlock> {
                     SmartBlockContent.Interactive(context.deserialize(contentElement, InteractiveBlockPayload::class.java))
                 SmartBlockType.MASTERY_MAP ->
                     SmartBlockContent.MasteryMap(context.deserialize(contentElement, MasteryMapBlockPayload::class.java))
-                SmartBlockType.UNKNOWN -> SmartBlockContent.Unknown(contentElement)
+                SmartBlockType.UNKNOWN -> SmartBlockContent.Unknown(contentElement.asJsonObject)
             }
         } catch (e: Exception) {
-            SmartBlockContent.Unknown(contentElement)
+            SmartBlockContent.Unknown(contentElement.asJsonObject)
         }
 
         return SmartBlock(
