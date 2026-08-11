@@ -3,22 +3,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { Copy, Check, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
 import MascotAvatar from './MascotAvatar';
+import BlockRenderer from './blocks/BlockRenderer';
+import { markdownComponents, MARKDOWN_MATH_PLUGINS } from './markdown-config';
 import { useChatStore } from '@/stores/chat-store';
-
-// Renders $inline$ and $$block$$ (also \(...\) / \[...\]) LaTeX the model
-// writes for math — same katex engine the classroom board already uses
-// (BoardElementView.tsx's LatexView), so a formula reads the same whether
-// the learner sees it in chat or on the board. Without this, react-markdown
-// has no idea `$x^2$` means anything and prints the dollar signs verbatim.
-const MARKDOWN_MATH_PLUGINS = { remarkPlugins: [remarkMath], rehypePlugins: [rehypeKatex] };
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -50,75 +42,17 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-const markdownComponents = {
-  // Paragraphs
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
-  ),
-  // Headings
-  h1: ({ children }: { children?: React.ReactNode }) => (
-    <h1 className="text-xl font-bold text-white mb-3 mt-4 first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }: { children?: React.ReactNode }) => (
-    <h2 className="text-lg font-semibold text-white mb-2 mt-4 first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }: { children?: React.ReactNode }) => (
-    <h3 className="text-base font-semibold text-white/90 mb-2 mt-3 first:mt-0">{children}</h3>
-  ),
-  // Lists
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="mb-3 space-y-1 pl-4">{children}</ul>
-  ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="mb-3 space-y-1 pl-4 list-decimal">{children}</ol>
-  ),
-  li: ({ children }: { children?: React.ReactNode }) => (
-    <li className="flex items-start gap-2 text-white/80">
-      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-lyo-400 shrink-0" />
-      <span>{children}</span>
-    </li>
-  ),
-  // Bold / italic
-  strong: ({ children }: { children?: React.ReactNode }) => (
-    <strong className="font-semibold text-white">{children}</strong>
-  ),
-  em: ({ children }: { children?: React.ReactNode }) => (
-    <em className="italic text-white/70">{children}</em>
-  ),
-  // Code
-  code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
-    if (inline) {
-      return (
-        <code className="px-1.5 py-0.5 rounded-md bg-white/10 text-lyo-300 font-mono text-[0.85em]">
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code className="block w-full overflow-x-auto p-3 rounded-xl bg-black/40 border border-white/10 text-lyo-300 font-mono text-sm leading-relaxed">
-        {children}
-      </code>
-    );
-  },
-  pre: ({ children }: { children?: React.ReactNode }) => (
-    <pre className="mb-3 rounded-xl overflow-hidden">{children}</pre>
-  ),
-  // Blockquote
-  blockquote: ({ children }: { children?: React.ReactNode }) => (
-    <blockquote className="border-l-2 border-lyo-500 pl-3 my-2 text-white/60 italic">
-      {children}
-    </blockquote>
-  ),
-  // HR
-  hr: () => <hr className="border-white/10 my-4" />,
-};
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [hovered, setHovered] = useState(false);
   const attachments = message.attachments ?? [];
   
-  const { isGenerating, generationProgress, getActiveConversation } = useChatStore();
+  const { isGenerating, generationProgress, getActiveConversation, sendMessage } = useChatStore();
+
+  // A structured lesson renders as blocks; message.content still holds the
+  // plain-text version of the same lesson for clients that cannot.
+  const hasBlocks = !isUser && Array.isArray(message.blocks) && message.blocks.length > 0;
 
   // Helper to extract OPEN_CLASSROOM JSON block from assistant messages.
   // Uses string-aware brace counting — a lazy regex stops at the FIRST '}',
@@ -255,8 +189,22 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           />
         )}
 
+        {/* Structured lesson. When present it replaces the prose bubble —
+            the plain text is the same content, kept only as the fallback for
+            clients that cannot render blocks. */}
+        {!isUser && hasBlocks && (
+          <div
+            className={cn(
+              'px-4 py-3 rounded-2xl text-sm leading-relaxed w-full',
+              'bg-white/5 border border-white/10 text-white/80 rounded-bl-sm backdrop-blur-sm'
+            )}
+          >
+            <BlockRenderer blocks={message.blocks!} message={message} />
+          </div>
+        )}
+
         {/* Regular text bubble */}
-        {(displayType === 'text' || !displayType) && (displayContent || (isUser && attachments.length > 0)) && (
+        {!hasBlocks && (displayType === 'text' || !displayType) && (displayContent || (isUser && attachments.length > 0)) && (
           <div
             className={cn(
               'px-4 py-3 rounded-2xl text-sm leading-relaxed',
@@ -311,25 +259,19 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Flashcard carousel placeholder */}
-        {message.type === 'flashcard' && !isUser && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-4 w-72">
-            <p className="text-sm text-white/60 mb-2 font-medium">Flashcard Set</p>
-            <div className="rounded-xl bg-gradient-to-br from-lyo-600/20 to-accent-purple/20 border border-lyo-500/20 p-4 text-center text-white/80 text-sm">
-              {message.content}
-            </div>
-          </div>
-        )}
-
-        {/* Quiz inline placeholder */}
-        {message.type === 'quiz' && !isUser && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-4 w-80">
-            <p className="text-sm text-white/60 mb-2 font-medium">Quick Quiz</p>
-            <div className="text-white/80 text-sm">
-              <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-                {message.content}
-              </ReactMarkdown>
-            </div>
+        {/* Server-suggested follow-up directions for this turn. */}
+        {!isUser && message.suggestedActions && message.suggestedActions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {message.suggestedActions.map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => sendMessage(label)}
+                className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 text-xs text-white/70 hover:text-white transition-colors"
+              >
+                {label}
+              </button>
+            ))}
           </div>
         )}
 

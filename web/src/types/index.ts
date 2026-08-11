@@ -39,11 +39,72 @@ export interface ChatAttachment {
   kind: 'image' | 'document';
 }
 
+/**
+ * Structured content blocks streamed with an assistant turn.
+ *
+ * Mirrors the backend's SmartBlock envelope (lyo_app/ai/schemas/smart_block.py)
+ * and iOS's Sources/Models/SmartBlock.swift. `unknown` is the deliberate
+ * forward-compatibility escape hatch: a block type this client does not know
+ * yet must be skipped, never rendered as raw JSON and never thrown on.
+ */
+export type ChatBlockType =
+  | 'text'
+  | 'code'
+  | 'quiz'
+  | 'flashcard'
+  | 'dataViz'
+  | 'media'
+  | 'progress'
+  | 'interactive'
+  | 'masteryMap'
+  | 'unknown';
+
+export interface ChatBlock {
+  id: string;
+  schema_version?: number;
+  type: ChatBlockType;
+  /** Beat within a lesson: hook | core | representation | example | method | callout | table | mcq */
+  subtype?: string | null;
+  content: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Narrowed content shape for `type: 'quiz'` blocks — the gradeable check. */
+export interface ChatQuizContent {
+  question: string;
+  options: { id: string; text: string; reveals?: string | null }[];
+  /** Present in the payload but NEVER used to decide correctness on the client. */
+  correct_index?: number;
+  explanation?: string | null;
+  hint?: string | null;
+  bailout_index?: number | null;
+}
+
+/** Server verdict for an answered check. The client renders this, never computes it. */
+export interface CheckAnswerResult {
+  correct: boolean;
+  correct_index: number;
+  /** Echoed back so the chosen option can be highlighted after a reload. */
+  selected_index: number;
+  explanation?: string | null;
+  misconception?: string | null;
+  bailed_out: boolean;
+  skill_id?: string | null;
+  mastery?: number | null;
+  next_actions?: string[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   type: 'text' | 'course_proposal' | 'flashcard' | 'quiz' | 'diagram' | 'roadmap' | 'topic_selection';
+  /** Structured lesson blocks, when the turn carried them. */
+  blocks?: ChatBlock[];
+  /** Server-graded results, keyed by check block id. */
+  checkResults?: Record<string, CheckAnswerResult>;
+  /** Server-suggested follow-up directions for this turn. */
+  suggestedActions?: string[];
   metadata?: Record<string, unknown>;
   attachments?: ChatAttachment[];
   createdAt: string;

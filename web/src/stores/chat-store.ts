@@ -1,11 +1,36 @@
 import { create } from 'zustand';
 import toast from 'react-hot-toast';
-import type { ChatMessage, ChatConversation, ChatAttachment } from '@/types';
+import type {
+  ChatMessage,
+  ChatConversation,
+  ChatAttachment,
+  ChatBlock,
+  CheckAnswerResult,
+} from '@/types';
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { parseCanonicalChatContent } from '@/lib/chat-attachments';
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
+
+/**
+ * Pull CTA labels out of an `actions` SSE event.
+ *
+ * The backend sends `{type:'actions', blocks:[{type:'CTARow',
+ * content:{actions:[...]}}]}`. Web dropped this event entirely, so
+ * server-suggested follow-ups never rendered.
+ */
+function extractActionLabels(chunk: Record<string, unknown>): string[] {
+  const blocks = Array.isArray(chunk.blocks) ? chunk.blocks : [];
+  const labels: string[] = [];
+  for (const block of blocks) {
+    const actions = (block as { content?: { actions?: unknown } })?.content?.actions;
+    if (Array.isArray(actions)) {
+      labels.push(...actions.filter((a): a is string => typeof a === 'string'));
+    }
+  }
+  return labels;
+}
 
 // Module-scoped, not store state: this must survive ChatInterface
 // remounting (tabbing away and back within the same app session) but reset
@@ -28,6 +53,12 @@ interface ChatStore {
   hydrate: () => Promise<void>;
   loadConversation: (id: string) => Promise<void>;
   sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>;
+  answerCheck: (
+    messageId: string,
+    blockId: string,
+    selectedIndex: number,
+    timeTakenMs?: number
+  ) => Promise<CheckAnswerResult | null>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
 }
@@ -109,11 +140,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const parsed = message.role === 'user'
         ? parseCanonicalChatContent(message.content)
         : { text: message.content, attachments: [] };
+      // Restore structured lesson blocks. Without this a reloaded lesson
+      // collapses to the plain-text fallback and its check stops being
+      // answerable.
+      const blocks = Array.isArray(message.blocks) ? message.blocks : undefined;
       return {
         id: message.id,
         role: message.role,
         content: parsed.text,
         type: 'text',
+        blocks,
         attachments: parsed.attachments,
         createdAt: message.created_at,
       };
@@ -204,8 +240,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const aiMessageId = generateId();
     let accumulated = '';
 
+    // True once anything renderable has arrived — prose OR structured blocks.
+    // `accumulated` alone is not a sufficient signal now that a turn can carry
+    // its whole answer in blocks.
+    let receivedContent = false;
+
     const appendToAiMessage = (text: string) => {
       accumulated += text;
+      receivedContent = true;
       set((s) => ({
         conversations: s.conversations.map((c) => {
           if (c.id !== convoId) return c;
@@ -238,6 +280,51 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         generationActivity: s.generationActivity === 'course' ? 'course' : 'response',
       }));
     };
+
+    // Merge a patch into the streaming assistant message, creating it if the
+    // structured event arrived before any text did.
+    const patchAiMessage = (patch: Partial<ChatMessage>) => {
+      set((s) => ({
+        conversations: s.conversations.map((c) => {
+          if (c.id !== convoId) return c;
+          const existing = c.messages.find((m) => m.id === aiMessageId);
+          if (existing) {
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === aiMessageId ? { ...m, ...patch } : m
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return {
+            ...c,
+            messages: [
+              ...c.messages,
+              {
+                id: aiMessageId,
+                role: 'assistant' as const,
+                content: accumulated,
+                type: 'text' as const,
+                createdAt: new Date().toISOString(),
+                ...patch,
+              },
+            ],
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      }));
+    };
+
+    const attachBlocksToAiMessage = (blocks: ChatBlock[]) => {
+      // Blocks are real content. Without this, a lesson delivered purely as
+      // blocks looks like an empty response to the completion handler below
+      // and gets wiped by the recovery path.
+      receivedContent = true;
+      patchAiMessage({ blocks });
+    };
+    const attachActionsToAiMessage = (labels: string[]) =>
+      patchAiMessage({ suggestedActions: labels });
 
     try {
       api.chat.stream(
@@ -330,6 +417,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }),
               }));
             }
+          } else if (chunk.type === 'smart_blocks') {
+            // Structured lesson content. Previously fell through every branch
+            // and was silently dropped, so lessons rendered as plain prose.
+            const blocks = Array.isArray(chunk.blocks) ? (chunk.blocks as ChatBlock[]) : [];
+            if (blocks.length) attachBlocksToAiMessage(blocks);
+          } else if (chunk.type === 'actions') {
+            const labels = extractActionLabels(chunk);
+            if (labels.length) attachActionsToAiMessage(labels);
           } else if (chunk.data) {
             const text = typeof chunk.data === 'string' ? chunk.data : '';
             if (text) appendToAiMessage(text);
@@ -338,7 +433,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         },
         () => {
-          if (!accumulated) {
+          if (!receivedContent) {
             recoverCanonicalConversation(convoId!);
           } else {
             set({
@@ -380,6 +475,50 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // Preserve the optimistic user turn until the next successful hydrate.
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
+    }
+  },
+
+  answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0) => {
+    const conversationId = get().activeConversationId;
+    // A check on a not-yet-synced local conversation has nothing to grade
+    // against server-side.
+    if (!conversationId || conversationId.startsWith('local-')) {
+      toast.error("This chat isn't synced yet—send a message first.");
+      return null;
+    }
+
+    try {
+      const result = await api.chat.checkAnswer({
+        conversationId,
+        blockId,
+        selectedIndex,
+        timeTakenMs,
+      });
+
+      set((state) => ({
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                messages: conversation.messages.map((message) =>
+                  message.id === messageId
+                    ? {
+                        ...message,
+                        checkResults: { ...(message.checkResults || {}), [blockId]: result },
+                      }
+                    : message
+                ),
+              }
+            : conversation
+        ),
+      }));
+
+      return result;
+    } catch {
+      // Never fake a verdict on the client: say we couldn't check rather than
+      // guessing, which is the whole failure mode this feature exists to fix.
+      toast.error("Couldn't check that answer—try again.");
+      return null;
     }
   },
 
