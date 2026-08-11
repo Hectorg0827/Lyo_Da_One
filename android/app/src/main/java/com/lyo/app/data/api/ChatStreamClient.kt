@@ -18,6 +18,12 @@ import java.io.IOException
 sealed class ChatStreamEvent {
     data class Chunk(val text: String) : ChatStreamEvent()
     data class Conversation(val id: String) : ChatStreamEvent()
+    /**
+     * Structured lesson content — every beat of a composed lesson (hook,
+     * callout, dataViz, flashcard, quiz, ...), not just plain prose. Web and
+     * iOS decode this same `smart_blocks` event; see chat-contract.mjs.
+     */
+    data class SmartBlocks(val blocks: List<SmartBlock>) : ChatStreamEvent()
     data object Done : ChatStreamEvent()
     data class Error(val message: String) : ChatStreamEvent()
 }
@@ -134,6 +140,13 @@ object ChatStreamClient {
             }
             obj.get("type")?.asString == "clarification" && obj.has("text") ->
                 ChatStreamEvent.Chunk(obj.get("text").asString)
+            obj.get("type")?.asString == "smart_blocks" && obj.has("blocks") -> {
+                val blocksJson = obj.getAsJsonArray("blocks")
+                val blocks: List<SmartBlock> = blocksJson.map { element ->
+                    ApiClient.gson.fromJson(element, SmartBlock::class.java)
+                }
+                blocks.takeIf { it.isNotEmpty() }?.let { ChatStreamEvent.SmartBlocks(it) }
+            }
             obj.has("data") && obj.get("data").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("data").asString)
             obj.has("content") && obj.get("content").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("content").asString)
             obj.has("text") && obj.get("text").isJsonPrimitive -> ChatStreamEvent.Chunk(obj.get("text").asString)

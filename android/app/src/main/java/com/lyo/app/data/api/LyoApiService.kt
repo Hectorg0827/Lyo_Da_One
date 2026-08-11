@@ -326,6 +326,15 @@ interface LyoApiService {
         @Path("conversationId") conversationId: String,
     ): Response<Unit>
 
+    /**
+     * Grade an in-chat check against the block the server itself emitted.
+     * Sends only which option was picked — correctness is decided here, from
+     * the question the server already asked, never inferred client-side from
+     * `QuizBlockPayload.correctIndex`.
+     */
+    @POST("api/v1/lyo2/chat/check")
+    suspend fun checkChatAnswer(@Body body: CheckAnswerRequest): CheckAnswerResult
+
     @POST("api/v1/ai/chat")
     suspend fun simpleChat(@Body body: SimpleChatRequest): SimpleChatResponse
 }

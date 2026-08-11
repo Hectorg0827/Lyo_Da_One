@@ -75,12 +75,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
+import com.lyo.app.data.api.AiConversationMessageDto
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
 import com.lyo.app.data.api.ChatMediaRef
+import com.lyo.app.data.api.CheckAnswerRequest
+import com.lyo.app.data.api.CheckAnswerResult
 import com.lyo.app.data.api.CreateAiConversationRequest
+import com.lyo.app.data.api.SmartBlock
 import com.lyo.app.ui.components.LyoBrandGradient
+import com.lyo.app.ui.components.SmartBlockList
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
@@ -126,7 +131,28 @@ data class ChatMsg(
     val role: String,
     val content: String,
     val id: String = UUID.randomUUID().toString(),
+    /** Structured lesson blocks, when the turn carried them. */
+    val blocks: List<SmartBlock>? = null,
+    /** Server-graded verdicts for this message's answered checks, keyed by block id. */
+    val checkResults: Map<String, CheckAnswerResult> = emptyMap(),
 )
+
+/**
+ * Restores a reloaded conversation's structured blocks *and* any checks
+ * already answered in a previous session — the server persists the verdict
+ * onto `block.metadata.result` when a check is graded (see /chat/check),
+ * so without reading it back a reloaded check would re-offer itself as
+ * unanswered. Mirrors web's extractCheckResults (chat-store.ts).
+ */
+private fun AiConversationMessageDto.toChatMsg(): ChatMsg {
+    val checkResults = blocks.orEmpty().mapNotNull { block ->
+        val resultJson = block.metadata?.get("result") ?: return@mapNotNull null
+        runCatching { ApiClient.gson.fromJson(resultJson, CheckAnswerResult::class.java) }
+            .getOrNull()
+            ?.let { block.id to it }
+    }.toMap()
+    return ChatMsg(role = role, content = content, id = id, blocks = blocks, checkResults = checkResults)
+}
 
 private data class PendingChatAttachment(
     val name: String,
@@ -318,6 +344,14 @@ fun ChatScreen(nav: NavHostController) {
                             messages[messages.lastIndex] = last.copy(content = last.content + event.text)
                         }
 
+                        is ChatStreamEvent.SmartBlocks -> {
+                            // Structured lesson content — every beat, not just
+                            // plain prose. Previously unhandled, so lessons
+                            // rendered as whatever plain text also came through.
+                            val last = messages.last()
+                            messages[messages.lastIndex] = last.copy(blocks = event.blocks)
+                        }
+
                         is ChatStreamEvent.Done -> Unit
                         is ChatStreamEvent.Conversation -> activeConversationId = event.id
                         is ChatStreamEvent.Error -> {
@@ -333,6 +367,39 @@ fun ChatScreen(nav: NavHostController) {
                 )
             }
             isStreaming = false
+        }
+    }
+
+    /**
+     * Grade an in-chat check against the block the server itself emitted.
+     *
+     * Sends only which option was picked. Correctness comes back from the
+     * server — this must never be inferred locally from
+     * `QuizBlockPayload.correctIndex`, which is the exact bug this endpoint
+     * exists to remove (chat praising a wrong answer). Mirrors web's
+     * answerCheck / iOS's UnifiedChatService.answerCheck.
+     */
+    fun answerCheck(messageId: String, blockId: String, selectedIndex: Int) {
+        val conversationId = activeConversationId ?: return
+        scope.launch {
+            runCatching {
+                ApiClient.api.checkChatAnswer(
+                    CheckAnswerRequest(
+                        conversationId = conversationId,
+                        blockId = blockId,
+                        selectedIndex = selectedIndex,
+                    ),
+                )
+            }.onSuccess { result ->
+                val index = messages.indexOfFirst { it.id == messageId }
+                if (index >= 0) {
+                    val current = messages[index]
+                    messages[index] = current.copy(checkResults = current.checkResults + (blockId to result))
+                }
+            }
+            // No onFailure handler: best-effort, same as web/iOS. A failed
+            // grade leaves the check pending rather than faking a verdict —
+            // the option stays tappable so the learner can try again.
         }
     }
 
@@ -385,7 +452,7 @@ fun ChatScreen(nav: NavHostController) {
             val detail = ApiClient.api.aiConversation(latest.id)
             activeConversationId = detail.id
             messages.clear()
-            messages.addAll(detail.messages.map { ChatMsg(it.role, it.content, it.id) })
+            messages.addAll(detail.messages.map { it.toChatMsg() })
         }
     }
 
@@ -472,9 +539,11 @@ fun ChatScreen(nav: NavHostController) {
                         showTyping = isStreaming &&
                             msg.id == messages.lastOrNull()?.id &&
                             msg.role == "assistant" &&
-                            msg.content.isEmpty(),
+                            msg.content.isEmpty() &&
+                            msg.blocks.isNullOrEmpty(),
                         canSpeak = textToSpeechReady && msg.role == "assistant" && msg.content.isNotBlank(),
                         speaking = speakingMessageId == msg.id,
+                        onAnswerCheck = { blockId, index -> answerCheck(msg.id, blockId, index) },
                         onToggleSpeech = { toggleSpeech(msg) },
                     )
                 }
@@ -658,6 +727,7 @@ private fun MessageBubble(
     canSpeak: Boolean,
     speaking: Boolean,
     onToggleSpeech: () -> Unit,
+    onAnswerCheck: (blockId: String, selectedIndex: Int) -> Unit,
 ) {
     val context = LocalContext.current
     val isUser = msg.role == "user"
@@ -751,7 +821,21 @@ private fun MessageBubble(
                     }
                 }
 
-                if (parsed.text.isNotBlank()) {
+                val blocks = msg.blocks
+                if (!blocks.isNullOrEmpty()) {
+                    // Structured lesson content — every beat (hook, callout,
+                    // dataViz, flashcard, quiz, ...), not just the plain text
+                    // in msg.content. Rendered instead of parsed.text below,
+                    // same mutual exclusivity web/iOS use: a turn's answer
+                    // lives in one place or the other, never both.
+                    SmartBlockList(
+                        blocks = blocks,
+                        checkResults = msg.checkResults,
+                        onQuizAnswer = onAnswerCheck,
+                        modifier = Modifier.padding(top = if (parsed.attachments.isNotEmpty()) 8.dp else 0.dp),
+                        contentColor = if (isUser) Color.White else TextPrimary,
+                    )
+                } else if (parsed.text.isNotBlank()) {
                     Text(
                         text = parsed.text,
                         style = MaterialTheme.typography.bodyLarge,
