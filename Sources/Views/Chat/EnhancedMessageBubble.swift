@@ -96,11 +96,16 @@ struct EnhancedMessageBubble: View {
             // Header showing Mascot and "Lyo" (Standardized to original mascot)
             HStack(alignment: .center, spacing: 10) {
                 HStack(spacing: 8) {
-                    // Assuming message streaming implies thinking
+                    // Assuming message streaming implies thinking. A turn
+                    // answered entirely in smartBlocks has empty content by
+                    // design (see smartBlocksSection below) — without this
+                    // check it reads as still-streaming forever, so the
+                    // mascot never leaves its "thinking" pose once the
+                    // lesson has actually finished rendering.
                     if message.contentTypes.contains(where: {
                         if case .processing = $0 { return true }
                         return false
-                    }) || message.content.isEmpty {
+                    }) || (message.content.isEmpty && (message.smartBlocks?.isEmpty ?? true)) {
                         AnimatedReadingMascotView(size: 28)
                     } else {
                         Image("Mascot_Standing")

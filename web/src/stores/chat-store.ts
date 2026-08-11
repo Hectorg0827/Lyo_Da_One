@@ -60,6 +60,15 @@ function extractActionLabels(chunk: Record<string, unknown>): string[] {
 // chat" behavior needs. See hydrate() below.
 let hasHydratedThisSession = false;
 
+// Module-scoped for the same reason as hasHydratedThisSession above:
+// fetchDueReviews() replaces `dueReviews` wholesale from the server on
+// every call (e.g. ChatInterface remounting when the learner tabs away and
+// back), which would otherwise resurrect a chip the learner just tapped
+// away — the schedule on the server doesn't move until the learner
+// actually answers a fresh check for that skill. A dismissal only needs to
+// survive the current app session, not a real reload.
+const dismissedDueReviewSkillIds = new Set<string>();
+
 interface ChatStore {
   conversations: ChatConversation[];
   activeConversationId: string | null;
@@ -87,7 +96,7 @@ interface ChatStore {
   ) => Promise<CheckAnswerResult | null>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
-  fetchSessionSummary: (conversationId: string) => Promise<void>;
+  fetchSessionSummary: (conversationId: string, forConversationId: string) => Promise<void>;
   dismissSessionSummary: () => void;
   fetchDueReviews: () => Promise<void>;
   dismissDueReview: (skillId: string) => void;
@@ -114,9 +123,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const hadAnsweredCheck = previous?.messages.some(
       (m) => m.checkResults && Object.keys(m.checkResults).length > 0
     );
-    if (previous && hadAnsweredCheck && !previous.id.startsWith('local-')) {
-      get().fetchSessionSummary(previous.id);
-    }
 
     const id = `local-${generateId()}`;
     const convo: ChatConversation = {
@@ -129,7 +135,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((state) => ({
       conversations: [convo, ...state.conversations],
       activeConversationId: id,
+      // Starting a fresh chat retires whatever recap was on screen — a
+      // stale card from an earlier session must not linger on this new,
+      // unrelated one while fetchSessionSummary (below) loads its own.
+      sessionSummary: null,
     }));
+
+    if (previous && hadAnsweredCheck && !previous.id.startsWith('local-')) {
+      get().fetchSessionSummary(previous.id, id);
+    }
+
     return id;
   },
 
@@ -595,9 +610,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     );
   },
 
-  fetchSessionSummary: async (conversationId) => {
+  fetchSessionSummary: async (conversationId, forConversationId) => {
     try {
       const summary = await api.chat.sessionSummary(conversationId);
+      // Stale guard: if the learner has already moved past the empty chat
+      // this recap was meant for — started yet another new chat, or
+      // switched to a different conversation entirely — while the request
+      // was in flight, applying it now would attach the wrong session's
+      // recap to whatever screen happens to be open.
+      if (get().activeConversationId !== forConversationId) return;
       // Nothing was graded in that conversation — a recap with nothing to
       // say is not worth interrupting the new chat for.
       if (summary.nailed.length > 0 || summary.shaky.length > 0) {
@@ -614,15 +635,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   fetchDueReviews: async () => {
     try {
       const { items } = await api.chat.dueReviews();
-      set({ dueReviews: items });
+      set({
+        dueReviews: items.filter((item) => !dismissedDueReviewSkillIds.has(item.skill_id)),
+      });
     } catch {
       // Best-effort — same reasoning as fetchSessionSummary.
     }
   },
 
-  dismissDueReview: (skillId) =>
+  dismissDueReview: (skillId) => {
+    dismissedDueReviewSkillIds.add(skillId);
     set((state) => ({
       dueReviews: state.dueReviews.filter((item) => item.skill_id !== skillId),
-    })),
+    }));
+  },
 }));
 

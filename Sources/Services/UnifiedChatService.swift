@@ -1651,7 +1651,14 @@ final class UnifiedChatService: ObservableObject {
             contentTypes: msg.contentTypes ?? [.text],
             attachments: chatAttachments,
             timestamp: msg.timestamp,
-            isStreaming: false
+            isStreaming: false,
+            // Without these, saveConversation() (called after every turn)
+            // persisted a structured lesson as its empty fallback content —
+            // reopening it from local history collapsed the lesson to
+            // nothing and, since checkResults was dropped too, re-offered
+            // any already-answered check as unanswered.
+            smartBlocks: msg.smartBlocks,
+            checkResults: msg.checkResults
         )
     }
 
@@ -1677,6 +1684,8 @@ final class UnifiedChatService: ObservableObject {
         )
         lyoMsg.sessionId = msg.sessionId
         lyoMsg.contentTypes = msg.contentTypes
+        lyoMsg.smartBlocks = msg.smartBlocks
+        lyoMsg.checkResults = msg.checkResults
         return lyoMsg
     }
 

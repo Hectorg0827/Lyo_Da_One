@@ -3,11 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
 import { useChatStore } from '@/stores/chat-store';
-
-/** "linear_equations" -> "linear equations" */
-function formatSkill(skillId: string): string {
-  return skillId.replace(/_/g, ' ');
-}
+import { formatSkillLabel as formatSkill } from '@/lib/utils';
 
 /**
  * The return half of the spaced-repetition loop: skills a past check flagged

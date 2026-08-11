@@ -3,11 +3,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, TrendingUp } from 'lucide-react';
 import { useChatStore } from '@/stores/chat-store';
-import { cn } from '@/lib/utils';
+import { cn, formatSkillLabel } from '@/lib/utils';
 
 /** "linear_equations" -> "Linear equations" */
 function formatSkill(skillId: string): string {
-  const spaced = skillId.replace(/_/g, ' ');
+  const spaced = formatSkillLabel(skillId);
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 

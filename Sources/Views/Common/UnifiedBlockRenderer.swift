@@ -216,6 +216,14 @@ struct SmartQuizBlockView: View {
     private var answered: Bool { checkResult != nil }
     private var isGrading: Bool { pendingIndex != nil && checkResult == nil }
 
+    /// Restarts the recovery task below whenever either half of "grading in
+    /// flight" changes — matches Android's `LaunchedEffect(pendingIndex,
+    /// checkResult)`, which keys on both for the same reason: `.task(id:)`
+    /// only restarts when its id changes, and keying on `pendingIndex` alone
+    /// would leave a stale task still holding the *old* (nil) `checkResult`
+    /// running after a real verdict arrives.
+    private var recoveryTaskKey: String { "\(pendingIndex.map(String.init) ?? "nil")-\(answered)" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             questionHeader
@@ -227,6 +235,17 @@ struct SmartQuizBlockView: View {
         }
         .padding()
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        // Grading is normally near-instant. If the request drops (no result,
+        // no error surfaced back into this view — onAnswer is fire-and-
+        // forget) the option would otherwise be stuck showing a spinner
+        // forever with no way to retry. Recover by re-enabling the options
+        // after a timeout, same as UnifiedBlockRenderer.kt on Android.
+        .task(id: recoveryTaskKey) {
+            guard pendingIndex != nil, checkResult == nil else { return }
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard !Task.isCancelled, checkResult == nil else { return }
+            pendingIndex = nil
+        }
     }
 
     private var questionHeader: some View {

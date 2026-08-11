@@ -109,12 +109,11 @@ class Lyo2ChatService: ObservableObject {
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = try JSONEncoder().encode(request)
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(AppConfig.apiKey, forHTTPHeaderField: "X-API-Key")
-        urlRequest.setValue("iOS", forHTTPHeaderField: "X-Platform")
-
-        if let token = await TokenManager.shared.getToken() {
-            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        // The conversation and the block being graded live inside the
+        // tenant-scoped stream that created them — without X-Tenant-Id here
+        // (which the stream request gets via this same helper), grading can
+        // fail to locate or authorize them in a multi-tenant deployment.
+        await SaaSHeaders.apply(to: &urlRequest)
 
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
         guard let httpResponse = response as? HTTPURLResponse,
