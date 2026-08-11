@@ -6,6 +6,8 @@ import type {
   ChatAttachment,
   ChatBlock,
   CheckAnswerResult,
+  SessionSummary,
+  DueReviewItem,
 } from '@/types';
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -65,6 +67,11 @@ interface ChatStore {
   generationProgress: number;
   generationActivity: GenerationActivity;
   isHydrating: boolean;
+  // Session-close recap of the conversation just left behind, and the
+  // spaced-repetition items due for another look. Both null/empty until
+  // fetched — see fetchSessionSummary / fetchDueReviews below.
+  sessionSummary: SessionSummary | null;
+  dueReviews: DueReviewItem[];
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -80,6 +87,10 @@ interface ChatStore {
   ) => Promise<CheckAnswerResult | null>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
+  fetchSessionSummary: (conversationId: string) => Promise<void>;
+  dismissSessionSummary: () => void;
+  fetchDueReviews: () => Promise<void>;
+  dismissDueReview: (skillId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -89,8 +100,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   generationProgress: 0,
   generationActivity: 'thinking',
   isHydrating: false,
+  sessionSummary: null,
+  dueReviews: [],
 
   createConversation: () => {
+    const state = get();
+    const previous = state.conversations.find((c) => c.id === state.activeConversationId);
+    // "Session close" = leaving a synced conversation that had at least one
+    // graded check to start a new one — the same trigger that already
+    // decides when a fresh chat opens (see hydrate()'s ChatGPT/Claude-style
+    // note). A local-only conversation was never sent to the server, so
+    // there is nothing for the summary endpoint to read.
+    const hadAnsweredCheck = previous?.messages.some(
+      (m) => m.checkResults && Object.keys(m.checkResults).length > 0
+    );
+    if (previous && hadAnsweredCheck && !previous.id.startsWith('local-')) {
+      get().fetchSessionSummary(previous.id);
+    }
+
     const id = `local-${generateId()}`;
     const convo: ChatConversation = {
       id,
@@ -567,5 +594,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       (c) => c.id === state.activeConversationId
     );
   },
+
+  fetchSessionSummary: async (conversationId) => {
+    try {
+      const summary = await api.chat.sessionSummary(conversationId);
+      // Nothing was graded in that conversation — a recap with nothing to
+      // say is not worth interrupting the new chat for.
+      if (summary.nailed.length > 0 || summary.shaky.length > 0) {
+        set({ sessionSummary: summary });
+      }
+    } catch {
+      // Best-effort: a recap that fails to load must never block starting
+      // (or using) a new conversation.
+    }
+  },
+
+  dismissSessionSummary: () => set({ sessionSummary: null }),
+
+  fetchDueReviews: async () => {
+    try {
+      const { items } = await api.chat.dueReviews();
+      set({ dueReviews: items });
+    } catch {
+      // Best-effort — same reasoning as fetchSessionSummary.
+    }
+  },
+
+  dismissDueReview: (skillId) =>
+    set((state) => ({
+      dueReviews: state.dueReviews.filter((item) => item.skill_id !== skillId),
+    })),
 }));
 
