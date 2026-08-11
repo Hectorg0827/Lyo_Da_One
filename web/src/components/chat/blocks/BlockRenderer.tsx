@@ -201,24 +201,6 @@ function GenericBlock({ block }: { block: ChatBlock }) {
   return null;
 }
 
-/**
- * Whether this client will show anything for a block.
- *
- * MessageBubble uses this to decide whether it can safely hide the plain-text
- * fallback: an array of blocks that all render to nothing must NOT suppress
- * the prose version of the same content.
- */
-export function canRenderBlock(block: ChatBlock): boolean {
-  if (!block || block.type === 'unknown') return false;
-  const content = (block.content ?? {}) as Record<string, unknown>;
-  return Object.values(content).some(
-    (v) =>
-      (typeof v === 'string' && v.length > 0) ||
-      typeof v === 'number' ||
-      (Array.isArray(v) && v.length > 0)
-  );
-}
-
 export default function BlockRenderer({
   blocks,
   message,

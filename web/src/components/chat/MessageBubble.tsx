@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
 import MascotAvatar from './MascotAvatar';
-import BlockRenderer, { canRenderBlock } from './blocks/BlockRenderer';
+import BlockRenderer from './blocks/BlockRenderer';
+import { canRenderBlock } from './blocks/can-render';
 import { markdownComponents, MARKDOWN_MATH_PLUGINS } from './markdown-config';
 import { useChatStore } from '@/stores/chat-store';
 
