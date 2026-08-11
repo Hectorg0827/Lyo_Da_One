@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
 import MascotAvatar from './MascotAvatar';
-import BlockRenderer from './blocks/BlockRenderer';
+import BlockRenderer, { canRenderBlock } from './blocks/BlockRenderer';
 import { markdownComponents, MARKDOWN_MATH_PLUGINS } from './markdown-config';
 import { useChatStore } from '@/stores/chat-store';
 
@@ -51,8 +51,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const { isGenerating, generationProgress, getActiveConversation, sendMessage } = useChatStore();
 
   // A structured lesson renders as blocks; message.content still holds the
-  // plain-text version of the same lesson for clients that cannot.
-  const hasBlocks = !isUser && Array.isArray(message.blocks) && message.blocks.length > 0;
+  // plain-text version of the same lesson. Only hide that fallback when the
+  // blocks will actually show something — otherwise a turn whose blocks this
+  // client cannot render would collapse to an empty bubble.
+  const hasBlocks =
+    !isUser && Array.isArray(message.blocks) && message.blocks.some(canRenderBlock);
 
   // Helper to extract OPEN_CLASSROOM JSON block from assistant messages.
   // Uses string-aware brace counting — a lazy regex stops at the FIRST '}',
@@ -266,8 +269,12 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
               <button
                 key={label}
                 type="button"
+                // Chips can arrive mid-stream. Sending while a response is
+                // still generating would open a second stream on the same
+                // conversation, same guard the composer already applies.
+                disabled={isGenerating}
                 onClick={() => sendMessage(label)}
-                className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 text-xs text-white/70 hover:text-white transition-colors"
+                className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 text-xs text-white/70 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/5"
               >
                 {label}
               </button>

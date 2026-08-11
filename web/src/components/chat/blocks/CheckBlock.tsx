@@ -42,7 +42,7 @@ export default function CheckBlock({
     if (answered || pendingIndex !== null) return;
     setPendingIndex(index);
     try {
-      await answerCheck(message.id, block.id, index, Date.now() - shownAt.current);
+      await answerCheck(message.id, block.id, index, Date.now() - shownAt.current, hintShown);
     } finally {
       setPendingIndex(null);
     }

@@ -20,6 +20,24 @@ export type GenerationActivity = 'thinking' | 'response' | 'course';
  * content:{actions:[...]}}]}`. Web dropped this event entirely, so
  * server-suggested follow-ups never rendered.
  */
+/**
+ * Recover previously graded check verdicts from persisted block metadata.
+ *
+ * The server writes the verdict onto the block when it grades, so a reloaded
+ * conversation can show an answered check as answered rather than re-offering
+ * it and losing the learner's selection.
+ */
+function extractCheckResults(blocks: ChatBlock[]): Record<string, CheckAnswerResult> | undefined {
+  const results: Record<string, CheckAnswerResult> = {};
+  for (const block of blocks) {
+    const stored = block?.metadata?.result;
+    if (stored && typeof stored === 'object' && 'correct' in (stored as object)) {
+      results[block.id] = stored as CheckAnswerResult;
+    }
+  }
+  return Object.keys(results).length > 0 ? results : undefined;
+}
+
 function extractActionLabels(chunk: Record<string, unknown>): string[] {
   const blocks = Array.isArray(chunk.blocks) ? chunk.blocks : [];
   const labels: string[] = [];
@@ -57,7 +75,8 @@ interface ChatStore {
     messageId: string,
     blockId: string,
     selectedIndex: number,
-    timeTakenMs?: number
+    timeTakenMs?: number,
+    hintUsed?: boolean
   ) => Promise<CheckAnswerResult | null>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
@@ -144,12 +163,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // collapses to the plain-text fallback and its check stops being
       // answerable.
       const blocks = Array.isArray(message.blocks) ? message.blocks : undefined;
+      // Graded verdicts ride on the block metadata, so an already-answered
+      // check stays answered instead of being offered again after a reload.
+      const checkResults = blocks ? extractCheckResults(blocks) : undefined;
       return {
         id: message.id,
         role: message.role,
         content: parsed.text,
         type: 'text',
         blocks,
+        checkResults,
         attachments: parsed.attachments,
         createdAt: message.created_at,
       };
@@ -323,8 +346,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       receivedContent = true;
       patchAiMessage({ blocks });
     };
-    const attachActionsToAiMessage = (labels: string[]) =>
+    const attachActionsToAiMessage = (labels: string[]) => {
+      // Same reason as blocks: a turn that produced only follow-up chips is
+      // still a real turn, and must not be wiped as an empty response.
+      receivedContent = true;
       patchAiMessage({ suggestedActions: labels });
+    };
 
     try {
       api.chat.stream(
@@ -478,7 +505,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0) => {
+  answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0, hintUsed = false) => {
     const conversationId = get().activeConversationId;
     // A check on a not-yet-synced local conversation has nothing to grade
     // against server-side.
@@ -493,6 +520,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         blockId,
         selectedIndex,
         timeTakenMs,
+        // Feeds LearnerMastery.hints_used, which damps the mastery gain — an
+        // assisted answer recorded as unassisted overstates what was learned.
+        hintUsed,
       });
 
       set((state) => ({

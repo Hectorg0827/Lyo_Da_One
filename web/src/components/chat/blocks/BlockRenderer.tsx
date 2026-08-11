@@ -3,7 +3,6 @@
 import ReactMarkdown from 'react-markdown';
 import { AlertTriangle } from 'lucide-react';
 import katex from 'katex';
-import 'katex/dist/katex.min.css';
 import { cn } from '@/lib/utils';
 import type { ChatBlock, ChatMessage } from '@/types';
 import { markdownComponents, MARKDOWN_MATH_PLUGINS } from '../markdown-config';
@@ -95,7 +94,9 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
 
   if (format === 'math') return <MathBlock source={source} />;
 
-  if (format === 'table') {
+  // `table` is markdown; `text` is prose. Both render through the shared
+  // markdown pipeline — a text-format block must not come out monospaced.
+  if (format === 'table' || format === 'text') {
     return (
       <div>
         {title && <p className="text-sm font-medium text-white/70 mb-2">{title}</p>}
@@ -106,12 +107,115 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
     );
   }
 
-  // Unknown viz formats (mermaid, chart) have no renderer here yet. Show the
+  // Diagram formats (mermaid, chart) have no renderer here yet. Show the
   // source rather than a blank gap, so nothing silently disappears.
   return (
     <pre className="text-white/70 font-mono text-xs overflow-x-auto p-3 rounded-xl bg-black/30 border border-white/10">
       {source}
     </pre>
+  );
+}
+
+/**
+ * Best-effort rendering for a declared block type that has no bespoke
+ * renderer yet (code, flashcard, media, progress, interactive, masteryMap).
+ *
+ * These must not be dropped: the prose bubble is suppressed whenever blocks
+ * are present, so silently skipping a block loses that content entirely — and
+ * a turn carrying only such a block would render an empty bubble. Pull out
+ * whatever human-readable strings the payload has rather than showing nothing.
+ */
+function GenericBlock({ block }: { block: ChatBlock }) {
+  const content = (block.content ?? {}) as Record<string, unknown>;
+  const str = (key: string) => (typeof content[key] === 'string' ? (content[key] as string) : null);
+
+  const code = str('code');
+  if (code) {
+    return (
+      <pre className="overflow-x-auto p-3 rounded-xl bg-black/40 border border-white/10">
+        <code className="text-lyo-300 font-mono text-sm">{code}</code>
+      </pre>
+    );
+  }
+
+  const front = str('front');
+  if (front) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <p className="text-white/90 text-sm font-medium">{front}</p>
+        {str('back') && <p className="text-white/60 text-sm mt-2">{str('back')}</p>}
+      </div>
+    );
+  }
+
+  if (typeof content.completed === 'number' && typeof content.total === 'number') {
+    const pct = content.total > 0 ? Math.round((content.completed / content.total) * 100) : 0;
+    return (
+      <div className="text-xs text-white/60">
+        {str('label') ?? 'Progress'}: {content.completed}/{content.total} ({pct}%)
+      </div>
+    );
+  }
+
+  const items = Array.isArray(content.items) ? content.items : null;
+  if (items?.length) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        {str('title') && <p className="text-sm font-medium text-white/70 mb-2">{str('title')}</p>}
+        <ul className="space-y-1.5">
+          {items.map((item, i) => {
+            const entry = item as Record<string, unknown>;
+            return (
+              <li key={i} className="text-sm text-white/80">
+                <span className="font-medium">{String(entry.label ?? entry.title ?? '')}</span>
+                {entry.detail ? <span className="text-white/55"> — {String(entry.detail)}</span> : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
+  const url = str('url');
+  if (url) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="text-sm text-lyo-300 underline">
+        {str('caption') ?? str('alt') ?? url}
+      </a>
+    );
+  }
+
+  const text = str('text') ?? str('title') ?? str('source');
+  if (text) {
+    return (
+      <div className="prose-invert prose-sm max-w-none">
+        <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+          {text}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
+  // Genuinely nothing displayable — better an empty gap than raw JSON.
+  return null;
+}
+
+/**
+ * Whether this client will show anything for a block.
+ *
+ * MessageBubble uses this to decide whether it can safely hide the plain-text
+ * fallback: an array of blocks that all render to nothing must NOT suppress
+ * the prose version of the same content.
+ */
+export function canRenderBlock(block: ChatBlock): boolean {
+  if (!block || block.type === 'unknown') return false;
+  const content = (block.content ?? {}) as Record<string, unknown>;
+  return Object.values(content).some(
+    (v) =>
+      (typeof v === 'string' && v.length > 0) ||
+      typeof v === 'number' ||
+      (Array.isArray(v) && v.length > 0)
   );
 }
 
@@ -138,10 +242,13 @@ export default function BlockRenderer({
             return <DataVizBlock key={block.id} block={block} />;
           case 'quiz':
             return <CheckBlock key={block.id} block={block} message={message} />;
-          default:
-            // Forward compatibility: a block type this client does not know
-            // yet is skipped, never rendered as raw JSON and never thrown on.
+          case 'unknown':
+            // Forward compatibility: a type this client genuinely does not
+            // know is skipped, never rendered as raw JSON and never thrown on.
             return null;
+          default:
+            // A DECLARED type without a bespoke renderer still gets shown.
+            return <GenericBlock key={block.id} block={block} />;
         }
       })}
     </div>
