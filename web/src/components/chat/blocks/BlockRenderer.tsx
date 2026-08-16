@@ -5,8 +5,26 @@ import { AlertTriangle } from 'lucide-react';
 import katex from 'katex';
 import { cn } from '@/lib/utils';
 import type { ChatBlock, ChatMessage } from '@/types';
-import { markdownComponents, MARKDOWN_MATH_PLUGINS } from '../markdown-config';
+import {
+  markdownComponents,
+  MARKDOWN_MATH_PLUGINS,
+  normalizeLatexDelimiters,
+  unwrapLatexDelimiters,
+} from '../markdown-config';
 import CheckBlock from './CheckBlock';
+
+const inlineMarkdownComponents = {
+  ...markdownComponents,
+  p: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+};
+
+function InlineMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown components={inlineMarkdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+      {normalizeLatexDelimiters(text)}
+    </ReactMarkdown>
+  );
+}
 
 /** Prose beat. `subtype` carries which beat of the lesson this is. */
 function TextBlock({ block }: { block: ChatBlock }) {
@@ -24,7 +42,7 @@ function TextBlock({ block }: { block: ChatBlock }) {
       )}
     >
       <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-        {text}
+        {normalizeLatexDelimiters(text)}
       </ReactMarkdown>
     </div>
   );
@@ -59,7 +77,7 @@ function CalloutBlock({ block }: { block: ChatBlock }) {
       <AlertTriangle className={cn('w-4 h-4 mt-0.5 shrink-0', iconTone)} aria-hidden="true" />
       <div className="prose-invert prose-sm max-w-none text-white/85">
         <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-          {text}
+          {normalizeLatexDelimiters(text)}
         </ReactMarkdown>
       </div>
     </div>
@@ -69,8 +87,9 @@ function CalloutBlock({ block }: { block: ChatBlock }) {
 /** Rendered display-mode LaTeX, matching the classroom board's treatment. */
 function MathBlock({ source }: { source: string }) {
   let html = '';
+  const normalizedSource = unwrapLatexDelimiters(source);
   try {
-    html = katex.renderToString(source, { throwOnError: false, displayMode: true });
+    html = katex.renderToString(normalizedSource, { throwOnError: false, displayMode: true });
   } catch {
     // Never lose the formula: fall back to showing its source.
     return (
@@ -99,9 +118,13 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
   if (format === 'table' || format === 'text') {
     return (
       <div>
-        {title && <p className="text-sm font-medium text-white/70 mb-2">{title}</p>}
+        {title && (
+          <div className="text-sm font-medium text-white/70 mb-2">
+            <InlineMarkdown text={title} />
+          </div>
+        )}
         <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-          {source}
+          {normalizeLatexDelimiters(source)}
         </ReactMarkdown>
       </div>
     );
@@ -142,8 +165,18 @@ function GenericBlock({ block }: { block: ChatBlock }) {
   if (front) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <p className="text-white/90 text-sm font-medium">{front}</p>
-        {str('back') && <p className="text-white/60 text-sm mt-2">{str('back')}</p>}
+        <div className="prose-invert prose-sm max-w-none text-white/90 font-medium">
+          <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+            {normalizeLatexDelimiters(front)}
+          </ReactMarkdown>
+        </div>
+        {str('back') && (
+          <div className="prose-invert prose-sm max-w-none text-white/60 mt-2">
+            <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+              {normalizeLatexDelimiters(str('back')!)}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     );
   }
@@ -152,7 +185,7 @@ function GenericBlock({ block }: { block: ChatBlock }) {
     const pct = content.total > 0 ? Math.round((content.completed / content.total) * 100) : 0;
     return (
       <div className="text-xs text-white/60">
-        {str('label') ?? 'Progress'}: {content.completed}/{content.total} ({pct}%)
+        {str('label') ? <InlineMarkdown text={str('label')!} /> : 'Progress'}: {content.completed}/{content.total} ({pct}%)
       </div>
     );
   }
@@ -161,14 +194,22 @@ function GenericBlock({ block }: { block: ChatBlock }) {
   if (items?.length) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        {str('title') && <p className="text-sm font-medium text-white/70 mb-2">{str('title')}</p>}
+        {str('title') && (
+          <div className="text-sm font-medium text-white/70 mb-2">
+            <InlineMarkdown text={str('title')!} />
+          </div>
+        )}
         <ul className="space-y-1.5">
           {items.map((item, i) => {
             const entry = item as Record<string, unknown>;
+            const label = String(entry.label ?? entry.title ?? '');
+            const detail = entry.detail ? String(entry.detail) : '';
             return (
               <li key={i} className="text-sm text-white/80">
-                <span className="font-medium">{String(entry.label ?? entry.title ?? '')}</span>
-                {entry.detail ? <span className="text-white/55"> — {String(entry.detail)}</span> : null}
+                <span className="font-medium"><InlineMarkdown text={label} /></span>
+                {detail ? (
+                  <span className="text-white/55"> — <InlineMarkdown text={detail} /></span>
+                ) : null}
               </li>
             );
           })}
@@ -191,7 +232,7 @@ function GenericBlock({ block }: { block: ChatBlock }) {
     return (
       <div className="prose-invert prose-sm max-w-none">
         <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-          {text}
+          {normalizeLatexDelimiters(text)}
         </ReactMarkdown>
       </div>
     );
