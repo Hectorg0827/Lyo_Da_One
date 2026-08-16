@@ -1154,6 +1154,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       // in flight for the turn being skipped becomes a no-op instead of
       // firing its onDone (which would otherwise double-advance the queue).
       stopSpeech();
+      // Clear the caption/speaker being cut short rather than leaving it in
+      // place. Without this, skipping into a board/pause/ambient turn (none
+      // of which touch `caption`) left the old line's word-reveal ticker
+      // running on the UI side, still typing out content the learner had
+      // just jumped past. If the next turn is itself a speech turn it sets
+      // its own fresh caption right away, so this only ever shows a blank
+      // beat, never a wrong one.
+      set({ caption: null, activeSpeaker: null });
       playNext();
     },
 
