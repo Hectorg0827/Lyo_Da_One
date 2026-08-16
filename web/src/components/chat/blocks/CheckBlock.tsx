@@ -7,7 +7,24 @@ import { Check, X, Lightbulb, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import type { ChatBlock, ChatMessage, ChatQuizContent } from '@/types';
-import { markdownComponents, MARKDOWN_MATH_PLUGINS } from '../markdown-config';
+import {
+  markdownComponents,
+  MARKDOWN_MATH_PLUGINS,
+  normalizeLatexDelimiters,
+} from '../markdown-config';
+
+const inlineMarkdownComponents = {
+  ...markdownComponents,
+  p: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+};
+
+function InlineMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown components={inlineMarkdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+      {normalizeLatexDelimiters(text)}
+    </ReactMarkdown>
+  );
+}
 
 /**
  * An answerable check inside a chat lesson.
@@ -56,7 +73,7 @@ export default function CheckBlock({
     <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-4">
       <div className="prose-invert prose-sm max-w-none text-white/90 mb-3">
         <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-          {content.question}
+          {normalizeLatexDelimiters(content.question)}
         </ReactMarkdown>
       </div>
 
@@ -94,7 +111,7 @@ export default function CheckBlock({
               ) : (
                 <span className="w-4 h-4 shrink-0 rounded-full border border-white/25" />
               )}
-              <span>{option.text}</span>
+              <span className="min-w-0"><InlineMarkdown text={option.text} /></span>
             </button>
           );
         })}
@@ -109,7 +126,7 @@ export default function CheckBlock({
           className="mt-3 inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 disabled:hover:text-white/50"
         >
           <Lightbulb className="w-3.5 h-3.5" aria-hidden="true" />
-          {hintShown ? content.hint : 'Need a hint?'}
+          {hintShown ? <InlineMarkdown text={content.hint} /> : 'Need a hint?'}
         </button>
       )}
 
@@ -139,13 +156,15 @@ export default function CheckBlock({
 
           {/* Naming the specific confusion is the point — not just "wrong". */}
           {!result!.correct && result!.misconception && (
-            <p className="text-sm text-white/60 mb-1">{result!.misconception}</p>
+            <div className="text-sm text-white/60 mb-1">
+              <InlineMarkdown text={result!.misconception} />
+            </div>
           )}
 
           {result!.explanation && (
             <div className="prose-invert prose-sm max-w-none text-white/80">
               <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-                {result!.explanation}
+                {normalizeLatexDelimiters(result!.explanation)}
               </ReactMarkdown>
             </div>
           )}
