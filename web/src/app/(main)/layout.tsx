@@ -2,6 +2,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { MobileNav } from '@/components/layout/MobileNav';
 import MainContent from '@/components/layout/MainContent';
+import ClassroomCaptionSync from '@/components/classroom/ClassroomCaptionSync';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       {/* Mobile bottom nav — hidden on desktop */}
       <MobileNav />
+
+      {/* Classroom-only compatibility layer: the visible caption follows the
+          audio clock instead of appearing before neural TTS starts. */}
+      <ClassroomCaptionSync />
     </div>
   );
 }
