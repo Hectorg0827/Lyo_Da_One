@@ -19,6 +19,36 @@ interface MessageBubbleProps {
 
 const ASSISTANT_RESPONSE_WIDTH_CLASS = 'w-[99%]';
 
+/**
+ * remark-math parses $...$ and $$...$$, but LLMs commonly emit the equally
+ * standard TeX delimiters \\(...\\) and \\[...\\]. CommonMark treats the
+ * leading backslash as an escape, which is why production was showing
+ * literal "[ \\text{...} \\frac{...} ]" instead of typeset math.
+ *
+ * Normalize only complete delimiter pairs and leave code spans/fences alone,
+ * so a programming example that contains TeX source is never rewritten.
+ */
+function normalizeLatexDelimiters(markdown: string): string {
+  const normalizeText = (text: string) =>
+    text
+      .replace(/\\\[([\s\S]*?)\\\]/g, (_match, body: string) => `\n$$\n${body.trim()}\n$$\n`)
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_match, body: string) => `$${body}$`);
+
+  const protectedCode = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+  let output = '';
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = protectedCode.exec(markdown)) !== null) {
+    output += normalizeText(markdown.slice(cursor, match.index));
+    output += match[0];
+    cursor = match.index + match[0].length;
+  }
+
+  output += normalizeText(markdown.slice(cursor));
+  return output;
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -144,6 +174,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 
   const ocData = getOpenClassroomData(message.content);
   const displayContent = ocData ? ocData.cleanText : message.content;
+  const normalizedAssistantContent = isUser ? displayContent : normalizeLatexDelimiters(displayContent);
   const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
   const displayType = ocData ? 'course_proposal' : message.type;
 
@@ -256,7 +287,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             ) : (
               <div className="prose-invert prose-sm max-w-none">
                 <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-                  {displayContent}
+                  {normalizedAssistantContent}
                 </ReactMarkdown>
               </div>
             )}
