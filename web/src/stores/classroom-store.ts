@@ -156,6 +156,11 @@ interface ClassroomStore {
 
   lyoState: string;
   waitingForScene: boolean;
+  // True whenever the auto-paced narration (speech/board/pause turns) is
+  // actively playing — i.e. there's something skipTurn() could cut short.
+  // False while idle, while a user_prompt/quiz/transfer is waiting on the
+  // learner, and while paused. Drives whether the "Skip" control is live.
+  isNarrating: boolean;
   canContinue: boolean;
   progressCurrent: number;
   progressTotal: number;
@@ -180,6 +185,12 @@ interface ClassroomStore {
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
+  /** Cuts the currently-playing narration turn short and immediately
+      advances to the next queued one — a video-style "skip ahead" for the
+      teacher's auto-paced speech/board/pause turns. A no-op when there's
+      nothing playing (waiting on the server, a prompt/quiz needs an
+      answer, or the class is paused) — see isNarrating. */
+  skipTurn: () => void;
   toggleSound: () => void;
   toggleVoice: () => void;
   togglePause: () => void;
@@ -209,7 +220,10 @@ function wsUrl(connection: ClassroomConnection, token: string | null): string {
   return buildClassroomWsUrl(API_URL, connection, token);
 }
 
-function speechDelay(text: string): number {
+/** Exported so the caption UI can pace its word-by-word reveal against the
+    same estimate the player itself uses for text-only/fallback pacing —
+    one formula, not two that can drift apart. */
+export function speechDelay(text: string): number {
   return Math.min(Math.max(text.length * 34, 1400), 7000);
 }
 
@@ -559,6 +573,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     playing = false;
     if (playTimer) { clearTimeout(playTimer); playTimer = null; }
     stopSpeech();
+    set({ isNarrating: false });
   }
 
   function learnerTakesFloor() {
@@ -572,7 +587,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const turn = turnQueue.shift();
     if (!turn) {
       playing = false;
-      set({ activeSpeaker: null });
+      set({ activeSpeaker: null, isNarrating: false });
       return;
     }
 
@@ -609,6 +624,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         pushTranscript(speaker, `${text} (asks you)`);
         if (get().voiceOn) speakLine(speaker, text, () => undefined);
         playing = false;
+        set({ isNarrating: false });
         // The learner owns this turn. There is intentionally no timer and no
         // AI classmate response while the real learner is silent.
         return;
@@ -709,6 +725,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   function resumePlayer() {
     if (playing) return;
     playing = true;
+    set({ isNarrating: true });
     playNext();
   }
 
@@ -889,6 +906,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     transcript: [],
     lyoState: 'reading',
     waitingForScene: false,
+    isNarrating: false,
     canContinue: false,
     progressCurrent: 0,
     progressTotal: 1,
@@ -924,7 +942,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         languageCode: connection.language || 'auto',
         board: [], boardHistory: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
-        lyoState: 'reading', waitingForScene: true, canContinue: false,
+        lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
         progressCurrent: 0, progressTotal: 1,
         continueLabel: 'Check understanding', nextActionIntent: 'continue', error: null,
       });
@@ -1124,6 +1142,19 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         continueLabel: 'Check understanding',
         nextActionIntent: 'continue',
       });
+    },
+
+    skipTurn: () => {
+      // Nothing playing to cut short: idle, paused, or the learner already
+      // owns the floor (a prompt/quiz/transfer is waiting on them — those
+      // are answered or explicitly skipped, never fast-forwarded past).
+      if (!playing || get().isPaused) return;
+      if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+      // Bumps speechGeneration, so a real TTS request or utterance already
+      // in flight for the turn being skipped becomes a no-op instead of
+      // firing its onDone (which would otherwise double-advance the queue).
+      stopSpeech();
+      playNext();
     },
 
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
