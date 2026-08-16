@@ -10,7 +10,11 @@ import CourseGenerationCard from './CourseGenerationCard';
 import MascotAvatar from './MascotAvatar';
 import BlockRenderer from './blocks/BlockRenderer';
 import { canRenderBlock } from './blocks/can-render';
-import { markdownComponents, MARKDOWN_MATH_PLUGINS } from './markdown-config';
+import {
+  markdownComponents,
+  MARKDOWN_MATH_PLUGINS,
+  normalizeLatexDelimiters,
+} from './markdown-config';
 import { useChatStore } from '@/stores/chat-store';
 
 interface MessageBubbleProps {
@@ -18,36 +22,6 @@ interface MessageBubbleProps {
 }
 
 const ASSISTANT_RESPONSE_WIDTH_CLASS = 'w-[99%]';
-
-/**
- * remark-math parses $...$ and $$...$$, but LLMs commonly emit the equally
- * standard TeX delimiters \\(...\\) and \\[...\\]. CommonMark treats the
- * leading backslash as an escape, which is why production was showing
- * literal "[ \\text{...} \\frac{...} ]" instead of typeset math.
- *
- * Normalize only complete delimiter pairs and leave code spans/fences alone,
- * so a programming example that contains TeX source is never rewritten.
- */
-function normalizeLatexDelimiters(markdown: string): string {
-  const normalizeText = (text: string) =>
-    text
-      .replace(/\\\[([\s\S]*?)\\\]/g, (_match, body: string) => `\n$$\n${body.trim()}\n$$\n`)
-      .replace(/\\\(([\s\S]*?)\\\)/g, (_match, body: string) => `$${body}$`);
-
-  const protectedCode = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
-  let output = '';
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = protectedCode.exec(markdown)) !== null) {
-    output += normalizeText(markdown.slice(cursor, match.index));
-    output += match[0];
-    cursor = match.index + match[0].length;
-  }
-
-  output += normalizeText(markdown.slice(cursor));
-  return output;
-}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
