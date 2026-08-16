@@ -6,16 +6,67 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
 /**
+ * Normalize TeX bracket/paren delimiters into the dollar delimiters understood
+ * reliably by remark-math. LLMs commonly emit \\(...\\) and \\[...\\], while
+ * CommonMark can consume the leading backslashes as escapes before remark-math
+ * sees them. Code spans and fenced code are intentionally left untouched so
+ * examples containing literal TeX source stay literal.
+ */
+export function normalizeLatexDelimiters(markdown: string): string {
+  const normalizeText = (text: string) =>
+    text
+      .replace(/\\\[([\s\S]*?)\\\]/g, (_match, body: string) => `\n$$\n${body.trim()}\n$$\n`)
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_match, body: string) => `$${body}$`);
+
+  const protectedCode = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+  let output = '';
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = protectedCode.exec(markdown)) !== null) {
+    output += normalizeText(markdown.slice(cursor, match.index));
+    output += match[0];
+    cursor = match.index + match[0].length;
+  }
+
+  output += normalizeText(markdown.slice(cursor));
+  return output;
+}
+
+/**
+ * KaTeX's renderToString expects the TeX body, not surrounding delimiters.
+ * Structured math blocks can still arrive wrapped because they are model
+ * generated, so unwrap one complete outer pair before rendering.
+ */
+export function unwrapLatexDelimiters(source: string): string {
+  const value = source.trim();
+
+  if (value.startsWith('\\[') && value.endsWith('\\]')) {
+    return value.slice(2, -2).trim();
+  }
+  if (value.startsWith('\\(') && value.endsWith('\\)')) {
+    return value.slice(2, -2).trim();
+  }
+  if (value.startsWith('$$') && value.endsWith('$$') && value.length >= 4) {
+    return value.slice(2, -2).trim();
+  }
+  if (value.startsWith('$') && value.endsWith('$') && value.length >= 2) {
+    return value.slice(1, -1).trim();
+  }
+
+  return value;
+}
+
+/**
  * Shared markdown rendering config for chat.
  *
  * Extracted from MessageBubble so lesson blocks render text identically to a
  * plain assistant turn — one place to change chat typography, and no chance
  * of a block and a bubble disagreeing about how a list or a formula looks.
  *
- * Renders $inline$ and $$block$$ (also \(...\) / \[...\]) LaTeX via the same
- * katex engine the classroom board uses (BoardElementView.tsx's LatexView),
- * so a formula reads the same wherever the learner meets it. Without this,
- * react-markdown prints the dollar signs verbatim.
+ * Renders $inline$ and $$block$$ LaTeX via the same KaTeX engine the classroom
+ * board uses. Call normalizeLatexDelimiters() before rendering model-produced
+ * markdown so \\(...\\) and \\[...\\] are supported consistently too.
  */
 export const MARKDOWN_MATH_PLUGINS = {
   // remark-gfm is what makes a reference table actually parse as a table
