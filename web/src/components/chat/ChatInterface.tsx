@@ -8,6 +8,8 @@ import MessageBubble from './MessageBubble';
 import ChatInputBar from './ChatInputBar';
 import SuggestionChips from './SuggestionChips';
 import MascotAvatar from './MascotAvatar';
+import SessionRecap from './SessionRecap';
+import DueReviewsNudge from './DueReviewsNudge';
 
 // ─── LYO Mascot hero (matches iOS LyoOverlayView avatarLayer) ────────────────
 // iOS renders this at 200pt on a full-screen overlay; the web chat sits under
@@ -160,7 +162,10 @@ function EmptyState() {
         Ready to embark on a learning journey?
       </p>
       <LYOOrb />
+      <SessionRecap />
       <div className="flex-1 min-h-4" />
+      <DueReviewsNudge />
+      <div className="h-2" />
       <SuggestionChips />
     </motion.div>
   );
@@ -174,15 +179,20 @@ export default function ChatInterface() {
     generationProgress,
     generationActivity,
     hydrate,
+    fetchDueReviews,
   } = useChatStore();
   const conversation = getActiveConversation();
   const messages = conversation?.messages ?? [];
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll when messages change or while generating
   useEffect(() => {
     hydrate();
-  }, [hydrate]);
+    // Checked once per app open, same cadence as hydrate() — a nudge that's
+    // still due an hour into the session isn't suddenly less due.
+    fetchDueReviews();
+  }, [hydrate, fetchDueReviews]);
+
+  // Auto-scroll when messages change or while generating
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

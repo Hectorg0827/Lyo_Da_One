@@ -92,6 +92,39 @@ class Lyo2ChatService: ObservableObject {
             }
         }
     }
+
+    /// Grade an in-chat check against the block the server itself emitted.
+    ///
+    /// Sends only which option was picked. Correctness comes back from the
+    /// server — this must never be inferred locally from `QuizBlockPayload
+    /// .correctIndex`, which is the exact bug this endpoint exists to remove
+    /// (chat praising a wrong answer). Mirrors web's `api.chat.checkAnswer`.
+    func checkAnswer(_ request: CheckAnswerRequest) async throws -> CheckAnswerResult {
+        let baseURL = AppConfig.baseURL
+        guard let url = URL(string: "\(baseURL)/api/v1/lyo2/chat/check") else {
+            throw URLError(.badURL)
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = try JSONEncoder().encode(request)
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // The conversation and the block being graded live inside the
+        // tenant-scoped stream that created them — without X-Tenant-Id here
+        // (which the stream request gets via this same helper), grading can
+        // fail to locate or authorize them in a multi-tenant deployment.
+        await SaaSHeaders.apply(to: &urlRequest)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            Log.ai.error("Lyo2 checkAnswer: HTTP \(status)")
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(CheckAnswerResult.self, from: data)
+    }
 }
 
 // MARK: - Streaming Manager (retained by Lyo2ChatService)

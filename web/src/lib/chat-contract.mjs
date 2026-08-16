@@ -46,6 +46,12 @@ export const DATA_VIZ_FORMATS = Object.freeze(['text', 'mermaid', 'chart', 'tabl
 /** Endpoint that grades an in-chat check. */
 export const CHAT_CHECK_ENDPOINT = '/api/v1/lyo2/chat/check';
 
+/** Endpoint for a conversation's session-close nailed/shaky recap. Append a conversation id. */
+export const CHAT_SESSION_SUMMARY_ENDPOINT = '/api/v1/lyo2/chat';
+
+/** Endpoint for the spaced-repetition items due for the current user. */
+export const CHAT_REVIEWS_DUE_ENDPOINT = '/api/v1/lyo2/chat/reviews/due';
+
 /**
  * Fields a client sends when answering a check.
  *

@@ -94,6 +94,31 @@ export interface CheckAnswerResult {
   next_actions?: string[];
 }
 
+/** A skill touched by an answered check, as summarized at session close. */
+export interface SessionSummarySkill {
+  skill_id: string;
+  mastery?: number | null;
+  question?: string | null;
+  misconception?: string | null;
+}
+
+/** Recap of a conversation's answered checks: what landed vs. what's shaky. */
+export interface SessionSummary {
+  conversation_id: string;
+  total_checks: number;
+  correct_checks: number;
+  nailed: SessionSummarySkill[];
+  shaky: SessionSummarySkill[];
+}
+
+/** A skill whose spaced-repetition schedule says it's due for another look. */
+export interface DueReviewItem {
+  skill_id: string;
+  days_overdue: number;
+  mastery_level?: number | null;
+  last_misconception?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';

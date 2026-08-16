@@ -44,13 +44,30 @@ struct LyoMessage: Identifiable, Codable, Equatable {
     var isStreaming: Bool = false
     
     /// v2 unified block format — decoded from the backend's `smart_blocks` SSE event.
+    /// Included in CodingKeys (below) so it survives both local persistence
+    /// paths — LyoAIViewModel.persistMessages's direct UserDefaults encode
+    /// of [LyoMessage], and ConversationManager's SavedConversation cache
+    /// (via UnifiedChatService.convertToMultimodal/convertToLyo) — without
+    /// it, reopening a past conversation or relaunching the app collapsed a
+    /// structured lesson to its (usually empty) plain-text fallback.
     var smartBlocks: [SmartBlock]?
 
-    // Exclude ephemeral animation state from Codable
+    /// Server-graded verdicts for this message's answered checks, keyed by
+    /// block id. Populated by `UnifiedChatService.answerCheck`. Also
+    /// included in CodingKeys, for the same reason as `smartBlocks` above —
+    /// without it, a check answered before the app restarted (or before
+    /// switching away and back) re-offered itself as unanswered.
+    var checkResults: [String: CheckAnswerResult]?
+
+    // Exclude ephemeral *animation* state (shouldAnimate, isRevealed,
+    // isStreaming) from Codable — those must always start fresh. Content the
+    // learner actually produced (smartBlocks, checkResults) is not ephemeral
+    // and must survive a restart, same as everything else below.
     enum CodingKeys: String, CodingKey {
         case id, sessionId, content, isFromUser, timestamp
         case attachments, actions, status, contentTypes
         case responseMode, quickExplainer, courseProposal
+        case smartBlocks, checkResults
     }
 
     enum MessageStatus: String, Codable {
@@ -70,6 +87,7 @@ struct LyoMessage: Identifiable, Codable, Equatable {
             && lhs.shouldAnimate == rhs.shouldAnimate
             && lhs.isStreaming == rhs.isStreaming
             && lhs.smartBlocks?.count == rhs.smartBlocks?.count
+            && lhs.checkResults?.count == rhs.checkResults?.count
     }
 }
 

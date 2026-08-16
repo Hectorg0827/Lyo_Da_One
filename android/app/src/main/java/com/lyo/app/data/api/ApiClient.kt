@@ -1,6 +1,7 @@
 package com.lyo.app.data.api
 
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.lyo.app.BuildConfig
 import com.lyo.app.data.TokenManager
 import okhttp3.Authenticator
@@ -21,7 +22,15 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
 
-    val gson: Gson = Gson()
+    // A plain Gson() has no idea how to route a SmartBlock's `content` object
+    // to the right payload type based on its sibling `type` field — Gson
+    // doesn't do sealed-class polymorphism on its own. Registering the
+    // deserializer here means it applies everywhere this shared instance
+    // decodes JSON: Retrofit responses (a reloaded conversation's `blocks`)
+    // and the SSE `smart_blocks` event parsed by hand in ChatStreamClient.
+    val gson: Gson = GsonBuilder()
+        .registerTypeAdapter(SmartBlock::class.java, SmartBlockDeserializer())
+        .create()
 
     private val authInterceptor = Interceptor { chain ->
         val token = TokenManager.accessToken

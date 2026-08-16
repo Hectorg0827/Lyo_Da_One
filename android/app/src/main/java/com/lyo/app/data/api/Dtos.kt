@@ -484,6 +484,12 @@ data class AiConversationMessageDto(
     val role: String,
     val content: String,
     @SerializedName("created_at") val createdAt: String,
+    /**
+     * Structured lesson blocks, when the turn carried them. Restored on
+     * reload so a lesson does not collapse into plain text — mirrors web's
+     * `blocks?: ChatBlock[] | null` on the same endpoint's message shape.
+     */
+    val blocks: List<SmartBlock>? = null,
 )
 
 data class AiConversationSummaryDto(

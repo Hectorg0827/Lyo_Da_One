@@ -1651,7 +1651,14 @@ final class UnifiedChatService: ObservableObject {
             contentTypes: msg.contentTypes ?? [.text],
             attachments: chatAttachments,
             timestamp: msg.timestamp,
-            isStreaming: false
+            isStreaming: false,
+            // Without these, saveConversation() (called after every turn)
+            // persisted a structured lesson as its empty fallback content —
+            // reopening it from local history collapsed the lesson to
+            // nothing and, since checkResults was dropped too, re-offered
+            // any already-answered check as unanswered.
+            smartBlocks: msg.smartBlocks,
+            checkResults: msg.checkResults
         )
     }
 
@@ -1677,6 +1684,8 @@ final class UnifiedChatService: ObservableObject {
         )
         lyoMsg.sessionId = msg.sessionId
         lyoMsg.contentTypes = msg.contentTypes
+        lyoMsg.smartBlocks = msg.smartBlocks
+        lyoMsg.checkResults = msg.checkResults
         return lyoMsg
     }
 
@@ -1710,6 +1719,30 @@ final class UnifiedChatService: ObservableObject {
             contentTypes: [.text]
         )
         messages.append(msg)
+    }
+
+    /// Submit an in-chat check answer for server grading and store the verdict.
+    ///
+    /// Sends only which option was picked — `QuizBlockPayload.correctIndex`
+    /// on the wire is never compared against locally. The verdict this
+    /// returns is what `UnifiedBlockRenderer`'s quiz view renders; there is
+    /// no client-side fallback grade, matching web's `answerCheck`.
+    func answerCheck(messageId: String, blockId: String, selectedIndex: Int) async {
+        do {
+            let result = try await Lyo2ChatService.shared.checkAnswer(
+                CheckAnswerRequest(
+                    conversationId: currentConversationId,
+                    blockId: blockId,
+                    selectedIndex: selectedIndex
+                )
+            )
+            guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return }
+            var results = messages[idx].checkResults ?? [:]
+            results[blockId] = result
+            messages[idx].checkResults = results
+        } catch {
+            Log.ai.error("answerCheck failed for block \(blockId): \(error)")
+        }
     }
 
     func appendTestPrepBubble(_ content: TestPrepContent) {

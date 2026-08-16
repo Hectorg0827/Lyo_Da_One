@@ -6,6 +6,8 @@ import type {
   ChatAttachment,
   ChatBlock,
   CheckAnswerResult,
+  SessionSummary,
+  DueReviewItem,
 } from '@/types';
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -58,6 +60,27 @@ function extractActionLabels(chunk: Record<string, unknown>): string[] {
 // chat" behavior needs. See hydrate() below.
 let hasHydratedThisSession = false;
 
+// Module-scoped for the same reason as hasHydratedThisSession above:
+// fetchDueReviews() replaces `dueReviews` wholesale from the server on
+// every call (e.g. ChatInterface remounting when the learner tabs away and
+// back), which would otherwise resurrect a chip the learner just tapped
+// away — the schedule on the server doesn't move until the learner
+// actually answers a fresh check for that skill. A dismissal only needs to
+// survive the current app session, not a real reload.
+const dismissedDueReviewSkillIds = new Set<string>();
+
+// Module-scoped identity for "the current new-chat screen", separate from
+// activeConversationId. sendMessage() promotes a fresh conversation's
+// device-local id to a server-assigned one (see below) partway through
+// sending the first message on it — activeConversationId legitimately
+// changes at that point even though it's still the exact same screen.
+// fetchSessionSummary's staleness guard needs to survive that promotion, so
+// it compares against this generation counter (bumped only on a real
+// navigation away — a new "new chat", loading a different conversation, or
+// the active conversation being deleted) rather than against
+// activeConversationId directly.
+let newChatScreenGeneration = 0;
+
 interface ChatStore {
   conversations: ChatConversation[];
   activeConversationId: string | null;
@@ -65,6 +88,11 @@ interface ChatStore {
   generationProgress: number;
   generationActivity: GenerationActivity;
   isHydrating: boolean;
+  // Session-close recap of the conversation just left behind, and the
+  // spaced-repetition items due for another look. Both null/empty until
+  // fetched — see fetchSessionSummary / fetchDueReviews below.
+  sessionSummary: SessionSummary | null;
+  dueReviews: DueReviewItem[];
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -80,6 +108,10 @@ interface ChatStore {
   ) => Promise<CheckAnswerResult | null>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
+  fetchSessionSummary: (conversationId: string, forScreenGeneration: number) => Promise<void>;
+  dismissSessionSummary: () => void;
+  fetchDueReviews: () => Promise<void>;
+  dismissDueReview: (skillId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -89,8 +121,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   generationProgress: 0,
   generationActivity: 'thinking',
   isHydrating: false,
+  sessionSummary: null,
+  dueReviews: [],
 
   createConversation: () => {
+    const state = get();
+    const previous = state.conversations.find((c) => c.id === state.activeConversationId);
+    // "Session close" = leaving a synced conversation that had at least one
+    // graded check to start a new one — the same trigger that already
+    // decides when a fresh chat opens (see hydrate()'s ChatGPT/Claude-style
+    // note). A local-only conversation was never sent to the server, so
+    // there is nothing for the summary endpoint to read.
+    const hadAnsweredCheck = previous?.messages.some(
+      (m) => m.checkResults && Object.keys(m.checkResults).length > 0
+    );
+
     const id = `local-${generateId()}`;
     const convo: ChatConversation = {
       id,
@@ -99,14 +144,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    // A genuinely new screen — invalidate any recap fetch still in flight
+    // for whatever new-chat screen preceded this one.
+    const myScreenGeneration = ++newChatScreenGeneration;
     set((state) => ({
       conversations: [convo, ...state.conversations],
       activeConversationId: id,
+      // Starting a fresh chat retires whatever recap was on screen — a
+      // stale card from an earlier session must not linger on this new,
+      // unrelated one while fetchSessionSummary (below) loads its own.
+      sessionSummary: null,
     }));
+
+    if (previous && hadAnsweredCheck && !previous.id.startsWith('local-')) {
+      get().fetchSessionSummary(previous.id, myScreenGeneration);
+    }
+
     return id;
   },
 
-  setActiveConversation: (id) => set({ activeConversationId: id }),
+  setActiveConversation: (id) => {
+    newChatScreenGeneration++;
+    set({ activeConversationId: id });
+  },
 
   hydrate: async () => {
     if (get().isHydrating) return;
@@ -150,6 +210,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   loadConversation: async (id) => {
+    // Switching conversations — a real navigation away from whatever
+    // new-chat screen was previously active. See newChatScreenGeneration.
+    // Re-selecting the conversation that's already active (the sidebar
+    // re-clicking the current chat, or recoverCanonicalConversation
+    // reloading the same id after a stream error) is not a navigation —
+    // bumping here would fail an in-flight fetchSessionSummary for this
+    // very screen and the recap would never show.
+    if (get().activeConversationId !== id) newChatScreenGeneration++;
     if (id.startsWith('local-')) {
       set({ activeConversationId: id });
       return;
@@ -554,11 +622,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteConversation: (id) => {
     if (!id.startsWith('local-')) api.chat.deleteConversation(id).catch(() => {});
-    set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== id),
-      activeConversationId:
-        state.activeConversationId === id ? null : state.activeConversationId,
-    }));
+    set((state) => {
+      // Deleting the active screen is a real navigation away from it too.
+      if (state.activeConversationId === id) newChatScreenGeneration++;
+      return {
+        conversations: state.conversations.filter((c) => c.id !== id),
+        activeConversationId:
+          state.activeConversationId === id ? null : state.activeConversationId,
+      };
+    });
   },
 
   getActiveConversation: () => {
@@ -566,6 +638,50 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     return state.conversations.find(
       (c) => c.id === state.activeConversationId
     );
+  },
+
+  fetchSessionSummary: async (conversationId, forScreenGeneration) => {
+    try {
+      const summary = await api.chat.sessionSummary(conversationId);
+      // Stale guard: if the learner has already moved past the empty chat
+      // this recap was meant for — started yet another new chat, or
+      // switched to a different conversation entirely — while the request
+      // was in flight, applying it now would attach the wrong session's
+      // recap to whatever screen happens to be open. Compared against the
+      // screen generation rather than activeConversationId directly: the
+      // latter also changes when sendMessage promotes this same screen's
+      // device-local id to a server-assigned one, which must NOT count as
+      // "moved on" — the recap still belongs on that screen.
+      if (newChatScreenGeneration !== forScreenGeneration) return;
+      // Nothing was graded in that conversation — a recap with nothing to
+      // say is not worth interrupting the new chat for.
+      if (summary.nailed.length > 0 || summary.shaky.length > 0) {
+        set({ sessionSummary: summary });
+      }
+    } catch {
+      // Best-effort: a recap that fails to load must never block starting
+      // (or using) a new conversation.
+    }
+  },
+
+  dismissSessionSummary: () => set({ sessionSummary: null }),
+
+  fetchDueReviews: async () => {
+    try {
+      const { items } = await api.chat.dueReviews();
+      set({
+        dueReviews: items.filter((item) => !dismissedDueReviewSkillIds.has(item.skill_id)),
+      });
+    } catch {
+      // Best-effort — same reasoning as fetchSessionSummary.
+    }
+  },
+
+  dismissDueReview: (skillId) => {
+    dismissedDueReviewSkillIds.add(skillId);
+    set((state) => ({
+      dueReviews: state.dueReviews.filter((item) => item.skill_id !== skillId),
+    }));
   },
 }));
 

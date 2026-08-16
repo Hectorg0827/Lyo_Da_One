@@ -884,6 +884,16 @@ class LyoAIViewModel: ObservableObject {
         Task { await sendMessage() }
     }
 
+    /// Answer a v2 SmartBlock check (`UnifiedBlockRenderer`'s quiz view).
+    ///
+    /// Unlike `onQuizAnswer` above, this never routes through the model —
+    /// `UnifiedChatService.answerCheck` posts straight to `/chat/check`,
+    /// which grades against the block the server itself emitted.
+    func answerSmartQuizCheck(messageId: String, blockId: String, selectedIndex: Int) {
+        HapticManager.shared.playLightImpact()
+        Task { await unifiedChat.answerCheck(messageId: messageId, blockId: blockId, selectedIndex: selectedIndex) }
+    }
+
     private func chatErrorMessage(for error: Error) -> String {
         let lyoError = LyoError.from(error: error)
 

@@ -45,3 +45,13 @@ export function getInitials(name: string): string {
 export function generateId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
+
+/**
+ * "linear_equations" -> "linear equations". Shared by SessionRecap and
+ * DueReviewsNudge so a skill id reads the same wherever chat surfaces one —
+ * previously each had its own copy. Callers capitalize as their context
+ * needs (a heading list vs. inline sentence text want different casing).
+ */
+export function formatSkillLabel(skillId: string): string {
+  return skillId.replace(/_/g, ' ');
+}

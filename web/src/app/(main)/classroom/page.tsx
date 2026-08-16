@@ -15,6 +15,7 @@ import {
 } from '@/lib/browser-speech';
 import {
   useClassroomStore,
+  speechDelay,
   type ClassroomConnection,
   type ClassroomMode,
   type HintLevel,
@@ -94,10 +95,10 @@ function ClassroomStage() {
 
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
-    transcript, lyoState, waitingForScene, canContinue, continueLabel,
+    transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
     progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
-    askQuestion, signal, takeFloor, requestHint, continueLesson, toggleSound, toggleVoice,
+    askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
     setSpeechRate, viewBoard,
   } = useClassroomStore();
 
@@ -111,6 +112,33 @@ function ClassroomStage() {
   const boardEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
+
+  // Closed-caption-style reveal: words appear one at a time while a line is
+  // "spoken" rather than the whole sentence landing at once, paced against
+  // the same speechDelay estimate the player uses for its own fallback
+  // timing. `caption` is a fresh object every turn (see classroom-store),
+  // so this naturally resets on each new line without extra key-tracking.
+  const [revealedWords, setRevealedWords] = useState<string[]>([]);
+  useEffect(() => {
+    if (!caption) {
+      setRevealedWords([]);
+      return;
+    }
+    const words = caption.text.split(/\s+/).filter(Boolean);
+    if (animationsOff || words.length === 0) {
+      setRevealedWords(words);
+      return;
+    }
+    setRevealedWords([]);
+    const perWordMs = Math.max(speechDelay(caption.text) / words.length, 70);
+    let count = 0;
+    const id = setInterval(() => {
+      count += 1;
+      setRevealedWords(words.slice(0, count));
+      if (count >= words.length) clearInterval(id);
+    }, perWordMs);
+    return () => clearInterval(id);
+  }, [caption, animationsOff]);
 
   useEffect(() => {
     connect(connection);
@@ -144,6 +172,28 @@ function ClassroomStage() {
 
   const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
   const totalBoards = boardHistory.length;
+
+  // Playback rail: Back/Next always render (rather than only once history
+  // exists) so the controls are discoverable from the first scene on. Back
+  // steps through erased boards; Next either steps forward through that
+  // same history, or — once you're caught back up to live — skips the
+  // teacher's currently-playing narration turn instead of waiting it out.
+  const canGoBack = viewingBoard === -1 ? totalBoards > 0 : viewingBoard > 0;
+  const canGoNext = viewingBoard !== -1 || isNarrating;
+  const goBack = () => {
+    if (viewingBoard === -1) viewBoard(totalBoards - 1);
+    else viewBoard(viewingBoard - 1);
+  };
+  const goNext = () => {
+    if (viewingBoard === -1) { if (isNarrating) skipTurn(); return; }
+    viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1);
+  };
+  const nextLabel = viewingBoard === -1 ? 'Skip' : 'Next';
+  const nextTitle = viewingBoard !== -1
+    ? 'Step forward through earlier boards'
+    : isNarrating
+      ? 'Skip ahead — cuts the current line short'
+      : 'Nothing to skip right now';
   const visibleCast = mode === 'classroom'
     ? CAST
     : CAST.filter((member) => member.name === 'Teacher');
@@ -344,30 +394,30 @@ function ClassroomStage() {
           'bg-[radial-gradient(ellipse_at_top,#17203f_0%,#0d142e_55%,#0a0f24_100%)]',
           'shadow-[inset_0_0_60px_rgba(0,0,0,0.55),0_10px_40px_rgba(0,0,0,0.4)]',
         )}>
-          {/* history rail — its own band, never on top of the lesson */}
-          {totalBoards > 0 && (
-            <div className="flex items-center justify-end gap-1 shrink-0 border-b border-white/5 bg-black/25 px-3 py-1.5">
-              <button
-                disabled={viewingBoard === 0}
-                onClick={() => viewBoard(viewingBoard === -1 ? totalBoards - 1 : Math.max(viewingBoard - 1, 0))}
-                className="p-1 text-white/60 hover:text-white disabled:opacity-25"
-                title="Previous board"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[10px] text-white/50 font-mono">
-                {viewingBoard === -1 ? 'live' : `${viewingBoard + 1}/${totalBoards}`}
-              </span>
-              <button
-                disabled={viewingBoard === -1}
-                onClick={() => viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1)}
-                className="p-1 text-white/60 hover:text-white disabled:opacity-25"
-                title="Forward"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+          {/* playback rail — its own band, never on top of the lesson.
+              Always rendered (not gated on history existing) so Back/Next
+              are discoverable from the very first scene. */}
+          <div className="flex items-center justify-between gap-1 shrink-0 border-b border-white/5 bg-black/25 px-2 py-1">
+            <button
+              disabled={!canGoBack}
+              onClick={goBack}
+              title={canGoBack ? 'Previous board' : 'No earlier boards yet'}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10.5px] font-semibold text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Back
+            </button>
+            <span className="text-[10px] text-white/50 font-mono">
+              {viewingBoard === -1 ? 'live' : `${viewingBoard + 1}/${totalBoards}`}
+            </span>
+            <button
+              disabled={!canGoNext}
+              onClick={goNext}
+              title={nextTitle}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10.5px] font-semibold text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
+            >
+              {nextLabel} <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
             {/* Pinned to the top: on an empty board the placeholder below fills
@@ -421,13 +471,19 @@ function ClassroomStage() {
       </div>
 
       {/* ── Voice band — Lyo and the live caption each own a column, so the
-             avatar never sits on top of anything that has to be read. ── */}
-      <div className="flex items-center gap-3 px-6 pt-3 pb-1 min-h-[3.9rem]">
+             avatar never sits on top of anything that has to be read.
+             The caption itself renders TV-closed-caption style: a single
+             fixed-height line, right-anchored, that only ever shows the
+             tail end of what's being said — older words scroll off the
+             left edge as new ones arrive on the right, rather than
+             wrapping and growing the band (which used to shrink the
+             board on longer lines, especially on mobile). ── */}
+      <div className="flex items-center gap-3 px-6 pt-2 pb-1 h-11 shrink-0">
         <motion.img
           key={lyoState}
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
-          className="w-12 h-12 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+          className="w-9 h-9 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
@@ -436,27 +492,39 @@ function ClassroomStage() {
               : { scale: 1, rotate: 0, y: 0 }}
           transition={{ duration: animationsOff ? 0 : 0.6 }}
         />
-        <div className="flex-1 min-w-0">
-          <AnimatePresence mode="wait">
-            {caption && (
-              <motion.p
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-                key={caption.speaker + caption.text.slice(0, 24)}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="text-[15px] leading-snug text-white/90"
-              >
-                <span className={cn('font-bold mr-2',
-                  CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
-                  {caption.speaker}:
-                </span>
-                “{caption.text}”
-              </motion.p>
-            )}
-          </AnimatePresence>
+        <div
+          className="flex-1 min-w-0 h-6 relative overflow-hidden"
+          style={{
+            WebkitMaskImage: 'linear-gradient(to right, transparent, black 12%)',
+            maskImage: 'linear-gradient(to right, transparent, black 12%)',
+          }}
+        >
+          {caption && (
+            <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap">
+              <span className={cn('font-bold shrink-0 text-[12.5px]',
+                CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
+                {caption.speaker}:
+              </span>
+              <AnimatePresence initial={false}>
+                {revealedWords.map((word, i) => (
+                  <motion.span
+                    key={i}
+                    initial={animationsOff ? false : { opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.12 }}
+                    className="text-[14px] leading-none text-white/90"
+                  >
+                    {word}
+                  </motion.span>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+          {/* The visual ticker above is decorative/progressive — screen
+              readers get the whole line at once instead of word-by-word. */}
+          <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+            {caption ? `${caption.speaker}: ${caption.text}` : ''}
+          </span>
         </div>
       </div>
 

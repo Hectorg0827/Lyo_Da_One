@@ -1,4 +1,4 @@
-import type { User, ChatBlock, CheckAnswerResult } from '@/types';
+import type { User, ChatBlock, CheckAnswerResult, SessionSummary, DueReviewItem } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 
@@ -299,6 +299,24 @@ export const api = {
           hint_used: params.hintUsed ?? false,
         }),
       });
+    },
+
+    /**
+     * Session-close recap: what a conversation's answered checks show the
+     * learner nailed vs. what's still shaky. Read-only — built entirely from
+     * data `checkAnswer` above already caused the server to write.
+     */
+    async sessionSummary(conversationId: string) {
+      return request<SessionSummary>(`/api/v1/lyo2/chat/${conversationId}/summary`);
+    },
+
+    /**
+     * Skills whose spaced-repetition schedule says they're due for another
+     * look — the return half of the loop `checkAnswer` silently feeds every
+     * time a check is graded.
+     */
+    async dueReviews() {
+      return request<{ items: DueReviewItem[] }>('/api/v1/lyo2/chat/reviews/due');
     },
 
     stream(
