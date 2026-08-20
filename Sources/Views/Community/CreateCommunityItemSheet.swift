@@ -1,20 +1,30 @@
 import SwiftUI
 
-/// The shared event/group creator. Its fields intentionally mirror the web and
-/// Android forms and the canonical Community backend schemas.
+/// Creates the same account-owned learning nodes exposed on Android and web.
 struct CreateCommunityItemSheet: View {
     @ObservedObject var viewModel: CommunityViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var selectedType: CommunityItemType = .event
+    private enum CreationType: String, CaseIterable {
+        case event = "Event"
+        case group = "Study group"
+        case tutor = "Tutoring"
+    }
+
+    @State private var selectedType: CreationType = .event
+    @State private var eventType = "study_session"
     @State private var title = ""
     @State private var description = ""
+    @State private var subject = ""
+    @State private var hourlyPrice = 0.0
     @State private var startTime = Date().addingTimeInterval(3_600)
     @State private var endTime = Date().addingTimeInterval(7_200)
     @State private var location = ""
+    @State private var meetingURL = ""
+    @State private var isOnline = false
     @State private var maxPeople = 20
     @State private var isPrivate = false
-    @State private var addToMap = false
+    @State private var addToMap = true
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
@@ -23,43 +33,82 @@ struct CreateCommunityItemSheet: View {
             Form {
                 Section {
                     Picker("Type", selection: $selectedType) {
-                        Text("Event").tag(CommunityItemType.event)
-                        Text("Study group").tag(CommunityItemType.group)
+                        ForEach(CreationType.allCases, id: \.self) { type in Text(type.rawValue).tag(type) }
                     }
                     .pickerStyle(.segmented)
                 }
 
                 Section("Details") {
-                    TextField(selectedType == .event ? "Event title" : "Group name", text: $title)
+                    TextField(titlePrompt, text: $title)
                         .textInputAutocapitalization(.sentences)
                     TextField("Description", text: $description, axis: .vertical)
                         .lineLimit(3...6)
+                    if selectedType == .tutor {
+                        TextField("Subject", text: $subject)
+                        HStack {
+                            Text("Hourly price")
+                            Spacer()
+                            TextField("0", value: $hourlyPrice, format: .currency(code: "USD"))
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                        }
+                    }
                 }
 
                 if selectedType == .event {
-                    Section("When and where") {
+                    Section("Event format") {
+                        Picker("Kind", selection: $eventType) {
+                            Text("Study session").tag("study_session")
+                            Text("Workshop").tag("workshop")
+                            Text("Class").tag("class")
+                            Text("Seminar").tag("seminar")
+                            Text("Office hours").tag("office_hours")
+                        }
                         DatePicker("Starts", selection: $startTime)
                         DatePicker("Ends", selection: $endTime, in: startTime...)
-                        TextField("Location or Online", text: $location)
-                        Toggle("Add current map location", isOn: $addToMap)
                     }
                     .onChange(of: startTime) { _, newStart in
-                        if endTime <= newStart {
-                            endTime = newStart.addingTimeInterval(3_600)
+                        if endTime <= newStart { endTime = newStart.addingTimeInterval(3_600) }
+                    }
+                }
+
+                Section("Where") {
+                    Toggle("Online", isOn: $isOnline)
+                    if isOnline {
+                        TextField("Meeting link (optional)", text: $meetingURL)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+                    } else {
+                        TextField("Location", text: $location)
+                        Toggle("Place at the current map center", isOn: $addToMap)
+                        if addToMap {
+                            Text("\(viewModel.region.center.latitude, specifier: "%.4f"), \(viewModel.region.center.longitude, specifier: "%.4f")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                } else {
+                }
+
+                if selectedType == .group {
                     Section("Privacy") {
                         Toggle("Private group (approval required)", isOn: $isPrivate)
                     }
                 }
 
-                Section("Capacity") {
-                    Stepper(
-                        selectedType == .event ? "Maximum attendees: \(maxPeople)" : "Maximum members: \(maxPeople)",
-                        value: $maxPeople,
-                        in: selectedType == .event ? 1...10_000 : 2...1_000
-                    )
+                if selectedType != .tutor {
+                    Section("Capacity") {
+                        Stepper(
+                            selectedType == .event ? "Maximum attendees: \(maxPeople)" : "Maximum members: \(maxPeople)",
+                            value: $maxPeople,
+                            in: selectedType == .event ? 1...10_000 : 2...1_000
+                        )
+                    }
+                }
+
+                Section {
+                    Text("After publishing, this node and your participation are saved to your Lyo account and appear on iOS, Android, and web.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -68,12 +117,11 @@ struct CreateCommunityItemSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(isSubmitting)
+                    Button("Cancel") { dismiss() }.disabled(isSubmitting)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isSubmitting ? "Creating…" : "Create") { submit() }
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
+                        .disabled(!canSubmit || isSubmitting)
                 }
             }
             .alert("Creation failed", isPresented: Binding(
@@ -89,9 +137,20 @@ struct CreateCommunityItemSheet: View {
         .preferredColorScheme(.dark)
     }
 
+    private var titlePrompt: String {
+        switch selectedType {
+        case .event: return "Event title"
+        case .group: return "Group name"
+        case .tutor: return "Lesson title"
+        }
+    }
+
+    private var canSubmit: Bool {
+        !cleanTitle.isEmpty && (selectedType != .tutor || !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private func submit() {
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanTitle.isEmpty else { return }
+        guard canSubmit else { return }
         guard selectedType != .event || endTime > startTime else {
             errorMessage = "The event must end after it starts."
             return
@@ -100,26 +159,48 @@ struct CreateCommunityItemSheet: View {
         isSubmitting = true
         Task {
             do {
-                if selectedType == .event {
+                switch selectedType {
+                case .event:
                     try await viewModel.createEvent(request: APICreateEducationalEventRequest(
                         title: cleanTitle,
                         description: cleanDescription,
-                        eventType: "study_session",
+                        eventType: eventType,
                         location: cleanLocation,
+                        isOnline: isOnline,
+                        meetingUrl: cleanMeetingURL,
                         maxAttendees: maxPeople,
                         startTime: startTime,
                         endTime: endTime,
                         timezone: TimeZone.current.identifier,
-                        latitude: addToMap ? viewModel.region.center.latitude : nil,
-                        longitude: addToMap ? viewModel.region.center.longitude : nil
+                        latitude: mapLatitude,
+                        longitude: mapLongitude
                     ))
-                } else {
+                case .group:
                     try await viewModel.createStudyGroup(request: APICreateStudyGroupRequest(
                         name: cleanTitle,
                         description: cleanDescription,
                         privacy: isPrivate ? "private" : "public",
                         maxMembers: maxPeople,
-                        requiresApproval: isPrivate
+                        requiresApproval: isPrivate,
+                        location: cleanLocation,
+                        isOnline: isOnline,
+                        meetingUrl: cleanMeetingURL,
+                        latitude: mapLatitude,
+                        longitude: mapLongitude
+                    ))
+                case .tutor:
+                    try await viewModel.createPrivateLesson(request: APICreatePrivateLessonRequest(
+                        title: cleanTitle,
+                        description: cleanDescription,
+                        subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
+                        pricePerHour: max(0, hourlyPrice),
+                        currency: "USD",
+                        durationMinutes: 60,
+                        location: cleanLocation,
+                        latitude: mapLatitude,
+                        longitude: mapLongitude,
+                        isOnline: isOnline,
+                        meetingUrl: cleanMeetingURL
                     ))
                 }
                 isSubmitting = false
@@ -131,13 +212,25 @@ struct CreateCommunityItemSheet: View {
         }
     }
 
+    private var cleanTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     private var cleanDescription: String? {
         let value = description.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
     }
 
     private var cleanLocation: String? {
+        guard !isOnline else { return "Online" }
         let value = location.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? "Online" : value
+        return value.isEmpty ? nil : value
     }
+
+    private var cleanMeetingURL: String? {
+        guard isOnline else { return nil }
+        let value = meetingURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private var mapLatitude: Double? { !isOnline && addToMap ? viewModel.region.center.latitude : nil }
+    private var mapLongitude: Double? { !isOnline && addToMap ? viewModel.region.center.longitude : nil }
 }

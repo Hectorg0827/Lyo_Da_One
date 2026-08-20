@@ -182,6 +182,34 @@ interface LyoApiService {
     ): JsonObject
 
     // ── Community ── (study-groups routes, matching web api.ts and iOS)
+    @GET("community/nearby")
+    suspend fun nearbyLearning(
+        @Query("lat") latitude: Double,
+        @Query("lng") longitude: Double,
+        @Query("radius_km") radiusKm: Double = 15.0,
+        @Query("categories") categories: String? = null,
+        @Query("q") query: String? = null,
+        @Query("include_online") includeOnline: Boolean = true,
+        @Query("include_institutions") includeInstitutions: Boolean = true,
+        @Query("limit") limit: Int = 150,
+    ): NearbyLearningResponseDto
+
+    @GET("community/me")
+    suspend fun myCommunity(): MyCommunityResponseDto
+
+    @PUT("community/saved-nodes/{kind}/{nodeId}")
+    suspend fun saveLearningNode(
+        @Path("kind") kind: String,
+        @Path("nodeId") nodeId: String,
+        @Body body: LearningNodeSaveRequest,
+    ): LearningNodeDto
+
+    @DELETE("community/saved-nodes/{kind}/{nodeId}")
+    suspend fun unsaveLearningNode(
+        @Path("kind") kind: String,
+        @Path("nodeId") nodeId: String,
+    ): Response<Unit>
+
     @GET("community/study-groups")
     suspend fun groups(): List<GroupDto>
 
@@ -205,6 +233,9 @@ interface LyoApiService {
 
     @DELETE("community/events/{eventId}/attend")
     suspend fun unattendEvent(@Path("eventId") eventId: String): Response<Unit>
+
+    @POST("community/lessons")
+    suspend fun createPrivateLesson(@Body body: CreatePrivateLessonRequest): JsonObject
 
     // Community posts — the same store iOS renders (community/posts),
     // NOT the separate /feed store; one account, one feed everywhere.

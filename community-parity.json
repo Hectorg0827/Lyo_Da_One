@@ -1,20 +1,26 @@
 {
   "$schema": "Community release contract shared by iOS, Android, and web",
-  "version": "2.1.0",
-  "referencePlatform": "ios",
-  "responsiveRule": "Web preserves the same capabilities and visual tokens while adapting into a bounded multi-column desktop workspace.",
+  "version": "3.0.0",
+  "referencePlatform": "shared-backend-contract",
+  "responsiveRule": "Every client opens on Learning Around Me with a multi-marker geographic canvas; lists, account state, and activity are supporting layers.",
   "canonicalBackend": "https://api.lyoai.app",
-  "tabs": ["Posts", "Events"],
+  "defaultTab": "Around Me",
+  "tabs": ["Around Me", "My Community", "Activity"],
+  "nodeCategories": ["event", "workshop", "class", "study_group", "tutor", "library", "museum", "educational_center"],
+  "nodeKinds": ["event", "study_group", "private_lesson", "institution"],
+  "viewModes": ["map", "list"],
+  "creation": ["post", "group", "event", "tutor"],
+  "accountOwnedState": ["saved_nodes", "joined_groups", "attending_events", "following"],
+  "locationPolicy": "Device location is an ephemeral query input. Saves, joins, RSVPs, follows, and user-created learning nodes are stored by authenticated user_id on the backend.",
   "postTypes": ["text", "question_discussion", "study_tip"],
-  "eventTypes": ["event", "group"],
-  "viewModes": ["list", "map"],
-  "creation": ["post", "group", "event"],
   "postActions": ["like", "bookmark", "comment", "share"],
   "commentActions": ["create", "like", "delete"],
-  "groupActions": ["list", "create", "join", "leave"],
-  "eventActions": ["list", "create", "attend", "leave", "map"],
+  "mapActions": ["select_without_navigation", "save", "join", "leave", "attend", "open_course", "ask_lyo", "open_source"],
   "apiPrefix": "/community",
   "canonicalEndpoints": [
+    "/community/nearby",
+    "/community/me",
+    "/community/saved-nodes/{kind}/{nodeId}",
     "/community/posts",
     "/community/posts/{postId}/like",
     "/community/posts/{postId}/bookmark",
@@ -24,7 +30,8 @@
     "/community/study-groups/{groupId}/join",
     "/community/study-groups/{groupId}/leave",
     "/community/events",
-    "/community/events/{eventId}/attend"
+    "/community/events/{eventId}/attend",
+    "/community/lessons"
   ],
   "design": {
     "primary": "#6366F1",
@@ -36,21 +43,19 @@
   },
   "evidence": {
     "ios": [
-      { "file": "Sources/Views/Community/CommunityView.swift", "markers": ["case posts, events", "CommunityGoogleStyleMap", "CreateCommunityItemSheet"] },
-      { "file": "Sources/Views/Community/CommunityFeedView.swift", "markers": ["onLike", "onBookmark", "CommentsView(post", "onShare"] },
-      { "file": "Sources/Views/Community/CommentsView.swift", "markers": ["toggleCommentLike", "deleteComment", "isCurrentUser"] },
-      { "file": "Sources/ViewModels/CommunityViewModel.swift", "markers": ["createEvent", "createStudyGroup"] }
+      { "file": "Sources/Views/Community/CommunityView.swift", "markers": ["case aroundMe", "LearningAroundMap", "LearningNodeDrawer", "MyCommunityAccountView", "CommunityFeedView"] },
+      { "file": "Sources/ViewModels/CommunityViewModel.swift", "markers": ["nearbyLearning", "getMyCommunity", "saveLearningNode", "community_updated"] },
+      { "file": "Sources/Views/Community/CreateCommunityItemSheet.swift", "markers": ["case tutor", "Place at the current map center", "createPrivateLesson"] }
     ],
     "android": [
-      { "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityScreen.kt", "markers": ["Posts", "Events", "CommunityEventMap", "CreateCommunityItemDialog", "toggleCommunityPostBookmark"] },
-      { "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/PostDetailScreen.kt", "markers": ["toggleCommunityCommentLike", "deleteCommunityComment", "currentUserId"] },
-      { "file": "android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt", "markers": ["createStudyGroup", "createCommunityEvent", "toggleCommunityPostLike", "toggleCommunityPostBookmark", "toggleCommunityCommentLike", "deleteCommunityComment"] }
+      { "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/LearningAroundCommunityScreen.kt", "markers": ["Around Me", "LearningMapWebView", "LearningNodeSheet", "MyCommunityTab", "community_updated"] },
+      { "file": "android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt", "markers": ["LearningAroundCommunityScreen", "CREATE_TUTOR"] },
+      { "file": "android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt", "markers": ["nearbyLearning", "myCommunity", "saveLearningNode", "createPrivateLesson"] }
     ],
     "web": [
-      { "file": "web/src/app/(main)/community/page.tsx", "markers": ["Posts", "Events", "CommunityEventMap", "CreateCommunityItemModal"] },
-      { "file": "web/src/components/community/PostCard.tsx", "markers": ["togglePostLike", "togglePostBookmark", "navigator.share", "navigator.clipboard"] },
-      { "file": "web/src/components/community/CommentThread.tsx", "markers": ["onLike", "onDelete", "currentUserId"] },
-      { "file": "web/src/lib/api.ts", "markers": ["createGroup", "createEvent", "togglePostLike", "togglePostBookmark", "likeComment", "deleteComment"] }
+      { "file": "web/src/app/(main)/community/page.tsx", "markers": ["Around Me", "My Community", "CommunityEventMap", "NodeDrawer", "community_updated"] },
+      { "file": "web/src/components/community/CommunityEventMap.tsx", "markers": ["L.map", "L.marker", "tileLayer"] },
+      { "file": "web/src/lib/api.ts", "markers": ["nearby", "saveNode", "unsaveNode", "createTutor"] }
     ]
   }
 }

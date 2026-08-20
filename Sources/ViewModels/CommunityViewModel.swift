@@ -4,8 +4,10 @@ import Combine
 import CoreLocation
 import os
 
-// MARK: - Models
+// MARK: - Compatibility models
 
+// These adapters remain for older Community subviews that are still compiled,
+// while the active screen renders the canonical APILearningNode contract.
 struct CommunityItem: Identifiable, Equatable {
     let id: String
     let type: CommunityItemType
@@ -15,24 +17,20 @@ struct CommunityItem: Identifiable, Equatable {
     let imageURL: String?
     let userAvatar: String?
     let timestamp: Date
-    
     var eventData: APIEducationalEvent?
     var groupData: APIStudyGroup?
-    
-    static func == (lhs: CommunityItem, rhs: CommunityItem) -> Bool {
-        return lhs.id == rhs.id
-    }
+
+    static func == (lhs: CommunityItem, rhs: CommunityItem) -> Bool { lhs.id == rhs.id }
 }
 
 enum CommunityItemType: String, CaseIterable, Identifiable {
     case all = "All"
     case event = "Events"
     case group = "Groups"
-    
-    var id: String { rawValue }
 
+    var id: String { rawValue }
     static var crossPlatformCases: [CommunityItemType] { allCases }
-    
+
     var icon: String {
         switch self {
         case .all: return "square.grid.2x2.fill"
@@ -40,7 +38,7 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
         case .group: return "person.3.fill"
         }
     }
-    
+
     var color: Color {
         switch self {
         case .all: return .primary
@@ -50,11 +48,6 @@ enum CommunityItemType: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - API Models (Matching Endpoint.swift)
-// See Sources/Models/CommunityDTOs.swift for APIStudyGroup, APIEducationalEvent, etc.
-
-// People results from the cross-entity backend search (/api/v1/search).
-// Same payload the web and Android Community tabs consume.
 struct APISearchUser: Codable, Identifiable, Equatable {
     let id: Int
     let username: String?
@@ -67,11 +60,8 @@ struct APISearchUser: Codable, Identifiable, Equatable {
     }
 }
 
-struct APISearchResponse: Codable {
-    let users: [APISearchUser]?
-}
+struct APISearchResponse: Codable { let users: [APISearchUser]? }
 
-// Beacon wrapper for map display (consolidated)
 struct CommunityBeacon: Identifiable {
     let id: String
     let coordinate: CLLocationCoordinate2D
@@ -83,237 +73,346 @@ struct CommunityBeacon: Identifiable {
     var distance: Double?
 }
 
-
-
-// MARK: - ViewModel
+// MARK: - Map-first Community state
 
 @MainActor
-class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
-    // UI State
-    @Published var searchText: String = "" {
+final class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
+    enum ViewMode { case map, list }
+
+    @Published var searchText = "" {
         didSet {
-            updateBeacons()
+            scheduleNearbyRefresh()
             searchPeople()
         }
     }
+    @Published var selectedCategories: Set<String> = [] {
+        didSet { scheduleNearbyRefresh() }
+    }
+    @Published var viewMode: ViewMode = .map
+    @Published var nearbyNodes: [APILearningNode] = []
+    @Published var myCommunity: APICommunityMeResponse?
+    @Published var selectedNode: APILearningNode?
     @Published var people: [APISearchUser] = []
     @Published var selectedPerson: APISearchUser?
-    @Published var selectedFilter: CommunityItemType = .all {
-        didSet { updateBeacons() }
-    }
-    @Published var currentFilter: CommunityFilter = .all
-    @Published var viewMode: ViewMode = .map
-    @Published var isLoading: Bool = false
+    @Published var isLoading = false
+    @Published var isAccountLoading = false
+    @Published var busyNodeKey: String?
     @Published var errorMessage: String?
-    enum ViewMode {
-        case map
-        case list
-    }
-    
-    // Data State
-    @Published var items: [CommunityItem] = [] {
-        didSet { updateBeacons() }
-    }
-    @Published var filteredItems: [CommunityItem] = [] // NEW: For List View
-    @Published var beacons: [CommunityBeacon] = []
-    
-    // Map State
+    @Published var locationLabel = "New York City"
+
     @Published var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194), // Default SF
-        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
+        span: MKCoordinateSpan(latitudeDelta: 0.14, longitudeDelta: 0.14)
     )
     @Published var mapCameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
+            span: MKCoordinateSpan(latitudeDelta: 0.14, longitudeDelta: 0.14)
         )
     )
-    
-    @Published var selectedPin: CommunityBeacon? {
-        didSet {
-            // When a pin is selected, ensure it's visible in the UI
-            if let pin = selectedPin {
-                 withAnimation {
-                     region.center = pin.coordinate
-                     // We intentionally don't change span to avoid zooming in too much automatically
-                 }
-            }
-        }
-    }
-    
-    // De-bouncer for map updates
-    private var mapUpdateTask: Task<Void, Never>?
-    // De-bouncer for people search
-    private var peopleSearchTask: Task<Void, Never>?
-    
-    // Location Manager
+
+    // Compatibility state for inactive legacy views.
+    @Published var selectedFilter: CommunityItemType = .all
+    @Published var currentFilter: CommunityFilter = .all
+    @Published var items: [CommunityItem] = []
+    @Published var filteredItems: [CommunityItem] = []
+    @Published var beacons: [CommunityBeacon] = []
+    @Published var selectedPin: CommunityBeacon?
+
     private let locationManager = CLLocationManager()
-    
-    // Repositories
     private let network = NetworkClient.shared
-    
+    private var refreshTask: Task<Void, Never>?
+    private var peopleSearchTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
+    private var hasAppliedDeviceLocation = false
+
     override init() {
         super.init()
         locationManager.delegate = self
+        SyncService.shared.events
+            .filter { $0.eventType == "community_updated" || $0.eventType == "context_updated" }
+            .sink { [weak self] _ in self?.loadData() }
+            .store(in: &cancellables)
         requestLocation()
     }
-    
+
+    var visibleNodes: [APILearningNode] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return nearbyNodes.filter { node in
+            (selectedCategories.isEmpty || selectedCategories.contains(node.category)) &&
+            (query.isEmpty || node.title.localizedCaseInsensitiveContains(query) ||
+             (node.description?.localizedCaseInsensitiveContains(query) ?? false) ||
+             (node.locationName?.localizedCaseInsensitiveContains(query) ?? false))
+        }
+    }
+
+    var mapNodes: [APILearningNode] {
+        visibleNodes.filter { $0.latitude != nil && $0.longitude != nil }
+    }
+
     func requestLocation() {
-        locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
-        
-        if let loc = locationManager.location {
-            region.center = loc.coordinate
-            mapCameraPosition = .region(region)
+        switch locationManager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            locationManager.startUpdatingLocation()
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        default:
             loadData()
         }
     }
-    
-    // Track map region changes to refresh real-world data
-    // Track map region changes to refresh real-world data AND backend beacons
-    func handleMapRegionChange(_ newRegion: MKCoordinateRegion) {
-        // Debounce map updates
-        mapUpdateTask?.cancel()
-        mapUpdateTask = Task {
-            try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s debounce
-            
-            // Only refresh if the change is significant (e.g. moved > 1km)
-            let latDiff = abs(newRegion.center.latitude - region.center.latitude)
-            let lonDiff = abs(newRegion.center.longitude - region.center.longitude)
-            
-            if latDiff > 0.005 || lonDiff > 0.005 {
-                await MainActor.run {
-                    self.region = newRegion
-                    // Reload data for the new region
-                    self.loadData()
-                }
-            }
-        }
-    }
-    
+
     func centerOnUserLocation() {
-        if let loc = locationManager.location {
-            withAnimation(.spring()) {
-                region.center = loc.coordinate
-                mapCameraPosition = .region(MKCoordinateRegion(center: loc.coordinate, span: region.span))
+        guard let location = locationManager.location else {
+            requestLocation()
+            return
+        }
+        applyDeviceLocation(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse {
+                manager.startUpdatingLocation()
+            } else if manager.authorizationStatus != .notDetermined {
+                self.loadData()
             }
         }
     }
-    
-    // MARK: - CLLocationManagerDelegate
-    
+
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        // Location updates handled via manager.location access in main actor calls usually,
-        // but we can trigger a refresh if needed.
+        guard let coordinate = locations.last?.coordinate else { return }
+        let latitude = coordinate.latitude
+        let longitude = coordinate.longitude
+        Task { @MainActor [weak self] in
+            guard let self, !self.hasAppliedDeviceLocation else { return }
+            self.hasAppliedDeviceLocation = true
+            manager.stopUpdatingLocation()
+            self.applyDeviceLocation(latitude: latitude, longitude: longitude)
+        }
     }
-    
+
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Log.social.error("Location Manager Error: \(error.localizedDescription)")
+        Log.social.warning("Community location unavailable: \(error.localizedDescription)")
+        Task { @MainActor [weak self] in self?.loadData() }
     }
-    
-    // MARK: - Operations
-    
+
+    private func applyDeviceLocation(latitude: Double, longitude: Double) {
+        region.center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        mapCameraPosition = .region(region)
+        locationLabel = "Current location"
+        loadData()
+    }
+
+    func handleMapRegionChange(_ newRegion: MKCoordinateRegion) {
+        let latDifference = abs(newRegion.center.latitude - region.center.latitude)
+        let lngDifference = abs(newRegion.center.longitude - region.center.longitude)
+        region = newRegion
+        guard latDifference > 0.01 || lngDifference > 0.01 else { return }
+        locationLabel = "Map area"
+        scheduleNearbyRefresh(delayNanoseconds: 700_000_000)
+    }
+
     func loadData() {
-        guard !isLoading else { return }
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            await self.refreshAll()
+        }
+    }
+
+    private func scheduleNearbyRefresh(delayNanoseconds: UInt64 = 300_000_000) {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            guard let self, !Task.isCancelled else { return }
+            await self.refreshNearby()
+        }
+    }
+
+    private func refreshAll() async {
+        await refreshNearby()
+        await refreshAccount()
+    }
+
+    private func refreshNearby() async {
         isLoading = true
-        
-        Task {
-            // List and map are two views over the exact same event/group store.
-            await loadFullList()
-        }
-    }
-    
-    private func loadFullList() async {
-        // Only fetch capabilities present in all three Community clients.
-        async let groupsTask = fetchStudyGroups()
-        async let eventsTask = fetchEvents()
-        let (groups, events) = await (groupsTask, eventsTask)
-
-        let groupItems = groups.map { group in
-            CommunityItem(
-                id: String(group.id),
-                type: .group,
-                title: group.name,
-                subtitle: "\(group.memberCount) members • \(group.subject)",
-                coordinate: CLLocationCoordinate2D(latitude: group.lat ?? 0, longitude: group.lng ?? 0),
-                imageURL: nil,
-                userAvatar: group.host.avatar,
-                timestamp: group.nextSession ?? Date(),
-                groupData: group
+        do {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let response: APINearbyLearningResponse = try await network.request(
+                Endpoints.Community.nearbyLearning(
+                    lat: region.center.latitude,
+                    lng: region.center.longitude,
+                    radius: 20,
+                    categories: Array(selectedCategories),
+                    query: query.isEmpty ? nil : query
+                ),
+                cachePolicy: .reloadIgnoringCache
             )
+            nearbyNodes = response.items
+            if let selectedNode,
+               let refreshed = response.items.first(where: { $0.key == selectedNode.key }) {
+                self.selectedNode = refreshed
+            }
+            rebuildCompatibilityState()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            Log.social.warning("Community nearby refresh failed: \(error.localizedDescription)")
         }
-        let eventItems = events.map { event in
-            CommunityItem(
-                id: String(event.id),
-                type: .event,
-                title: event.title,
-                subtitle: event.locationName,
-                coordinate: CLLocationCoordinate2D(latitude: event.lat ?? 0, longitude: event.lng ?? 0),
-                imageURL: event.imageURL,
-                userAvatar: event.organizerProfile?.avatar,
-                timestamp: event.date,
-                eventData: event
-            )
-        }
-
-        await MainActor.run {
-            self.items = groupItems + eventItems
-            self.updateBeacons()
-            self.isLoading = false
-        }
+        isLoading = false
     }
-    private func updateBeacons() {
-        // 1. Filter by Type
-        var filtered = selectedFilter == .all ? items : items.filter { $0.type == selectedFilter }
-        
-        // 2. Filter by Search Text
-        if !searchText.isEmpty {
-            filtered = filtered.filter { item in
-                item.title.localizedCaseInsensitiveContains(searchText) ||
-                (item.subtitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+
+    private func refreshAccount() async {
+        isAccountLoading = true
+        do {
+            let response: APICommunityMeResponse = try await network.request(
+                Endpoints.Community.getMyCommunity,
+                cachePolicy: .reloadIgnoringCache
+            )
+            myCommunity = response
+            if let selectedNode,
+               !nearbyNodes.contains(where: { $0.key == selectedNode.key }) {
+                self.selectedNode = response.savedNodes.first(where: { $0.key == selectedNode.key })
+            }
+        } catch {
+            Log.social.warning("Community account refresh failed: \(error.localizedDescription)")
+        }
+        isAccountLoading = false
+    }
+
+    func toggleSave(_ node: APILearningNode) async {
+        await perform(node: node) {
+            if node.isSaved {
+                let _: EmptyResponse = try await self.network.request(
+                    Endpoints.Community.unsaveLearningNode(kind: node.kind, id: node.id),
+                    cachePolicy: .reloadIgnoringCache
+                )
+            } else {
+                let _: APILearningNode = try await self.network.request(
+                    Endpoints.Community.saveLearningNode(kind: node.kind, id: node.id, snapshot: node),
+                    cachePolicy: .reloadIgnoringCache
+                )
             }
         }
-        
-        self.filteredItems = filtered
-        
-        self.beacons = filtered.compactMap { item -> CommunityBeacon? in
-            // Only include items with valid coordinates
-            guard item.coordinate.latitude != 0 && item.coordinate.longitude != 0 else { return nil }
+    }
+
+    func toggleParticipation(_ node: APILearningNode) async {
+        await perform(node: node) {
+            switch node.kind {
+            case "event":
+                if node.isAttending { try await self.unregisterFromEvent(id: node.id, refresh: false) }
+                else { try await self.registerForEvent(id: node.id, refresh: false) }
+            case "study_group":
+                if node.isJoined { try await self.leaveStudyGroup(id: node.id, refresh: false) }
+                else { try await self.joinStudyGroup(id: node.id, refresh: false) }
+            default:
+                break
+            }
+        }
+    }
+
+    private func perform(node: APILearningNode, operation: @escaping () async throws -> Void) async {
+        guard busyNodeKey == nil else { return }
+        busyNodeKey = node.key
+        do {
+            try await operation()
+            await refreshAll()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        busyNodeKey = nil
+    }
+
+    func createEvent(request: APICreateEducationalEventRequest) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.createEventRequest(request: request))
+        await refreshAll()
+    }
+
+    func createStudyGroup(request: APICreateStudyGroupRequest) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.createStudyGroupRequest(request: request))
+        await refreshAll()
+    }
+
+    func createPrivateLesson(request: APICreatePrivateLessonRequest) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.createPrivateLesson(request: request))
+        await refreshAll()
+    }
+
+    // Legacy overloads used by older detail screens.
+    func createEvent(_ event: EducationalEvent) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.createEvent(event: event))
+        await refreshAll()
+    }
+
+    func createStudyGroup(_ group: StudyGroup) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.createStudyGroup(group: group))
+        await refreshAll()
+    }
+
+    func joinStudyGroup(id: String, refresh: Bool = true) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.joinStudyGroup(groupId: id), cachePolicy: .reloadIgnoringCache)
+        if refresh { await refreshAll() }
+    }
+
+    func leaveStudyGroup(id: String, refresh: Bool = true) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.leaveStudyGroup(groupId: id), cachePolicy: .reloadIgnoringCache)
+        if refresh { await refreshAll() }
+    }
+
+    func registerForEvent(id: String, refresh: Bool = true) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.registerForEvent(eventId: id), cachePolicy: .reloadIgnoringCache)
+        if refresh { await refreshAll() }
+    }
+
+    func unregisterFromEvent(id: String, refresh: Bool = true) async throws {
+        let _: EmptyResponse = try await network.request(Endpoints.Community.unregisterFromEvent(eventId: id), cachePolicy: .reloadIgnoringCache)
+        if refresh { await refreshAll() }
+    }
+
+    func applyFilter(_ filter: CommunityFilter) { currentFilter = filter }
+
+    func centerMapOnPin(_ pin: CommunityBeacon) {
+        selectedPin = pin
+        region.center = pin.coordinate
+        mapCameraPosition = .region(region)
+    }
+
+    private func rebuildCompatibilityState() {
+        items = nearbyNodes.map { node in
+            let type: CommunityItemType = node.kind == "study_group" ? .group : .event
+            return CommunityItem(
+                id: node.id,
+                type: type,
+                title: node.title,
+                subtitle: node.locationName,
+                coordinate: CLLocationCoordinate2D(
+                    latitude: node.latitude ?? 0,
+                    longitude: node.longitude ?? 0
+                ),
+                imageURL: node.imageUrl,
+                userAvatar: node.host?.avatar,
+                timestamp: Self.parseDate(node.startsAt) ?? Date(),
+                eventData: nil,
+                groupData: nil
+            )
+        }
+        filteredItems = items
+        beacons = visibleNodes.compactMap { node in
+            guard let latitude = node.latitude, let longitude = node.longitude else { return nil }
             return CommunityBeacon(
-                id: item.id,
-                coordinate: item.coordinate,
-                type: item.type,
-                title: item.title,
-                subtitle: item.subtitle,
-                imageURL: item.imageURL,
-                hasLinkedCourse: false
+                id: node.key,
+                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                type: node.kind == "study_group" ? .group : .event,
+                title: node.title,
+                subtitle: node.locationName,
+                imageURL: node.imageUrl,
+                hasLinkedCourse: node.courseId != nil,
+                distance: node.distanceKm.map { $0 * 0.621371 }
             )
         }
     }
-    
-    // MARK: - API Calls (Real Backend)
-    // Each fetch is resilient: returns [] on failure so one broken endpoint
-    // doesn't prevent the rest of the community data from loading.
-    
-    private func fetchStudyGroups() async -> [APIStudyGroup] {
-        do {
-            return try await network.request(Endpoints.Community.getStudyGroups(filters: nil, location: region.center))
-        } catch {
-            Log.social.warning("Community: study-groups fetch failed – \(error.localizedDescription)")
-            return []
-        }
-    }
-    
-    private func fetchEvents() async -> [APIEducationalEvent] {
-        do {
-            return try await network.request(Endpoints.Community.getEvents(filters: nil, location: region.center))
-        } catch {
-            Log.social.warning("Community: events fetch failed – \(error.localizedDescription)")
-            return []
-        }
-    }
-    
-    // People aren't in the local event/group store — ask the backend search.
+
     private func searchPeople() {
         peopleSearchTask?.cancel()
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -322,79 +421,29 @@ class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDelegate 
             return
         }
         peopleSearchTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000) // debounce
+            try? await Task.sleep(nanoseconds: 250_000_000)
             guard let self, !Task.isCancelled else { return }
             do {
                 let response: APISearchResponse = try await self.network.request(
                     Endpoints.Search.search(query: query, type: "users", limit: 6, offset: 0)
                 )
-                if !Task.isCancelled {
-                    self.people = response.users ?? []
-                }
+                if !Task.isCancelled { self.people = response.users ?? [] }
             } catch {
-                Log.social.warning("Community: people search failed – \(error.localizedDescription)")
+                Log.social.warning("Community people search failed: \(error.localizedDescription)")
             }
         }
     }
 
-    // MARK: - Filter
+    static func parseDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        if let date = ISO8601DateFormatter().date(from: value) { return date }
 
-    func applyFilter(_ filter: CommunityFilter) {
-        currentFilter = filter
-        updateBeacons()
-        // Note: MapPins could be updated here if we tracked domain models
-    }
-    
-    // MARK: - Actions
-    
-    func createEvent(_ event: EducationalEvent) async throws {
-        // Implementation for creating event - endpoint now uses domain model
-        let _: EducationalEvent = try await network.request(Endpoints.Community.createEvent(event: event))
-        loadData() // Refresh
-    }
-    
-    func createStudyGroup(_ group: StudyGroup) async throws {
-        let _: StudyGroup = try await network.request(Endpoints.Community.createStudyGroup(group: group))
-        loadData()
-    }
-
-    func createEvent(request: APICreateEducationalEventRequest) async throws {
-        let _: APIEducationalEvent = try await network.request(
-            Endpoints.Community.createEventRequest(request: request)
-        )
-        loadData()
-    }
-
-    func createStudyGroup(request: APICreateStudyGroupRequest) async throws {
-        let _: APIStudyGroup = try await network.request(
-            Endpoints.Community.createStudyGroupRequest(request: request)
-        )
-        loadData()
-    }
-    
-    func joinStudyGroup(id: String) async throws {
-        let _: EmptyResponse = try await network.request(Endpoints.Community.joinStudyGroup(groupId: id))
-        loadData() // Refresh
-    }
-
-    func leaveStudyGroup(id: String) async throws {
-        let _: EmptyResponse = try await network.request(Endpoints.Community.leaveStudyGroup(groupId: id))
-        loadData()
-    }
-    
-    func registerForEvent(id: String) async throws {
-        let _: EmptyResponse = try await network.request(Endpoints.Community.registerForEvent(eventId: id))
-        loadData()
-    }
-
-    func unregisterFromEvent(id: String) async throws {
-        let _: EmptyResponse = try await network.request(Endpoints.Community.unregisterFromEvent(eventId: id))
-        loadData()
-    }
-    
-    func centerMapOnPin(_ pin: CommunityBeacon) {
-        selectedPin = pin
-        region.center = pin.coordinate
-        mapCameraPosition = .region(MKCoordinateRegion(center: pin.coordinate, span: region.span))
+        let local = DateFormatter()
+        local.locale = Locale(identifier: "en_US_POSIX")
+        local.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return local.date(from: value)
     }
 }

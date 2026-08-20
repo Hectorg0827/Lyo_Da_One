@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -16,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +51,7 @@ import kotlinx.coroutines.launch
 fun CreatePostScreen(nav: NavHostController) {
     var content by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
+    var postType by remember { mutableStateOf("text") }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -75,6 +79,7 @@ fun CreatePostScreen(nav: NavHostController) {
                     CommunityCreatePostRequest(
                         content = trimmedContent,
                         tags = parsedTags.takeIf { it.isNotEmpty() },
+                        postType = postType,
                     ),
                 )
             }.onSuccess {
@@ -118,10 +123,28 @@ fun CreatePostScreen(nav: NavHostController) {
                 .padding(padding)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(
+                    listOf(
+                        "text" to "Post",
+                        "question_discussion" to "Question",
+                        "study_tip" to "Study tip",
+                    ),
+                ) { option ->
+                    FilterChip(
+                        selected = postType == option.first,
+                        onClick = { postType = option.first },
+                        enabled = !submitting,
+                        label = { Text(option.second) },
+                    )
+                }
+            }
             OutlinedTextField(
                 value = content,
                 onValueChange = { content = it },
-                label = { Text("What do you want to share?") },
+                label = {
+                    Text(if (postType == "question_discussion") "What would you like help with?" else "What do you want to share?")
+                },
                 minLines = 8,
                 maxLines = 14,
                 enabled = !submitting,

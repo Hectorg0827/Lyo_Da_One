@@ -70,7 +70,7 @@ for (const [platform, contents] of Object.entries(backendDefaults)) {
 
 const postCreationFiles = {
   ios: read('Sources/Models/Community/CommunityPostModels.swift'),
-  android: read('android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityScreen.kt'),
+  android: read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreatePostScreen.kt'),
   web: read('web/src/components/community/CreatePostModal.tsx'),
 };
 for (const [platform, contents] of Object.entries(postCreationFiles)) {
@@ -83,7 +83,7 @@ for (const [platform, file] of Object.entries(apiFiles)) {
     .toLowerCase()
     .replace(/\\\([^)]*\)/g, '{id}')
     .replace(/\$\{[^}]*\}/g, '{id}')
-    .replace(/\{(?:post|group|event|comment)[^}]*\}/g, '{id}')
+    .replace(/\{[a-z][a-z0-9_]*\}/gi, '{id}')
     .replaceAll('/api/v1', '')
     .replaceAll('"community/', '"/community/');
   for (const endpoint of contract.canonicalEndpoints) {
@@ -97,7 +97,8 @@ const communityUi = [
   'Sources/Views/Community/CreateCommunityItemSheet.swift',
   'Sources/Views/Community/CommentsView.swift',
   'Sources/ViewModels/CommunityViewModel.swift',
-  'android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityScreen.kt',
+  'android/app/src/main/java/com/lyo/app/ui/screens/community/LearningAroundCommunityScreen.kt',
+  'android/app/src/main/java/com/lyo/app/ui/screens/create/CreateCommunityItemScreen.kt',
   'android/app/src/main/java/com/lyo/app/ui/screens/community/GroupsScreen.kt',
   'web/src/app/(main)/community/page.tsx',
   'web/src/app/(main)/community/groups/page.tsx',
@@ -113,16 +114,32 @@ for (const file of communityUi) {
   }
 }
 
-const iosCommunityModel = read('Sources/ViewModels/CommunityViewModel.swift');
-for (const legacyExclusive of [
-  'privateLesson',
-  'educationalCenter',
-  'marketplace',
-  'showNearbyPlaces',
-  'fetchRealWorldCenters',
-]) {
-  if (iosCommunityModel.includes(legacyExclusive)) {
-    failures.push(`iOS active Community model still exposes platform-exclusive ${legacyExclusive}`);
+const activeRoutes = read('android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt');
+if (!activeRoutes.includes('composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }')) {
+  failures.push('Android active Community route is not map-first.');
+}
+
+const accountStateFiles = {
+  ios: `${read('Sources/ViewModels/CommunityViewModel.swift')}\n${read('Sources/Views/Community/CommunityView.swift')}`,
+  android: read('android/app/src/main/java/com/lyo/app/ui/screens/community/LearningAroundCommunityScreen.kt'),
+  web: read('web/src/app/(main)/community/page.tsx'),
+};
+for (const [platform, contents] of Object.entries(accountStateFiles)) {
+  for (const forbiddenStore of ['localStorage', 'UserDefaults', 'SharedPreferences', 'rememberSaveable']) {
+    if (contents.includes(forbiddenStore)) {
+      failures.push(`${platform} Community persists canonical account state in device storage via ${forbiddenStore}`);
+    }
+  }
+}
+
+const categoryEvidence = {
+  ios: read('Sources/Views/Community/CommunityView.swift'),
+  android: read('android/app/src/main/java/com/lyo/app/ui/screens/community/LearningAroundCommunityScreen.kt'),
+  web: read('web/src/app/(main)/community/page.tsx'),
+};
+for (const [platform, contents] of Object.entries(categoryEvidence)) {
+  for (const category of contract.nodeCategories) {
+    if (!contents.includes(category)) failures.push(`${platform} map filters missing ${category}`);
   }
 }
 

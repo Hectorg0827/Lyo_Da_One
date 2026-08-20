@@ -1136,6 +1136,12 @@ enum Endpoints {
 
     // MARK: - Community Hub
     enum Community: Endpoint {
+        // Map-first discovery and account-owned state
+        case nearbyLearning(lat: Double, lng: Double, radius: Double, categories: [String], query: String?)
+        case getMyCommunity
+        case saveLearningNode(kind: String, id: String, snapshot: APILearningNode)
+        case unsaveLearningNode(kind: String, id: String)
+
         // Study Groups
         case getStudyGroups(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
         case getStudyGroup(id: String)
@@ -1151,6 +1157,9 @@ enum Endpoints {
         case createEventRequest(request: APICreateEducationalEventRequest)
         case registerForEvent(eventId: String)
         case unregisterFromEvent(eventId: String)
+
+        // Tutoring
+        case createPrivateLesson(request: APICreatePrivateLessonRequest)
 
         // Marketplace
         case getListings(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
@@ -1173,6 +1182,12 @@ enum Endpoints {
 
         var path: String {
             switch self {
+            case .nearbyLearning: return "/api/v1/community/nearby"
+            case .getMyCommunity: return "/api/v1/community/me"
+            case .saveLearningNode(let kind, let id, _),
+                 .unsaveLearningNode(let kind, let id):
+                return "/api/v1/community/saved-nodes/\(kind)/\(id)"
+
             // Study Groups
             case .getStudyGroups: return "/api/v1/community/study-groups"
             case .getStudyGroup(let id): return "/api/v1/community/study-groups/\(id)"
@@ -1186,6 +1201,8 @@ enum Endpoints {
             case .createEvent, .createEventRequest: return "/api/v1/community/events"
             case .registerForEvent(let id): return "/api/v1/community/events/\(id)/attend"
             case .unregisterFromEvent(let id): return "/api/v1/community/events/\(id)/attend"
+
+            case .createPrivateLesson: return "/api/v1/community/lessons"
 
             // Marketplace
             case .getListings: return "/api/v1/community/marketplace"
@@ -1210,21 +1227,23 @@ enum Endpoints {
 
         var method: HTTPMethod {
             switch self {
-            case .getStudyGroups, .getStudyGroup, .getEvents, .getEvent,
+            case .nearbyLearning, .getMyCommunity,
+                 .getStudyGroups, .getStudyGroup, .getEvents, .getEvent,
                  .getListings, .getListing, .getInstitutions, .getInstitution, .searchInstitutions,
                  .getBeacons, .getAvailableSlots:
                 return .get
 
             case .createStudyGroup, .createStudyGroupRequest, .joinStudyGroup,
                  .createEvent, .createEventRequest, .registerForEvent,
+                 .createPrivateLesson,
                  .createListing, .createQuestion, .answerQuestion,
                  .createBooking:
                 return .post
 
-            case .leaveStudyGroup, .unregisterFromEvent:
+            case .leaveStudyGroup, .unregisterFromEvent, .unsaveLearningNode:
                 return .delete
 
-            case .updateListing:
+            case .updateListing, .saveLearningNode:
                 return .put
 
             case .deleteListing:
@@ -1234,6 +1253,9 @@ enum Endpoints {
 
         var body: Encodable? {
             switch self {
+            case .saveLearningNode(_, _, let snapshot):
+                return APILearningNodeSaveRequest(snapshot: snapshot)
+
             case .createStudyGroup(let group):
                 return group
 
@@ -1244,6 +1266,9 @@ enum Endpoints {
                 return event
 
             case .createEventRequest(let request):
+                return request
+
+            case .createPrivateLesson(let request):
                 return request
 
             case .createQuestion(let question):
@@ -1270,6 +1295,20 @@ enum Endpoints {
             var items: [URLQueryItem] = []
 
             switch self {
+            case .nearbyLearning(let lat, let lng, let radius, let categories, let query):
+                items.append(URLQueryItem(name: "lat", value: "\(lat)"))
+                items.append(URLQueryItem(name: "lng", value: "\(lng)"))
+                items.append(URLQueryItem(name: "radius_km", value: "\(radius)"))
+                items.append(URLQueryItem(name: "include_online", value: "true"))
+                items.append(URLQueryItem(name: "include_institutions", value: "true"))
+                items.append(URLQueryItem(name: "limit", value: "150"))
+                if !categories.isEmpty {
+                    items.append(URLQueryItem(name: "categories", value: categories.sorted().joined(separator: ",")))
+                }
+                if let query, !query.isEmpty {
+                    items.append(URLQueryItem(name: "q", value: query))
+                }
+
             case .getStudyGroups(let filters, let location),
                  .getEvents(let filters, let location),
                  .getListings(let filters, let location),

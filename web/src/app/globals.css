@@ -1,3 +1,5 @@
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -492,4 +494,38 @@
     transform-origin: 0 0;
     transform: rotate(90deg);
   }
+}
+
+/* Learning Around Me — compact, category-colored map pins. */
+.lyo-learning-marker {
+  background: transparent;
+  border: 0;
+}
+
+.lyo-learning-marker span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  transform: scale(var(--scale));
+  border: 3px solid rgba(255, 255, 255, 0.96);
+  border-radius: 50% 50% 50% 8px;
+  background: var(--marker);
+  color: white;
+  font: 800 13px/1 var(--font-display);
+  box-shadow: 0 7px 20px rgba(3, 7, 18, 0.42);
+  transition: transform 160ms ease;
+}
+
+.leaflet-container {
+  font-family: var(--font-display);
+}
+
+.leaflet-control-attribution {
+  background: rgba(5, 8, 16, 0.78) !important;
+  color: rgba(255, 255, 255, 0.68) !important;
+}
+
+.leaflet-control-attribution a {
+  color: #a78bfa !important;
 }

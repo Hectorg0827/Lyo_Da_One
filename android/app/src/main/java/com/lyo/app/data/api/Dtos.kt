@@ -258,6 +258,12 @@ data class GroupDto(
     val privacy: String? = null,
     @SerializedName("max_members") val maxMembers: Int? = null,
     @SerializedName("is_member") val isMember: Boolean? = null,
+    val location: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean? = null,
+    @SerializedName("meeting_url") val meetingUrl: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
 }
@@ -289,6 +295,11 @@ data class CreateStudyGroupRequest(
     val privacy: String = "public",
     @SerializedName("max_members") val maxMembers: Int = 20,
     @SerializedName("requires_approval") val requiresApproval: Boolean = false,
+    val location: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean = false,
+    @SerializedName("meeting_url") val meetingUrl: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )
 
 data class CreateCommunityEventRequest(
@@ -296,12 +307,83 @@ data class CreateCommunityEventRequest(
     val description: String? = null,
     @SerializedName("event_type") val eventType: String = "study_session",
     val location: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean = false,
+    @SerializedName("meeting_url") val meetingUrl: String? = null,
     @SerializedName("max_attendees") val maxAttendees: Int = 50,
     @SerializedName("start_time") val startTime: String,
     @SerializedName("end_time") val endTime: String,
     val timezone: String,
     val latitude: Double? = null,
     val longitude: Double? = null,
+)
+
+data class CommunityUserPreviewDto(
+    val id: Long,
+    val name: String,
+    val avatar: String? = null,
+)
+
+data class LearningNodeDto(
+    val key: String,
+    val kind: String,
+    val category: String,
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerializedName("distance_km") val distanceKm: Double? = null,
+    @SerializedName("location_name") val locationName: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean = false,
+    @SerializedName("meeting_url") val meetingUrl: String? = null,
+    @SerializedName("starts_at") val startsAt: String? = null,
+    @SerializedName("ends_at") val endsAt: String? = null,
+    val timezone: String? = null,
+    val host: CommunityUserPreviewDto? = null,
+    @SerializedName("member_count") val memberCount: Int? = null,
+    @SerializedName("attendee_count") val attendeeCount: Int? = null,
+    val capacity: Int? = null,
+    @SerializedName("is_joined") val isJoined: Boolean = false,
+    @SerializedName("is_attending") val isAttending: Boolean = false,
+    @SerializedName("is_saved") val isSaved: Boolean = false,
+    @SerializedName("course_id") val courseId: Long? = null,
+    @SerializedName("lesson_id") val lessonId: Long? = null,
+    @SerializedName("study_group_id") val studyGroupId: Long? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+    val source: String = "lyo",
+    @SerializedName("source_url") val sourceUrl: String? = null,
+)
+
+data class NearbyLearningResponseDto(
+    val items: List<LearningNodeDto> = emptyList(),
+    @SerializedName("center_latitude") val centerLatitude: Double,
+    @SerializedName("center_longitude") val centerLongitude: Double,
+    @SerializedName("radius_km") val radiusKm: Double,
+    @SerializedName("fetched_at") val fetchedAt: String,
+)
+
+data class LearningNodeSaveRequest(val snapshot: LearningNodeDto)
+
+data class MyCommunityResponseDto(
+    @SerializedName("joined_groups") val joinedGroups: List<GroupDto> = emptyList(),
+    @SerializedName("attending_events") val attendingEvents: List<EventDto> = emptyList(),
+    @SerializedName("saved_nodes") val savedNodes: List<LearningNodeDto> = emptyList(),
+    val following: List<CommunityUserPreviewDto> = emptyList(),
+    @SerializedName("updated_at") val updatedAt: String,
+)
+
+data class CreatePrivateLessonRequest(
+    val title: String,
+    val description: String? = null,
+    val subject: String,
+    @SerializedName("price_per_hour") val pricePerHour: Double = 0.0,
+    val currency: String = "USD",
+    @SerializedName("duration_minutes") val durationMinutes: Int = 60,
+    val location: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerializedName("is_online") val isOnline: Boolean = false,
+    @SerializedName("meeting_url") val meetingUrl: String? = null,
 )
 
 // ── Community posts (community/posts — the same store iOS renders) ──────────

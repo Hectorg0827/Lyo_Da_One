@@ -24,6 +24,7 @@ export type SyncEventType =
   | 'typing_stopped'
   | 'session_transferred'
   | 'context_updated'
+  | 'community_updated'
   | 'error';
 
 export interface SyncEvent {

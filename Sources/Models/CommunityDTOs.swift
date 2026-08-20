@@ -3,7 +3,7 @@ import Foundation
 /// DTOs matching the actual Backend JSON response for Community features
 /// These differ from the Domain Models in Sources/Models/Community.swift (which expect nested User objects)
 
-struct APIUserPreview: Codable {
+struct APIUserPreview: Codable, Equatable {
     let id: Int
     let name: String
     let avatar: String?
@@ -94,12 +94,11 @@ struct APICreateStudyGroupRequest: Codable {
     let privacy: String
     let maxMembers: Int
     let requiresApproval: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case name, description, privacy
-        case maxMembers = "max_members"
-        case requiresApproval = "requires_approval"
-    }
+    let location: String?
+    let isOnline: Bool
+    let meetingUrl: String?
+    let latitude: Double?
+    let longitude: Double?
 }
 
 struct APICreateEducationalEventRequest: Codable {
@@ -107,6 +106,8 @@ struct APICreateEducationalEventRequest: Codable {
     let description: String?
     let eventType: String
     let location: String?
+    let isOnline: Bool
+    let meetingUrl: String?
     let maxAttendees: Int
     let startTime: Date
     let endTime: Date
@@ -114,13 +115,97 @@ struct APICreateEducationalEventRequest: Codable {
     let latitude: Double?
     let longitude: Double?
 
-    enum CodingKeys: String, CodingKey {
-        case title, description, location, timezone, latitude, longitude
-        case eventType = "event_type"
-        case maxAttendees = "max_attendees"
-        case startTime = "start_time"
-        case endTime = "end_time"
-    }
+}
+
+// MARK: - Learning Around Me
+
+/// Canonical, flat map DTO shared by iOS, Android, and web. Membership,
+/// attendance, and save flags are computed by the backend for the signed-in
+/// account; clients never treat device storage as the source of truth.
+struct APILearningNode: Codable, Identifiable, Equatable {
+    let key: String
+    let kind: String
+    let category: String
+    let id: String
+    let title: String
+    let description: String?
+    let latitude: Double?
+    let longitude: Double?
+    let distanceKm: Double?
+    let locationName: String?
+    let isOnline: Bool
+    let meetingUrl: String?
+    let startsAt: String?
+    let endsAt: String?
+    let timezone: String?
+    let host: APIUserPreview?
+    let memberCount: Int?
+    let attendeeCount: Int?
+    let capacity: Int?
+    let isJoined: Bool
+    let isAttending: Bool
+    let isSaved: Bool
+    let courseId: Int?
+    let lessonId: Int?
+    let studyGroupId: Int?
+    let imageUrl: String?
+    let source: String
+    let sourceUrl: String?
+}
+
+struct APINearbyLearningResponse: Decodable {
+    let items: [APILearningNode]
+    let centerLatitude: Double
+    let centerLongitude: Double
+    let radiusKm: Double
+    let fetchedAt: String
+}
+
+struct APILearningNodeSaveRequest: Encodable {
+    let snapshot: APILearningNode
+}
+
+struct APIAccountStudyGroup: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let description: String?
+    let memberCount: Int?
+    let location: String?
+    let isOnline: Bool
+    let imageUrl: String?
+}
+
+struct APIAccountCommunityEvent: Decodable, Identifiable {
+    let id: Int
+    let title: String
+    let description: String?
+    let startTime: String
+    let endTime: String
+    let location: String?
+    let isOnline: Bool
+    let attendeeCount: Int?
+}
+
+struct APICommunityMeResponse: Decodable {
+    let joinedGroups: [APIAccountStudyGroup]
+    let attendingEvents: [APIAccountCommunityEvent]
+    let savedNodes: [APILearningNode]
+    let following: [APIUserPreview]
+    let updatedAt: String
+}
+
+struct APICreatePrivateLessonRequest: Codable {
+    let title: String
+    let description: String?
+    let subject: String
+    let pricePerHour: Double
+    let currency: String
+    let durationMinutes: Int
+    let location: String?
+    let latitude: Double?
+    let longitude: Double?
+    let isOnline: Bool
+    let meetingUrl: String?
 }
 
 struct APIEducationalEvent: Decodable, Identifiable {
