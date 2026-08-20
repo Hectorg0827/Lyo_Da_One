@@ -434,7 +434,7 @@ final class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDel
         }
     }
 
-    static func parseDate(_ value: String?) -> Date? {
+    nonisolated static func parseDate(_ value: String?) -> Date? {
         guard let value else { return nil }
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
