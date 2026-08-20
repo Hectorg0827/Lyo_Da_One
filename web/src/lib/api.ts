@@ -1,4 +1,15 @@
-import type { User, ChatBlock, CheckAnswerResult, SessionSummary, DueReviewItem } from '@/types';
+import type {
+  User,
+  ChatBlock,
+  CheckAnswerResult,
+  SessionSummary,
+  DueReviewItem,
+  LearningNode,
+  LearningNodeCategory,
+  LearningNodeKind,
+  MyCommunityResponse,
+  NearbyLearningResponse,
+} from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 
@@ -749,6 +760,47 @@ export const api = {
 
   // ── Community (Groups & Events) ──
   community: {
+    async nearby(params: {
+      latitude: number;
+      longitude: number;
+      radiusKm?: number;
+      categories?: LearningNodeCategory[];
+      query?: string;
+      includeOnline?: boolean;
+      includeInstitutions?: boolean;
+      limit?: number;
+    }) {
+      const query = new URLSearchParams({
+        lat: String(params.latitude),
+        lng: String(params.longitude),
+        radius_km: String(params.radiusKm ?? 15),
+        include_online: String(params.includeOnline ?? true),
+        include_institutions: String(params.includeInstitutions ?? true),
+        limit: String(params.limit ?? 150),
+      });
+      if (params.categories?.length) query.set('categories', params.categories.join(','));
+      if (params.query?.trim()) query.set('q', params.query.trim());
+      return request<NearbyLearningResponse>(`/community/nearby?${query}`);
+    },
+
+    async me() {
+      return request<MyCommunityResponse>('/community/me');
+    },
+
+    async saveNode(node: LearningNode) {
+      return request<LearningNode>(
+        `/community/saved-nodes/${node.kind}/${encodeURIComponent(node.id)}`,
+        { method: 'PUT', body: JSON.stringify({ snapshot: node }) },
+      );
+    },
+
+    async unsaveNode(kind: LearningNodeKind, nodeId: string) {
+      return request<void>(
+        `/community/saved-nodes/${kind}/${encodeURIComponent(nodeId)}`,
+        { method: 'DELETE' },
+      );
+    },
+
     async groups() {
       return request<Record<string, unknown>[]>('/community/study-groups');
     },
@@ -759,6 +811,11 @@ export const api = {
       privacy?: 'public' | 'private';
       max_members?: number;
       requires_approval?: boolean;
+      location?: string;
+      is_online?: boolean;
+      meeting_url?: string;
+      latitude?: number;
+      longitude?: number;
     }) {
       return request<Record<string, unknown>>('/community/study-groups', {
         method: 'POST',
@@ -785,10 +842,11 @@ export const api = {
     async createEvent(payload: {
       title: string;
       description?: string;
-      event_type: 'study_session' | 'workshop' | 'lecture' | 'discussion' | 'project_showcase' | 'networking' | 'other';
+      event_type: 'study_session' | 'workshop' | 'class' | 'seminar' | 'lecture' | 'discussion' | 'project_showcase' | 'networking' | 'office_hours' | 'other';
       start_time: string;
       end_time: string;
       location?: string;
+      is_online?: boolean;
       meeting_url?: string;
       max_attendees?: number;
       timezone: string;
@@ -796,6 +854,25 @@ export const api = {
       longitude?: number;
     }) {
       return request<Record<string, unknown>>('/community/events', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    async createTutor(payload: {
+      title: string;
+      description?: string;
+      subject: string;
+      price_per_hour?: number;
+      currency?: string;
+      duration_minutes?: number;
+      location?: string;
+      latitude?: number;
+      longitude?: number;
+      is_online?: boolean;
+      meeting_url?: string;
+    }) {
+      return request<Record<string, unknown>>('/community/lessons', {
         method: 'POST',
         body: JSON.stringify(payload),
       });

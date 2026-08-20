@@ -14,6 +14,18 @@ const SPEAKER_TONE: Record<string, string> = {
   You: 'text-lyo-300',
 };
 
+// Construct the Unicode matcher at runtime so TypeScript can still compile the
+// app's ES5 target. Modern browsers get full multilingual letter/number
+// support; older engines fall back without preventing the classroom from
+// loading.
+const SPOKEN_CHARACTER = (() => {
+  try {
+    return new RegExp('[\\p{L}\\p{N}]', 'u');
+  } catch {
+    return /[A-Za-z0-9]/;
+  }
+})();
+
 function wordsFor(text: string): string[] {
   return text.trim().split(/\s+/).filter(Boolean);
 }
@@ -22,7 +34,7 @@ function wordWeight(word: string): number {
   // Speech is not uniform: longer words take longer and punctuation creates
   // a natural pause. Weighting the known transcript this way keeps the visual
   // word reveal much closer to real neural-audio timing than a flat timer.
-  const spokenLength = word.replace(/[^\p{L}\p{N}]/gu, '').length;
+  const spokenLength = Array.from(word).filter((character) => SPOKEN_CHARACTER.test(character)).length;
   let weight = Math.max(0.8, Math.min(2.4, spokenLength / 4.5));
   if (/[,;:]$/.test(word)) weight += 0.65;
   if (/[.!?]$/.test(word)) weight += 1.05;

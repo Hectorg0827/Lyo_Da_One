@@ -364,6 +364,72 @@ export interface EducationalEvent {
   coverImage: string;
 }
 
+export type LearningNodeKind = 'event' | 'study_group' | 'private_lesson' | 'institution';
+
+export type LearningNodeCategory =
+  | 'event'
+  | 'workshop'
+  | 'class'
+  | 'study_group'
+  | 'tutor'
+  | 'library'
+  | 'museum'
+  | 'educational_center';
+
+export interface CommunityUserPreview {
+  id: number;
+  name: string;
+  avatar?: string | null;
+}
+
+/** Canonical map node returned by /community/nearby on every platform. */
+export interface LearningNode {
+  key: string;
+  kind: LearningNodeKind;
+  category: LearningNodeCategory;
+  id: string;
+  title: string;
+  description?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_km?: number | null;
+  location_name?: string | null;
+  is_online: boolean;
+  meeting_url?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  timezone?: string | null;
+  host?: CommunityUserPreview | null;
+  member_count?: number | null;
+  attendee_count?: number | null;
+  capacity?: number | null;
+  is_joined: boolean;
+  is_attending: boolean;
+  is_saved: boolean;
+  course_id?: number | null;
+  lesson_id?: number | null;
+  study_group_id?: number | null;
+  image_url?: string | null;
+  source: string;
+  source_url?: string | null;
+}
+
+export interface NearbyLearningResponse {
+  items: LearningNode[];
+  center_latitude: number;
+  center_longitude: number;
+  radius_km: number;
+  fetched_at: string;
+}
+
+export interface MyCommunityResponse {
+  joined_groups: Record<string, unknown>[];
+  attending_events: Record<string, unknown>[];
+  saved_nodes: LearningNode[];
+  following: CommunityUserPreview[];
+  updated_at: string;
+}
+
 // ---- Gamification ----
 export interface Achievement {
   id: string;

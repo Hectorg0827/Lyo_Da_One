@@ -43,7 +43,7 @@ import com.lyo.app.ui.screens.chat.ChatScreen
 import com.lyo.app.ui.screens.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
-import com.lyo.app.ui.screens.community.ReliableCommunityScreen
+import com.lyo.app.ui.screens.community.LearningAroundCommunityScreen
 import com.lyo.app.ui.screens.community.ReliablePostDetailScreen
 import com.lyo.app.ui.screens.create.CreateClipScreen
 import com.lyo.app.ui.screens.create.CreateCommunityItemScreen
@@ -79,6 +79,7 @@ object Routes {
     const val CREATE_POST = "create/post"
     const val CREATE_GROUP = "create/group"
     const val CREATE_EVENT = "create/event"
+    const val CREATE_TUTOR = "create/tutor"
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
@@ -175,7 +176,7 @@ private fun LyoNavHost() {
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
             composable(Routes.CHAT) { ChatScreen(nav) }
-            composable(Routes.COMMUNITY) { ReliableCommunityScreen(nav) }
+            composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }
             composable(Routes.POST_DETAIL) { entry ->
                 ReliablePostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")
             }
@@ -189,6 +190,9 @@ private fun LyoNavHost() {
             }
             composable(Routes.CREATE_EVENT) {
                 CreateCommunityItemScreen(nav = nav, createGroup = false)
+            }
+            composable(Routes.CREATE_TUTOR) {
+                CreateCommunityItemScreen(nav = nav, createGroup = false, createTutor = true)
             }
             composable(Routes.STORIES) { StoriesScreen(nav) }
             composable(Routes.COURSES) { CoursesScreen(nav) }
