@@ -741,11 +741,11 @@ private fun nodeMeta(node: LearningNodeDto): String = listOfNotNull(
     node.memberCount?.let { "$it members" },
 ).joinToString(" · ")
 
-private fun formatNodeDate(value: String?): String? = value?.let {
+private fun formatNodeDate(value: String?): String? = value?.let { rawValue ->
     runCatching {
-        OffsetDateTime.parse(it).format(DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
+        OffsetDateTime.parse(rawValue).format(DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
     }.recoverCatching {
-        LocalDateTime.parse(it).format(DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
+        LocalDateTime.parse(rawValue).format(DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
     }.getOrNull()
 }
 
