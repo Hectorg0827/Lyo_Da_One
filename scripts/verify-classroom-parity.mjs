@@ -14,6 +14,8 @@ function rejectText(source, forbidden, label) {
 const web = read('web/src/stores/classroom-store.ts');
 const webContract = read('web/src/lib/classroom-contract.mjs');
 const webSpeech = read('web/src/lib/browser-speech.ts');
+const webPage = read('web/src/app/(main)/classroom/page.tsx');
+const webCaption = read('web/src/components/classroom/ClassroomCaptionSync.tsx');
 const iosClassroom = read('Sources/Services/LivingClassroomService.swift');
 const iosTts = read('Sources/Core/Networking/Endpoint.swift');
 const iosModels = read('Sources/Models/SDUIModels.swift');
@@ -30,6 +32,12 @@ const androidVoice = read(
 );
 const androidNavigation = read(
   'android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt',
+);
+const androidChrome = read(
+  'android/app/src/main/java/com/lyo/app/ui/classroom/ClassroomChrome.kt',
+);
+const androidLivingClassroom = read(
+  'android/app/src/main/java/com/lyo/app/ui/classroom/ClassroomScreen.kt',
 );
 
 for (const [source, label] of [
@@ -83,6 +91,32 @@ requireText(androidClassroom, '.addQueryParameter("course_id", courseId)', 'Andr
 requireText(androidClassroom, '.addQueryParameter("client_contract_version", "2")', 'Android contract version');
 requireText(iosClassroom, 'URLQueryItem(name: "course_id"', 'iOS course identity');
 requireText(iosClassroom, 'URLQueryItem(name: "client_contract_version", value: "2")', 'iOS contract version');
+
+// ── Classroom presentation contract ─────────────────────────────────────────
+// These literals intentionally make accidental visual regressions fail CI.
+// Mutation checks: remove the caption target, restore revealedWords, reduce a
+// touch target below 44/48, or reintroduce a false web-parity comment and this
+// gate must fail.
+requireText(webPage, 'data-classroom-caption-target', 'Web single caption mount');
+rejectText(webPage, 'revealedWords', 'Web duplicate caption renderer');
+requireText(webCaption, 'line-clamp-2', 'Web two-line audio caption');
+requireText(webCaption, 'line-clamp-3', 'Web silent-mode teaching caption');
+requireText(webPage, 'min-h-11 min-w-11', 'Web permanent exit touch target');
+requireText(webPage, '> Challenge', 'Web Challenge action');
+requireText(webPage, '> Raise hand', 'Web Raise hand action');
+rejectText(webPage, 'Harder case', 'Web obsolete action label');
+requireText(androidChrome, 'heightIn(min = 48.dp)', 'Android action touch targets');
+requireText(androidChrome, 'Text("Challenge")', 'Android Challenge action');
+requireText(androidChrome, 'maxLines = 2', 'Android two-line caption');
+
+for (const [source, label] of [
+  [iosView, 'iOS active lesson'],
+  [iosClassroomView, 'iOS living classroom'],
+  [androidChrome, 'Android chrome'],
+  [androidLivingClassroom, 'Android living classroom'],
+]) {
+  rejectText(source, "matching the web classroom's", `${label} false parity claim`);
+}
 
 rejectText(iosLegacyViewModel, 'createMockQuickCheck', 'iOS hardcoded quick check');
 rejectText(iosLegacyViewModel, 'Which part of y = mx + b', 'iOS algebra-only quick check');

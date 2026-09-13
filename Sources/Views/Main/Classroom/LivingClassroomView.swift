@@ -359,8 +359,8 @@ struct LivingClassroomView: View {
                 subtitle: "AI Classroom"
             )
 
-            // Netflix/YouTube-style classroom: default to landscape
-            // full-screen, matching the web classroom's behavior.
+            // Legacy iOS classroom orientation policy. This is intentionally
+            // not described as web parity; web does not force orientation.
             AppDelegate.orientationLock = .landscape
             if UIDevice.current.orientation != .landscapeLeft && UIDevice.current.orientation != .landscapeRight {
                 UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")

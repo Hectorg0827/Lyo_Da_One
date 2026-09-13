@@ -15,7 +15,6 @@ import {
 } from '@/lib/browser-speech';
 import {
   useClassroomStore,
-  speechDelay,
   type ClassroomConnection,
   type ClassroomMode,
   type HintLevel,
@@ -26,7 +25,6 @@ import { upsertCourseOnStart } from '@/lib/stack';
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
 const CAST: { name: string; emoji: string; accent: string }[] = [
-  { name: 'Teacher', emoji: '🧑‍🏫', accent: 'ring-accent-purple text-accent-purple' },
   { name: 'Maya', emoji: '👩🏽‍🎓', accent: 'ring-accent-teal text-accent-teal' },
   { name: 'Sam', emoji: '🧑🏻‍🎓', accent: 'ring-accent-orange text-accent-orange' },
   { name: 'Rio', emoji: '🧑🏾‍🎓', accent: 'ring-accent-green text-accent-green' },
@@ -113,33 +111,6 @@ function ClassroomStage() {
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
 
-  // Closed-caption-style reveal: words appear one at a time while a line is
-  // "spoken" rather than the whole sentence landing at once, paced against
-  // the same speechDelay estimate the player uses for its own fallback
-  // timing. `caption` is a fresh object every turn (see classroom-store),
-  // so this naturally resets on each new line without extra key-tracking.
-  const [revealedWords, setRevealedWords] = useState<string[]>([]);
-  useEffect(() => {
-    if (!caption) {
-      setRevealedWords([]);
-      return;
-    }
-    const words = caption.text.split(/\s+/).filter(Boolean);
-    if (animationsOff || words.length === 0) {
-      setRevealedWords(words);
-      return;
-    }
-    setRevealedWords([]);
-    const perWordMs = Math.max(speechDelay(caption.text) / words.length, 70);
-    let count = 0;
-    const id = setInterval(() => {
-      count += 1;
-      setRevealedWords(words.slice(0, count));
-      if (count >= words.length) clearInterval(id);
-    }, perWordMs);
-    return () => clearInterval(id);
-  }, [caption, animationsOff]);
-
   useEffect(() => {
     connect(connection);
     return () => disconnect();
@@ -194,9 +165,10 @@ function ClassroomStage() {
     : isNarrating
       ? 'Skip ahead — cuts the current line short'
       : 'Nothing to skip right now';
-  const visibleCast = mode === 'classroom'
-    ? CAST
-    : CAST.filter((member) => member.name === 'Teacher');
+  // Lyo owns the teacher position beside the transcript. The participant
+  // rail is reserved for real classroom-mode peers, avoiding a second
+  // representation of the same teacher.
+  const visibleCast = mode === 'classroom' ? CAST : [];
   const hintOptions: { level: HintLevel; label: string }[] = [
     { level: 'nudge', label: 'Small nudge' },
     { level: 'principle', label: 'Show the principle' },
@@ -259,29 +231,35 @@ function ClassroomStage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-8rem)] md:h-[calc(100dvh-4rem)] max-w-4xl mx-auto">
+    <div className="relative mx-auto flex h-[calc(100dvh-8rem)] min-h-[560px] max-w-5xl flex-col overflow-hidden pb-[max(0.25rem,env(safe-area-inset-bottom))] md:h-[calc(100dvh-4rem)]">
 
       {/* ── Top bar ── */}
-      <div className="flex items-center gap-2 px-4 py-2">
+      <div className="flex items-start gap-3 px-3 py-2.5 sm:px-4">
         <button
           onClick={() => router.back()}
-          className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
+          aria-label="Leave classroom"
+          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           title="Leave classroom"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="h-5 w-5" />
         </button>
-        <div className="min-w-0">
-          <h1 className="text-sm font-bold text-white truncate">{topic}</h1>
-          <p className="text-[11px] text-lyo-200/80 truncate" title={objective}>
-            Goal: {objective}
+        <div className="min-w-0 flex-1 pt-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-[15px] font-bold tracking-tight text-white sm:text-base">{topic}</h1>
+            <button type="button" title={objective} aria-label={`Learning goal: ${objective}`} className="shrink-0 rounded-full border border-white/15 px-1.5 text-[10px] font-bold text-white/65 hover:bg-white/10 hover:text-white">i</button>
+          </div>
+          <p className="truncate text-[11px] font-medium text-white/65">
+            {lessonId ? `Lesson ${lessonId}` : 'Guided lesson'} · {objective}
           </p>
-          <p className="text-[10px] text-white/45">
-            {status === 'live' ? <span className="text-green-400">● class in session</span>
-              : status === 'connecting' ? 'walking to class…' : status}
-            <span className="ml-2">
-              {progressCurrent}/{progressTotal} checkpoints mastered
-            </span>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em]">
+            {status === 'live' ? <span className="text-emerald-300">● Live</span>
+              : status === 'connecting' ? <span className="text-white/60">Connecting…</span> : <span className="text-white/60">{status}</span>}
           </p>
+          {progressTotal > 0 && (
+            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10" aria-label={`${progressCurrent} of ${progressTotal} checkpoints mastered`}>
+              <div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
+            </div>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -388,11 +366,11 @@ function ClassroomStage() {
           Zone discipline: the frame is a column of non-overlapping bands —
           an optional history rail, then the lesson content. Nothing floats
           over the content, so the learner never reads through an element. */}
-      <div className="flex-1 min-h-0 mx-4">
+      <div className="mx-3 min-h-0 flex-1 sm:mx-4">
         <div className={cn(
-          'h-full flex flex-col rounded-2xl border-[3px] border-[#3a3323] overflow-hidden',
-          'bg-[radial-gradient(ellipse_at_top,#17203f_0%,#0d142e_55%,#0a0f24_100%)]',
-          'shadow-[inset_0_0_60px_rgba(0,0,0,0.55),0_10px_40px_rgba(0,0,0,0.4)]',
+          'h-full flex flex-col rounded-[22px] border border-white/10 overflow-hidden',
+          'bg-[radial-gradient(ellipse_at_top,#1b2850_0%,#101936_48%,#090f24_100%)]',
+          'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_70px_rgba(2,6,23,0.45),0_18px_50px_rgba(2,6,23,0.42)]',
         )}>
           {/* playback rail — its own band, never on top of the lesson.
               Always rendered (not gated on history existing) so Back/Next
@@ -419,7 +397,7 @@ function ClassroomStage() {
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4 sm:px-7 sm:py-6 sm:space-y-5">
             {/* Pinned to the top: on an empty board the placeholder below fills
                 the scroll area, which would push a recovery action out of sight. */}
             {(status === 'error' || status === 'ended' || error) && (
@@ -465,25 +443,21 @@ function ClassroomStage() {
             <div ref={boardEndRef} />
           </div>
 
-          {/* chalk tray — a real band at the foot of the frame */}
-          <div className="shrink-0 mx-6 h-1.5 rounded-t bg-[#3a3323]/80" />
+          <div className="mx-8 h-px shrink-0 bg-gradient-to-r from-transparent via-teal-300/30 to-transparent" />
         </div>
       </div>
 
-      {/* ── Voice band — Lyo and the live caption each own a column, so the
-             avatar never sits on top of anything that has to be read.
-             The caption itself renders TV-closed-caption style: a single
-             fixed-height line, right-anchored, that only ever shows the
-             tail end of what's being said — older words scroll off the
-             left edge as new ones arrive on the right, rather than
-             wrapping and growing the band (which used to shrink the
-             board on longer lines, especially on mobile). ── */}
-      <div className="flex items-center gap-3 px-6 pt-2 pb-1 h-11 shrink-0">
+      {/* One teacher, one synchronized transcript. ClassroomCaptionSync owns
+          the visual text; this component owns the semantic live region. */}
+      <div className={cn(
+        'mx-3 mt-2 flex shrink-0 items-center gap-3 rounded-2xl border bg-[#111936]/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl transition-[min-height,border-color] sm:mx-4 sm:px-4',
+        voiceOn ? 'min-h-16 border-white/10 sm:min-h-[72px]' : 'min-h-24 border-teal-300/20 sm:min-h-28',
+      )}>
         <motion.img
           key={lyoState}
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
-          className="w-9 h-9 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+          className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.55)] sm:h-14 sm:w-14"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
@@ -492,36 +466,7 @@ function ClassroomStage() {
               : { scale: 1, rotate: 0, y: 0 }}
           transition={{ duration: animationsOff ? 0 : 0.6 }}
         />
-        <div
-          className="flex-1 min-w-0 h-6 relative overflow-hidden"
-          style={{
-            WebkitMaskImage: 'linear-gradient(to right, transparent, black 12%)',
-            maskImage: 'linear-gradient(to right, transparent, black 12%)',
-          }}
-        >
-          {caption && (
-            <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap">
-              <span className={cn('font-bold shrink-0 text-[12.5px]',
-                CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
-                {caption.speaker}:
-              </span>
-              <AnimatePresence initial={false}>
-                {revealedWords.map((word, i) => (
-                  <motion.span
-                    key={i}
-                    initial={animationsOff ? false : { opacity: 0, y: 3 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.12 }}
-                    className="text-[14px] leading-none text-white/90"
-                  >
-                    {word}
-                  </motion.span>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-          {/* The visual ticker above is decorative/progressive — screen
-              readers get the whole line at once instead of word-by-word. */}
+        <div data-classroom-caption-target className="relative min-w-0 flex-1 self-stretch overflow-hidden">
           <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
             {caption ? `${caption.speaker}: ${caption.text}` : ''}
           </span>
@@ -552,7 +497,7 @@ function ClassroomStage() {
       </AnimatePresence>
 
       {/* ── The class, seated ── */}
-      <div className="flex items-end justify-center gap-5 px-4 pt-1 pb-2">
+      {visibleCast.length > 0 && <div className="flex items-end justify-center gap-5 px-4 pt-2 pb-1">
         {visibleCast.map((member, i) => {
           const speaking = activeSpeaker === member.name;
           return (
@@ -582,13 +527,13 @@ function ClassroomStage() {
             </motion.div>
           );
         })}
-      </div>
+      </div>}
 
       {/* ── Your desk ──
              Everything here needs a live socket. When the class is not in
              session the controls are disabled rather than silently swallowing
              input, and the reason is stated instead of implied. */}
-      <div className="px-4 pb-3 pt-1 space-y-2">
+      <div className="space-y-2 px-3 pb-2 pt-2 sm:px-4">
         {!live && (
           <p className="text-[11px] text-white/45 text-center">
             {deskDisabledReason}
@@ -599,22 +544,22 @@ function ClassroomStage() {
             onClick={continueLesson}
             disabled={!live}
             title={live ? undefined : deskDisabledReason}
-            className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-lyo-600 to-accent-purple hover:opacity-90 active:scale-[0.99] transition-all disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
+            className="min-h-12 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {continueLabel} →
           </button>
         )}
-        <div className="flex items-center gap-2">
-          <div className="relative shrink-0">
+        <div className="grid grid-cols-3 items-stretch gap-2">
+          <div className="relative">
             <button
               onClick={() => setHintMenuOpen((open) => !open)}
               disabled={!live}
               title={live ? undefined : deskDisabledReason}
               aria-expanded={hintMenuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-white/70"
+              className="flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-2 py-2 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <HelpCircle className="w-3.5 h-3.5" /> Get help
+              <HelpCircle className="h-4 w-4 text-accent-purple" /> Help
             </button>
             {hintMenuOpen && (
               <div
@@ -639,13 +584,27 @@ function ClassroomStage() {
             onClick={() => signal('too_easy')}
             disabled={!live}
             title={live ? undefined : deskDisabledReason}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-white/70"
+            className="flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-2 py-2 text-xs font-semibold text-white/80 transition-colors hover:border-accent-purple/35 hover:bg-accent-purple/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Zap className="w-3.5 h-3.5" /> Harder case
+            <Zap className="h-4 w-4 text-accent-purple" /> Challenge
           </button>
 
-          {handRaised ? (
-            <div className="flex-1 flex gap-2">
+          <button
+            onClick={() => setHandRaised((raised) => !raised)}
+            disabled={!live}
+            title={live ? undefined : deskDisabledReason}
+            aria-expanded={handRaised}
+            className={cn(
+              'flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+              handRaised
+                ? 'border-accent-gold/45 bg-accent-gold/20 text-accent-gold'
+                : 'border-accent-gold/25 bg-accent-gold/10 text-accent-gold hover:bg-accent-gold/20',
+            )}
+          >
+            <Hand className="h-4 w-4" /> Raise hand
+          </button>
+          {handRaised && (
+            <div className="col-span-3 flex gap-2 pt-1">
               <input
                 autoFocus
                 value={question}
@@ -683,15 +642,6 @@ function ClassroomStage() {
                 <Send className="w-3.5 h-3.5" />
               </button>
             </div>
-          ) : (
-            <button
-              onClick={() => setHandRaised(true)}
-              disabled={!live}
-              title={live ? undefined : deskDisabledReason}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-accent-gold bg-accent-gold/10 border border-accent-gold/25 hover:bg-accent-gold/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent-gold/10"
-            >
-              <Hand className="w-3.5 h-3.5" /> Raise your hand
-            </button>
           )}
         </div>
       </div>

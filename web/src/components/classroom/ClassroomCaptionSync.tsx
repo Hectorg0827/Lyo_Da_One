@@ -73,15 +73,6 @@ function countAtCharIndex(text: string, charIndex: number): number {
   return Math.max(1, wordsFor(text.slice(0, index)).length);
 }
 
-function isCaptionTarget(element: Element): element is HTMLElement {
-  const parent = element.parentElement;
-  return Boolean(
-    parent
-      && parent.classList.contains('relative')
-      && parent.classList.contains('overflow-hidden'),
-  );
-}
-
 /**
  * Synchronizes the classroom's visible caption to the audio that is actually
  * playing, rather than to when the server text arrived.
@@ -91,8 +82,8 @@ function isCaptionTarget(element: Element): element is HTMLElement {
  * neural MP3 path without duplicating audio requests. Native speech synthesis
  * is handled with real `boundary` events when the browser provides them.
  *
- * The original caption remains in the DOM for its aria-live/screen-reader
- * behavior. Only its visual ticker is replaced by this synchronized layer.
+ * The semantic caption remains in the DOM for aria-live/screen-reader
+ * behavior. This component is the single owner of the visual transcript.
  */
 export default function ClassroomCaptionSync() {
   const pathname = usePathname();
@@ -147,8 +138,8 @@ export default function ClassroomCaptionSync() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caption?.speaker, caption?.text, voiceOn]);
 
-  // Find the existing visual caption band. The sr-only status element is a
-  // semantic anchor and is substantially more stable than styling classes.
+  // Find the explicit transcript mount. It exists independently of caption
+  // content, avoiding the race that previously mounted two visual tickers.
   useEffect(() => {
     if (!active || typeof document === 'undefined') {
       setTarget(null);
@@ -156,11 +147,7 @@ export default function ClassroomCaptionSync() {
     }
 
     const findTarget = () => {
-      const statuses = Array.from(document.querySelectorAll(
-        'span[role="status"][aria-live="polite"][aria-atomic="true"]',
-      ));
-      const status = statuses.find(isCaptionTarget);
-      const nextTarget = status?.parentElement ?? null;
+      const nextTarget = document.querySelector<HTMLElement>('[data-classroom-caption-target]');
       setTarget((current) => current === nextTarget ? current : nextTarget);
     };
 
@@ -169,21 +156,6 @@ export default function ClassroomCaptionSync() {
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [active]);
-
-  // Hide only the original visual ticker; its adjacent sr-only full sentence
-  // stays untouched for assistive technology. The portal below replaces it.
-  useEffect(() => {
-    if (!target) return;
-    const originalTicker = Array.from(target.children).find(
-      (child) => child instanceof HTMLElement && !child.hasAttribute('data-lyo-synced-caption'),
-    ) as HTMLElement | undefined;
-    if (!originalTicker) return;
-    const previousVisibility = originalTicker.style.visibility;
-    originalTicker.style.visibility = 'hidden';
-    return () => {
-      originalTicker.style.visibility = previousVisibility;
-    };
-  }, [target]);
 
   // Shared neural voice path: classroom-store plays a generated MP3 through a
   // detached HTMLAudioElement. Track that media element's real currentTime and
@@ -353,22 +325,15 @@ export default function ClassroomCaptionSync() {
     <div
       data-lyo-synced-caption="true"
       aria-hidden="true"
-      className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap pointer-events-none"
+      className="pointer-events-none absolute inset-0 flex min-w-0 items-center"
     >
       {caption && (
-        <>
-          <span className={`font-bold shrink-0 text-[12.5px] ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
+        <p className={`${voiceOn ? 'line-clamp-2 text-[14px] leading-5 sm:text-[15px] sm:leading-[22px]' : 'line-clamp-3 text-base leading-6 sm:text-lg sm:leading-7'} text-white/95`}>
+          <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
             {caption.speaker}:
           </span>
-          {visibleWords.map((word, index) => (
-            <span
-              key={`${caption.speaker}-${index}`}
-              className="text-[14px] leading-none text-white/90"
-            >
-              {word}
-            </span>
-          ))}
-        </>
+          <span>“{visibleWords.join(' ')}”</span>
+        </p>
       )}
     </div>,
     target,

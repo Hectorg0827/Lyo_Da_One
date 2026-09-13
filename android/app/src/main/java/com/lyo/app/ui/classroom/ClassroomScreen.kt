@@ -57,9 +57,9 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
         onDispose { engine.dispose() }
     }
 
-    // Netflix/YouTube-style classroom: default to landscape full-screen +
-    // immersive (hidden) system bars, matching the web classroom's
-    // behavior. Modeled directly on ChatScreen.kt's TextToSpeech
+    // Legacy Android classroom policy: landscape full-screen + immersive
+    // system bars. Web does not force orientation, so this is not parity.
+    // Modeled directly on ChatScreen.kt's TextToSpeech
     // DisposableEffect shape: acquire in the effect body, capture the
     // ORIGINAL orientation before mutating so onDispose restores it
     // exactly rather than hardcoding a default (some other screen may
