@@ -6,7 +6,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
   NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
-  Accessibility, Gauge, Settings2, Timer, Mic,
+  Accessibility, Gauge, Settings2, Timer, Mic, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -40,6 +40,23 @@ const CAST: { name: string; emoji: string; accent: string }[] = [
   { name: 'Rio', emoji: '🧑🏾‍🎓', accent: 'ring-accent-green text-accent-green' },
   { name: 'Zack', emoji: '👨🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
 ];
+
+/**
+ * The three desk controls share one class so they are genuinely equal — same
+ * width, same 48px minimum touch target. They used to be two fixed-width
+ * pills and one flexing button at 32px tall, which read as a hierarchy nobody
+ * intended and missed the minimum target size on a phone.
+ *
+ * Purple is the interaction colour in this palette, so it carries hover and
+ * active state here. Gold is reserved for achievements — "Raise your hand"
+ * wore it and does not any more.
+ */
+const DESK_CONTROL =
+  'flex-1 flex items-center justify-center gap-1.5 min-h-[48px] px-3 rounded-xl '
+  + 'text-xs font-semibold text-white/75 bg-white/5 border border-white/10 '
+  + 'hover:bg-lyo-500/15 hover:border-lyo-500/40 hover:text-white transition-colors '
+  + 'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 '
+  + 'disabled:hover:border-white/10 disabled:hover:text-white/75';
 
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
@@ -114,6 +131,7 @@ function ClassroomStage() {
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -265,17 +283,24 @@ function ClassroomStage() {
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
+        {/* Two lines, not four. The goal was a permanently truncated third
+            line ("Goal: Understand and apply …") that could never be read in
+            full anyway; it moves behind the info toggle below. */}
         <div className="min-w-0">
           <h1 className="text-sm font-bold text-white truncate">{topic}</h1>
-          <p className="text-[11px] text-lyo-200/80 truncate" title={objective}>
-            Goal: {objective}
-          </p>
-          <p className="text-[10px] text-white/45">
-            {status === 'live' ? <span className="text-green-400">● class in session</span>
+          <p className="text-[11px] text-white/60">
+            {status === 'live' ? <span className="text-accent-green">● Live</span>
               : status === 'connecting' ? 'walking to class…' : status}
-            <span className="ml-2">
-              {progressCurrent}/{progressTotal} checkpoints mastered
-            </span>
+            <span className="mx-1.5 text-white/30">·</span>
+            <span>{progressCurrent} of {progressTotal} checkpoints</span>
+            <button
+              onClick={() => setGoalOpen((open) => !open)}
+              aria-expanded={goalOpen}
+              aria-label={goalOpen ? 'Hide the lesson goal' : 'Show the lesson goal'}
+              className="ml-1.5 align-middle text-white/50 hover:text-white transition-colors"
+            >
+              <Info className="w-3 h-3" />
+            </button>
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -315,6 +340,33 @@ function ClassroomStage() {
           </button>
         </div>
       </div>
+
+      {/* The goal in full, on request. It used to sit permanently in the
+          header truncated to one line, where it cost space every second of
+          the lesson and could not be read. */}
+      {goalOpen && objective && (
+        <p className="mx-4 mb-2 rounded-lg bg-white/5 px-3 py-2 text-[12px] text-white/75">
+          <span className="font-semibold text-white">Goal: </span>{objective}
+        </p>
+      )}
+
+      {/* Progress, as a bar rather than only a count. Green reads as learning
+          and success in this palette; purple is reserved for interaction. */}
+      {progressTotal > 0 && (
+        <div
+          className="mx-4 mb-2 h-1 overflow-hidden rounded-full bg-white/10"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={progressTotal}
+          aria-valuenow={progressCurrent}
+          aria-label={`${progressCurrent} of ${progressTotal} checkpoints mastered`}
+        >
+          <div
+            className="h-full rounded-full bg-accent-green transition-[width] duration-500"
+            style={{ width: `${Math.min(100, (progressCurrent / progressTotal) * 100)}%` }}
+          />
+        </div>
+      )}
 
       {settingsOpen && (
         <div
@@ -447,7 +499,7 @@ function ClassroomStage() {
               />
             ))}
             {waitingForScene && viewingBoard === -1 && (
-              <div className="flex items-center gap-2 text-white/35 text-sm py-3">
+              <div className="flex items-center gap-2 text-white/60 text-sm py-3">
                 <motion.span
                   animate={animationsOff ? { opacity: 1 } : { opacity: [0.3, 1, 0.3] }}
                   transition={animationsOff ? { duration: 0 } : { duration: 1.3, repeat: Infinity }}
@@ -556,9 +608,14 @@ function ClassroomStage() {
              Everything here needs a live socket. When the class is not in
              session the controls are disabled rather than silently swallowing
              input, and the reason is stated instead of implied. */}
-      <div className="px-4 pb-3 pt-1 space-y-2">
+      {/* pb from the safe-area inset, not a constant: on Android the desk sat
+          under the system navigation bar. */}
+      <div
+        className="px-4 pt-1 space-y-2"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         {!live && (
-          <p className="text-[11px] text-white/45 text-center">
+          <p className="text-[12px] text-white/70 text-center">
             {deskDisabledReason}
           </p>
         )}
@@ -573,16 +630,16 @@ function ClassroomStage() {
           </button>
         )}
         <div className="flex items-center gap-2">
-          <div className="relative shrink-0">
+          <div className="relative flex-1 flex">
             <button
               onClick={() => setHintMenuOpen((open) => !open)}
               disabled={!live}
               title={live ? undefined : deskDisabledReason}
               aria-expanded={hintMenuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-white/70"
+              className={DESK_CONTROL}
             >
-              <HelpCircle className="w-3.5 h-3.5" /> Get help
+              <HelpCircle className="w-4 h-4" /> Help
             </button>
             {hintMenuOpen && (
               <div
@@ -607,9 +664,9 @@ function ClassroomStage() {
             onClick={() => signal('too_easy')}
             disabled={!live}
             title={live ? undefined : deskDisabledReason}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-white/70"
+            className={DESK_CONTROL}
           >
-            <Zap className="w-3.5 h-3.5" /> Harder case
+            <Zap className="w-4 h-4" /> Challenge
           </button>
 
           {handRaised ? (
@@ -656,9 +713,9 @@ function ClassroomStage() {
               onClick={() => setHandRaised(true)}
               disabled={!live}
               title={live ? undefined : deskDisabledReason}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-accent-gold bg-accent-gold/10 border border-accent-gold/25 hover:bg-accent-gold/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent-gold/10"
+              className={cn(DESK_CONTROL, 'text-lyo-200 border-lyo-500/30 bg-lyo-500/10')}
             >
-              <Hand className="w-3.5 h-3.5" /> Raise your hand
+              <Hand className="w-4 h-4" /> Raise hand
             </button>
           )}
         </div>
@@ -688,7 +745,7 @@ function ClassroomStage() {
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
                 {transcript.length === 0 && (
-                  <p className="text-white/30 text-sm italic">Notes will appear as the class goes on.</p>
+                  <p className="text-white/60 text-sm italic">Notes will appear as the class goes on.</p>
                 )}
                 {transcript.map((line) => (
                   <p key={line.id} className="text-[13px] leading-relaxed text-white/80">

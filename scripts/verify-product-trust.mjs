@@ -668,6 +668,42 @@ requireText(
   'The Classroom caption is no longer announced to screen readers'
 );
 
+// ── 3n. The Classroom's controls are reachable and its accents mean one thing ─
+//
+// Three desk controls at 32px tall, two of them fixed-width and one flexing,
+// read as a hierarchy nobody intended and missed the minimum touch target on
+// a phone. They now share one class.
+//
+// The accent system: purple is interaction, teal/green is learning and
+// success, gold is achievements only. "Raise your hand" wore gold, which made
+// an ordinary action look like a reward.
+
+requireText(
+  classroomPage,
+  'min-h-[48px]',
+  'The Classroom desk controls are below the minimum touch target'
+);
+rejectText(
+  classroomPage,
+  'Harder case',
+  'The Classroom still labels the challenge control "Harder case"'
+);
+// Order matters and the first draft of this had it backwards: in JSX the
+// className precedes the label, so a pattern looking for gold *after*
+// "Raise hand" matched nothing and the rule silently did nothing. Caught by
+// mutating the button back to gold and watching the gate stay green.
+rejectPattern(
+  classroomPage,
+  /accent-gold[\s\S]{0,200}?Raise hand/,
+  'Raising a hand is styled as an achievement'
+);
+// The desk is the last thing above the Android system navigation bar.
+requireText(
+  classroomPage,
+  'safe-area-inset-bottom',
+  'The Classroom desk ignores the device safe area'
+);
+
 const REQUIRED_RULES = [
   'The client sends its own session score',
   'The client puts a session score in a request body',
@@ -688,6 +724,9 @@ const REQUIRED_RULES = [
   'The Classroom seats classmates the backend cannot make speak',
   'The caption pacer renders its own ticker again',
   'The Classroom caption is no longer announced to screen readers',
+  'The Classroom desk controls are below the minimum touch target',
+  'The Classroom desk ignores the device safe area',
+  'Raising a hand is styled as an achievement',
   'The planned session length is dropped on the way into the Classroom',
   'iOS lets a learner start a second plan after a failed lookup',
   'The iOS intake composer stays live after a failed plan lookup',

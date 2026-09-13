@@ -46,9 +46,16 @@ import com.lyo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 
 /**
- * Netflix/YouTube-style auto-hiding chrome state, matching the 3s idle
- * timeout already shipped on web (classroom/page.tsx's resetHideTimer) and
- * iOS (ActiveLessonView.swift's resetChromeTimer): visible on load,
+ * Netflix/YouTube-style auto-hiding chrome state. iOS has the same thing in
+ * ActiveLessonView.swift's resetChromeTimer.
+ *
+ * Web does NOT, despite what this comment used to say: there is no
+ * `resetHideTimer` in classroom/page.tsx and never was in the history this
+ * repo carries. Web is scheduled to gain it — with a permanently visible
+ * exit, see docs/CLASSROOM_UI_SPEC §4.4 — at which point this really will be
+ * parity. Until then, do not cite web here.
+ *
+ * Behaviour: visible on load,
  * auto-hides after `ClassroomTokens.CHROME_AUTO_HIDE_MS` of no interaction,
  * never schedules a hide while `blockAutoHide` is true (an active
  * checkpoint — see ClassroomEngine.hasActiveCheckpoint), and is forced back

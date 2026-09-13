@@ -359,8 +359,15 @@ struct LivingClassroomView: View {
                 subtitle: "AI Classroom"
             )
 
-            // Netflix/YouTube-style classroom: default to landscape
-            // full-screen, matching the web classroom's behavior.
+            // Landscape-locked while the classroom is open.
+            //
+            // This does NOT match web, whatever this comment used to claim:
+            // the web classroom has no orientation handling at all. The
+            // agreed direction is portrait-primary with landscape as an
+            // expand gesture for the board, so this lock is scheduled for
+            // removal — see docs/CLASSROOM_UI_SPEC §4.3. Left in place for
+            // now rather than changed blind, because nobody in this
+            // workstream can tap through an iOS build.
             AppDelegate.orientationLock = .landscape
             if UIDevice.current.orientation != .landscapeLeft && UIDevice.current.orientation != .landscapeRight {
                 UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
