@@ -616,6 +616,58 @@ rejectPattern(
   'The iOS plan view grew its own copy of the state back'
 );
 
+// ── 3l. The Classroom shows one teacher, and no imaginary classmates ───────
+//
+// The seated cast row drew five avatars. Lyo was one of them *and* the mascot
+// beside the transcript, so the teacher competed with itself; the other four
+// were fiction. `_get_peer_states` in the backend returns a single hard-coded
+// stub ("AI peers are synthetic — no DB table") and nothing on the wire can
+// make a peer speak, so Maya, Rio and Zack stood for nobody.
+//
+// Avatars implying classmates who cannot speak are the same fabrication as
+// the random activity heatmap already removed from Home, and they would come
+// back the moment someone reads the row as a styling problem.
+
+const classroomPage = readCode('web/src/app/(main)/classroom/page.tsx');
+const captionSync = readCode('web/src/components/classroom/ClassroomCaptionSync.tsx');
+
+rejectText(
+  classroomPage,
+  'visibleCast',
+  'The Classroom seats classmates the backend cannot make speak'
+);
+
+// ── 3m. The caption has exactly one renderer ───────────────────────────────
+//
+// The page and ClassroomCaptionSync each drew their own absolutely-positioned
+// ticker into the same 24px strip, so two different sentences were painted on
+// top of each other and the teacher was unreadable. The sync component now
+// paces (writes `revealedCount`) and the page renders. Two ways this breaks:
+// the pacer growing a renderer again, or the page growing a second pacer.
+
+rejectText(
+  captionSync,
+  'createPortal',
+  'The caption pacer renders its own ticker again'
+);
+requireText(
+  captionSync,
+  'setRevealedCount',
+  'The caption pacer no longer reports progress to the store'
+);
+requireText(
+  classroomPage,
+  'revealedCount',
+  'The Classroom paces the caption itself instead of reading the store'
+);
+// The sr-only line is the semantic caption. A previous version hid it by
+// accident while trying to hide the duplicate ticker.
+requireText(
+  classroomPage,
+  'role="status"',
+  'The Classroom caption is no longer announced to screen readers'
+);
+
 const REQUIRED_RULES = [
   'The client sends its own session score',
   'The client puts a session score in a request body',
@@ -633,6 +685,9 @@ const REQUIRED_RULES = [
   'iOS cannot tell "not started" from a measured zero',
   'An unmeasured iOS figure falls back to zero',
   'iOS test prep is not reachable from anywhere',
+  'The Classroom seats classmates the backend cannot make speak',
+  'The caption pacer renders its own ticker again',
+  'The Classroom caption is no longer announced to screen readers',
   'The planned session length is dropped on the way into the Classroom',
   'iOS lets a learner start a second plan after a failed lookup',
   'The iOS intake composer stays live after a failed plan lookup',

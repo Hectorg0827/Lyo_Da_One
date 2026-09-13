@@ -1,18 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useClassroomStore } from '@/stores/classroom-store';
-
-const SPEAKER_TONE: Record<string, string> = {
-  Teacher: 'text-accent-purple',
-  Maya: 'text-accent-teal',
-  Sam: 'text-accent-orange',
-  Rio: 'text-accent-green',
-  Zack: 'text-accent-gold',
-  You: 'text-lyo-300',
-};
 
 // Construct the Unicode matcher at runtime so TypeScript can still compile the
 // app's ES5 target. Modern browsers get full multilingual letter/number
@@ -73,26 +63,27 @@ function countAtCharIndex(text: string, charIndex: number): number {
   return Math.max(1, wordsFor(text.slice(0, index)).length);
 }
 
-function isCaptionTarget(element: Element): element is HTMLElement {
-  const parent = element.parentElement;
-  return Boolean(
-    parent
-      && parent.classList.contains('relative')
-      && parent.classList.contains('overflow-hidden'),
-  );
-}
-
 /**
- * Synchronizes the classroom's visible caption to the audio that is actually
- * playing, rather than to when the server text arrived.
+ * Paces the classroom caption against the audio that is actually playing,
+ * rather than against when the server text arrived.
  *
- * The classroom store intentionally owns TTS playback. This bridge observes
- * that playback at the browser media boundary so it also covers the shared
- * neural MP3 path without duplicating audio requests. Native speech synthesis
- * is handled with real `boundary` events when the browser provides them.
+ * **This component renders nothing.** It writes `revealedCount` to the
+ * classroom store and the page draws the strip. That split is deliberate and
+ * was learned the hard way: this file used to portal its own ticker into the
+ * caption band and hide the page's by walking the DOM for "the first child
+ * that isn't mine". The hiding ran before the page's ticker existed — the
+ * page only mounts it once a caption arrives — so it hid the screen-reader
+ * span instead, and two absolutely-positioned tickers ended up painting
+ * different sentences on top of each other in a 24px strip. The teacher
+ * became literally unreadable.
  *
- * The original caption remains in the DOM for its aria-live/screen-reader
- * behavior. Only its visual ticker is replaced by this synchronized layer.
+ * One pacer, one renderer, no DOM archaeology.
+ *
+ * The classroom store owns TTS playback. This observes it at the browser
+ * media boundary so the shared neural MP3 path is covered without duplicating
+ * audio requests, and uses real `boundary` events for device speech where the
+ * engine provides them — with a timed fallback for the Android engines that
+ * do not.
  */
 export default function ClassroomCaptionSync() {
   const pathname = usePathname();
@@ -101,8 +92,7 @@ export default function ClassroomCaptionSync() {
   const voiceOn = useClassroomStore((state) => state.voiceOn);
   const speechRate = useClassroomStore((state) => state.speechRate);
 
-  const [target, setTarget] = useState<HTMLElement | null>(null);
-  const [revealedCount, setRevealedCount] = useState(0);
+  const setRevealedCount = useClassroomStore((state) => state.setRevealedCount);
 
   const captionRef = useRef(caption);
   const voiceOnRef = useRef(voiceOn);
@@ -116,8 +106,6 @@ export default function ClassroomCaptionSync() {
   voiceOnRef.current = voiceOn;
   speechRateRef.current = speechRate;
   activeRef.current = active;
-
-  const words = useMemo(() => wordsFor(caption?.text ?? ''), [caption?.text]);
 
   const cancelFrames = () => {
     if (audioFrameRef.current !== null) {
@@ -146,44 +134,6 @@ export default function ClassroomCaptionSync() {
     setRevealedCount(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caption?.speaker, caption?.text, voiceOn]);
-
-  // Find the existing visual caption band. The sr-only status element is a
-  // semantic anchor and is substantially more stable than styling classes.
-  useEffect(() => {
-    if (!active || typeof document === 'undefined') {
-      setTarget(null);
-      return;
-    }
-
-    const findTarget = () => {
-      const statuses = Array.from(document.querySelectorAll(
-        'span[role="status"][aria-live="polite"][aria-atomic="true"]',
-      ));
-      const status = statuses.find(isCaptionTarget);
-      const nextTarget = status?.parentElement ?? null;
-      setTarget((current) => current === nextTarget ? current : nextTarget);
-    };
-
-    findTarget();
-    const observer = new MutationObserver(findTarget);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [active]);
-
-  // Hide only the original visual ticker; its adjacent sr-only full sentence
-  // stays untouched for assistive technology. The portal below replaces it.
-  useEffect(() => {
-    if (!target) return;
-    const originalTicker = Array.from(target.children).find(
-      (child) => child instanceof HTMLElement && !child.hasAttribute('data-lyo-synced-caption'),
-    ) as HTMLElement | undefined;
-    if (!originalTicker) return;
-    const previousVisibility = originalTicker.style.visibility;
-    originalTicker.style.visibility = 'hidden';
-    return () => {
-      originalTicker.style.visibility = previousVisibility;
-    };
-  }, [target]);
 
   // Shared neural voice path: classroom-store plays a generated MP3 through a
   // detached HTMLAudioElement. Track that media element's real currentTime and
@@ -346,31 +296,6 @@ export default function ClassroomCaptionSync() {
 
   useEffect(() => () => cancelFrames(), []);
 
-  if (!active || !target) return null;
-
-  const visibleWords = words.slice(0, Math.min(revealedCount, words.length));
-  return createPortal(
-    <div
-      data-lyo-synced-caption="true"
-      aria-hidden="true"
-      className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap pointer-events-none"
-    >
-      {caption && (
-        <>
-          <span className={`font-bold shrink-0 text-[12.5px] ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
-            {caption.speaker}:
-          </span>
-          {visibleWords.map((word, index) => (
-            <span
-              key={`${caption.speaker}-${index}`}
-              className="text-[14px] leading-none text-white/90"
-            >
-              {word}
-            </span>
-          ))}
-        </>
-      )}
-    </div>,
-    target,
-  );
+  // Renders nothing by design — see the note at the top of this file.
+  return null;
 }

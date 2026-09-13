@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
@@ -15,7 +15,6 @@ import {
 } from '@/lib/browser-speech';
 import {
   useClassroomStore,
-  speechDelay,
   type ClassroomConnection,
   type ClassroomMode,
   type HintLevel,
@@ -25,6 +24,15 @@ import { upsertCourseOnStart } from '@/lib/stack';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
+/**
+ * Speaker identity — used for the accent colour on a spoken line, and
+ * nothing else.
+ *
+ * This was also a row of seated avatars until it turned out four of the five
+ * were fictional: the backend's `_get_peer_states` returns one hard-coded
+ * stub peer and nothing on the wire can make a peer speak. The colours stay
+ * so that a peer *would* be identifiable the day peer participation is real.
+ */
 const CAST: { name: string; emoji: string; accent: string }[] = [
   { name: 'Teacher', emoji: '🧑‍🏫', accent: 'ring-accent-purple text-accent-purple' },
   { name: 'Maya', emoji: '👩🏽‍🎓', accent: 'ring-accent-teal text-accent-teal' },
@@ -96,7 +104,7 @@ function ClassroomStage() {
   const {
     status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
+    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate, revealedCount,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
     askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
     setSpeechRate, viewBoard,
@@ -113,32 +121,22 @@ function ClassroomStage() {
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
 
-  // Closed-caption-style reveal: words appear one at a time while a line is
-  // "spoken" rather than the whole sentence landing at once, paced against
-  // the same speechDelay estimate the player uses for its own fallback
-  // timing. `caption` is a fresh object every turn (see classroom-store),
-  // so this naturally resets on each new line without extra key-tracking.
-  const [revealedWords, setRevealedWords] = useState<string[]>([]);
-  useEffect(() => {
-    if (!caption) {
-      setRevealedWords([]);
-      return;
-    }
-    const words = caption.text.split(/\s+/).filter(Boolean);
-    if (animationsOff || words.length === 0) {
-      setRevealedWords(words);
-      return;
-    }
-    setRevealedWords([]);
-    const perWordMs = Math.max(speechDelay(caption.text) / words.length, 70);
-    let count = 0;
-    const id = setInterval(() => {
-      count += 1;
-      setRevealedWords(words.slice(0, count));
-      if (count >= words.length) clearInterval(id);
-    }, perWordMs);
-    return () => clearInterval(id);
-  }, [caption, animationsOff]);
+  // The words currently revealed, paced by ClassroomCaptionSync against the
+  // real audio and read from the store. The page used to run its own timer
+  // off a duration *estimate* while the sync component paced off actual
+  // playback — two counts, and worse, two absolutely-positioned tickers in
+  // one strip, painting different sentences over each other. One count now.
+  //
+  // Reduced motion still reveals the whole line at once: that is what this
+  // page has always done for it, and it is a render decision, not a pacing
+  // one, so the pacer stays purely about audio.
+  const captionWords = useMemo(
+    () => (caption?.text ?? '').split(/\s+/).filter(Boolean),
+    [caption?.text],
+  );
+  const revealedWords = animationsOff
+    ? captionWords
+    : captionWords.slice(0, Math.min(revealedCount, captionWords.length));
 
   useEffect(() => {
     connect(connection);
@@ -194,9 +192,6 @@ function ClassroomStage() {
     : isNarrating
       ? 'Skip ahead — cuts the current line short'
       : 'Nothing to skip right now';
-  const visibleCast = mode === 'classroom'
-    ? CAST
-    : CAST.filter((member) => member.name === 'Teacher');
   const hintOptions: { level: HintLevel; label: string }[] = [
     { level: 'nudge', label: 'Small nudge' },
     { level: 'principle', label: 'Show the principle' },
@@ -470,20 +465,22 @@ function ClassroomStage() {
         </div>
       </div>
 
-      {/* ── Voice band — Lyo and the live caption each own a column, so the
-             avatar never sits on top of anything that has to be read.
-             The caption itself renders TV-closed-caption style: a single
-             fixed-height line, right-anchored, that only ever shows the
-             tail end of what's being said — older words scroll off the
-             left edge as new ones arrive on the right, rather than
-             wrapping and growing the band (which used to shrink the
-             board on longer lines, especially on mobile). ── */}
-      <div className="flex items-center gap-3 px-6 pt-2 pb-1 h-11 shrink-0">
+      {/* ── Transcript strip ──────────────────────────────────────────────
+             What the teacher is saying, given its own container instead of a
+             24px right-anchored ticker that could only ever show the tail of
+             a sentence. Two lines, wrapping, replaced each turn rather than
+             accumulated.
+
+             One renderer. This band previously hosted two — the ticker below
+             and a portalled copy from ClassroomCaptionSync — both absolutely
+             positioned, so two different sentences were painted on top of
+             each other. See the note at the top of that file. ── */}
+      <div className="flex items-start gap-3 px-4 pt-2 pb-1 shrink-0">
         <motion.img
           key={lyoState}
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
-          className="w-9 h-9 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+          className="w-11 h-11 shrink-0 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
@@ -492,36 +489,20 @@ function ClassroomStage() {
               : { scale: 1, rotate: 0, y: 0 }}
           transition={{ duration: animationsOff ? 0 : 0.6 }}
         />
-        <div
-          className="flex-1 min-w-0 h-6 relative overflow-hidden"
-          style={{
-            WebkitMaskImage: 'linear-gradient(to right, transparent, black 12%)',
-            maskImage: 'linear-gradient(to right, transparent, black 12%)',
-          }}
-        >
+        <div className="flex-1 min-w-0 min-h-[56px] max-h-[72px] overflow-hidden rounded-xl bg-black/35 px-3 py-2">
           {caption && (
-            <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap">
-              <span className={cn('font-bold shrink-0 text-[12.5px]',
+            <p className="text-[14px] leading-snug line-clamp-2">
+              <span className={cn('font-bold mr-1.5',
                 CAST.find((c) => c.name === caption.speaker)?.accent.split(' ')[1] ?? 'text-lyo-300')}>
                 {caption.speaker}:
               </span>
-              <AnimatePresence initial={false}>
-                {revealedWords.map((word, i) => (
-                  <motion.span
-                    key={i}
-                    initial={animationsOff ? false : { opacity: 0, y: 3 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.12 }}
-                    className="text-[14px] leading-none text-white/90"
-                  >
-                    {word}
-                  </motion.span>
-                ))}
-              </AnimatePresence>
-            </div>
+              <span className="text-white/90">{revealedWords.join(' ')}</span>
+            </p>
           )}
-          {/* The visual ticker above is decorative/progressive — screen
-              readers get the whole line at once instead of word-by-word. */}
+          {/* The visible line is progressive; screen readers get the whole
+              sentence at once. This span is the semantic caption and must
+              never be hidden — a previous version hid it by accident while
+              trying to hide the duplicate ticker. */}
           <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
             {caption ? `${caption.speaker}: ${caption.text}` : ''}
           </span>
@@ -551,38 +532,25 @@ function ClassroomStage() {
         )}
       </AnimatePresence>
 
-      {/* ── The class, seated ── */}
-      <div className="flex items-end justify-center gap-5 px-4 pt-1 pb-2">
-        {visibleCast.map((member, i) => {
-          const speaking = activeSpeaker === member.name;
-          return (
-            <motion.div
-              key={member.name}
-              className="flex flex-col items-center gap-0.5"
-              animate={{ y: speaking ? -4 : 0 }}
-            >
-              <motion.div
-                className={cn(
-                  'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow',
-                  speaking ? `${member.accent.split(' ')[0]} shadow-[0_0_18px_rgba(139,92,246,0.45)]` : 'ring-white/10',
-                )}
-                animate={speaking
-                  ? { scale: [1, 1.07, 1] }
-                  : { y: [0, i % 2 === 0 ? 1.5 : -1.5, 0] }}
-                transition={speaking
-                  ? { duration: 0.7, repeat: Infinity }
-                  : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                {member.emoji}
-              </motion.div>
-              <span className={cn('text-[9.5px] font-bold',
-                speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
-                {member.name === 'Teacher' ? 'Lyo' : member.name}
-              </span>
-            </motion.div>
-          );
-        })}
-      </div>
+      {/* The seated class used to sit here: five avatars, one per CAST
+          member. They are gone, and deliberately.
+
+          Lyo was drawn twice — once as the mascot beside the transcript and
+          again as a 🧑‍🏫 emoji in this row — so the teacher competed with
+          itself for the learner's attention.
+
+          The other four were not real. `_get_peer_states` in
+          scene_lifecycle_engine.py returns a single hard-coded stub
+          ("AI peers are synthetic — no DB table") and no peer can become a
+          speaker on the wire, so Maya, Rio and Zack represented nothing at
+          all. Avatars implying classmates who cannot speak are the same
+          fabrication as the random activity heatmap this product already
+          removed from Home.
+
+          The speaker is still identified: the transcript strip names them in
+          their own accent colour, which is what CAST is kept for. When peer
+          participation is genuinely built, a row like this earns its place
+          back. ── */}
 
       {/* ── Your desk ──
              Everything here needs a live socket. When the class is not in
