@@ -785,7 +785,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       case 'QuizCard':
         addBoardElement({ id: nextId(), kind: 'quiz', quiz: comp });
-        pushTranscript('Teacher', `📝 Recognition check: ${comp.question ?? ''}`);
+        pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
         set({ canContinue: false });
         break;
       case 'InputField':
