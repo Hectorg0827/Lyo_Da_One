@@ -23,6 +23,7 @@ struct ActiveLessonView: View {
     var onTransferSubmit: (SDUIComponent, String) -> Bool = { _, _ in false }
     var onHint: (SDUIComponent) -> Bool = { _ in false }
     var onSkip: (SDUIComponent) -> Bool = { _ in false }
+    var onActivityUpdate: (String, [String: Any]) -> Bool = { _, _ in false }
     /// Fired when the learner answers a `user_prompt` checkpoint — either by
     /// tapping one of its options or by submitting an open response. This is
     /// what makes a mid-lesson question a real, backend-visible exchange
@@ -61,6 +62,9 @@ struct ActiveLessonView: View {
         // reads and continues past).
         var promptOptions: [String]? = nil
         var requiresOpenResponse: Bool = false
+        var teachingExamples: [LiveLessonBlock] = []
+        var teachingVisual: ClassroomTeachingVisual? = nil
+        var activityId: String? = nil
 
         enum SupportingBlock {
             case comparison(ConceptComparisonModel)
@@ -296,6 +300,7 @@ struct ActiveLessonView: View {
                                 skippedInteractionIds.insert(component.id)
                                 return true
                             },
+                            onActivityUpdate: onActivityUpdate,
                             onPromptSubmit: { response in
                                 let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !trimmed.isEmpty else { return }
@@ -638,6 +643,7 @@ struct LyoBoardView: View {
     var onTransferSubmit: (SDUIComponent, String) -> Bool
     var onHint: (SDUIComponent) -> Bool
     var onSkip: (SDUIComponent) -> Bool
+    var onActivityUpdate: (String, [String: Any]) -> Bool = { _, _ in false }
     var onPromptSubmit: (String) -> Void = { _ in }
 
     var body: some View {
@@ -658,6 +664,15 @@ struct LyoBoardView: View {
             } else if step.requiresOpenResponse {
                 openResponseContent()
             } else {
+                ForEach(step.teachingExamples, id: \.id) { example in
+                    BlockRendererView(block: example)
+                }
+                if let visual = step.teachingVisual, let activityId = step.activityId {
+                    ClassroomTeachingVisualView(visual: visual) { values in
+                        onActivityUpdate(activityId, values)
+                    }
+                    .id(activityId)
+                }
                 switch step.supporting {
                 case .classroomQuiz(let component):
                     quizContent(component)
@@ -673,7 +688,9 @@ struct LyoBoardView: View {
                         .padding(4)
 
                 case .none:
-                    defaultExplanationContent()
+                    if step.teachingExamples.isEmpty && step.teachingVisual == nil {
+                        defaultExplanationContent()
+                    }
                 }
             }
         }

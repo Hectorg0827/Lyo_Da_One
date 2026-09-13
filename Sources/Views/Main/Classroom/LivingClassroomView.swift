@@ -469,6 +469,7 @@ struct LivingClassroomView: View {
                     actionData: ["reason": "unsure"]
                 )
             },
+            onActivityUpdate: { id, values in service.updateActivity(id: id, values: values) },
             onPromptAnswer: { step, response in
                 // Route through the same "user_message" path chat uses, so
                 // the backend's hesitation detection and learner_signal

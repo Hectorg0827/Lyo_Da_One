@@ -14,6 +14,7 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         lhs.studentName == rhs.studentName &&
         lhs.question == rhs.question &&
         lhs.options == rhs.options &&
+        lhs.teachingVisual == rhs.teachingVisual &&
         lhs.actionIntent == rhs.actionIntent &&
         lhs.languageCode == rhs.languageCode
     }
@@ -41,6 +42,7 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
     // Pass-through carrier for the rich BlockRendererView pipeline.
     // Populated only when type == .lessonBlock.
     let lessonBlock: LiveLessonBlock?
+    let teachingVisual: ClassroomTeachingVisual?
 
     enum CodingKeys: String, CodingKey {
         case componentId = "component_id"
@@ -85,7 +87,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         actionPayload: [String: String]? = nil,
         languageCode: String? = nil,
         audioURL: String? = nil,
-        lessonBlock: LiveLessonBlock? = nil
+        lessonBlock: LiveLessonBlock? = nil,
+        teachingVisual: ClassroomTeachingVisual? = nil
     ) {
         self.id = id
         self.type = type
@@ -105,6 +108,7 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         self.languageCode = languageCode
         self.audioURL = audioURL
         self.lessonBlock = lessonBlock
+        self.teachingVisual = teachingVisual
     }
 
     init(from decoder: Decoder) throws {
@@ -145,11 +149,17 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         // The backend's LessonBlock has fields: { block_type: String, block: { ...LiveLessonBlock fields... } }
         // We merge `block_type` into the inner dict as `type`, then decode as LiveLessonBlock.
         if self.type == .lessonBlock,
+           try container.decodeIfPresent(String.self, forKey: .blockType) == "teaching_visual" {
+            self.teachingVisual = try? container.decode(ClassroomTeachingVisual.self, forKey: .block)
+            self.lessonBlock = nil
+        } else if self.type == .lessonBlock,
            let blockData = try container.decodeIfPresent(LiveLessonBlockPayload.self, forKey: .block),
            let blockTypeRaw = try container.decodeIfPresent(String.self, forKey: .blockType) {
             self.lessonBlock = blockData.toLiveLessonBlock(typeRaw: blockTypeRaw, fallbackId: self.id)
+            self.teachingVisual = nil
         } else {
             self.lessonBlock = nil
+            self.teachingVisual = nil
         }
     }
 
@@ -172,6 +182,10 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(actionPayload, forKey: .actionPayload)
         try container.encodeIfPresent(languageCode, forKey: .languageCode)
         try container.encodeIfPresent(audioURL, forKey: .audioURL)
+        if let visual = teachingVisual {
+            try container.encode("teaching_visual", forKey: .blockType)
+            try container.encode(visual, forKey: .block)
+        }
     }
 
     enum ComponentType: String, Codable {

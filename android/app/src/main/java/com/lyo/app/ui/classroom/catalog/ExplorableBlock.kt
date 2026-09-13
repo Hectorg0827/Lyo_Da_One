@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -141,12 +142,13 @@ fun A2uiRenderScope.ExplorableBlockRenderer() {
  *  skipped rather than breaking the whole render, the same
  *  resilience-over-crash rule the rest of the catalog follows. */
 @Composable
-private fun ExplorablePlot(
+internal fun ExplorablePlot(
     expression: String,
     xMin: Double,
     xMax: Double,
     paramValues: Map<String, Double>,
     modifier: Modifier = Modifier,
+    yBounds: ClosedFloatingPointRange<Double>? = null,
 ) {
     val range = (xMax - xMin).takeIf { it > 0.0 } ?: (DEFAULT_X_MAX - DEFAULT_X_MIN)
     val safeXMin = if (xMax > xMin) xMin else DEFAULT_X_MIN
@@ -159,10 +161,10 @@ private fun ExplorablePlot(
         }
     }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.clipToBounds()) {
         if (samples.size < 2) return@Canvas
-        val yMin = samples.minOf { it.second }
-        val yMax = samples.maxOf { it.second }
+        val yMin = yBounds?.start ?: samples.minOf { it.second }
+        val yMax = yBounds?.endInclusive ?: samples.maxOf { it.second }
         val ySpan = (yMax - yMin).takeIf { it > 1e-9 } ?: 1.0
 
         fun toOffset(x: Double, y: Double): Offset {
@@ -189,6 +191,7 @@ private fun ExplorablePlot(
             // Don't draw a line across a gap left by a skipped (unplottable)
             // sample — only connect genuinely adjacent x-steps.
             if (x2 - x1 > range / PLOT_SAMPLES * 1.5) continue
+            if (kotlin.math.abs(y2 - y1) > ySpan * 2) continue
             drawLine(
                 color = ClassroomTokens.AccentPurple,
                 start = toOffset(x1, y1),

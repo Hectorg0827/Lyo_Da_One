@@ -157,6 +157,8 @@ struct CurveExplorerView: View {
     let config: ExplorableConfig
     /// Fired once after the learner's first manipulation — an engagement signal.
     var onExplored: (() -> Void)?
+    var onValuesChange: (([String: Double]) -> Void)? = nil
+    var yBounds: ClosedRange<Double>? = nil
 
     @State private var values: [String: Double] = [:]
     @State private var hasExplored = false
@@ -187,6 +189,11 @@ struct CurveExplorerView: View {
             plot
                 .frame(height: 170)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            if let bounds = yBounds {
+                Text("x: \(xMin.formatted()) … \(xMax.formatted()) · y: \(bounds.lowerBound.formatted()) … \(bounds.upperBound.formatted())")
+                    .font(.caption).foregroundColor(.secondary)
+            }
 
             ForEach(config.params, id: \.name) { param in
                 slider(for: param)
@@ -232,7 +239,7 @@ struct CurveExplorerView: View {
             var samples: [(x: Double, y: Double)] = []
             for i in 0...sampleCount {
                 let x = xMin + (xMax - xMin) * Double(i) / Double(sampleCount)
-                var vars = values
+                var vars = Dictionary(uniqueKeysWithValues: config.params.map { ($0.name, values[$0.name] ?? $0.initial) })
                 vars["x"] = x
                 if let y = eval(vars), y.isFinite { samples.append((x, y)) }
             }
@@ -245,6 +252,7 @@ struct CurveExplorerView: View {
             if yHi - yLo < 1e-6 { yLo -= 1; yHi += 1 }
             let yPad = (yHi - yLo) * 0.15
             yLo -= yPad; yHi += yPad
+            if let bounds = yBounds { yLo = bounds.lowerBound; yHi = bounds.upperBound }
 
             func point(_ s: (x: Double, y: Double)) -> CGPoint {
                 CGPoint(
@@ -273,7 +281,8 @@ struct CurveExplorerView: View {
             for s in samples {
                 let p = point(s)
                 if let prev = previous,
-                    Swift.abs(s.y - prev.y) < (yHi - yLo) * 2 {
+                    Swift.abs(s.y - prev.y) < (yHi - yLo) * 2,
+                    s.x - prev.x < (xMax - xMin) / Double(sampleCount) * 1.5 {
                     curve.addLine(to: p)
                 } else {
                     curve.move(to: p)
@@ -295,6 +304,7 @@ struct CurveExplorerView: View {
             get: { values[param.name] ?? param.initial },
             set: { newValue in
                 values[param.name] = newValue
+                onValuesChange?(Dictionary(uniqueKeysWithValues: config.params.map { ($0.name, values[$0.name] ?? $0.initial) }))
                 if !hasExplored {
                     hasExplored = true
                     onExplored?()

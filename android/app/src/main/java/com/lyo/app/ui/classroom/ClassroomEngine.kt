@@ -65,6 +65,8 @@ class ClassroomEngine(
     private var playerJob: Job? = null
     private var promptTimeoutJob: Job? = null
     private var highlightClearJob: Job? = null
+    private var activitySaveJob: Job? = null
+    private val activityUpdates = mutableMapOf<String, A2uiAction>()
 
     val surface = A2uiSurfaceState(ClassroomBridge.SURFACE_ID)
     val catalog: A2uiCatalog = BasicCatalog + ClassroomCatalog
@@ -130,6 +132,7 @@ class ClassroomEngine(
     }
 
     fun dispose() {
+        flushActivities()
         ClassroomSocketClient.disconnect()
         scope.cancel()
     }
@@ -333,6 +336,13 @@ class ClassroomEngine(
     // ── Outgoing: board-content actions (from the A2UI renderer) ────────
 
     fun onAction(action: A2uiAction) {
+        if (action.name == "update_activity") {
+            activityUpdates[action.sourceComponentId] = action
+            activitySaveJob?.cancel()
+            activitySaveJob = scope.launch { delay(200); flushActivities() }
+            return
+        }
+        flushActivities()
         if (action.name == "submitPrompt") {
             promptTimeoutJob?.cancel()
             hasActiveCheckpoint = false
@@ -377,10 +387,21 @@ class ClassroomEngine(
     }
 
     fun continueLesson() {
-        ClassroomSocketClient.send(ClassroomBridge.continueLessonAction(sessionId, nextActionIntent))
+        flushActivities()
+        val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
+        ClassroomSocketClient.send(ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId))
+    }
+
+    private fun flushActivities() {
+        activitySaveJob?.cancel()
+        activitySaveJob = null
+        val updates = activityUpdates.values.toList()
+        activityUpdates.clear()
+        updates.forEach { ClassroomSocketClient.send(ClassroomBridge.actionToUserAction(it, sessionId)) }
     }
 
     fun askQuestion(text: String) {
+        flushActivities()
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         pushTranscript("You", "✋ $trimmed")
@@ -388,16 +409,19 @@ class ClassroomEngine(
     }
 
     fun requestHint(level: String) {
+        flushActivities()
         pushTranscript("You", "Requested a hint")
         ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))
     }
 
     fun signalConfused() {
+        flushActivities()
         pushTranscript("You", "Requested a small nudge")
         ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))
     }
 
     fun signalTooEasy() {
+        flushActivities()
         pushTranscript("You", "Requested a harder case")
         ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))
     }

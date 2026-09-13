@@ -5,6 +5,7 @@ import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
 import { updateCourseProgress } from '@/lib/stack';
 import { transcriptLabelFor } from '@/lib/learner-model.mjs';
+import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -99,6 +100,7 @@ export interface DirectorTurn {
 // ─── Board model — the main attraction ───────────────────────────────────────
 
 export type BoardElement =
+  | { id: string; kind: 'teaching_visual'; visual: TeachingVisual }
   | { id: string; kind: 'chalk'; text: string; highlightedTerm?: string }
   | { id: string; kind: 'highlight'; term: string }
   | { id: string; kind: 'latex'; latex: string }
@@ -173,6 +175,7 @@ interface ClassroomStore {
   progressTotal: number;
   continueLabel: string;
   nextActionIntent: string;
+  nextActionComponentId: string;
   error: string | null;
 
   soundOn: boolean;
@@ -192,6 +195,7 @@ interface ClassroomStore {
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
+  updateActivity: (id: string, values: Record<string, unknown>) => boolean;
   /** Cuts the currently-playing narration turn short and immediately
       advances to the next queued one — a video-style "skip ahead" for the
       teacher's auto-paced speech/board/pause turns. A no-op when there's
@@ -789,7 +793,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         });
         break;
       case 'LessonBlock':
-        if (comp.block_type === 'summary' && comp.block) {
+        if (comp.block_type === 'teaching_visual') {
+          const visual = parseTeachingVisual(comp.block);
+          if (visual) addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual });
+        } else if (comp.block_type === 'summary' && comp.block) {
           addBoardElement({
             id: nextId(),
             kind: 'summary',
@@ -818,6 +825,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           canContinue: true,
           continueLabel: comp.label || 'Continue',
           nextActionIntent: comp.action_intent || 'continue',
+          nextActionComponentId: comp.component_id,
           waitingForScene: false,
         });
         break;
@@ -868,11 +876,24 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
    * check it before optimistically showing "waiting for the teacher" — a
    * silently dropped action used to leave the board spinning forever.
    */
+  const activityUpdates = new Map<string, Record<string, unknown>>();
+  let activityTimer: ReturnType<typeof setTimeout> | null = null;
+  function flushActivities() {
+    if (activityTimer) clearTimeout(activityTimer);
+    activityTimer = null;
+    const updates = Array.from(activityUpdates);
+    activityUpdates.clear();
+    for (const [id, values] of updates) {
+      if (!sendAction('update_activity', id, values)) reportOffline();
+    }
+  }
+
   function sendAction(
     actionIntent: string,
     componentId: string,
     answerData?: Record<string, unknown>,
   ): boolean {
+    if (actionIntent !== 'update_activity') flushActivities();
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     const payload: Record<string, unknown> = {
       event_type: 'user_action',
@@ -919,6 +940,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     progressTotal: 1,
     continueLabel: 'Check understanding',
     nextActionIntent: 'continue',
+    nextActionComponentId: 'web_continue',
     error: null,
     soundOn: false,
     voiceOn: true,
@@ -951,7 +973,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
         progressCurrent: 0, progressTotal: 1,
-        continueLabel: 'Check understanding', nextActionIntent: 'continue', error: null,
+        continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue', error: null,
       });
 
       const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
@@ -970,6 +992,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     },
 
     disconnect: () => {
+      flushActivities();
       stopPlayer();
       turnQueue = [];
       authToken = null;
@@ -1137,12 +1160,29 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       pushTranscript('You', `Requested: ${labels[level]}`);
     },
 
+    updateActivity: (id, values) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { reportOffline(); return false; }
+      if (!get().board.some(el => el.id === id && el.kind === 'teaching_visual')) return false;
+      set(state => ({ board: state.board.map(el => {
+        if (el.id !== id || el.kind !== 'teaching_visual') return el;
+        const params = values.params as Record<string, number> | undefined;
+        const visual = parseTeachingVisual(params
+          ? { ...el.visual, params: el.visual.params.map(p => ({ ...p, initial: params[p.name] })) }
+          : { ...el.visual, value: values.value });
+        return visual ? { ...el, visual } : el;
+      }) }));
+      activityUpdates.set(id, values);
+      if (activityTimer) clearTimeout(activityTimer);
+      activityTimer = setTimeout(flushActivities, 200);
+      return true;
+    },
+
     continueLesson: () => {
       const actionIntent = get().nextActionIntent || 'continue';
       learnerTakesFloor();
       // Leave the Continue button in place if the action never left the
       // browser — clearing canContinue would strip the only way forward.
-      if (!sendAction(actionIntent, 'web_continue')) {
+      if (!sendAction(actionIntent, get().nextActionComponentId || 'web_continue')) {
         reportOffline();
         return;
       }

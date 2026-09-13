@@ -37,6 +37,9 @@ enum ActiveLessonAdapter {
         var pendingSpeakerImageName: String?
 
         var pendingSupporting: ActiveLessonView.LessonStep.SupportingBlock?
+        var pendingExamples: [LiveLessonBlock] = []
+        var pendingVisual: ClassroomTeachingVisual?
+        var pendingActivityId: String?
         var pendingKeyTerm: ActiveLessonView.LessonStep.KeyTerm?
         // A user_prompt turn is a real pause: the Teacher is waiting on a
         // specific response, not just moving on to the next line. These
@@ -55,6 +58,7 @@ enum ActiveLessonAdapter {
                 pendingId = nil; pendingText = nil
                 pendingSpeakerName = nil; pendingSpeakerBadge = nil; pendingSpeakerImageName = nil
                 pendingSupporting = nil; pendingKeyTerm = nil
+                pendingExamples = []; pendingVisual = nil; pendingActivityId = nil
                 pendingPromptOptions = nil; pendingRequiresOpenResponse = false
                 return
             }
@@ -68,7 +72,10 @@ enum ActiveLessonAdapter {
                 speakerBadge: pendingSpeakerBadge ?? "AI Teacher ✨",
                 speakerImageName: pendingSpeakerImageName,
                 promptOptions: pendingPromptOptions,
-                requiresOpenResponse: pendingRequiresOpenResponse
+                requiresOpenResponse: pendingRequiresOpenResponse,
+                teachingExamples: pendingExamples,
+                teachingVisual: pendingVisual,
+                activityId: pendingActivityId
             ))
             pendingId = nil
             pendingText = nil
@@ -76,6 +83,7 @@ enum ActiveLessonAdapter {
             pendingSpeakerBadge = nil
             pendingSpeakerImageName = nil
             pendingSupporting = nil
+            pendingExamples = []; pendingVisual = nil; pendingActivityId = nil
             pendingKeyTerm = nil
             pendingPromptOptions = nil
             pendingRequiresOpenResponse = false
@@ -211,6 +219,10 @@ enum ActiveLessonAdapter {
                 }
 
             case .lessonBlock:
+                if let visual = component.teachingVisual {
+                    pendingVisual = visual
+                    pendingActivityId = component.id
+                }
                 if let block = component.lessonBlock {
                     if let comparison = comparisonModel(from: block) {
                         pendingSupporting = .comparison(comparison)
@@ -222,8 +234,7 @@ enum ActiveLessonAdapter {
                 }
 
             case .exampleBlock:
-                if pendingSupporting == nil {
-                    pendingSupporting = .lessonBlock(
+                    pendingExamples.append(
                         LiveLessonBlock(
                             id: component.id,
                             type: .callout,
@@ -231,7 +242,6 @@ enum ActiveLessonAdapter {
                             content: component.content
                         )
                     )
-                }
 
             case .ctaButton:
                 finalCtaLabel = component.content.isEmpty ? "Continue" : component.content
@@ -285,7 +295,10 @@ enum ActiveLessonAdapter {
                 speakerBadge: last.speakerBadge,
                 speakerImageName: last.speakerImageName,
                 promptOptions: last.promptOptions,
-                requiresOpenResponse: last.requiresOpenResponse
+                requiresOpenResponse: last.requiresOpenResponse,
+                teachingExamples: last.teachingExamples,
+                teachingVisual: last.teachingVisual,
+                activityId: last.activityId
             )
         }
         return result
