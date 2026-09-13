@@ -444,9 +444,9 @@ function TransferView({
   return (
     <div className="space-y-3 rounded-xl border border-lyo-400/25 bg-lyo-500/10 p-4">
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
-        {isSpanish ? '✍️ Demuestra que puedes usarlo' : '✍️ Show you can use it'}
+        {isSpanish ? 'Tu turno' : 'Your turn'}
       </p>
-      <label htmlFor={`transfer-${el.id}`} className="block text-white text-base font-medium">
+      <label htmlFor={`transfer-${el.id}`} className="block whitespace-pre-line text-white text-base font-medium leading-relaxed">
         {el.input.question || (isSpanish ? '¿Cómo usarías esta idea?' : 'How would you use this idea?')}
       </label>
       <textarea
@@ -479,7 +479,9 @@ function TransferView({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className={cn('text-xs', ready ? 'text-green-300' : 'text-white/45')}>
-              {wordCount}/{minWords} {isSpanish ? 'palabras como mínimo' : 'minimum words'}
+              {minWords <= 1
+                ? (isSpanish ? 'Una respuesta breve está bien.' : 'A brief answer is welcome.')
+                : <>{wordCount}/{minWords} {isSpanish ? 'palabras como mínimo' : 'minimum words'}</>}
             </span>
             {speechSupported && !el.submitted && (
               <button
@@ -503,7 +505,7 @@ function TransferView({
                   onClick={() => onSkip(el.id)}
                   className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
                 >
-                  {isSpanish ? 'No lo sé — omitir' : <>I don&apos;t know — skip</>}
+                  {isSpanish ? 'Practicar después' : 'Practise later'}
                 </button>
                 <button
                   type="button"
