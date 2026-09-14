@@ -165,10 +165,10 @@ function ClassroomStage() {
     : isNarrating
       ? 'Skip ahead — cuts the current line short'
       : 'Nothing to skip right now';
-  // Lyo owns the teacher position beside the transcript. The participant
-  // rail is reserved for real classroom-mode peers, avoiding a second
-  // representation of the same teacher.
-  const visibleCast = mode === 'classroom' ? CAST : [];
+  // Lyo owns the teacher position beside the transcript. There is no
+  // participant rail: the backend has no real peers to put in one, so the
+  // only honest number of classmates to draw is none. CAST survives below
+  // purely as the speaker to accent-colour map for the transcript.
   const hintOptions: { level: HintLevel; label: string }[] = [
     { level: 'nudge', label: 'Small nudge' },
     { level: 'principle', label: 'Show the principle' },
@@ -482,7 +482,7 @@ function ClassroomStage() {
             exit={{ opacity: 0, y: 8 }}
             className="px-6 py-1.5 flex flex-wrap items-center justify-center gap-2"
           >
-            <Hand className="w-4 h-4 text-accent-gold animate-bounce" />
+            <Hand className="w-4 h-4 text-lyo-300 animate-bounce" />
             {(prompt.options ?? []).map((opt) => (
               <button
                 key={opt}
@@ -496,38 +496,16 @@ function ClassroomStage() {
         )}
       </AnimatePresence>
 
-      {/* ── The class, seated ── */}
-      {visibleCast.length > 0 && <div className="flex items-end justify-center gap-5 px-4 pt-2 pb-1">
-        {visibleCast.map((member, i) => {
-          const speaking = activeSpeaker === member.name;
-          return (
-            <motion.div
-              key={member.name}
-              className="flex flex-col items-center gap-0.5"
-              animate={{ y: speaking ? -4 : 0 }}
-            >
-              <motion.div
-                className={cn(
-                  'w-11 h-11 rounded-full flex items-center justify-center text-xl bg-white/[0.06] ring-2 transition-shadow',
-                  speaking ? `${member.accent.split(' ')[0]} shadow-[0_0_18px_rgba(139,92,246,0.45)]` : 'ring-white/10',
-                )}
-                animate={speaking
-                  ? { scale: [1, 1.07, 1] }
-                  : { y: [0, i % 2 === 0 ? 1.5 : -1.5, 0] }}
-                transition={speaking
-                  ? { duration: 0.7, repeat: Infinity }
-                  : { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                {member.emoji}
-              </motion.div>
-              <span className={cn('text-[9.5px] font-bold',
-                speaking ? member.accent.split(' ')[1] : 'text-white/35')}>
-                {member.name === 'Teacher' ? 'Lyo' : member.name}
-              </span>
-            </motion.div>
-          );
-        })}
-      </div>}
+      {/* No seated cast row.
+        *
+        * The four classmates this used to draw were not real. The backend's
+        * `_get_peer_states` returns a single hard-coded stub — its own comment
+        * says "AI peers are synthetic — no DB table" — and nothing on the wire
+        * can make a peer speak. Drawing them put invented people around a real
+        * learner, which is the one thing the product trust gate exists to stop.
+        *
+        * CAST stays as the speaker to accent-colour map used by the transcript.
+        */}
 
       {/* ── Your desk ──
              Everything here needs a live socket. When the class is not in
@@ -596,9 +574,11 @@ function ClassroomStage() {
             aria-expanded={handRaised}
             className={cn(
               'flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+              // Purple is interaction; gold is reserved for achievements.
+              // Raising your hand is an ordinary control, not something won.
               handRaised
-                ? 'border-accent-gold/45 bg-accent-gold/20 text-accent-gold'
-                : 'border-accent-gold/25 bg-accent-gold/10 text-accent-gold hover:bg-accent-gold/20',
+                ? 'border-lyo-500/50 bg-lyo-500/25 text-white'
+                : 'border-lyo-500/30 bg-lyo-500/10 text-lyo-200 hover:bg-lyo-500/20',
             )}
           >
             <Hand className="h-4 w-4" /> Raise hand

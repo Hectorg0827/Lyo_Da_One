@@ -159,6 +159,19 @@ interface ClassroomStore {
   viewingBoard: number;         // -1 = live, else history index
 
   caption: Caption | null;      // the line being spoken right now
+  /**
+   * How many words of `caption.text` are currently revealed.
+   *
+   * One number, owned here, because this used to be two. The page paced a
+   * reveal off a duration *estimate* while ClassroomCaptionSync paced one off
+   * the *real* audio, and both drew their own absolutely-positioned ticker
+   * into the same strip — so two different sentences were painted on top of
+   * each other and the teacher became unreadable.
+   *
+   * The pacer (ClassroomCaptionSync) writes this; the page renders it. There
+   * is no second copy to drift.
+   */
+  revealedCount: number;
   activeSpeaker: string | null; // who is talking (lights up in the cast row)
   prompt: ActivePrompt | null;  // cold-call awaiting the learner
   transcript: TranscriptItem[]; // full log — the drawer, the byproduct
@@ -179,6 +192,7 @@ interface ClassroomStore {
   error: string | null;
 
   soundOn: boolean;
+  setRevealedCount: (count: number) => void;
   voiceOn: boolean;
   speechRate: number;
   isPaused: boolean;        // the single most accessible control: stop the class
@@ -590,7 +604,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   function learnerTakesFloor() {
     stopPlayer();
     turnQueue = [];
-    set({ caption: null, activeSpeaker: null, prompt: null });
+    set({ caption: null, activeSpeaker: null, prompt: null, revealedCount: 0 });
   }
 
   function playNext() {
@@ -607,7 +621,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const text = (turn.text ?? '').trim();
         if (text) {
           const speaker = turn.speaker || 'Teacher';
-          set({ caption: { speaker, text }, activeSpeaker: speaker });
+          set({ caption: { speaker, text }, activeSpeaker: speaker, revealedCount: 0 });
           pushTranscript(speaker, text);
           speakLine(speaker, text, playNext);
           return;
@@ -627,6 +641,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         set({
           caption: { speaker, text },
           activeSpeaker: speaker,
+          revealedCount: 0,
           prompt: {
             id: promptId, speaker, text,
             options: turn.options?.length ? turn.options : undefined,
@@ -774,7 +789,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       case 'QuizCard':
         addBoardElement({ id: nextId(), kind: 'quiz', quiz: comp });
-        pushTranscript('Teacher', `📝 Recognition check: ${comp.question ?? ''}`);
+        pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
         set({ canContinue: false });
         break;
       case 'InputField':
@@ -943,6 +958,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     nextActionComponentId: 'web_continue',
     error: null,
     soundOn: false,
+    revealedCount: 0,
     voiceOn: true,
     speechRate: 1,
     isPaused: false,
@@ -1127,7 +1143,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         return;
       }
       pushTranscript('You', `✋ ${trimmed}`);
-      set({ waitingForScene: true, lyoState: 'curious', caption: { speaker: 'You', text: trimmed } });
+      // The learner's own line is not spoken by anyone, so it is shown whole
+      // rather than paced — there is no audio for a pacer to follow.
+      set({
+        waitingForScene: true,
+        lyoState: 'curious',
+        caption: { speaker: 'You', text: trimmed },
+        revealedCount: trimmed.split(/\s+/).filter(Boolean).length,
+      });
     },
 
     takeFloor: () => learnerTakesFloor(),
@@ -1244,6 +1267,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     setSpeechRate: (rate: number) => set({
       speechRate: Math.max(0.75, Math.min(1.25, rate)),
     }),
+
+    setRevealedCount: (count: number) => set({ revealedCount: Math.max(0, count) }),
 
     viewBoard: (index: number) => set({ viewingBoard: index }),
   };

@@ -111,6 +111,8 @@ struct ActiveLessonView: View {
 
     // Native immersive chrome auto-hide. Web intentionally keeps its chrome
     // stable until cross-platform resume semantics are complete.
+    // See docs/CLASSROOM_UI_SPEC §4.4 for the agreed direction: web gains
+    // this with a permanently visible exit, not before.
     // Everything except the board, the dialogue card, and the Teacher's
     // portrait hides itself after 3s of no interaction; a tap on the
     // background brings it back.

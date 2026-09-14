@@ -361,6 +361,8 @@ struct LivingClassroomView: View {
 
             // Legacy iOS classroom orientation policy. This is intentionally
             // not described as web parity; web does not force orientation.
+            // Scheduled for removal in favour of portrait-primary with
+            // landscape as an expand gesture — docs/CLASSROOM_UI_SPEC §4.3.
             AppDelegate.orientationLock = .landscape
             if UIDevice.current.orientation != .landscapeLeft && UIDevice.current.orientation != .landscapeRight {
                 UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")

@@ -44,6 +44,11 @@ function rejectText(source, forbidden, label) {
   if (source.includes(forbidden)) failures.push(`${label}: forbidden ${JSON.stringify(forbidden)}`);
 }
 
+function requirePattern(source, pattern, label) {
+  checked.add(label);
+  if (!pattern.test(source)) failures.push(`${label}: no match for ${pattern}`);
+}
+
 function rejectPattern(source, pattern, label) {
   checked.add(label);
   if (pattern.test(source)) failures.push(`${label}: forbidden pattern ${pattern}`);
@@ -616,6 +621,96 @@ rejectPattern(
   'The iOS plan view grew its own copy of the state back'
 );
 
+// ── 3l. The Classroom shows one teacher, and no imaginary classmates ───────
+//
+// The seated cast row drew five avatars. Lyo was one of them *and* the mascot
+// beside the transcript, so the teacher competed with itself; the other four
+// were fiction. `_get_peer_states` in the backend returns a single hard-coded
+// stub ("AI peers are synthetic — no DB table") and nothing on the wire can
+// make a peer speak, so Maya, Rio and Zack stood for nobody.
+//
+// Avatars implying classmates who cannot speak are the same fabrication as
+// the random activity heatmap already removed from Home, and they would come
+// back the moment someone reads the row as a styling problem.
+
+const classroomPage = readCode('web/src/app/(main)/classroom/page.tsx');
+const captionSync = readCode('web/src/components/classroom/ClassroomCaptionSync.tsx');
+
+rejectText(
+  classroomPage,
+  'visibleCast',
+  'The Classroom seats classmates the backend cannot make speak'
+);
+
+// ── 3m. The caption has exactly one visual renderer ────────────────────────
+//
+// The page and ClassroomCaptionSync each drew their own absolutely-positioned
+// ticker into the same 24px strip, so two different sentences were painted on
+// top of each other and the teacher was unreadable.
+//
+// The shipped fix gives the pacer one explicit mount to portal into, rather
+// than having it hunt the DOM for a ticker to replace and hide. So the rules
+// here pin the *invariant* — one visual owner, anchored deliberately — and
+// not any particular way of achieving it. An earlier draft of this gate
+// required a store-held `revealedCount` instead, which pinned one specific
+// implementation and would have failed the equally correct one that shipped.
+
+requireText(
+  classroomPage,
+  'data-classroom-caption-target',
+  'The caption pacer has no explicit mount and must hunt the DOM again'
+);
+// The hunt is what broke it the first time: the observer ran before the
+// page's ticker existed and hid the screen-reader span instead.
+rejectText(
+  captionSync,
+  'isCaptionTarget',
+  'The caption pacer is guessing which element to replace again'
+);
+// The sr-only line is the semantic caption. A previous version hid it by
+// accident while trying to hide the duplicate ticker.
+requireText(
+  classroomPage,
+  'role="status"',
+  'The Classroom caption is no longer announced to screen readers'
+);
+
+// ── 3n. The Classroom's controls are reachable and its accents mean one thing ─
+//
+// Three desk controls at 32px tall, two of them fixed-width and one flexing,
+// read as a hierarchy nobody intended and missed the minimum touch target on
+// a phone. They now share one class.
+//
+// The accent system: purple is interaction, teal/green is learning and
+// success, gold is achievements only. "Raise your hand" wore gold, which made
+// an ordinary action look like a reward.
+
+requirePattern(
+  classroomPage,
+  /min-h-(?:12|\[48px\])/,
+  'The Classroom desk controls are below the minimum touch target'
+);
+rejectText(
+  classroomPage,
+  'Harder case',
+  'The Classroom still labels the challenge control "Harder case"'
+);
+// Order matters and the first draft of this had it backwards: in JSX the
+// className precedes the label, so a pattern looking for gold *after*
+// "Raise hand" matched nothing and the rule silently did nothing. Caught by
+// mutating the button back to gold and watching the gate stay green.
+rejectPattern(
+  classroomPage,
+  /accent-gold[\s\S]{0,200}?Raise hand/,
+  'Raising a hand is styled as an achievement'
+);
+// The desk is the last thing above the Android system navigation bar.
+requireText(
+  classroomPage,
+  'safe-area-inset-bottom',
+  'The Classroom desk ignores the device safe area'
+);
+
 const REQUIRED_RULES = [
   'The client sends its own session score',
   'The client puts a session score in a request body',
@@ -633,6 +728,13 @@ const REQUIRED_RULES = [
   'iOS cannot tell "not started" from a measured zero',
   'An unmeasured iOS figure falls back to zero',
   'iOS test prep is not reachable from anywhere',
+  'The Classroom seats classmates the backend cannot make speak',
+  'The caption pacer has no explicit mount and must hunt the DOM again',
+  'The caption pacer is guessing which element to replace again',
+  'The Classroom caption is no longer announced to screen readers',
+  'The Classroom desk controls are below the minimum touch target',
+  'The Classroom desk ignores the device safe area',
+  'Raising a hand is styled as an achievement',
   'The planned session length is dropped on the way into the Classroom',
   'iOS lets a learner start a second plan after a failed lookup',
   'The iOS intake composer stays live after a failed plan lookup',
