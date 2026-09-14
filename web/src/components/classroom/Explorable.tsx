@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Lightbulb } from 'lucide-react';
 
 // ─── Safe expression evaluator ────────────────────────────────────────────────
@@ -147,14 +147,18 @@ export interface ExplorableParam {
 }
 
 export function Explorable({
-  expression, params, xMin = -5, xMax = 5, prompt,
+  expression, params, xMin = -5, xMax = 5, yMin, yMax, prompt, onValuesChange,
 }: {
   expression: string;
   params: ExplorableParam[];
   xMin?: number;
   xMax?: number;
+  yMin?: number;
+  yMax?: number;
   prompt?: string;
+  onValuesChange?: (values: Record<string, number>) => void;
 }) {
+  const sliderId = useId();
   const [values, setValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(params.map((p) => [p.name, p.initial])));
 
@@ -180,6 +184,9 @@ export function Explorable({
     if (hi - lo < 1e-6) { lo -= 1; hi += 1; }
     const pad = (hi - lo) * 0.15;
     lo -= pad; hi += pad;
+    if (yMin !== undefined && yMax !== undefined && yMin < yMax) {
+      lo = yMin; hi = yMax;
+    }
 
     const px = (x: number) => ((x - xMin) / domain) * W;
     const py = (y: number) => H - ((y - lo) / (hi - lo)) * H;
@@ -187,14 +194,14 @@ export function Explorable({
     let d = '';
     let prev: { x: number; y: number } | null = null;
     for (const s of samples) {
-      const jump = prev && Math.abs(s.y - prev.y) > (hi - lo) * 2;
+      const jump = prev && (Math.abs(s.y - prev.y) > (hi - lo) * 2 || s.x - prev.x > domain / n * 1.5);
       d += `${!prev || jump ? 'M' : 'L'}${px(s.x).toFixed(1)},${py(s.y).toFixed(1)}`;
       prev = s;
     }
     const zeroY = lo < 0 && hi > 0 ? py(0) : null;
     const zeroX = xMin < 0 && xMax > 0 ? px(0) : null;
     return { d, zeroY, zeroX };
-  }, [evaluate, values, xMin, xMax, domain]);
+  }, [evaluate, values, xMin, xMax, yMin, yMax, domain]);
 
   if (!evaluate || !path) {
     return <pre className="text-white/60 text-sm font-mono">{expression}</pre>;
@@ -209,7 +216,7 @@ export function Explorable({
 
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full max-w-xl mx-auto rounded-xl bg-black/25 border border-white/10"
+        className="w-full max-w-xl mx-auto overflow-hidden rounded-xl bg-black/25 border border-white/10"
         role="img"
         aria-label={`Interactive graph of ${expression}. Current parameters: ${params.map((param) => `${param.name} ${values[param.name] ?? param.initial}`).join(', ')}`}
       >
@@ -222,26 +229,31 @@ export function Explorable({
         <path d={path.d} fill="none" stroke="#A78BFA" strokeWidth={2.5}
           strokeLinecap="round" strokeLinejoin="round" />
       </svg>
+      {yMin !== undefined && yMax !== undefined && <p className="text-center text-xs tabular-nums text-slate-300">x: {xMin} … {xMax} · y: {yMin} … {yMax}</p>}
 
       <div className="space-y-2 max-w-xl mx-auto">
         {params.map((p) => (
           <div key={p.name} className="flex items-center gap-3">
-            <label htmlFor={`explorable-${p.name}`} className="text-sm font-bold text-white/70 w-8">
+            <label htmlFor={`${sliderId}-${p.name}`} className="text-sm font-bold text-white/70 w-8">
               <code>{p.name}</code>
             </label>
             <input
-              id={`explorable-${p.name}`}
+              id={`${sliderId}-${p.name}`}
               aria-label={`Adjust ${p.name} from ${p.min} to ${p.max}`}
               type="range"
               min={p.min}
               max={p.max}
               step={p.step ?? 0.1}
               value={values[p.name] ?? p.initial}
-              onChange={(e) => setValues((v) => ({ ...v, [p.name]: Number(e.target.value) }))}
+              onChange={(e) => {
+                const next = { ...values, [p.name]: Number(e.target.value) };
+                setValues(next);
+                onValuesChange?.(next);
+              }}
               className="flex-1 accent-accent-purple"
             />
             <output
-              htmlFor={`explorable-${p.name}`}
+              htmlFor={`${sliderId}-${p.name}`}
               aria-live="polite"
               className="text-xs text-white/50 font-mono w-12 text-right"
             >

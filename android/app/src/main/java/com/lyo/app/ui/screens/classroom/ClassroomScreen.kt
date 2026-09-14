@@ -51,11 +51,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.gson.JsonObject
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.lyo.app.BuildConfig
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.TokenManager
 import com.lyo.app.data.api.ApiClient
+import com.lyo.app.data.classroom.ClassroomBlock
+import com.lyo.app.ui.classroom.catalog.TeachingVisualCard
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoPurple
@@ -67,6 +70,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -106,6 +111,9 @@ internal data class AndroidClassroomState(
     val application: ClassroomApplication? = null,
     val continueLabel: String? = null,
     val continueIntent: String = "continue",
+    val continueComponentId: String = "android_continue",
+    val visual: ClassroomBlock? = null,
+    val visualId: String? = null,
     val progressCurrent: Int = 0,
     val progressTotal: Int = 1,
     val voiceEnabled: Boolean = true,
@@ -123,6 +131,8 @@ internal class AndroidClassroomController(
     private val voice = ClassroomVoicePlayer(context)
     private var socket: WebSocket? = null
     private var seenComponents = mutableSetOf<String>()
+    private var activitySaveJob: Job? = null
+    private val activityUpdates = mutableMapOf<String, Map<String, JsonElement>>()
 
     fun connect(topic: String) {
         val token = TokenManager.accessToken
@@ -217,7 +227,7 @@ internal class AndroidClassroomController(
     fun continueLesson() {
         val intent = state.continueIntent
         beginLearnerInput()
-        if (sendAction(intent, "android_continue")) awaitServerScene()
+        if (sendAction(intent, state.continueComponentId)) awaitServerScene()
     }
 
     fun askQuestion(question: String): Boolean {
@@ -257,6 +267,7 @@ internal class AndroidClassroomController(
     }
 
     fun close() {
+        flushActivities()
         voice.close()
         socket?.close(1000, "Leaving classroom")
         socket = null
@@ -276,8 +287,9 @@ internal class AndroidClassroomController(
     private fun sendAction(
         intent: String,
         componentId: String,
-        answerData: Map<String, String>? = null,
+        answerData: Map<String, Any?>? = null,
     ): Boolean {
+        if (intent != "update_activity") flushActivities()
         val activeSocket = socket
         if (activeSocket == null || !state.connected) {
             state = state.copy(
@@ -302,6 +314,21 @@ internal class AndroidClassroomController(
             )
         }
         return sent
+    }
+
+    fun updateActivity(id: String, values: Map<String, JsonElement>) {
+        if (id != state.visualId) return
+        activityUpdates[id] = values
+        activitySaveJob?.cancel()
+        activitySaveJob = scope.launch { delay(200); flushActivities() }
+    }
+
+    private fun flushActivities() {
+        activitySaveJob?.cancel()
+        activitySaveJob = null
+        val updates = activityUpdates.toMap()
+        activityUpdates.clear()
+        updates.forEach { (id, values) -> sendAction("update_activity", id, values) }
     }
 
     private fun consumeMessage(raw: String) {
@@ -344,6 +371,8 @@ internal class AndroidClassroomController(
             teacherText = "",
             boardTitle = "",
             boardContent = "",
+            visual = null,
+            visualId = null,
             peerText = null,
             checkpoint = null,
             application = null,
@@ -375,14 +404,21 @@ internal class AndroidClassroomController(
                 state = state.copy(peerText = component.stringOrNull("text"))
             }
             "ExampleBlock" -> {
+                val title = component.stringOrNull("title") ?: "Worked example"
+                val content = component.stringOrNull("content").orEmpty()
                 state = state.copy(
-                    boardTitle = component.stringOrNull("title") ?: "Worked example",
-                    boardContent = component.stringOrNull("content").orEmpty(),
+                    boardTitle = state.boardTitle.ifBlank { title },
+                    boardContent = if (state.boardContent.isBlank()) content else state.boardContent + "\n\n" + title + "\n" + content,
                     waiting = false,
                 )
             }
             "LessonBlock" -> {
                 val block = component.objectOrNull("block")
+                if (component.stringOrNull("block_type") == "teaching_visual") {
+                    val visual = runCatching { ApiClient.gson.fromJson(block, ClassroomBlock::class.java) }.getOrNull()
+                    state = state.copy(visual = visual, visualId = id, waiting = false)
+                    return
+                }
                 state = state.copy(
                     boardTitle = block?.stringOrNull("title") ?: "Lesson board",
                     boardContent = block?.stringOrNull("content").orEmpty(),
@@ -429,6 +465,7 @@ internal class AndroidClassroomController(
                 state = state.copy(
                     continueLabel = component.stringOrNull("label") ?: "Continue",
                     continueIntent = component.stringOrNull("action_intent") ?: "continue",
+                    continueComponentId = id,
                     waiting = false,
                 )
             }
@@ -622,6 +659,12 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
                         Spacer(Modifier.height(8.dp))
                         Text(state.boardContent, color = TextPrimary)
                     }
+                }
+            }
+
+            state.visual?.let { visual ->
+                item(key = state.visualId) {
+                    TeachingVisualCard(visual, state.visualId.orEmpty()) { controller.updateActivity(state.visualId.orEmpty(), it) }
                 }
             }
 

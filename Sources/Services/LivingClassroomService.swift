@@ -26,6 +26,8 @@ class LivingClassroomService: ObservableObject {
     private var componentQueue: [SDUIComponent] = []
 
     private var webSocketTask: URLSessionWebSocketTask?
+    private var activityUpdates: [String: [String: Any]] = [:]
+    private var activitySaveTask: Task<Void, Never>?
     private var urlSession: URLSession?
     private var isConnecting: Bool = false
     private var sessionId: String = ""
@@ -212,6 +214,7 @@ class LivingClassroomService: ObservableObject {
 
     /// Gracefully closes the connection
     func disconnect() {
+        flushActivityUpdates()
         TextToSpeechService.shared.stop()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
@@ -258,7 +261,10 @@ class LivingClassroomService: ObservableObject {
         // Any learner action owns the floor immediately and invalidates speech
         // from the previous scene. The backend is the only teaching and
         // assessment authority for the live classroom.
-        bargeIn()
+        if actionIntent != "update_activity" {
+            flushActivityUpdates()
+            bargeIn()
+        }
 
         guard isConnected, let task = webSocketTask else {
             logger.warning("WebSocket not connected — learner action was not sent")
@@ -313,6 +319,29 @@ class LivingClassroomService: ObservableObject {
             }
         }
         return true
+    }
+
+    @discardableResult
+    func updateActivity(id: String, values: [String: Any]) -> Bool {
+        guard isConnected else { error = URLError(.notConnectedToInternet); return false }
+        activityUpdates[id] = values
+        activitySaveTask?.cancel()
+        activitySaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.flushActivityUpdates()
+        }
+        return true
+    }
+
+    private func flushActivityUpdates() {
+        activitySaveTask?.cancel()
+        activitySaveTask = nil
+        let updates = activityUpdates
+        activityUpdates.removeAll()
+        for (id, values) in updates {
+            sendUserAction(actionIntent: "update_activity", componentId: id, actionData: values)
+        }
     }
 
     var nextQueuedComponent: SDUIComponent? {

@@ -30,6 +30,7 @@ import com.lyo.app.ui.classroom.a2ui.A2uiComponentRenderer
  */
 val ClassroomCatalog: A2uiCatalog = A2uiCatalog(
     mapOf(
+        "TeachingVisual" to A2uiComponentRenderer { TeachingVisualRenderer() },
         "ChalkboardText" to A2uiComponentRenderer { ChalkboardTextRenderer() },
         "HighlightSpotlight" to A2uiComponentRenderer { HighlightSpotlightRenderer() },
         "MascotAvatar" to A2uiComponentRenderer { MascotAvatarRenderer() },

@@ -162,14 +162,14 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Build debug APK
+      - name: Build debug APK and test classroom contracts
         id: android-build
         continue-on-error: true
         working-directory: android
         shell: bash
         run: |
           set -o pipefail
-          gradle assembleDebug --no-daemon 2>&1 | tee android-build.log
+          gradle assembleDebug testDebugUnitTest --no-daemon 2>&1 | tee android-build.log
 
       - name: Upload Android compiler diagnostics
         if: steps.android-build.outcome == 'failure'

@@ -38,6 +38,7 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets.getByName("test").resources.srcDir("../../Sources/Tests/Fixtures")
 }
 
 dependencies {

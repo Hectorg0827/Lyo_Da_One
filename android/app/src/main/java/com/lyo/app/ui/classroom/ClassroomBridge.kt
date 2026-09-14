@@ -1,6 +1,7 @@
 package com.lyo.app.ui.classroom
 
 import com.google.gson.JsonArray
+import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
@@ -257,7 +258,12 @@ object ClassroomBridge {
             }
 
             "LessonBlock" -> {
-                if (component.block_type == "summary" && component.block != null) {
+                if (component.block_type == "teaching_visual" && component.block != null) {
+                    val id = component.component_id ?: UUID.randomUUID().toString()
+                    appendLeaf(boardChildren,
+                        A2uiComponent(id, "TeachingVisual", mapOf("visual" to A2uiValue.PathRef("/board/elements/$id/visual"))),
+                        listOf("/board/elements/$id/visual" to Gson().toJsonTree(component.block)))
+                } else if (component.block_type == "summary" && component.block != null) {
                     val id = UUID.randomUUID().toString()
                     val block = component.block
                     val summaryMutation = appendSummary(
@@ -296,6 +302,7 @@ object ClassroomBridge {
                         A2uiMessage.UpdateDataModel(SURFACE_ID, "/canContinue", JsonPrimitive(true)),
                         A2uiMessage.UpdateDataModel(SURFACE_ID, "/continueLabel", JsonPrimitive(component.label ?: "Continue")),
                         A2uiMessage.UpdateDataModel(SURFACE_ID, "/nextActionIntent", JsonPrimitive(component.action_intent ?: "continue")),
+                        A2uiMessage.UpdateDataModel(SURFACE_ID, "/nextActionComponentId", JsonPrimitive(component.component_id ?: "android_continue")),
                     ),
                     boardChildren = boardChildren,
                 )
@@ -726,6 +733,13 @@ object ClassroomBridge {
         fun str(key: String): String? = ctx[key]?.takeIf { it.isJsonPrimitive }?.asString
 
         return when (action.name) {
+            "update_activity" -> UserActionEnvelope(
+                session_id = sessionId, action_intent = "update_activity",
+                component_id = action.sourceComponentId, timestamp = isoTimestampNow(),
+                answer_data = if (ctx["params"]?.isJsonObject == true) mapOf(
+                    "params" to ctx.getValue("params").asJsonObject.entrySet().associate { it.key to it.value.asDouble }
+                ) else mapOf("value" to ctx["value"]?.asInt),
+            )
             "submitPrompt" -> UserActionEnvelope(
                 session_id = sessionId,
                 action_intent = "user_message",
@@ -813,10 +827,10 @@ object ClassroomBridge {
         answer_data = null,
     )
 
-    fun continueLessonAction(sessionId: String, nextActionIntent: String): UserActionEnvelope = UserActionEnvelope(
+    fun continueLessonAction(sessionId: String, nextActionIntent: String, componentId: String = "android_continue"): UserActionEnvelope = UserActionEnvelope(
         session_id = sessionId,
         action_intent = nextActionIntent,
-        component_id = "android_continue",
+        component_id = componentId,
         timestamp = isoTimestampNow(),
         answer_data = null,
     )

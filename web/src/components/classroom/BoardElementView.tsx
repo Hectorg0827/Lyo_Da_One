@@ -14,6 +14,7 @@ import {
 } from '@/lib/browser-speech';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
+import { TeachingVisualView } from './TeachingVisualView';
 
 let mermaidReady: Promise<typeof import('mermaid')> | null = null;
 function loadMermaid() {
@@ -556,6 +557,7 @@ export function BoardElementView({
       transition={{ duration: reducedMotion ? 0 : 0.45, ease: 'easeOut' }}
       className="board-element"
     >
+      {el.kind === 'teaching_visual' && <TeachingVisualView key={el.id} id={el.id} visual={el.visual} />}
       {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
 
       {el.kind === 'highlight' && <HighlightView term={el.term} />}
