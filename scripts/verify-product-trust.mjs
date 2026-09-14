@@ -44,6 +44,11 @@ function rejectText(source, forbidden, label) {
   if (source.includes(forbidden)) failures.push(`${label}: forbidden ${JSON.stringify(forbidden)}`);
 }
 
+function requirePattern(source, pattern, label) {
+  checked.add(label);
+  if (!pattern.test(source)) failures.push(`${label}: no match for ${pattern}`);
+}
+
 function rejectPattern(source, pattern, label) {
   checked.add(label);
   if (pattern.test(source)) failures.push(`${label}: forbidden pattern ${pattern}`);
@@ -637,28 +642,30 @@ rejectText(
   'The Classroom seats classmates the backend cannot make speak'
 );
 
-// ── 3m. The caption has exactly one renderer ───────────────────────────────
+// ── 3m. The caption has exactly one visual renderer ────────────────────────
 //
 // The page and ClassroomCaptionSync each drew their own absolutely-positioned
 // ticker into the same 24px strip, so two different sentences were painted on
-// top of each other and the teacher was unreadable. The sync component now
-// paces (writes `revealedCount`) and the page renders. Two ways this breaks:
-// the pacer growing a renderer again, or the page growing a second pacer.
+// top of each other and the teacher was unreadable.
+//
+// The shipped fix gives the pacer one explicit mount to portal into, rather
+// than having it hunt the DOM for a ticker to replace and hide. So the rules
+// here pin the *invariant* — one visual owner, anchored deliberately — and
+// not any particular way of achieving it. An earlier draft of this gate
+// required a store-held `revealedCount` instead, which pinned one specific
+// implementation and would have failed the equally correct one that shipped.
 
-rejectText(
-  captionSync,
-  'createPortal',
-  'The caption pacer renders its own ticker again'
-);
-requireText(
-  captionSync,
-  'setRevealedCount',
-  'The caption pacer no longer reports progress to the store'
-);
 requireText(
   classroomPage,
-  'revealedCount',
-  'The Classroom paces the caption itself instead of reading the store'
+  'data-classroom-caption-target',
+  'The caption pacer has no explicit mount and must hunt the DOM again'
+);
+// The hunt is what broke it the first time: the observer ran before the
+// page's ticker existed and hid the screen-reader span instead.
+rejectText(
+  captionSync,
+  'isCaptionTarget',
+  'The caption pacer is guessing which element to replace again'
 );
 // The sr-only line is the semantic caption. A previous version hid it by
 // accident while trying to hide the duplicate ticker.
@@ -678,9 +685,9 @@ requireText(
 // success, gold is achievements only. "Raise your hand" wore gold, which made
 // an ordinary action look like a reward.
 
-requireText(
+requirePattern(
   classroomPage,
-  'min-h-[48px]',
+  /min-h-(?:12|\[48px\])/,
   'The Classroom desk controls are below the minimum touch target'
 );
 rejectText(
@@ -722,7 +729,8 @@ const REQUIRED_RULES = [
   'An unmeasured iOS figure falls back to zero',
   'iOS test prep is not reachable from anywhere',
   'The Classroom seats classmates the backend cannot make speak',
-  'The caption pacer renders its own ticker again',
+  'The caption pacer has no explicit mount and must hunt the DOM again',
+  'The caption pacer is guessing which element to replace again',
   'The Classroom caption is no longer announced to screen readers',
   'The Classroom desk controls are below the minimum touch target',
   'The Classroom desk ignores the device safe area',

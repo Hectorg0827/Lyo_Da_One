@@ -773,7 +773,7 @@ object ClassroomBridge {
 
     // ── Outgoing, chrome-originated actions ──────────────────────────────
     // These never flow through an A2uiAction — the buttons that trigger
-    // them (Continue, Raise your hand / ask, Get help, Harder case) are
+    // them (Continue, Raise hand / ask, Help, Challenge) are
     // ClassroomChrome's own hand-authored Compose, not A2UI board content
     // (see the plan's Architecture section: chrome is never agent-authored,
     // so it was never routed through the generic protocol layer to begin

@@ -46,16 +46,7 @@ import com.lyo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 
 /**
- * Netflix/YouTube-style auto-hiding chrome state. iOS has the same thing in
- * ActiveLessonView.swift's resetChromeTimer.
- *
- * Web does NOT, despite what this comment used to say: there is no
- * `resetHideTimer` in classroom/page.tsx and never was in the history this
- * repo carries. Web is scheduled to gain it — with a permanently visible
- * exit, see docs/CLASSROOM_UI_SPEC §4.4 — at which point this really will be
- * parity. Until then, do not cite web here.
- *
- * Behaviour: visible on load,
+ * Immersive chrome state shared by the native classroom surfaces: visible on load,
  * auto-hides after `ClassroomTokens.CHROME_AUTO_HIDE_MS` of no interaction,
  * never schedules a hide while `blockAutoHide` is true (an active
  * checkpoint — see ClassroomEngine.hasActiveCheckpoint), and is forced back
@@ -235,7 +226,7 @@ fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifie
 }
 
 /**
- * The "your desk" row — Continue / Get help / Harder case / Raise your
+ * The "your desk" row — Continue / Help / Challenge / Raise hand.
  * hand, ported from web's desk row (classroom/page.tsx) and iOS's bottom
  * lens dock, trimmed to this v1's actually-wired actions (see
  * ClassroomEngine). Settings/notebook panels live in SettingsPanel/
@@ -271,8 +262,8 @@ fun BottomActionDock(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onHint) { Text("Get help") }
-            OutlinedButton(onClick = onTooEasy) { Text("Harder case") }
+            OutlinedButton(onClick = onHint, modifier = Modifier.heightIn(min = 48.dp)) { Text("Help") }
+            OutlinedButton(onClick = onTooEasy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Challenge") }
             if (handRaised) {
                 androidx.compose.material3.OutlinedTextField(
                     value = question,
@@ -288,8 +279,8 @@ fun BottomActionDock(
                     Icon(Icons.Filled.Send, contentDescription = "Send", tint = ClassroomTokens.AccentPurple)
                 }
             } else {
-                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f)) {
-                    Text("Raise your hand", color = LyoGold)
+                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                    Text("Raise hand", color = LyoGold)
                 }
             }
         }
@@ -330,7 +321,7 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modi
                 if (speaker != null) {
                     Text(text = speaker, color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
-                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }

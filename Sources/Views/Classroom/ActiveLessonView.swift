@@ -105,11 +105,10 @@ struct ActiveLessonView: View {
     @State private var shakeOffset: CGFloat = 0.0
     @State private var isBoardTappedToComplete = false
 
-    // Netflix/YouTube-style chrome auto-hide — mirrors the web classroom's
-    // `chromeVisible`/`resetChromeTimer`. Android has the same in
-    // ClassroomChrome.kt. Web has neither yet — this comment used to cite a
-    // `resetHideTimer` in web/src/app/(main)/classroom/page.tsx that does not
-    // exist. See docs/CLASSROOM_UI_SPEC §4.4.
+    // Native immersive chrome auto-hide. Web intentionally keeps its chrome
+    // stable until cross-platform resume semantics are complete.
+    // See docs/CLASSROOM_UI_SPEC §4.4 for the agreed direction: web gains
+    // this with a permanently visible exit, not before.
     // Everything except the board, the dialogue card, and the Teacher's
     // portrait hides itself after 3s of no interaction; a tap on the
     // background brings it back.

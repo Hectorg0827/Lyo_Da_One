@@ -1,8 +1,18 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { useClassroomStore } from '@/stores/classroom-store';
+
+const SPEAKER_TONE: Record<string, string> = {
+  Teacher: 'text-accent-purple',
+  Maya: 'text-accent-teal',
+  Sam: 'text-accent-orange',
+  Rio: 'text-accent-green',
+  Zack: 'text-accent-gold',
+  You: 'text-lyo-300',
+};
 
 // Construct the Unicode matcher at runtime so TypeScript can still compile the
 // app's ES5 target. Modern browsers get full multilingual letter/number
@@ -64,26 +74,16 @@ function countAtCharIndex(text: string, charIndex: number): number {
 }
 
 /**
- * Paces the classroom caption against the audio that is actually playing,
- * rather than against when the server text arrived.
+ * Synchronizes the classroom's visible caption to the audio that is actually
+ * playing, rather than to when the server text arrived.
  *
- * **This component renders nothing.** It writes `revealedCount` to the
- * classroom store and the page draws the strip. That split is deliberate and
- * was learned the hard way: this file used to portal its own ticker into the
- * caption band and hide the page's by walking the DOM for "the first child
- * that isn't mine". The hiding ran before the page's ticker existed — the
- * page only mounts it once a caption arrives — so it hid the screen-reader
- * span instead, and two absolutely-positioned tickers ended up painting
- * different sentences on top of each other in a 24px strip. The teacher
- * became literally unreadable.
+ * The classroom store intentionally owns TTS playback. This bridge observes
+ * that playback at the browser media boundary so it also covers the shared
+ * neural MP3 path without duplicating audio requests. Native speech synthesis
+ * is handled with real `boundary` events when the browser provides them.
  *
- * One pacer, one renderer, no DOM archaeology.
- *
- * The classroom store owns TTS playback. This observes it at the browser
- * media boundary so the shared neural MP3 path is covered without duplicating
- * audio requests, and uses real `boundary` events for device speech where the
- * engine provides them — with a timed fallback for the Android engines that
- * do not.
+ * The semantic caption remains in the DOM for aria-live/screen-reader
+ * behavior. This component is the single owner of the visual transcript.
  */
 export default function ClassroomCaptionSync() {
   const pathname = usePathname();
@@ -92,7 +92,8 @@ export default function ClassroomCaptionSync() {
   const voiceOn = useClassroomStore((state) => state.voiceOn);
   const speechRate = useClassroomStore((state) => state.speechRate);
 
-  const setRevealedCount = useClassroomStore((state) => state.setRevealedCount);
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const [revealedCount, setRevealedCount] = useState(0);
 
   const captionRef = useRef(caption);
   const voiceOnRef = useRef(voiceOn);
@@ -106,6 +107,8 @@ export default function ClassroomCaptionSync() {
   voiceOnRef.current = voiceOn;
   speechRateRef.current = speechRate;
   activeRef.current = active;
+
+  const words = useMemo(() => wordsFor(caption?.text ?? ''), [caption?.text]);
 
   const cancelFrames = () => {
     if (audioFrameRef.current !== null) {
@@ -134,6 +137,25 @@ export default function ClassroomCaptionSync() {
     setRevealedCount(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caption?.speaker, caption?.text, voiceOn]);
+
+  // Find the explicit transcript mount. It exists independently of caption
+  // content, avoiding the race that previously mounted two visual tickers.
+  useEffect(() => {
+    if (!active || typeof document === 'undefined') {
+      setTarget(null);
+      return;
+    }
+
+    const findTarget = () => {
+      const nextTarget = document.querySelector<HTMLElement>('[data-classroom-caption-target]');
+      setTarget((current) => current === nextTarget ? current : nextTarget);
+    };
+
+    findTarget();
+    const observer = new MutationObserver(findTarget);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [active]);
 
   // Shared neural voice path: classroom-store plays a generated MP3 through a
   // detached HTMLAudioElement. Track that media element's real currentTime and
@@ -296,6 +318,24 @@ export default function ClassroomCaptionSync() {
 
   useEffect(() => () => cancelFrames(), []);
 
-  // Renders nothing by design — see the note at the top of this file.
-  return null;
+  if (!active || !target) return null;
+
+  const visibleWords = words.slice(0, Math.min(revealedCount, words.length));
+  return createPortal(
+    <div
+      data-lyo-synced-caption="true"
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 flex min-w-0 items-center"
+    >
+      {caption && (
+        <p className={`${voiceOn ? 'line-clamp-2 text-[14px] leading-5 sm:text-[15px] sm:leading-[22px]' : 'line-clamp-3 text-base leading-6 sm:text-lg sm:leading-7'} text-white/95`}>
+          <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
+            {caption.speaker}:
+          </span>
+          <span>“{visibleWords.join(' ')}”</span>
+        </p>
+      )}
+    </div>,
+    target,
+  );
 }
