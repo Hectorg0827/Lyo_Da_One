@@ -104,7 +104,20 @@ enum ActiveLessonAdapter {
                     resolvedTurns = FallbackTurnParser.parse(component.content)
                 }
 
-                if let turns = resolvedTurns {
+                // Plain prose is the ordinary case for a guided-teaching scene:
+                // no DirectorTurn array to decode, and no embedded `{...}` for
+                // the fallback parser to find, so it hands back an EMPTY array
+                // rather than nil. `if let turns` then succeeds, the loop below
+                // runs zero times, `pendingText` is never set, and the final
+                // flush drops the whole turn on the floor.
+                //
+                // A scene ending in a question survived that by accident —
+                // `.quizCard` and `.inputField` synthesise a step when there is
+                // no pending text. `.ctaButton` has no such fallback, so every
+                // Continue-only scene (orientation, and each paced worked
+                // example) rendered as nothing at all on iOS. Say it once here
+                // instead: a teacher message with words in it is a turn.
+                if let turns = resolvedTurns, !turns.isEmpty {
                     for (turnIndex, turn) in turns.enumerated() {
                         if turn.type == "speech" || turn.type == "user_prompt" {
                             flush() // flush previous turn in the sequence
