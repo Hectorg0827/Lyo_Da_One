@@ -1,18 +1,19 @@
 # LYO CLASSROOM — UI TRANSFORMATION SPEC
 
-End-to-end brief for rebuilding the Classroom's interface across web, iOS and
-Android. Written after reading the live code on `main`; every claim in §2 was
-verified, not inferred.
+Design contract for the Classroom across web, iOS and Android. Updated on
+14 September 2026 after the guided-teaching and UI pull requests merged. §2
+preserves the original diagnostic baseline; §6 records approved decisions and
+remaining validation, and §7 distinguishes implementation from acceptance.
 
 ---
 
 ## 0. How to use this
 
-Work the phases in §7 in order. Before writing code, read §2 — it contains
-findings that will otherwise cost you a day rediscovering, including three
-code comments that are actively wrong.
-
-Do not start a phase whose open question in §6 is unanswered. Ask the human.
+Work the prerequisites in §7 in order. Read §6 before treating a product
+choice as unresolved: silent teaching and optional voice with typing retained
+are already approved. Resumability is an implementation and validation
+requirement, not a request for the learner to accept lost progress. Keep new
+immersion and orientation changes deferred until that requirement passes.
 
 ---
 
@@ -31,7 +32,11 @@ a schedule, a progress bar implying a plan.
 
 ---
 
-## 2. What is actually true today (verified on `main`)
+## 2. Original diagnostic baseline
+
+The caption, teacher duplication and stale-comment findings below describe
+the implementation before Phases 1–2. [Client PR #57](https://github.com/Hectorg0827/Lyo_Da_One/pull/57)
+fixes those issues. Do not reintroduce the removed participant row.
 
 ### 2.1 The three platforms disagree, and the comments lie about it
 
@@ -91,31 +96,34 @@ The container also forces a single line regardless: `h-6`,
 So the same mascot appears twice and the teacher is an emoji. Mascot PNGs live
 at `web/public/mascot/`.
 
-### 2.4 Already built — do not rebuild these
+### 2.4 Preserve the working foundations
 
-- **Speaking state**: the participant avatar already gets a purple glow
-  (`shadow-[0_0_18px_rgba(139,92,246,0.45)]`), a scale pulse and a 4px lift
-  when `activeSpeaker` matches.
-- **Participant row**: already 44px circles (`w-11 h-11`) with names beneath
-  and a purple ring on the speaker.
+- **One caption owner:** the page renders the caption; the headless
+  `ClassroomCaptionSync` controller updates the shared reveal count. Preserve
+  audio pacing, speech boundary events and the fallback for engines without
+  them. Do not restore the portal or DOM-hiding workaround.
+- **One teacher:** the decorative participant row is removed. The `CAST`
+  speaker-to-colour map remains available for actual speaker events; its
+  existence does not establish live peer participation.
+- **Accessible output:** the complete caption remains available to screen
+  readers while the visual reveal stays decorative.
 
-Both are invisible in practice because `visibleCast` filters to the Teacher
-alone unless `mode === 'classroom'`. What looks like a missing feature is a
-mode that is never entered.
+### 2.5 Structured teaching now exists
 
-- **TTS caption sync**: `ClassroomCaptionSync.tsx` is ~300 lines that patch
-  `HTMLMediaElement.prototype.play` and `speechSynthesis.speak` to pace the
-  word reveal against *real audio* — weighting words by length and
-  punctuation, using `boundary` events where available, with a specific
-  fallback for **Android engines that do not emit them**. Any caption redesign
-  must carry this forward or drop it deliberately. Do not delete it by
-  accident while fixing §2.2.
+The original run-on lesson text required a server change. That foundation is
+now implemented by [backend PR #48](https://github.com/Hectorg0827/LyoBackendJune/pull/48)
+and [client PR #56](https://github.com/Hectorg0827/Lyo_Da_One/pull/56):
+orientation, a worked example in 2–4 learner-paced beats, guided choice,
+fading support, then a fresh, concise application.
 
-### 2.5 Content, not CSS
+The same server-owned sequence supplies audio and silent presentations.
+Validated fraction bars, comparisons, sequences and parameterised graphs
+have client renderers. A visual adjustment saves the activity state without
+grading, advancing the lesson or replaying narration.
 
-Run-on lesson text ("1. … 2. … 3. …" as one paragraph) is composed
-**server-side**. Progressive reveal requires the server to send structured
-steps. Restyling the card will not split that paragraph.
+Use the [guided teaching contract](https://github.com/Hectorg0827/LyoBackendJune/blob/main/docs/CLASSROOM_GUIDED_TEACHING.md).
+The remaining card transformation and silent hierarchy should consume those
+steps, not start another teaching pipeline.
 
 ---
 
@@ -144,11 +152,14 @@ Format: `Lyo: "Normalization keeps each fact in one place."`
 
 ### 4.2 One teacher presence
 
-One teacher, anchored beside the speech — the thing talking sits next to what
-it is saying. Delete the large idle mascot. Replace the 🧑‍🏫 emoji with the
-teacher mascot (assets land in `web/public/mascot/` as
-`teacher_idle|speaking|thinking|celebrating.png`; each platform's own asset
-folder mirrors it).
+One teacher, anchored beside the current teaching beat. The shipped web page
+uses exactly five existing files in `web/public/mascot/`:
+`mascot_reading_1.png` through `mascot_reading_4.png`, and
+`mascot_standing.png`. There is no missing-asset upload requirement.
+
+Distinct teacher artwork is a future design choice, not a broken dependency.
+Map teacher states to known events: explaining, waiting, receiving an answer
+and confirmed feedback. Do not infer learning or emotions from prose.
 
 Full-size mascot appears only for **moments that earn it** — a correct
 demonstration, a checkpoint, the loading state. Never as permanent furniture.
@@ -159,9 +170,9 @@ demonstration, a checkpoint, the loading state. Never as permanent furniture.
 wide canvas for diagrams, schema comparisons, figures — not the default and
 not a lock.
 
-**Remove the iOS force-landscape.** Taking a learner's orientation away is too
-strong a move to make on their behalf, and it is the reason the platforms
-diverged.
+This is the intended direction for Phase 3. Changing the iOS orientation
+lock and adding rotate-to-expand remain deferred until the resumption and
+real-device checks in §6c pass.
 
 ### 4.4 Chrome and exit
 
@@ -170,7 +181,8 @@ diverged.
 Always visible, never fades:
 - One exit affordance, top-left, ≥44px touch target. May rest at ~40% opacity.
   May not be absent.
-- The caption.
+- The audio-mode caption; in silent mode, the current teaching beat is
+  visible in the main card (§6b).
 - Any question awaiting an answer.
 
 Auto-hides after ~3s idle (match the existing Android/iOS timeout constant):
@@ -197,10 +209,12 @@ The goal moves behind an info affordance. **Do not show a countdown unless it
 is real** — the classroom recently shipped a hard-coded 10-minute plan against
 sessions the learner was told were 45.
 
-### 4.6 The card reinforces; it does not duplicate the lecture
+### 4.6 One teaching stage, two delivery modes
 
-The teacher teaches; the card anchors. Reveal steps progressively rather than
-dumping a numbered paragraph. Requires §2.5 server work.
+With audio on, the voice leads and the card carries the relevant worked
+example or visual. With audio off, the card carries the complete teaching
+beat and the learner controls when to continue. The small caption strip is
+hidden in that mode. Use the existing structured steps (§2.5).
 
 ### 4.7 Colour system
 
@@ -220,11 +234,16 @@ prominent-secondary.
 
 ### 4.9 Teach → Check → Respond → Continue
 
-The engine already works this way — it generates a teaching scene, then a
-question, grades it, and adapts. **The UI does not express it.** Make the card
-*become* the question rather than sitting beside it. This is mostly client
-work over machinery that already exists, and it is the product's strongest
-differentiator from a slide viewer.
+Use the gradual-release sequence in §2.5. The card should transform from a
+modeled step to a supported decision, then feedback and the next useful
+practice step. Keep the relevant worked example or visual available while
+the learner answers. Do not replace the first explanation with a difficult
+unassisted recall test.
+
+The primary teacher responds to difficulty with a hint, a different example
+or prerequisite teaching and then returns to the same objective. Extra help
+requires a fresh faded attempt before independent practice. Do not introduce
+a visible peer teacher automatically.
 
 ---
 
@@ -247,7 +266,7 @@ differentiator from a slide viewer.
 
 ---
 
-## 6. Open questions — do not guess
+## 6. Approved decisions and remaining validation
 
 **a. ~~Do classmates actually speak?~~ ANSWERED — no, and they cannot.**
 `_get_peer_states` returns a single hard-coded stub ("AI peers are synthetic —
@@ -256,74 +275,111 @@ removed in Phase 1. Building real peer participation is a feature, not a
 layout fix; the CAST colour map is kept so a peer would be identifiable the
 day it exists.
 
-**b. What does the classroom look like with sound off?** If the teacher
-speaks and the card only reinforces, then with audio off the teacher says
-nothing and the card is all there is. On a phone, in public, most people have
-sound off. This mode is currently undesigned.
+**b. Silent teaching — APPROVED; hierarchy and device validation remain.**
+Use guided lesson dialogue: one teacher, one bite-sized teaching beat, one
+relevant visual and one clear next action. Hide the 56–72px caption strip and
+put the full teaching text into the central card. Continue is learner-paced;
+the checkpoint transforms that same surface. Audio and silent modes consume
+the same pedagogical state.
 
-**c. Are sessions resumable?** Exit is `router.back()`; the socket closes. If
-leaving at minute 3 of 45 loses the session, nobody will risk the exit button
-and §4.4 is moot. Resumability is the prerequisite that makes an immersive
-mode safe.
+Select silent mode when the learner requests it, Classroom voice is disabled,
+usable output volume is zero where the platform exposes it, or audio/TTS is
+unavailable. A hardware mute-switch signal is not a required cross-platform
+contract. Derive mascot reactions from known teaching and grading events.
+Use native haptics for meaningful feedback, respecting device preferences.
 
-**d. What replaces the written answer?** The human has decided typed answers
-create too much friction. That removes the top rung of the evidence ladder —
-the strongest claim left becomes "picked the right option", and recognition is
-explicitly not mastery in this product.
+**c. Resumability — REQUIRED; persistence implemented, acceptance outstanding.**
+The merged version 2 guided state saves the current teaching batch and beat,
+target coverage, paused example, pending question, support history and visual
+values in the existing learner-owned session context. Re-entry restores the
+saved scene without generating a new turn or grading again.
 
-Recommended: **spoken answers.** The classroom is already voice-first and iOS
-already ships `VoiceInputService`; the same evidence rung, no keyboard.
-Alternatives that avoid typing: ordering steps, or constructing an answer from
-tiles. **Not yet agreed — confirm before building.** If the decision is
-multiple-choice only, readiness must say plainly what it is based on.
+Before enabling further immersion, demonstrate: leave during an example,
+return on another supported client, and see the same beat; repeat with an
+unanswered checkpoint, a help detour and an adjusted visual. Confirm duplicate
+Continue/answer submissions neither skip teaching nor commit evidence twice.
+Exercise failed saves and interrupted connections. An unsent offline action
+must not be described as saved.
+
+Updated clients send the actual CTA ID; installed clients using legacy static
+Continue IDs do not have the same duplicate-tap guarantee. A passing backend
+round-trip test does not replace web/iOS/Android acceptance testing.
+
+**d. Answer modality — retain typing and optional voice.**
+Keep choices for early guided practice, short completion tasks while support
+fades, and clear, concise application prompts when the learner is ready.
+Typed answers and available dictation remain usable. Do not require speech
+or replace open responses with tiles in this tranche.
+
+The evidence rung follows the task and the server's judgment of the response,
+including assistance used. Neither choosing an option nor using a microphone
+establishes independent application or retention. Any future modality
+experiment must preserve that distinction.
 
 ---
 
-## 6b. The largest unused backend capability
+## 6e. Show the learner their evidence
 
 The Classroom now writes, per graded answer: an evidence rung (recognition →
 application → transfer → retention), a confidence damped by how many hints
 were used, a misconception tag, and an updated mastery score per concept.
 
-**The learner is shown none of it.** Nothing says "you have now shown you can
-*apply* this, not just recognise it"; nothing indicates a hint lowered what an
-answer counted for; nothing shows which concepts are solid.
+**The Classroom still needs a clear learner-facing record of that evidence.**
+Show what the learner demonstrated, where support was used, and what should be
+practised next. Read those claims from committed server evidence, not local
+answer counters, lesson completion or visual interactions.
 
 That is the biggest gap between what the backend knows and what the interface
 says — bigger than any component. It is also the easiest place to start
 claiming things nothing measured, so whatever is shown must read off the same
 rungs the server recorded. *Recognised* is not *applied*.
 
-Component-level gaps are small by comparison: `Celebration` is emitted by the
-engine and dropped by the web store; `TextBlock`, `ChatBubble`,
-`TypingIndicator` and `ReflectionPrompt` are in the backend enum but never
-emitted, so they are dead registry entries rather than client gaps.
+The production adaptive path does **not** emit a `Celebration` component.
+Its constructors belong to inactive Director/coach code. There is no live
+celebration being dropped by the web store. Deliberate, proportionate
+acknowledgment of a demonstrated skill remains work to design against actual
+evidence; it must not imply long-term mastery.
+
+`ChatBubble`, `TypingIndicator` and `ReflectionPrompt` are unused wire-type
+cleanup candidates, not missing client experiences. Confirm imports, exports,
+tests and persisted-payload compatibility before removing them. Keep that
+cleanup separate from the teaching and evidence UI.
 
 ---
 
 ## 7. Order of work
 
-**Phase 1 — Stop the bleeding** — ✅ SHIPPED
+**Phase 1 — Stop the bleeding** — implemented and merged; phone acceptance pending
 1. Collapse the two caption renderers into one; build the 56–72px two-line
    strip (§4.1); restore the `sr-only` span; preserve the TTS sync.
 2. Delete the duplicate teacher representations; one presence beside the
    speech (§4.2).
 3. Fix the safe-area collision and secondary-text contrast.
 
-**Phase 2 — Structure** — ✅ SHIPPED
+**Phase 2 — Structure** — implemented and merged; phone acceptance pending
 4. Header consolidation (§4.5) and the colour system (§4.7).
 5. Action bar (§4.8).
 6. Correct or delete the three stale parity comments (§2.1); extend the parity
    gate (§5.4).
 
-**Phase 3 — Immersion** *(needs 6c)*
+**Phase 3 — Immersion** *(deferred until §6c acceptance passes)*
 7. Auto-hiding chrome on web with a permanent exit (§4.4), matching the
    existing Android/iOS timeout.
 8. Remove the iOS force-landscape; add rotate-to-expand-the-board (§4.3).
 
-**Phase 4 — The real differentiator** *(needs 6a, 6b, 6d)*
-9. Card-becomes-the-question (§4.9).
-10. Server-side structured lesson steps (§2.5).
+**Teaching foundation — implemented and merged**
+[Backend #48](https://github.com/Hectorg0827/LyoBackendJune/pull/48),
+[test fixes #49](https://github.com/Hectorg0827/LyoBackendJune/pull/49), and
+[clients #56](https://github.com/Hectorg0827/Lyo_Da_One/pull/56) supply the paced
+sequence, guided practice, interactive visuals and durable teaching state.
+[UI #57](https://github.com/Hectorg0827/Lyo_Da_One/pull/57) supplies Phases 1–2.
+All four are merged. Build/test CI passed on their reviewed heads; that alone
+does not establish real-device usability or learning outcomes.
+
+**Phase 4 — The teaching surface** *(decisions in §6b and §6d are settled)*
+9. Finish card-becomes-the-question (§4.9), retaining the relevant example.
+10. Complete the silent hierarchy using existing structured steps (§2.5).
+11. Expose a learner-facing evidence record (§6e).
 
 ---
 

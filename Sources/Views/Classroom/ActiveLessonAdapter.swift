@@ -247,14 +247,14 @@ enum ActiveLessonAdapter {
                 }
 
             case .exampleBlock:
-                    pendingExamples.append(
-                        LiveLessonBlock(
-                            id: component.id,
-                            type: .callout,
-                            title: component.title ?? "Worked example",
-                            content: component.content
-                        )
+                pendingExamples.append(
+                    LiveLessonBlock(
+                        id: component.id,
+                        type: .callout,
+                        title: component.title ?? "Worked example",
+                        content: component.content
                     )
+                )
 
             case .ctaButton:
                 finalCtaLabel = component.content.isEmpty ? "Continue" : component.content
