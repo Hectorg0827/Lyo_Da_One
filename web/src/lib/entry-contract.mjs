@@ -30,13 +30,98 @@ export function defaultObjective(topic) {
 }
 
 /**
+ * The lesson shape a learner may optionally set before the Classroom opens.
+ *
+ * Every option here is one the backend actually reads. Nothing is offered
+ * that only decorates the form:
+ *
+ *  - `level` maps to `preferred_difficulty` (0.3 / 0.6 / 0.85) in
+ *    `scene_lifecycle_engine.py`, which reaches the teaching prompt as
+ *    "level".
+ *  - `minutes` maps to `target_duration_minutes`, which the prompt receives as
+ *    `target_minutes` and which `unit_count()` turns into how many units get
+ *    taught. The server clamps it to 3–60.
+ *  - `language` maps to `language_code` via `TTSService.normalize_language`,
+ *    which is what the teacher actually speaks.
+ *
+ * Asking a question whose answer changes nothing would be a worse form than
+ * not asking it, so this list and the backend's readers move together.
+ */
+export const CLASSROOM_LEVELS = [
+  { value: 'beginner', label: 'New to this', hint: 'Start from the ground up' },
+  { value: 'intermediate', label: 'Some of it', hint: 'Fill the gaps, move quicker' },
+  { value: 'advanced', label: 'Most of it', hint: 'Go straight to the hard parts' },
+];
+
+/**
+ * Session lengths, in minutes.
+ *
+ * Shared with the Classroom so the two cannot drift. The Classroom only
+ * honours a duration it recognises, so a length offered here that it did not
+ * accept would silently become 10 — the learner would set 45 minutes and be
+ * taught a ten-minute lesson, with nothing on screen admitting it.
+ */
+export const SESSION_LENGTHS = [5, 10, 20, 30, 45];
+
+/**
+ * Languages the teacher can actually be asked for.
+ *
+ * These are the five families `TTSService.normalize_language` maps to a
+ * locale. `auto` is the default and is not a language: it lets the server
+ * detect one from the topic itself.
+ */
+export const CLASSROOM_LANGUAGES = [
+  { value: 'auto', label: 'Match my topic' },
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'it', label: 'Italiano' },
+  { value: 'pt', label: 'Português' },
+];
+
+/**
+ * Keep a value only when it is one we offered.
+ *
+ * An unrecognised level is dropped rather than guessed at. Sending it on
+ * would have the server fall back to its own default anyway, but a dropped
+ * parameter and a wrong one read the same in a URL and differently in a
+ * lesson.
+ */
+function knownValue(value, allowed) {
+  const clean = (value ?? '').toString().trim().toLowerCase();
+  return allowed.includes(clean) ? clean : null;
+}
+
+export function normalizeLevel(level) {
+  return knownValue(level, CLASSROOM_LEVELS.map((l) => l.value));
+}
+
+export function normalizeLanguage(language) {
+  const known = knownValue(language, CLASSROOM_LANGUAGES.map((l) => l.value));
+  // `auto` is the default the Classroom already applies, so it is carried as
+  // nothing rather than as a parameter claiming a choice was made.
+  return known === 'auto' ? null : known;
+}
+
+export function normalizeSessionMinutes(minutes) {
+  const value = Number(minutes);
+  return SESSION_LENGTHS.includes(value) ? value : null;
+}
+
+/**
  * Open the Classroom on a topic.
  *
  * Returns null for an empty topic: a Classroom with nothing to teach is not a
  * destination, and callers should keep their CTA disabled rather than push an
  * empty session.
+ *
+ * `level`, `minutes` and `language` are the learner's optional answers. Each
+ * is omitted when unset or unrecognised, so an untouched form produces exactly
+ * the URL it always did and the Classroom's own defaults still apply.
  */
-export function classroomEntryHref({ topic, mode, objective, courseId, lessonId } = {}) {
+export function classroomEntryHref({
+  topic, mode, objective, courseId, lessonId, level, minutes, language,
+} = {}) {
   const cleanTopic = (topic ?? '').trim();
   if (!cleanTopic) return null;
 
@@ -50,6 +135,15 @@ export function classroomEntryHref({ topic, mode, objective, courseId, lessonId 
   if (mode !== undefined) params.set('mode', normalizeClassroomMode(mode));
   if (courseId) params.set('courseId', courseId);
   if (lessonId) params.set('lessonId', lessonId);
+
+  const cleanLevel = normalizeLevel(level);
+  if (cleanLevel) params.set('difficulty', cleanLevel);
+
+  const cleanMinutes = normalizeSessionMinutes(minutes);
+  if (cleanMinutes) params.set('duration', String(cleanMinutes));
+
+  const cleanLanguage = normalizeLanguage(language);
+  if (cleanLanguage) params.set('language', cleanLanguage);
 
   return `/classroom?${params.toString()}`;
 }

@@ -711,6 +711,50 @@ requireText(
   'The Classroom desk ignores the device safe area'
 );
 
+// ── 3o. The optional lesson questions ────────────────────────────────────────
+//
+// The front door may only ask what the backend actually reads. A control that
+// changes nothing is worse than an absent one: the learner answers it, believes
+// the lesson was shaped by the answer, and is taught the default.
+//
+//   difficulty -> preferred_difficulty -> the teaching prompt's "level"
+//   duration   -> target_duration_minutes -> unit_count() and pacing
+//   language   -> language_code via TTSService.normalize_language
+//
+// Each option list lives in the entry contract so the Classroom and the front
+// door read the same one.
+requireText(entryContract, 'CLASSROOM_LEVELS', 'The level question lost its shared options');
+requireText(entryContract, 'SESSION_LENGTHS', 'The session-length question lost its shared options');
+requireText(entryContract, 'CLASSROOM_LANGUAGES', 'The language question lost its shared options');
+requireText(frontDoor, 'CLASSROOM_LEVELS', 'The front door stopped asking what the learner knows');
+requireText(frontDoor, 'SESSION_LENGTHS', 'The front door stopped asking how long they have');
+// The Classroom must parse duration through the same list it is offered from.
+// A length offered but not honoured becomes 10 minutes with nothing saying so.
+// Match the CALL, not the identifier: the import line alone satisfies a bare
+// text check, so a rule written that way passes while the parse below it does
+// something else entirely.
+requirePattern(
+  classroomPage,
+  /normalizeSessionMinutes\(\s*params\.get\('duration'\)\s*\)/,
+  'The Classroom accepts session lengths the front door does not offer'
+);
+requirePattern(
+  classroomPage,
+  /SESSION_LENGTHS\.map\(/,
+  'The Classroom session-length menu drifted from the shared list'
+);
+// Unrecognised answers are dropped, never guessed. A wrong parameter and an
+// absent one read the same in a URL and differently in a lesson.
+requireText(entryContract, 'function normalizeLevel', 'An unrecognised level is passed through unchecked');
+requireText(entryContract, 'function normalizeLanguage', 'An unrecognised language is passed through unchecked');
+// Typing a topic and pressing Enter must stay the whole requirement: the
+// questions are optional, so nothing may gate the CTA on answering them.
+rejectPattern(
+  frontDoor,
+  /disabled=\{!trimmed\s*\|\|/,
+  'The optional questions became required before the Classroom opens'
+);
+
 const REQUIRED_RULES = [
   'The client sends its own session score',
   'The client puts a session score in a request body',
@@ -738,6 +782,16 @@ const REQUIRED_RULES = [
   'The planned session length is dropped on the way into the Classroom',
   'iOS lets a learner start a second plan after a failed lookup',
   'The iOS intake composer stays live after a failed plan lookup',
+  'The level question lost its shared options',
+  'The session-length question lost its shared options',
+  'The language question lost its shared options',
+  'The front door stopped asking what the learner knows',
+  'The front door stopped asking how long they have',
+  'The Classroom accepts session lengths the front door does not offer',
+  'The Classroom session-length menu drifted from the shared list',
+  'An unrecognised level is passed through unchecked',
+  'An unrecognised language is passed through unchecked',
+  'The optional questions became required before the Classroom opens',
 ];
 
 for (const rule of REQUIRED_RULES) {

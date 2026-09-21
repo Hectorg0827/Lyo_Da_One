@@ -21,6 +21,7 @@ import {
 } from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 import { upsertCourseOnStart } from '@/lib/stack';
+import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -71,8 +72,11 @@ function ClassroomStage() {
     || modeParam === 'review'
     ? modeParam
     : 'solo';
-  const parsedDuration = Number(params.get('duration'));
-  const initialDuration = [5, 10, 20].includes(parsedDuration) ? parsedDuration : 10;
+  // SESSION_LENGTHS is shared with the front door on purpose. A length the
+  // front door offers but the Classroom does not recognise becomes 10 here
+  // with nothing on screen saying so, which is a lesson quietly shorter than
+  // the one the learner asked for.
+  const initialDuration = normalizeSessionMinutes(params.get('duration')) ?? 10;
   const [mode, setMode] = useState<ClassroomMode>(initialMode);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -329,9 +333,9 @@ function ClassroomStage() {
               onChange={(event) => setDurationMinutes(Number(event.target.value))}
               className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
             >
-              <option value={5}>5 minutes</option>
-              <option value={10}>10 minutes</option>
-              <option value={20}>20 minutes</option>
+              {SESSION_LENGTHS.map((minutes) => (
+                <option key={minutes} value={minutes}>{minutes} minutes</option>
+              ))}
             </select>
           </label>
           <div className="space-y-2">
@@ -412,8 +416,39 @@ function ClassroomStage() {
               </div>
             )}
             {shownBoard.length === 0 && !waitingForScene && (
-              <div className="flex-1 flex items-center justify-center text-white/20 text-sm italic py-16">
-                a clean board…
+              /* The first thing a learner ever sees in the Classroom. It used
+                 to be the words "a clean board…" in grey italics, which reads
+                 as a screen that failed to load rather than a class about to
+                 start. It says what is being prepared and for whom, so the
+                 wait is legible. */
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 py-14 text-center">
+                <motion.img
+                  src={LYO_STATE_IMG.thinking}
+                  alt=""
+                  aria-hidden
+                  className="h-20 w-20 object-contain drop-shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
+                  animate={animationsOff ? undefined : { y: [0, -7, 0] }}
+                  transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-white/80">
+                    {status === 'connecting' ? 'Setting up your class' : 'Opening the board'}
+                  </p>
+                  <p className="mx-auto max-w-xs text-xs leading-relaxed text-white/45">
+                    {topic} · {difficulty ? `${difficulty} level · ` : ''}
+                    {durationMinutes} minute session
+                  </p>
+                </div>
+                <div className="flex gap-1.5" aria-hidden>
+                  {[0, 1, 2].map((i) => (
+                    <motion.span
+                      key={i}
+                      className="h-1.5 w-1.5 rounded-full bg-teal-300/70"
+                      animate={animationsOff ? undefined : { opacity: [0.25, 1, 0.25] }}
+                      transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.18 }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
             {shownBoard.map((el) => (
@@ -430,14 +465,25 @@ function ClassroomStage() {
               />
             ))}
             {waitingForScene && viewingBoard === -1 && (
-              <div className="flex items-center gap-2 text-white/35 text-sm py-3">
+              /* Between beats. A shimmering line stands in for the sentence
+                 being written, so the board looks like it is being worked on
+                 rather than stalled. */
+              <div className="flex items-center gap-2.5 py-3 text-sm text-white/45">
                 <motion.span
-                  animate={animationsOff ? { opacity: 1 } : { opacity: [0.3, 1, 0.3] }}
-                  transition={animationsOff ? { duration: 0 } : { duration: 1.3, repeat: Infinity }}
+                  animate={animationsOff ? { opacity: 1 } : { opacity: [0.35, 1, 0.35], rotate: [0, 12, 0] }}
+                  transition={animationsOff ? { duration: 0 } : { duration: 1.6, repeat: Infinity }}
+                  className="text-teal-300"
                 >
                   <Sparkles className="w-4 h-4" />
                 </motion.span>
-                the teacher is preparing…
+                <span className="font-medium">Lyo is writing</span>
+                <span
+                  aria-hidden
+                  className={cn(
+                    'h-1.5 flex-1 max-w-[120px] rounded-full bg-white/10',
+                    animationsOff ? '' : 'animate-pulse',
+                  )}
+                />
               </div>
             )}
             <div ref={boardEndRef} />
