@@ -68,6 +68,7 @@ const learnerModel = readCode('web/src/lib/learner-model.mjs');
 const lessonView = readCode('web/src/components/courses/LessonView.tsx');
 const learningProgress = readCode('web/src/lib/learning-progress.ts');
 const classroomStore = readCode('web/src/stores/classroom-store.ts');
+const evidenceRecord = readCode('web/src/components/classroom/EvidenceRecord.tsx');
 const chatStore = readCode('web/src/stores/chat-store.ts');
 
 // ── 1. No fabricated learner activity ────────────────────────────────────────
@@ -755,6 +756,43 @@ rejectPattern(
   'The optional questions became required before the Classroom opens'
 );
 
+// ── 3p. The learner's own record ─────────────────────────────────────────────
+//
+// The Classroom finally shows a learner what their answers proved. Every line
+// of it is a claim about a person made back to that person, so the same rule
+// that governs the rest of this file applies at its sharpest: the client may
+// report what the server recorded and nothing else.
+requireText(
+  evidenceRecord,
+  'personalization.learnerRecord()',
+  'The evidence record stopped reading committed server evidence'
+);
+// Not from answers counted this session, lessons marked finished, or anything
+// the client merely watched happen.
+rejectPattern(
+  evidenceRecord,
+  /answersCorrect|lessonsCompleted|scoreFrom|deriveMasteryState\(/,
+  'The evidence record computes a rung on the client'
+);
+// A failed read must not render as "you have not shown anything yet" — that
+// is a statement about the learner, and a failed request is not evidence for
+// it.
+requireText(
+  evidenceRecord,
+  'unavailable',
+  'A failed record read is indistinguishable from an empty record'
+);
+// Recognition and application may never be described with the same words.
+requireText(learnerModel, 'RUNG_CLAIMS', 'The rung vocabulary lost its shared definitions');
+requirePattern(
+  learnerModel,
+  /recognition:\s*Object\.freeze\(\{[\s\S]{0,200}?caveat:/,
+  'Recognition lost the caveat that separates it from knowing something'
+);
+// An unrecognised rung must render as nothing rather than be given the wrong
+// label — the same rule normalizeEvidenceKind follows for scoring.
+requireText(learnerModel, 'function rungClaim', 'A rung can be labelled without being recognised');
+
 const REQUIRED_RULES = [
   'The client sends its own session score',
   'The client puts a session score in a request body',
@@ -792,6 +830,12 @@ const REQUIRED_RULES = [
   'An unrecognised level is passed through unchecked',
   'An unrecognised language is passed through unchecked',
   'The optional questions became required before the Classroom opens',
+  'The evidence record stopped reading committed server evidence',
+  'The evidence record computes a rung on the client',
+  'A failed record read is indistinguishable from an empty record',
+  'The rung vocabulary lost its shared definitions',
+  'Recognition lost the caveat that separates it from knowing something',
+  'A rung can be labelled without being recognised',
 ];
 
 for (const rule of REQUIRED_RULES) {

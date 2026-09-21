@@ -22,6 +22,7 @@ import {
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 import { upsertCourseOnStart } from '@/lib/stack';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
+import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,9 @@ function ClassroomStage() {
 
   const [question, setQuestion] = useState('');
   const [notebookOpen, setNotebookOpen] = useState(false);
+  // The notebook holds two things a learner asks for after a lesson: what
+  // was said, and what it proved. They are different questions.
+  const [notebookTab, setNotebookTab] = useState<'notes' | 'record'>('notes');
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
@@ -678,13 +682,16 @@ function ClassroomStage() {
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-40"
+              className="fixed inset-0 bg-black/50 z-[60]"
               onClick={() => setNotebookOpen(false)}
             />
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-sm bg-[#0d142e] border-l border-white/10 z-50 flex flex-col"
+              /* Above the mobile nav, which is also z-50 and — being rendered
+                 after the page in the layout — otherwise wins the tie and
+                 covers the bottom of the drawer on a phone. */
+              className="fixed right-0 top-0 bottom-0 z-[61] flex w-full max-w-sm flex-col border-l border-white/10 bg-[#0d142e] pb-[env(safe-area-inset-bottom)]"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                 <p className="text-sm font-bold text-white flex items-center gap-2">
@@ -694,20 +701,46 @@ function ClassroomStage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
-                {transcript.length === 0 && (
-                  <p className="text-white/30 text-sm italic">Notes will appear as the class goes on.</p>
+              <div role="tablist" aria-label="Notebook" className="flex gap-1 border-b border-white/10 px-3 pb-2 pt-1">
+                {([['notes', 'What was said'], ['record', "What you've shown"]] as const).map(
+                  ([value, label]) => (
+                    <button
+                      key={value}
+                      role="tab"
+                      aria-selected={notebookTab === value}
+                      onClick={() => setNotebookTab(value)}
+                      className={cn(
+                        'min-h-[36px] rounded-lg px-3 text-[12.5px] font-semibold transition-colors',
+                        notebookTab === value
+                          ? 'bg-white/10 text-white'
+                          : 'text-white/50 hover:bg-white/5 hover:text-white/80',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ),
                 )}
-                {transcript.map((line) => (
-                  <p key={line.id} className="text-[13px] leading-relaxed text-white/80">
-                    <span className={cn('font-bold mr-1.5',
-                      line.speaker === 'You' ? 'text-accent-gold'
-                        : CAST.find((c) => c.name === line.speaker)?.accent.split(' ')[1] ?? 'text-white/60')}>
-                      {line.speaker}:
-                    </span>
-                    {line.text}
-                  </p>
-                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                {notebookTab === 'record' ? (
+                  <EvidenceRecord />
+                ) : (
+                  <div className="space-y-2.5">
+                    {transcript.length === 0 && (
+                      <p className="text-white/30 text-sm italic">Notes will appear as the class goes on.</p>
+                    )}
+                    {transcript.map((line) => (
+                      <p key={line.id} className="text-[13px] leading-relaxed text-white/80">
+                        <span className={cn('font-bold mr-1.5',
+                          line.speaker === 'You' ? 'text-accent-gold'
+                            : CAST.find((c) => c.name === line.speaker)?.accent.split(' ')[1] ?? 'text-white/60')}>
+                          {line.speaker}:
+                        </span>
+                        {line.text}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
