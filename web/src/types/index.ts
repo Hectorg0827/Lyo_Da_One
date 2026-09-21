@@ -151,6 +151,46 @@ export interface ConceptSummary {
 }
 
 /**
+ * One rung of one concept, as the learner actually demonstrated it.
+ *
+ * Mirrors `RungRecord` in `lyo_app/events/concept_record.py`. A rung absent
+ * from a concept's list was never shown — the client must not infer one from
+ * a mastery score.
+ */
+export interface RungRecord {
+  kind: 'exposure' | 'recognition' | 'explanation' | 'application' | 'transfer' | 'retention';
+  /** 0..1, already damped server-side for whatever help was used. */
+  confidence: number;
+  /** True when the learner reached this rung without hints at least once. */
+  unaided: boolean;
+}
+
+/** Everything this learner has shown about one concept. */
+export interface ConceptRecord {
+  concept_id: string;
+  state:
+    | 'NOT_SEEN' | 'EXPOSED' | 'RECOGNIZED' | 'EXPLAINED'
+    | 'APPLIED' | 'TRANSFERRED' | 'RETAINED' | 'MASTERED';
+  rungs: RungRecord[];
+  best_rung: RungRecord['kind'] | null;
+  misconception: string | null;
+  next_rung: RungRecord['kind'] | null;
+  last_seen: string | null;
+}
+
+/**
+ * A learner's own record, most recently worked on first.
+ *
+ * `unavailable` is not the same as an empty `concepts` list. Empty means the
+ * learner has not demonstrated anything yet, which is a claim about them;
+ * `unavailable` means the server could not answer, which is not.
+ */
+export interface LearnerRecord {
+  concepts: ConceptRecord[];
+  unavailable: boolean;
+}
+
+/**
  * One concrete next thing to do, and why it was chosen.
  *
  * The reason is assembled server-side so every client says the same thing

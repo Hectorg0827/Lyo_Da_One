@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   TEST_PREP_OPENING_TURN,
   classroomEntryHref,
@@ -7,6 +8,12 @@ import {
   shouldShowLearnerDashboard,
   testPrepEntryHref,
   practiceEntryHref,
+  CLASSROOM_LEVELS,
+  SESSION_LENGTHS,
+  CLASSROOM_LANGUAGES,
+  normalizeLevel,
+  normalizeLanguage,
+  normalizeSessionMinutes,
 } from './entry-contract.mjs';
 
 const query = (href) => new URL(href, 'https://lyo.test').searchParams;
@@ -168,4 +175,77 @@ test('review still enters review mode', () => {
 test('practice with no concept is not a destination', () => {
   assert.equal(practiceEntryHref(''), null);
   assert.equal(practiceEntryHref(null), null);
+});
+
+// ── The optional lesson questions ───────────────────────────────────────────
+
+test('a learner who answers nothing gets exactly the URL they always did', () => {
+  // The whole point of the options being optional. Typing a topic and pressing
+  // Enter must not start sending a level nobody chose.
+  const params = query(classroomEntryHref({ topic: 'Fractions' }));
+  assert.equal(params.get('difficulty'), null);
+  assert.equal(params.get('duration'), null);
+  assert.equal(params.get('language'), null);
+});
+
+test('the answers the learner does give reach the Classroom', () => {
+  const params = query(classroomEntryHref({
+    topic: 'Fractions', level: 'beginner', minutes: 30, language: 'es',
+  }));
+  assert.equal(params.get('difficulty'), 'beginner');
+  assert.equal(params.get('duration'), '30');
+  assert.equal(params.get('language'), 'es');
+});
+
+test('an unrecognised answer is dropped rather than guessed at', () => {
+  const params = query(classroomEntryHref({
+    topic: 'Fractions', level: 'wizard', minutes: 7, language: 'klingon',
+  }));
+  assert.equal(params.get('difficulty'), null);
+  assert.equal(params.get('duration'), null);
+  assert.equal(params.get('language'), null);
+});
+
+test('"match my topic" is carried as no language, not as a choice', () => {
+  // `auto` is what the Classroom already does. Sending it would claim the
+  // learner picked a language when they declined to.
+  assert.equal(normalizeLanguage('auto'), null);
+  assert.equal(query(classroomEntryHref({ topic: 'Fractions', language: 'auto' })).get('language'), null);
+});
+
+test('a goal the learner picked becomes the objective the Director receives', () => {
+  const params = query(classroomEntryHref({
+    topic: 'Fractions', objective: 'Prepare for an exam on Fractions',
+  }));
+  assert.equal(params.get('objective'), 'Prepare for an exam on Fractions');
+});
+
+test('every session length the front door offers is one the Classroom honours', () => {
+  // The Classroom parses `duration` with this same list. If the two ever
+  // diverge, a learner asks for 45 minutes and is taught a 10-minute lesson
+  // with nothing on screen admitting it.
+  const classroom = readFileSync(
+    new URL('../app/(main)/classroom/page.tsx', import.meta.url), 'utf8',
+  );
+  assert.match(classroom, /normalizeSessionMinutes\(params\.get\('duration'\)\)/);
+  assert.match(classroom, /SESSION_LENGTHS\.map/);
+  // And the server clamps to 3-60, so nothing offered may fall outside it.
+  for (const minutes of SESSION_LENGTHS) {
+    assert.ok(minutes >= 3 && minutes <= 60, `${minutes} is outside the server's 3-60 clamp`);
+  }
+});
+
+test('normalisers accept exactly what is offered and nothing else', () => {
+  for (const { value } of CLASSROOM_LEVELS) assert.equal(normalizeLevel(value), value);
+  assert.equal(normalizeLevel('BEGINNER '), 'beginner');
+  assert.equal(normalizeLevel(''), null);
+  assert.equal(normalizeLevel(undefined), null);
+
+  for (const minutes of SESSION_LENGTHS) assert.equal(normalizeSessionMinutes(minutes), minutes);
+  assert.equal(normalizeSessionMinutes('30'), 30);
+  assert.equal(normalizeSessionMinutes(0), null);
+
+  for (const { value } of CLASSROOM_LANGUAGES) {
+    assert.equal(normalizeLanguage(value), value === 'auto' ? null : value);
+  }
 });

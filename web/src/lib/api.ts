@@ -8,6 +8,7 @@ import type {
   User,
   ChatBlock,
   ConceptSummary,
+  LearnerRecord,
   IntakeTurn,
   ReadinessPayload,
   StudyPlanSummary,
@@ -790,6 +791,23 @@ export const api = {
         // out of the front door the page exists to show them.
         optionalAuth: true,
       });
+    },
+
+    /**
+     * What this learner has actually shown, concept by concept.
+     *
+     * `conceptSummary` above answers "how many things do I know?".  This
+     * answers "what did I show, on what, was I helped, and what is left" —
+     * read from committed server evidence, never from a local answer counter,
+     * a lesson marked finished, or anything the client watched happen.
+     *
+     * Requires a real learner: a guest has no record to read, so this is the
+     * one call here that does not pass `optionalAuth`.
+     */
+    async learnerRecord(limit = 100) {
+      return request<LearnerRecord>(
+        `/api/v1/personalization/concepts/record?limit=${limit}`
+      );
     },
 
     /**

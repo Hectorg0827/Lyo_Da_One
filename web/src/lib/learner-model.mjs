@@ -358,3 +358,113 @@ export function hasConceptEvidence(summary) {
   const total = Number(summary.total);
   return Number.isFinite(total) && total > 0;
 }
+
+// ─── Saying a record back to the learner ─────────────────────────────────────
+
+/**
+ * How each rung is named to the person who earned it.
+ *
+ * The wording is the product's honesty surface. "You recognised this" and
+ * "you can apply this" are different claims about the same person, and the
+ * gap between them is the whole reason the ladder exists — so the copy keeps
+ * them apart rather than reaching for a warmer word that blurs them.
+ *
+ * `exposure` is deliberately the flattest of the six: being shown something
+ * is proof of nothing, and the record says so rather than crediting
+ * attendance.
+ */
+export const RUNG_CLAIMS = Object.freeze({
+  exposure: Object.freeze({
+    label: 'Seen',
+    claim: 'You were taught this',
+    caveat: 'Being shown something is not yet evidence you know it.',
+  }),
+  recognition: Object.freeze({
+    label: 'Recognised',
+    claim: 'You picked it out correctly',
+    caveat: 'Choosing the right option is not the same as being able to use it.',
+  }),
+  explanation: Object.freeze({
+    label: 'Explained',
+    claim: 'You put it in your own words',
+  }),
+  application: Object.freeze({
+    label: 'Applied',
+    claim: 'You used it on a problem',
+  }),
+  transfer: Object.freeze({
+    label: 'Transferred',
+    claim: 'You used it on something new',
+  }),
+  retention: Object.freeze({
+    label: 'Remembered',
+    claim: 'You still had it after a gap',
+  }),
+});
+
+/**
+ * The learner-facing name and claim for a rung.
+ *
+ * Returns null for anything unrecognised rather than inventing a label. A new
+ * server-side rung must show as nothing rather than be described with the
+ * wrong words — the same rule `normalizeEvidenceKind` follows.
+ */
+export function rungClaim(kind) {
+  const normalized = normalizeEvidenceKind(kind);
+  return normalized ? RUNG_CLAIMS[normalized] ?? null : null;
+}
+
+/**
+ * One line summarising where a concept stands.
+ *
+ * MASTERED is the only state that gets a strong word, and it is earned by
+ * three separate demonstrations rather than by a high score on one.
+ */
+export const STATE_HEADLINES = Object.freeze({
+  NOT_SEEN: 'Not started',
+  EXPOSED: 'Taught, not yet shown',
+  RECOGNIZED: 'Recognised so far',
+  EXPLAINED: 'You can explain it',
+  APPLIED: 'You can use it',
+  TRANSFERRED: 'You can use it somewhere new',
+  RETAINED: 'It stuck',
+  MASTERED: 'Applied, transferred and retained',
+});
+
+export function stateHeadline(state) {
+  return STATE_HEADLINES[state] ?? STATE_HEADLINES.NOT_SEEN;
+}
+
+/**
+ * What to tell the learner to do next about one concept.
+ *
+ * Reads the server's `next_rung` rather than deciding here, so the advice
+ * and the record cannot disagree. Returns null when the server named no next
+ * step, which is what the top of the ladder looks like.
+ */
+export function nextStepLabel(nextRung) {
+  const claim = rungClaim(nextRung);
+  if (!claim) return null;
+  switch (normalizeEvidenceKind(nextRung)) {
+    case 'recognition': return 'Next: try a question on it';
+    case 'explanation': return 'Next: explain it in your own words';
+    case 'application': return 'Next: use it on a problem';
+    case 'transfer': return 'Next: try it on something unfamiliar';
+    case 'retention': return 'Next: come back to it in a few days';
+    default: return null;
+  }
+}
+
+/**
+ * Turn a concept key into something readable.
+ *
+ * Concept keys are `slugify_skill` output — "quadratic-formula". This is
+ * presentation only: the key itself stays the identity everywhere else, so
+ * two surfaces cannot disagree about which concept is which.
+ */
+export function conceptLabel(conceptId) {
+  const raw = (conceptId ?? '').toString().trim();
+  if (!raw) return 'Untitled concept';
+  const words = raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Untitled concept';
+}

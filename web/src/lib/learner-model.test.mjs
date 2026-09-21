@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   MASTERY_CONFIDENCE_FLOOR,
   conceptFromDueReview,
@@ -14,6 +15,10 @@ import {
   transcriptLabelFor,
   shouldLeadWithConcepts,
   hasConceptEvidence,
+  rungClaim,
+  stateHeadline,
+  nextStepLabel,
+  conceptLabel,
 } from './learner-model.mjs';
 
 const strong = (kind) => ({ kind, confidence: 1 });
@@ -274,4 +279,75 @@ test('meeting a concept counts as real activity on its own', () => {
   assert.equal(hasConceptEvidence({ total: 3, exploring: 3 }), true);
   assert.equal(hasConceptEvidence({ total: 0 }), false);
   assert.equal(hasConceptEvidence(null), false);
+});
+
+// ─── Saying a record back to the learner ─────────────────────────────────────
+//
+// Every line the record renders is a claim about a person, made back to that
+// person. These pin the wording apart where blurring it would flatter.
+
+test('recognising something and applying it never share a word', () => {
+  const recognised = rungClaim('recognition');
+  const applied = rungClaim('application');
+  assert.notEqual(recognised.label, applied.label);
+  assert.notEqual(recognised.claim, applied.claim);
+  // The weaker rung carries the caveat; the stronger one does not need it.
+  assert.ok(recognised.caveat);
+});
+
+test('being taught something is not credited as knowing it', () => {
+  const exposure = rungClaim('exposure');
+  assert.equal(exposure.claim, 'You were taught this');
+  assert.match(exposure.caveat, /not yet evidence/i);
+});
+
+test('the wire word for recall is understood', () => {
+  // The classroom emits "retrieval"; the ladder says "retention".
+  assert.deepEqual(rungClaim('retrieval'), rungClaim('retention'));
+});
+
+test('an unrecognised rung is described with no words at all', () => {
+  // A new server-side rung must render as nothing rather than be labelled
+  // with the wrong claim about what the learner did.
+  assert.equal(rungClaim('vibes'), null);
+  assert.equal(rungClaim(undefined), null);
+  assert.equal(nextStepLabel('vibes'), null);
+});
+
+test('mastered is the only state that gets a strong word', () => {
+  assert.equal(stateHeadline('RECOGNIZED'), 'Recognised so far');
+  assert.equal(stateHeadline('MASTERED'), 'Applied, transferred and retained');
+  // An unknown state falls back to the weakest claim, never the strongest.
+  assert.equal(stateHeadline('SUPER_MASTERED'), stateHeadline('NOT_SEEN'));
+});
+
+test('the top of the ladder has no next step to invent', () => {
+  assert.equal(nextStepLabel(null), null);
+  assert.equal(nextStepLabel('application'), 'Next: use it on a problem');
+});
+
+test('a concept key is made readable without changing its identity', () => {
+  assert.equal(conceptLabel('quadratic-formula'), 'Quadratic formula');
+  assert.equal(conceptLabel('  '), 'Untitled concept');
+  assert.equal(conceptLabel(null), 'Untitled concept');
+});
+
+test('the record reads the server, never a local counter', () => {
+  // The component must not compute a rung from anything it watched happen.
+  const source = readFileSync(
+    new URL('../components/classroom/EvidenceRecord.tsx', import.meta.url), 'utf8',
+  );
+  assert.match(source, /personalization\.learnerRecord\(\)/);
+  // No local tallying of answers, lessons or scores into a claim.
+  assert.doesNotMatch(source, /answersCorrect|lessonsCompleted|scoreFrom|\+\+/);
+});
+
+test('a failed read is not rendered as an empty record', () => {
+  // "You have not shown anything yet" is a claim about the learner. A request
+  // that failed is not evidence for it.
+  const source = readFileSync(
+    new URL('../components/classroom/EvidenceRecord.tsx', import.meta.url), 'utf8',
+  );
+  assert.match(source, /unavailable/);
+  assert.match(source, /not a reading of your/i);
 });

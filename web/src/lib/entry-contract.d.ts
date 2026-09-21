@@ -1,12 +1,37 @@
 import type { ClassroomMode } from './classroom-contract';
 
+export type ClassroomLevel = 'beginner' | 'intermediate' | 'advanced';
+
 export interface ClassroomEntry {
   topic: string;
   mode?: ClassroomMode | string;
   objective?: string;
   courseId?: string;
   lessonId?: string;
+  /** The learner's optional answers. Each is dropped when unrecognised. */
+  level?: ClassroomLevel | string | null;
+  minutes?: number | string | null;
+  language?: string | null;
 }
+
+export interface ClassroomLevelOption {
+  value: ClassroomLevel;
+  label: string;
+  hint: string;
+}
+
+export interface ClassroomLanguageOption {
+  value: string;
+  label: string;
+}
+
+export const CLASSROOM_LEVELS: readonly ClassroomLevelOption[];
+export const SESSION_LENGTHS: readonly number[];
+export const CLASSROOM_LANGUAGES: readonly ClassroomLanguageOption[];
+
+export function normalizeLevel(level?: string | null): ClassroomLevel | null;
+export function normalizeLanguage(language?: string | null): string | null;
+export function normalizeSessionMinutes(minutes?: number | string | null): number | null;
 
 export const TEST_PREP_OPENING_TURN: string;
 export function defaultObjective(topic: string): string;
