@@ -54,6 +54,7 @@ object ChatStreamClient {
             "conversation_id" to conversationId,
             "device_id" to "android",
             "client_message_id" to clientMessageId,
+            "timezone" to java.time.ZoneId.systemDefault().id,
         )
         if (media.isNotEmpty()) {
             requestFields["media"] = media.map { item ->

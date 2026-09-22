@@ -720,25 +720,9 @@ class LyoAIViewModel: ObservableObject {
             }
         }
 
-        // Route to test prep orchestrator if a funnel session is active
-        if messageAttachments.isEmpty,
-           case .gatheringInfo = TestPrepOrchestrator.shared.state {
-            unifiedChat.appendUserMessage(messageText, attachments: messageAttachments)
-            let attachmentIds = messageAttachments.compactMap { $0.id }
-            TestPrepOrchestrator.shared.handleFunnelResponse(
-                messageText,
-                attachmentIds: attachmentIds,
-                in: unifiedChat
-            )
-            return
-        }
-
-        // Detect fresh test prep intent before sending to the backend
-        if messageAttachments.isEmpty && isTestPrepIntent(messageText) {
-            unifiedChat.appendUserMessage(messageText, attachments: messageAttachments)
-            TestPrepOrchestrator.shared.handleIntent(rawPhrase: messageText, in: unifiedChat)
-            return
-        }
+        // Test Prep, including its continuation, is owned by the backend.
+        // Never intercept it with a device-local funnel: Chat and the dedicated
+        // screen must see the same profile, schedule and graded evidence.
 
         // Use Streaming Flow
         await unifiedChat.sendMessageStreaming(

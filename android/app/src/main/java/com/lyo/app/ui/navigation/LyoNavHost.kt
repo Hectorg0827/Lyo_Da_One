@@ -70,6 +70,8 @@ object Routes {
     const val SIGNUP = "signup"
     const val HOME = "home"
     const val CHAT = "chat"
+    const val TEST_PREP = "test-prep"
+    const val PREP_CLASSROOM = "test-prep/classroom/{sessionId}?topic={topic}&mode={mode}"
     const val COMMUNITY = "community"
     const val POST_DETAIL = "community/{postId}"
     const val GROUPS = "groups"
@@ -176,6 +178,12 @@ private fun LyoNavHost() {
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
             composable(Routes.CHAT) { ChatScreen(nav) }
+            composable(Routes.TEST_PREP) { com.lyo.app.ui.screens.testprep.TestPrepScreen(nav) }
+            composable(Routes.PREP_CLASSROOM) { entry ->
+                ClassroomScreen(nav, entry.arguments?.getString("sessionId") ?: "",
+                    topicOverride = entry.arguments?.getString("topic"),
+                    teachingMode = entry.arguments?.getString("mode") ?: "solo")
+            }
             composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }
             composable(Routes.POST_DETAIL) { entry ->
                 ReliablePostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")

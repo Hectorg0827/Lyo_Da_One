@@ -472,6 +472,7 @@ fun ChatScreen(nav: NavHostController) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Text("LYO", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            TextButton(onClick = { nav.navigate("test-prep") }) { Text("Test Prep", color = LyoPurple) }
             TextButton(
                 enabled = !isStreaming && !uploadingAttachment,
                 onClick = {

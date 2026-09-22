@@ -21,6 +21,7 @@ struct Lyo2RouterRequest: Codable {
     let conversationId: String?
     let deviceId: String
     let clientMessageId: String?
+    var timezone: String = TimeZone.current.identifier
     
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -34,6 +35,7 @@ struct Lyo2RouterRequest: Codable {
         case conversationId = "conversation_id"
         case deviceId = "device_id"
         case clientMessageId = "client_message_id"
+        case timezone
     }
     
     init(

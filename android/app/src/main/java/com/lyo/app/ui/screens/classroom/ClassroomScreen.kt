@@ -134,7 +134,7 @@ internal class AndroidClassroomController(
     private var activitySaveJob: Job? = null
     private val activityUpdates = mutableMapOf<String, Map<String, JsonElement>>()
 
-    fun connect(topic: String) {
+    fun connect(topic: String, teachingMode: String = "solo", courseBacked: Boolean = true) {
         val token = TokenManager.accessToken
         if (token.isNullOrBlank()) {
             state = state.copy(waiting = false, error = "Sign in to start the AI classroom.")
@@ -147,11 +147,11 @@ internal class AndroidClassroomController(
             ).toHttpUrl()
             .newBuilder()
             .addQueryParameter("session_id", courseId)
-            .addQueryParameter("course_id", courseId)
+            .apply { if (courseBacked) addQueryParameter("course_id", courseId) }
             .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", topic)
             .addQueryParameter("token", token)
-            .addQueryParameter("mode", "solo")
+            .addQueryParameter("mode", teachingMode)
             .addQueryParameter("duration_minutes", "10")
             .addQueryParameter("language", "auto")
             .build()
@@ -481,7 +481,7 @@ internal class AndroidClassroomController(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClassroomScreen(nav: NavHostController, courseId: String) {
+fun ClassroomScreen(nav: NavHostController, courseId: String, topicOverride: String? = null, teachingMode: String = "solo") {
     val context = LocalContext.current
     val controller = remember(courseId) {
         AndroidClassroomController(context, courseId)
@@ -549,9 +549,9 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
     }
 
     LaunchedEffect(courseId) {
-        val course = runCatching { ApiClient.api.course(courseId) }.getOrNull()
-        title = course?.title ?: "AI Classroom"
-        controller.connect(title)
+        val course = if (topicOverride == null) runCatching { ApiClient.api.course(courseId) }.getOrNull() else null
+        title = topicOverride ?: course?.title ?: "AI Classroom"
+        controller.connect(title, teachingMode, topicOverride == null)
         // Save this course into the learner's device- and platform-agnostic
         // Stacks list the moment the classroom opens, mirroring web's
         // /classroom page upsertCourseOnStart effect and iOS's
@@ -559,7 +559,7 @@ fun ClassroomScreen(nav: NavHostController, courseId: String) {
         // here (CourseHeader's "Start Class" and the standalone "Start AI
         // Classroom" button) gets this for free. No-ops silently if the
         // learner isn't signed in or the sync fails.
-        StackRepository.upsertCourseOnStart(courseId, title = title)
+        if (topicOverride == null) StackRepository.upsertCourseOnStart(courseId, title = title)
     }
     DisposableEffect(controller) {
         onDispose { controller.close() }
