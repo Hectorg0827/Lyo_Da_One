@@ -14,7 +14,7 @@ Backend must deploy first: clients require `GET /me/study_plans/state` and
 `PATCH /me/study_plans/profiles/{id}`. There is deliberately no silent fallback
 to the old device-local flow if the shared API is unavailable.
 
-Web validation: TypeScript, production build, the 86 existing Test Prep tests,
+Web validation: TypeScript, production build, all 163 web contract tests,
 and product-trust/Classroom/chat parity checks. Native compilation and unit
 tests run in the repository's existing iOS/Android CI jobs; this workspace has
 no Xcode or Android SDK. Physical-device notification delivery remains a
@@ -25,3 +25,5 @@ Release smoke test: begin intake in Chat, switch to Test Prep, finish intake,
 reopen on a second device, edit the exam date, complete a lesson, and confirm
 the same schedule and measured readiness on all devices. Retry one intake
 request and one plan-generation request; neither may create duplicates.
+
+Android reminder receipt still requires Firebase app configuration, a messaging service/token registration path, and notification permission handling. The dedicated study workflow is implemented; push parity is not yet verified.

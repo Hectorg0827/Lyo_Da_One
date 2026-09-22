@@ -343,7 +343,7 @@ final class TestPrepViewModel: ObservableObject {
             guard let uri = result.publicURL else { throw URLError(.badServerResponse) }
             let material = PrepMaterial(name: url.lastPathComponent, uri: uri,
                 modality: mimeType.hasPrefix("image/") ? "IMAGE" : "DOCUMENT", mimeType: mimeType)
-            if let saved = snapshot, let profile = saved.profile, saved.plan != nil {
+            if let saved = snapshot, let profile = saved.profile {
                 _ = try await service.editProfile(id: profile.id,
                     body: PrepProfileUpdate(expectedRevision: saved.revision, materials: profile.materials + [material]))
                 await load()
@@ -370,8 +370,6 @@ final class TestPrepViewModel: ObservableObject {
 
         // Refresh so readiness reflects the session that just closed. A
         // failure here is reported, never allowed to undo what is on screen.
-        if let planId = state.planId {
-            await loadDetails(planId: planId)
-        }
+        await load()
     }
 }

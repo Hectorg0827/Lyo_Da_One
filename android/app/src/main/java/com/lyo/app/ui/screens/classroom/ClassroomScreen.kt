@@ -147,7 +147,7 @@ internal class AndroidClassroomController(
             ).toHttpUrl()
             .newBuilder()
             .addQueryParameter("session_id", courseId)
-            .apply { if (courseBacked) addQueryParameter("course_id", courseId) }
+            .apply { if (courseBacked) this.addQueryParameter("course_id", courseId) }
             .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", topic)
             .addQueryParameter("token", token)
