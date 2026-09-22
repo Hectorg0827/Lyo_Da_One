@@ -82,13 +82,9 @@ test('a due review enters review mode, carrying no stored question', () => {
   assert.equal(params.get('last_question'), null);
 });
 
-test('"I have a test" reaches the real test-prep intent by saying so', () => {
-  // TEST_PREP is resolved by the backend router from what the learner says
-  // (lyo_app/ai/router.py), so the entry opens Chat with that turn rather
-  // than standing a client-side wizard in front of it.
+test('"I have a test" opens the resumable account-owned workflow', () => {
   const href = testPrepEntryHref();
-  assert.ok(href.startsWith('/chat?prompt='));
-  assert.equal(query(href).get('prompt'), TEST_PREP_OPENING_TURN);
+  assert.equal(href, '/test-prep');
   // The router matches on "have a test"; losing that phrasing silently
   // downgrades the entry to a generic explanation.
   assert.match(TEST_PREP_OPENING_TURN, /have a test/i);

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Test Prep
 //
@@ -30,6 +31,13 @@ struct TestPrepView: View {
 
     @State private var draft = ""
     @State private var classroomEntry: ClassroomEntry?
+    @State private var showImporter = false
+    @State private var editing = false
+    @State private var subject = ""
+    @State private var testDate = ""
+    @State private var topics = ""
+    @State private var minutes = 45
+    @State private var days = 5
 
     /// A session the learner tapped, on its way to the Classroom.
     private struct ClassroomEntry: Identifiable {
@@ -60,6 +68,13 @@ struct TestPrepView: View {
         }
         .navigationTitle("Test prep")
         .task { await model.load() }
+        .refreshable { await model.load() }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.image, .pdf, .plainText]) { result in
+            if case .success(let url) = result {
+                let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                Task { await model.addMaterial(url: url, mimeType: mime) }
+            }
+        }
         .fullScreenCover(item: $classroomEntry) { entry in
             LivingClassroomView(
                 courseId: entry.courseId,
@@ -108,6 +123,12 @@ struct TestPrepView: View {
             if let error = model.intakeError {
                 noticeBox(error)
             }
+            if model.snapshot?.profile?.intakeComplete == true {
+                managementSection
+                Button("Build my saved plan") { Task { await model.buildSavedPlan() } }
+                    .disabled(model.intakeBusy)
+            }
+            materialsSection
 
             HStack(spacing: DesignTokens.Spacing.xs) {
                 TextField("e.g. Biology GCSE on the 25th", text: $draft, axis: .vertical)
@@ -164,6 +185,65 @@ struct TestPrepView: View {
             readinessCard
             focusCard
             todaySection
+            if let error = model.intakeError { noticeBox(error) }
+            managementSection
+            materialsSection
+            DisclosureGroup("Full study schedule") {
+                ForEach(model.snapshot?.sessions ?? []) { session in
+                    VStack(alignment: .leading) {
+                        if let date = session.scheduledDate {
+                            Text(date.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                        }
+                        if session.isOpen { sessionRow(session) }
+                        else { Text("\(session.topic) · \(session.status)") }
+                    }.padding(.vertical, 6)
+                }
+            }
+        }
+    }
+
+    private var materialsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach((model.snapshot?.profile?.materials ?? []) + model.pendingMaterials, id: \.uri) { material in
+                Label(material.name, systemImage: "doc")
+                    .font(.caption)
+            }
+            Button("Add photo, PDF or notes", systemImage: "paperclip") { showImporter = true }
+                .disabled(model.intakeBusy || model.state.planLoadFailed)
+        }
+    }
+
+    @ViewBuilder private var managementSection: some View {
+        if let saved = model.snapshot, let profile = saved.profile {
+            Button(editing ? "Close details" : "Edit test details") {
+                subject = profile.subject; testDate = profile.testDate
+                topics = profile.topics.map(\.name).joined(separator: "\n")
+                minutes = profile.dailyMinutesAvailable; days = profile.studyDaysPerWeek
+                editing.toggle()
+            }
+            if editing {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Upcoming sessions will be rebuilt. Completed work stays in your record.").font(.caption)
+                    TextField("Subject", text: $subject)
+                    TextField("Test date (YYYY-MM-DD)", text: $testDate)
+                    TextField("Topics, one per line", text: $topics, axis: .vertical)
+                    Stepper("\(minutes) minutes per day", value: $minutes, in: 5...480, step: 5)
+                    Stepper("\(days) days per week", value: $days, in: 1...7)
+                    Text("Study timezone: \(saved.timezone)").font(.caption)
+                    Button("Save and update schedule") {
+                        let named = topics.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                        Task {
+                            await model.saveDetails(PrepProfileUpdate(expectedRevision: saved.revision,
+                                subject: subject, testDate: testDate,
+                                topics: named.map { name in profile.topics.first { $0.name == name } ?? PrepTopic(name: name) },
+                                dailyMinutesAvailable: minutes, studyDaysPerWeek: days,
+                                timezone: TimeZone.current.identifier))
+                            if model.intakeError == nil { editing = false }
+                        }
+                    }.disabled(model.intakeBusy || subject.isEmpty || topics.isEmpty)
+                }.textFieldStyle(.roundedBorder)
+            }
         }
     }
 

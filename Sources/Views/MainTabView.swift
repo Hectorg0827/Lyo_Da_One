@@ -21,6 +21,7 @@ struct MainTabView: View {
     @State private var navigateToTutor: (courseId: String, lessonId: String)? = nil
     @State private var isTutorModePresented = false
     @State private var isLiveClassroomPresented = false
+    @State private var isTestPrepPresented = false
     @State private var activeChallengeCode: ChallengeCodeItem?
     @ObservedObject private var deepLinkHandler = DeepLinkHandler.shared
     @State private var liveClassroomData: (courseId: String, lessonId: String, courseTitle: String, lessonTitle: String)? = nil
@@ -293,6 +294,9 @@ extension MainTabView {
                 // Deep links were parsed but never consumed before this.
                 guard let action else { return }
                 switch action {
+                case .openTestPrep:
+                    isTestPrepPresented = true
+                    deepLinkHandler.clearPendingAction()
                 case .openChallenge(let code):
                     activeChallengeCode = ChallengeCodeItem(code: code)
                     deepLinkHandler.clearPendingAction()
@@ -302,6 +306,9 @@ extension MainTabView {
                 default:
                     break
                 }
+            }
+            .sheet(isPresented: $isTestPrepPresented) {
+                NavigationStack { TestPrepView() }
             }
             .sheet(item: $activeChallengeCode) { item in
                 ChallengeTakeView(code: item.code)

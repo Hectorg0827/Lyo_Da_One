@@ -12,6 +12,7 @@ import com.lyo.app.ui.theme.LyoTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.lyo.app.notifications.StudyReminders.openTestPrep = intent.getBooleanExtra("open_test_prep", false)
         enableEdgeToEdge()
         setContent {
             LyoTheme {
@@ -20,4 +21,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        com.lyo.app.notifications.StudyReminders.openTestPrep = intent.getBooleanExtra("open_test_prep", false)
+    }
+
 }

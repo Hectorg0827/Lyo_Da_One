@@ -1,5 +1,56 @@
 import Foundation
 
+struct PrepMaterial: Codable, Equatable {
+    let name: String
+    let uri: String
+    let modality: String
+    let mimeType: String
+}
+
+struct PrepTopic: Codable, Equatable {
+    let name: String
+    var weight: Double? = 1
+    var confidence: Int? = 5
+}
+
+struct PrepProfile: Codable {
+    let id: String
+    let subject: String
+    let testDate: String
+    let topics: [PrepTopic]
+    let dailyMinutesAvailable: Int
+    let studyDaysPerWeek: Int
+    let materials: [PrepMaterial]
+    let intakeComplete: Bool
+    let intakeTranscript: [PrepTranscriptTurn]
+}
+
+struct PrepTranscriptTurn: Codable {
+    let role: String
+    let content: String
+}
+
+struct PrepSnapshot: Codable {
+    let profile: PrepProfile?
+    let plan: StudyPlanSummary?
+    let timezone: String
+    let revision: Int
+    var sessions: [PlannedSession]
+}
+
+struct PrepProfileUpdate: Codable {
+    let expectedRevision: Int
+    var subject: String? = nil
+    var testDate: String? = nil
+    var topics: [PrepTopic]? = nil
+    var dailyMinutesAvailable: Int? = nil
+    var studyDaysPerWeek: Int? = nil
+    var timezone: String? = nil
+    var materials: [PrepMaterial]? = nil
+}
+
+struct PrepEditReply: Codable { let needsPlan: Bool }
+
 // MARK: - Test Prep wire models
 //
 // What `/api/v1/me/study_plans/...` actually sends. These replace
@@ -90,7 +141,7 @@ struct PlannedSession: Codable, Equatable, Identifiable {
     /// Carried by the server so a session can be matched to its standing in
     /// readiness, and so both name the concept the same way.
     let conceptId: String
-    let status: String
+    var status: String
     let performanceScore: Double?
 
     /// The server's own words for a session that is done with.

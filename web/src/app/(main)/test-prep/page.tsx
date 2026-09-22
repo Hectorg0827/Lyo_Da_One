@@ -6,17 +6,14 @@ import { CalendarClock, GraduationCap, Loader2, Send, Target } from 'lucide-reac
 
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
-import { TEST_PREP_OPENING_TURN, testPrepEntryHref } from '@/lib/entry-contract.mjs';
+import { TEST_PREP_OPENING_TURN } from '@/lib/entry-contract.mjs';
 import {
-  STAGE_PLAN,
   completionSummary,
-  currentPlan,
   daysLabel,
   intakeIsComplete,
   openSessions,
   readinessHeadline,
   sessionEntryHref,
-  stageForPlans,
   topicStanding,
 } from '@/lib/test-prep.mjs';
 import {
@@ -28,6 +25,8 @@ import {
   todayCopy,
 } from '@/lib/test-prep-state.mjs';
 import type { ReadinessPayload, StudySessionRow } from '@/types';
+import { PrepManagement } from '@/components/test-prep/PrepManagement';
+import type { PrepMaterial, PrepSnapshot } from '@/lib/test-prep-api';
 
 /**
  * Test Prep — the face on a learner loop that had none.
@@ -74,17 +73,23 @@ export default function TestPrepPage() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [building, setBuilding] = useState(false);
-  const startedIntake = useRef(false);
+  const [snapshot, setSnapshot] = useState<PrepSnapshot | null>(null);
+  const [materials, setMaterials] = useState<PrepMaterial[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [intakeError, setIntakeError] = useState<string | null>(null);
+  const retryTurn = useRef<{ text: string; id: string } | null>(null);
+  const busy = useRef(false);
 
   const loadPlan = useCallback(async () => {
     dispatch({ type: 'load_started' });
     try {
-      const plans = await api.testPrep.plans();
-      if (stageForPlans(plans) !== STAGE_PLAN) {
-        dispatch({ type: 'no_plan' });
-        return;
-      }
-      const plan = currentPlan(plans);
+      const saved = await api.testPrep.state();
+      setSnapshot(saved);
+      setProfileId(saved.profile?.id);
+      setTurns((saved.profile?.intake_transcript ?? []).map(t => ({
+        role: t.role === 'user' ? 'learner' : 'coach', text: t.content,
+      })));
+      const plan = saved.plan;
       if (!plan) {
         dispatch({ type: 'no_plan' });
         return;
@@ -123,16 +128,23 @@ export default function TestPrepPage() {
   const sendTurn = useCallback(
     async (message: string) => {
       const text = message.trim();
-      if (!text || sending) return;
+      if (!text || busy.current || uploading) return;
       // Checked here and not only on the controls. This call ends in
       // `plans/generate`, which creates a plan unconditionally, and a plan
       // must not be created while we do not know whether one already exists.
       if (!canStartIntake(state)) return;
       setSending(true);
-      setTurns((prev) => [...prev, { role: 'learner', text }]);
+      busy.current = true;
+      setIntakeError(null);
+      if (retryTurn.current?.text !== text) {
+        retryTurn.current = { text, id: crypto.randomUUID() };
+        setTurns((prev) => [...prev, { role: 'learner', text }]);
+      }
       setDraft('');
       try {
-        const turn = await api.testPrep.intakeTurn(text, profileId);
+        const turn = await api.testPrep.intakeTurn(text, profileId, materials, retryTurn.current.id);
+        retryTurn.current = null;
+        setMaterials([]);
         setProfileId(turn.test_profile_id);
         setTurns((prev) => [...prev, { role: 'coach', text: turn.message_to_user }]);
 
@@ -142,20 +154,18 @@ export default function TestPrepPage() {
           await api.testPrep.generatePlan(turn.test_profile_id);
           await loadPlan();
         }
-      } catch {
-        setTurns((prev) => [
-          ...prev,
-          {
-            role: 'coach',
-            text: 'Something went wrong on my side. Could you say that again?',
-          },
-        ]);
+      } catch (error) {
+        setIntakeError(error instanceof Error ? error.message : 'Your message could not be sent. Please retry.');
+        setDraft(text);
+        // Reload server-owned state: a timeout may have occurred after saving.
+        await loadPlan();
       } finally {
+        busy.current = false;
         setSending(false);
         setBuilding(false);
       }
     },
-    [loadPlan, profileId, sending]
+    [loadPlan, profileId, materials, state, uploading]
   );
 
   const finishSession = useCallback(
@@ -179,6 +189,8 @@ export default function TestPrepPage() {
                 ? 'Marked done. Nothing was recorded for this session.'
                 : 'Marked done, but I could not read what was measured.';
 
+        setSnapshot(saved => saved ? { ...saved, sessions: saved.sessions.map(session =>
+          session.id === sessionId ? { ...session, status: 'completed' } : session) } : saved);
         dispatch({ type: 'finish_succeeded', sessionId, notice: text });
         await loadPlan();
       } catch {
@@ -190,22 +202,6 @@ export default function TestPrepPage() {
     },
     [finishing, loadPlan]
   );
-
-  // Open with the coach's first question rather than an empty box, so the
-  // learner is asked something instead of being left to guess the format.
-  //
-  // The opening line is the same constant Home's "I have a test" sends into
-  // Chat. Two surfaces opening test prep with two different sentences is how
-  // they start being two different features.
-  useEffect(() => {
-    // `canStartIntake` gates this too, and it matters most here: this effect
-    // opens the conversation on its own, so a failed plan lookup would begin
-    // building a second plan without the learner having done anything at all.
-    if (stage !== 'intake' || !isAuthenticated || loading || startedIntake.current) return;
-    if (!canStartIntake(state)) return;
-    startedIntake.current = true;
-    void sendTurn(TEST_PREP_OPENING_TURN);
-  }, [stage, isAuthenticated, loading, sendTurn]);
 
   if (authLoading || loading) {
     return (
@@ -232,7 +228,7 @@ export default function TestPrepPage() {
             Sign in
           </Link>
           <Link
-            href={testPrepEntryHref()}
+            href={`/chat?prompt=${encodeURIComponent(TEST_PREP_OPENING_TURN)}`}
             className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white"
           >
             Just talk it through
@@ -271,6 +267,7 @@ export default function TestPrepPage() {
         )}
 
         <div className="mt-6 space-y-3">
+          {turns.length === 0 && !failed && <p className="rounded-2xl bg-white/[0.06] px-4 py-3 text-white/90">What subject is your test?</p>}
           {turns.map((turn, index) => (
             <div
               key={`${turn.role}-${index}`}
@@ -291,6 +288,33 @@ export default function TestPrepPage() {
           )}
         </div>
 
+        {intakeError && <p role="alert" className="mt-4 text-amber-200">{intakeError}</p>}
+        {snapshot?.profile?.intake_complete && <PrepManagement snapshot={snapshot} onSaved={loadPlan} />}
+        {snapshot?.profile?.intake_complete && (
+          <button className="mt-4 rounded-xl bg-violet-600 px-5 py-3 text-white disabled:opacity-50"
+            disabled={building} onClick={async () => {
+              if (!profileId || busy.current) return;
+              busy.current = true; setBuilding(true); setIntakeError(null);
+              try { await api.testPrep.generatePlan(profileId); await loadPlan(); }
+              catch (e) { setIntakeError(e instanceof Error ? e.message : 'Could not build your plan.'); }
+              finally { busy.current = false; setBuilding(false); }
+            }}>{building ? 'Building your plan…' : 'Build my saved plan'}</button>
+        )}
+        <label className="mt-4 block text-sm text-white/70">Add notes, a photo or a PDF
+          <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf,text/plain" disabled={sending || uploading || failed}
+            className="mt-2 block w-full text-sm" onChange={async event => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              setUploading(true); setIntakeError(null);
+              try {
+                const uploaded = await api.media.upload(file, 'test-prep');
+                setMaterials(prev => [...prev, { name: file.name, uri: uploaded.url,
+                  modality: file.type.startsWith('image/') ? 'IMAGE' : 'DOCUMENT', mime_type: file.type }]);
+              } catch { setIntakeError('The file could not be uploaded. Please try again.'); }
+              finally { setUploading(false); event.target.value = ''; }
+            }} />
+        </label>
+        <p className="mt-2 text-sm text-white/60" aria-live="polite">{uploading ? 'Uploading…' : materials.map(m => m.name).join(', ')}</p>
         <form
           className="mt-6 flex gap-2"
           onSubmit={(event) => {
@@ -308,7 +332,7 @@ export default function TestPrepPage() {
           />
           <button
             type="submit"
-            disabled={sending || !draft.trim() || !canStartIntake(state)}
+            disabled={sending || uploading || !draft.trim() || !canStartIntake(state)}
             className="rounded-xl bg-white px-4 py-3 text-black disabled:opacity-40"
             aria-label="Send"
           >
@@ -348,6 +372,8 @@ export default function TestPrepPage() {
           </p>
         )}
       </header>
+
+      {snapshot && <PrepManagement snapshot={snapshot} onSaved={loadPlan} />}
 
       <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
         <div className="flex items-center gap-2 text-sm text-white/60">

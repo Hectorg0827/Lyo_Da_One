@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Keep development builds usable until this app has a Firebase configuration.
+if (file("google-services.json").exists()) { apply(plugin = "com.google.gms.google-services") }
+
 android {
     namespace = "com.lyo.app"
     compileSdk = 35
@@ -42,6 +45,8 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-messaging")
     val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
     implementation(composeBom)
 

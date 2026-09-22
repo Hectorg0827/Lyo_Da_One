@@ -215,6 +215,9 @@ final class TestPrepViewModel: ObservableObject {
     @Published private(set) var transcript: [IntakeLine] = []
     @Published private(set) var intakeBusy = false
     @Published private(set) var intakeError: String?
+    @Published private(set) var snapshot: PrepSnapshot?
+    @Published private(set) var pendingMaterials: [PrepMaterial] = []
+    private var retryTurn: (text: String, id: String)?
 
     private let service: TestPrepPlanService
     private var testProfileId: String?
@@ -229,15 +232,20 @@ final class TestPrepViewModel: ObservableObject {
         state.loadStarted()
         defer { state.loadSettled() }
 
-        let plans: [StudyPlanSummary]
+        let saved: PrepSnapshot
         do {
-            plans = try await service.plans()
+            saved = try await service.state()
+            snapshot = saved
+            testProfileId = saved.profile?.id
+            transcript = (saved.profile?.intakeTranscript ?? []).map {
+                IntakeLine(speaker: $0.role == "user" ? .learner : .coach, text: $0.content)
+            }
         } catch {
             state.loadFailed()
             return
         }
 
-        guard let plan = TestPrepPresentation.currentPlan(plans) else {
+        guard let plan = saved.plan else {
             state.noPlan()
             return
         }
@@ -268,14 +276,21 @@ final class TestPrepViewModel: ObservableObject {
 
         intakeBusy = true
         intakeError = nil
-        transcript.append(IntakeLine(speaker: .learner, text: trimmed))
+        if retryTurn?.text != trimmed {
+            retryTurn = (trimmed, UUID().uuidString)
+            transcript.append(IntakeLine(speaker: .learner, text: trimmed))
+        }
         defer { intakeBusy = false }
 
         let reply: IntakeTurnReply
         do {
-            reply = try await service.intakeTurn(message: trimmed, testProfileId: testProfileId)
+            reply = try await service.intakeTurn(message: trimmed, testProfileId: testProfileId,
+                requestId: retryTurn!.id, materials: pendingMaterials)
+            retryTurn = nil
+            pendingMaterials = []
         } catch {
             intakeError = "I could not send that just now. Try again in a moment."
+            await load()
             return
         }
 
@@ -288,10 +303,52 @@ final class TestPrepViewModel: ObservableObject {
         do {
             let plan = try await service.generatePlan(testProfileId: reply.testProfileId)
             state.planLoaded(id: plan.planId)
-            await loadDetails(planId: plan.planId)
+            await load()
         } catch {
             intakeError = "I have everything I need, but could not build the plan just now."
+            await load()
         }
+    }
+
+    func buildSavedPlan() async {
+        guard let id = testProfileId, !intakeBusy else { return }
+        intakeBusy = true
+        defer { intakeBusy = false }
+        do { _ = try await service.generatePlan(testProfileId: id); await load() }
+        catch { intakeError = "Your details are saved. I couldn't build the schedule yet; please retry." }
+    }
+
+    func saveDetails(_ update: PrepProfileUpdate) async {
+        guard let id = testProfileId, !intakeBusy else { return }
+        intakeBusy = true; intakeError = nil
+        defer { intakeBusy = false }
+        do {
+            let reply = try await service.editProfile(id: id, body: update)
+            if reply.needsPlan { _ = try await service.generatePlan(testProfileId: id) }
+            await load()
+        } catch { intakeError = "Could not update the schedule. Refresh to check your saved details before retrying."; await load() }
+    }
+
+    func addMaterial(url: URL, mimeType: String) async {
+        guard !intakeBusy else { return }
+        intakeBusy = true; intakeError = nil
+        defer { intakeBusy = false }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            guard data.count <= 10 * 1024 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
+            let result = try await CloudStorageService.shared.uploadFile(data: data,
+                filename: url.lastPathComponent, contentType: mimeType, folder: "test-prep")
+            guard let uri = result.publicURL else { throw URLError(.badServerResponse) }
+            let material = PrepMaterial(name: url.lastPathComponent, uri: uri,
+                modality: mimeType.hasPrefix("image/") ? "IMAGE" : "DOCUMENT", mimeType: mimeType)
+            if let saved = snapshot, let profile = saved.profile {
+                _ = try await service.editProfile(id: profile.id,
+                    body: PrepProfileUpdate(expectedRevision: saved.revision, materials: profile.materials + [material]))
+                await load()
+            } else { pendingMaterials.append(material) }
+        } catch { intakeError = "The file could not be added. Please retry with a photo, PDF or text file under 10 MB." }
     }
 
     // MARK: Finishing a session
@@ -302,6 +359,9 @@ final class TestPrepViewModel: ObservableObject {
 
         do {
             let outcome = try await service.completeSession(sessionId: session.id)
+            if let index = snapshot?.sessions.firstIndex(where: { $0.id == session.id }) {
+                snapshot?.sessions[index].status = "completed"
+            }
             state.finishSucceeded(
                 sessionId: session.id,
                 notice: TestPrepPresentation.completionSummary(outcome)
@@ -313,8 +373,6 @@ final class TestPrepViewModel: ObservableObject {
 
         // Refresh so readiness reflects the session that just closed. A
         // failure here is reported, never allowed to undo what is on screen.
-        if let planId = state.planId {
-            await loadDetails(planId: planId)
-        }
+        await load()
     }
 }

@@ -7,5 +7,6 @@ class LyoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         TokenManager.init(this)
+        com.lyo.app.notifications.StudyReminders.init(this)
     }
 }

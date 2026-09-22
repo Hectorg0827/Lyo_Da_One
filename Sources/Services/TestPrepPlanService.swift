@@ -24,6 +24,8 @@ extension Endpoints {
     enum StudyPlans: Endpoint {
         /// This learner's plans. GET; see the note above.
         case plans
+        case state
+        case editProfile(id: String, body: PrepProfileUpdate)
         case intakeTurn(body: IntakeTurnRequest)
         case generatePlan(testProfileId: String)
         case readiness(planId: String)
@@ -35,6 +37,10 @@ extension Endpoints {
             switch self {
             case .plans:
                 return "/api/v1/me/study_plans"
+            case .state:
+                return "/api/v1/me/study_plans/state"
+            case .editProfile(let id, _):
+                return "/api/v1/me/study_plans/profiles/\(id)"
             case .intakeTurn:
                 return "/api/v1/me/study_plans/intake/turn"
             case .generatePlan:
@@ -50,8 +56,10 @@ extension Endpoints {
 
         var method: HTTPMethod {
             switch self {
-            case .plans, .readiness, .todaySessions:
+            case .plans, .readiness, .todaySessions, .state:
                 return .get
+            case .editProfile:
+                return .patch
             case .intakeTurn, .generatePlan, .completeSession:
                 return .post
             }
@@ -60,6 +68,8 @@ extension Endpoints {
         var body: Encodable? {
             switch self {
             case .intakeTurn(let body):
+                return body
+            case .editProfile(_, let body):
                 return body
             default:
                 return nil
@@ -72,6 +82,8 @@ extension Endpoints {
             // is how the route declares it.
             case .generatePlan(let testProfileId):
                 return [URLQueryItem(name: "test_profile_id", value: testProfileId)]
+            case .todaySessions:
+                return [URLQueryItem(name: "timezone", value: TimeZone.current.identifier)]
             case .completeSession(_, let notes):
                 // `user_notes` only. The route used to take a score here — the
                 // device saying how well its owner had done — and stored it as
@@ -96,6 +108,9 @@ struct IntakeTurnRequest: Codable {
     let userMessage: String
     /// nil on the opening turn; the server creates the profile and returns its id.
     let testProfileId: String?
+    var timezone: String = TimeZone.current.identifier
+    var requestId: String = UUID().uuidString
+    var materials: [PrepMaterial] = []
 }
 
 // MARK: - Study plan service
@@ -119,10 +134,20 @@ actor TestPrepPlanService {
         try await client.request(Endpoints.StudyPlans.plans, cachePolicy: .reloadIgnoringCache)
     }
 
-    func intakeTurn(message: String, testProfileId: String?) async throws -> IntakeTurnReply {
+    func state() async throws -> PrepSnapshot {
+        try await client.request(Endpoints.StudyPlans.state, cachePolicy: .reloadIgnoringCache)
+    }
+
+    func editProfile(id: String, body: PrepProfileUpdate) async throws -> PrepEditReply {
+        try await client.request(Endpoints.StudyPlans.editProfile(id: id, body: body), cachePolicy: .reloadIgnoringCache)
+    }
+
+    func intakeTurn(message: String, testProfileId: String?, requestId: String = UUID().uuidString,
+                    materials: [PrepMaterial] = []) async throws -> IntakeTurnReply {
         try await client.request(
             Endpoints.StudyPlans.intakeTurn(
-                body: IntakeTurnRequest(userMessage: message, testProfileId: testProfileId)
+                body: IntakeTurnRequest(userMessage: message, testProfileId: testProfileId,
+                    requestId: requestId, materials: materials)
             ),
             cachePolicy: .reloadIgnoringCache
         )

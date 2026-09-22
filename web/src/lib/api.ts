@@ -417,6 +417,7 @@ export const api = {
             conversation_history: history,
             device_id: getOrCreateChatDeviceId(),
             client_message_id: clientMessageId,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             media,
           }),
           signal: controller.signal,
@@ -834,6 +835,14 @@ export const api = {
   // data. A plan is built from a conversational intake, not posted in one go:
   // `intakeTurn` until the server says it is complete, then `generatePlan`.
   testPrep: {
+    async state() {
+      return request<import('./test-prep-api').PrepSnapshot>('/api/v1/me/study_plans/state');
+    },
+    async editProfile(profileId: string, update: import('./test-prep-api').PrepUpdate) {
+      return request<{ needs_plan: boolean }>(`/api/v1/me/study_plans/profiles/${encodeURIComponent(profileId)}`, {
+        method: 'PATCH', body: JSON.stringify(update),
+      });
+    },
     /**
      * This learner's study plans. Empty is the normal first state.
      *
@@ -845,12 +854,16 @@ export const api = {
     },
 
     /** One turn of the intake conversation that builds a test profile. */
-    async intakeTurn(userMessage: string, testProfileId?: string) {
+    async intakeTurn(userMessage: string, testProfileId?: string,
+      materials: import('./test-prep-api').PrepMaterial[] = [], requestId = crypto.randomUUID()) {
       return request<IntakeTurn>('/api/v1/me/study_plans/intake/turn', {
         method: 'POST',
         body: JSON.stringify({
           user_message: userMessage,
           test_profile_id: testProfileId ?? null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          request_id: requestId,
+          materials,
         }),
       });
     },
@@ -884,7 +897,8 @@ export const api = {
 
     /** Today's scheduled sessions, each carrying the concept id to teach. */
     async todaySessions() {
-      return request<StudySessionRow[]>('/api/v1/me/study_plans/sessions/today', {
+      const timezone = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      return request<StudySessionRow[]>(`/api/v1/me/study_plans/sessions/today?timezone=${timezone}`, {
         optionalAuth: true,
       });
     },

@@ -70,6 +70,8 @@ object Routes {
     const val SIGNUP = "signup"
     const val HOME = "home"
     const val CHAT = "chat"
+    const val TEST_PREP = "test-prep"
+    const val PREP_CLASSROOM = "test-prep/classroom/{sessionId}?topic={topic}&mode={mode}"
     const val COMMUNITY = "community"
     const val POST_DETAIL = "community/{postId}"
     const val GROUPS = "groups"
@@ -133,6 +135,19 @@ private fun LyoNavHost() {
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
+    val context = LocalContext.current
+    LaunchedEffect(Session.isAuthenticated) {
+        if (Session.isAuthenticated) runCatching {
+            com.lyo.app.notifications.StudyReminders.refreshIfEnabled(context)
+        }
+    }
+    LaunchedEffect(Session.isAuthenticated, com.lyo.app.notifications.StudyReminders.openTestPrep) {
+        if (Session.isAuthenticated && com.lyo.app.notifications.StudyReminders.openTestPrep) {
+            nav.navigate(Routes.TEST_PREP) { launchSingleTop = true }
+            com.lyo.app.notifications.StudyReminders.openTestPrep = false
+        }
+    }
+
     val showBottomBar = currentRoute in bottomItems.map { it.route }
 
     Scaffold(
@@ -176,6 +191,12 @@ private fun LyoNavHost() {
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
             composable(Routes.CHAT) { ChatScreen(nav) }
+            composable(Routes.TEST_PREP) { com.lyo.app.ui.screens.testprep.TestPrepScreen(nav) }
+            composable(Routes.PREP_CLASSROOM) { entry ->
+                ClassroomScreen(nav, entry.arguments?.getString("sessionId") ?: "",
+                    topicOverride = entry.arguments?.getString("topic"),
+                    teachingMode = entry.arguments?.getString("mode") ?: "solo")
+            }
             composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }
             composable(Routes.POST_DETAIL) { entry ->
                 ReliablePostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")

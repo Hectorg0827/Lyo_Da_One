@@ -108,7 +108,7 @@ requireText(frontDoor, 'I have a test', 'Front door test-prep CTA');
 requireText(frontDoor, 'classroomEntryHref', 'Front door reaches the real classroom');
 requireText(frontDoor, 'testPrepEntryHref', 'Front door reaches the real test-prep intent');
 requireText(entryContract, '`/classroom?', 'Entry contract targets the real classroom route');
-requireText(entryContract, "`/chat?prompt=", 'Entry contract targets the real test-prep intent');
+requireText(entryContract, "return '/test-prep'", 'Entry contract targets the account-owned test-prep workflow');
 // The backend router matches TEST_PREP on this phrasing; losing it silently
 // downgrades the entry to a generic explanation.
 requireText(entryContract, 'have a test', 'Test-prep entry keeps its intent phrasing');

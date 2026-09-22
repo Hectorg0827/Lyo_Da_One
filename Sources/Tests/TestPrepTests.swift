@@ -9,6 +9,33 @@ import XCTest
 // by a test is the only verification this logic gets.
 
 final class TestPrepDecodingTests: XCTestCase {
+    func testPushRegistrationUsesSharedDecoder() throws {
+        let data = """
+        {"id":"12","device_token":"test-token","device_type":"ios","is_active":true,
+         "registered_at":"2026-09-22T00:00:00","app_version":null,"os_version":null}
+        """.data(using: .utf8)!
+        let registered = try JSONDecoder.lyoDecoder.decode(PushDeviceResponse.self, from: data)
+        XCTAssertEqual(registered.id, "12")
+        XCTAssertEqual(registered.deviceType, "ios")
+        XCTAssertTrue(registered.isActive)
+    }
+
+    func testSharedSnapshotResumesChatIntakeAndMaterials() throws {
+        let json = """
+        {"profile":{"id":"tp1","subject":"Biology","test_date":"2026-10-02",
+         "topics":[{"name":"Cells","weight":1,"confidence":3}],
+         "daily_minutes_available":30,"study_days_per_week":5,
+         "materials":[{"name":"notes.pdf","uri":"https://api.lyoai.app/media/notes.pdf",
+                       "modality":"DOCUMENT","mime_type":"application/pdf"}],
+         "intake_complete":false,"intake_transcript":[{"role":"assistant","content":"When is your test?"}]},
+         "plan":null,"timezone":"America/New_York","revision":2,"sessions":[]}
+        """.data(using: .utf8)!
+        let saved = try JSONDecoder.lyoDecoder.decode(PrepSnapshot.self, from: json)
+        XCTAssertEqual(saved.profile?.intakeTranscript.last?.content, "When is your test?")
+        XCTAssertEqual(saved.profile?.materials.first?.mimeType, "application/pdf")
+        XCTAssertEqual(saved.revision, 2)
+        XCTAssertNil(saved.plan)
+    }
 
     /// The exact JSON the server's own Pydantic models produce. Captured from
     /// them rather than transcribed from the route signatures, because the two

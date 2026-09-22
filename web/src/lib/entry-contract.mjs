@@ -184,9 +184,9 @@ export function practiceEntryHref(conceptLabel) {
   });
 }
 
-/** Open Chat on the Test Prep intent. */
+/** Open the saved account-owned Test Prep workflow. Chat uses its same API. */
 export function testPrepEntryHref() {
-  return `/chat?prompt=${encodeURIComponent(TEST_PREP_OPENING_TURN)}`;
+  return '/test-prep';
 }
 
 /**

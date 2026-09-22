@@ -38,6 +38,7 @@ object TokenManager {
     }
 
     fun clear() {
+        com.lyo.app.notifications.StudyReminders.clearLocalRegistration()
         prefs.edit().remove(KEY_ACCESS).remove(KEY_REFRESH).apply()
     }
 

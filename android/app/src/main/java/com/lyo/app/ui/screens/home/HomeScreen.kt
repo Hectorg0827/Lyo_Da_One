@@ -127,6 +127,11 @@ fun HomeScreen(nav: NavHostController) {
         modifier = Modifier.fillMaxSize(),
     ) {
         item {
+            androidx.compose.material3.Button(onClick = { nav.navigate(Routes.TEST_PREP) }, modifier = Modifier.fillMaxWidth()) {
+                Text("I have a test · Start or resume")
+            }
+        }
+        item {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
