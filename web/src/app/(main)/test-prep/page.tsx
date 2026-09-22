@@ -189,6 +189,8 @@ export default function TestPrepPage() {
                 ? 'Marked done. Nothing was recorded for this session.'
                 : 'Marked done, but I could not read what was measured.';
 
+        setSnapshot(saved => saved ? { ...saved, sessions: saved.sessions.map(session =>
+          session.id === sessionId ? { ...session, status: 'completed' } : session) } : saved);
         dispatch({ type: 'finish_succeeded', sessionId, notice: text });
         await loadPlan();
       } catch {

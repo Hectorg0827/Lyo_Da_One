@@ -35,7 +35,7 @@ struct PrepSnapshot: Codable {
     let plan: StudyPlanSummary?
     let timezone: String
     let revision: Int
-    let sessions: [PlannedSession]
+    var sessions: [PlannedSession]
 }
 
 struct PrepProfileUpdate: Codable {
@@ -141,7 +141,7 @@ struct PlannedSession: Codable, Equatable, Identifiable {
     /// Carried by the server so a session can be matched to its standing in
     /// readiness, and so both name the concept the same way.
     let conceptId: String
-    let status: String
+    var status: String
     let performanceScore: Double?
 
     /// The server's own words for a session that is done with.

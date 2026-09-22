@@ -78,7 +78,8 @@ fun TestPrepScreen(nav: NavHostController) {
                 require(bytes.size <= 10 * 1024 * 1024) { "Files must be under 10 MB" }
                 val upload = ApiClient.api.uploadMedia(MultipartBody.Part.createFormData("file", name,
                     bytes.toRequestBody(mime.toMediaType())), "test-prep".toRequestBody("text/plain".toMediaType()))
-                val material = PrepMaterial(name, upload.url, if (mime.startsWith("image/")) "IMAGE" else "DOCUMENT", mime)
+                val uri = upload.url?.takeIf { it.isNotBlank() } ?: throw IllegalStateException("Upload returned no file URL")
+                val material = PrepMaterial(name, uri, if (mime.startsWith("image/")) "IMAGE" else "DOCUMENT", mime)
                 val snapshot = saved
                 val profile = snapshot?.profile
                 if (snapshot != null && profile != null) {
@@ -188,6 +189,9 @@ fun TestPrepScreen(nav: NavHostController) {
                             busy = true; error = null
                             try {
                                 val outcome = ApiClient.testPrep.complete(session.id)
+                                saved = saved?.copy(sessions = saved!!.sessions.map {
+                                    if (it.id == session.id) it.copy(status = "completed") else it
+                                })
                                 notice = outcome.performance_score?.let { "${(it * 100).toInt()}% from ${outcome.graded} graded answers." }
                                     ?: "Marked done. Nothing was graded, so there is no score."
                                 load()

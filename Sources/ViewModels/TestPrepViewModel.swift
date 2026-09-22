@@ -359,6 +359,9 @@ final class TestPrepViewModel: ObservableObject {
 
         do {
             let outcome = try await service.completeSession(sessionId: session.id)
+            if let index = snapshot?.sessions.firstIndex(where: { $0.id == session.id }) {
+                snapshot?.sessions[index].status = "completed"
+            }
             state.finishSucceeded(
                 sessionId: session.id,
                 notice: TestPrepPresentation.completionSummary(outcome)
