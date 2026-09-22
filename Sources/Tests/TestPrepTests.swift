@@ -9,6 +9,17 @@ import XCTest
 // by a test is the only verification this logic gets.
 
 final class TestPrepDecodingTests: XCTestCase {
+    func testPushRegistrationUsesSharedDecoder() throws {
+        let data = """
+        {"id":"12","device_token":"test-token","device_type":"ios","is_active":true,
+         "registered_at":"2026-09-22T00:00:00","app_version":null,"os_version":null}
+        """.data(using: .utf8)!
+        let registered = try JSONDecoder.lyoDecoder.decode(PushDeviceResponse.self, from: data)
+        XCTAssertEqual(registered.id, "12")
+        XCTAssertEqual(registered.deviceType, "ios")
+        XCTAssertTrue(registered.isActive)
+    }
+
     func testSharedSnapshotResumesChatIntakeAndMaterials() throws {
         let json = """
         {"profile":{"id":"tp1","subject":"Biology","test_date":"2026-10-02",

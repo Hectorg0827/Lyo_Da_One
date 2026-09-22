@@ -114,6 +114,7 @@ object Session {
         user = null
         isAuthenticated = false
         SyncClient.disconnect()
+        com.lyo.app.notifications.StudyReminders.clearLocalRegistration()
         TokenManager.setTokens(accessToken, refreshToken)
 
         try {
@@ -134,6 +135,7 @@ object Session {
     suspend fun logout() {
         SyncClient.disconnect()
         try {
+            com.lyo.app.notifications.StudyReminders.disable()
             ApiClient.api.logout()
         } catch (_: Exception) {
             // Server logout is best-effort; local credentials must always clear.

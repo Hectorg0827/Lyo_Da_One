@@ -26,4 +26,6 @@ reopen on a second device, edit the exam date, complete a lesson, and confirm
 the same schedule and measured readiness on all devices. Retry one intake
 request and one plan-generation request; neither may create duplicates.
 
-Android reminder receipt still requires Firebase app configuration, a messaging service/token registration path, and notification permission handling. The dedicated study workflow is implemented; push parity is not yet verified.
+Android now includes an opt-in permission flow, Firebase messaging receiver, account-bound token registration/rotation, logout suppression, and navigation to Test Prep from a reminder tap. Release builds need the matching Firebase app configuration at `android/app/google-services.json` (supplied by the release environment). Development builds compile without it and tell the learner reminders are unavailable. Real push receipt is still unverified.
+
+iOS registration decoding uses the shared snake-case decoder. Logout unregisters the device and remote notifications, and a reminder tap opens the shared Test Prep screen. Foreground receipt does not interrupt the current lesson.

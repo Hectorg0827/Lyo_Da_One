@@ -135,6 +135,19 @@ private fun LyoNavHost() {
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
+    val context = LocalContext.current
+    LaunchedEffect(Session.isAuthenticated) {
+        if (Session.isAuthenticated) runCatching {
+            com.lyo.app.notifications.StudyReminders.refreshIfEnabled(context)
+        }
+    }
+    LaunchedEffect(Session.isAuthenticated, com.lyo.app.notifications.StudyReminders.openTestPrep) {
+        if (Session.isAuthenticated && com.lyo.app.notifications.StudyReminders.openTestPrep) {
+            nav.navigate(Routes.TEST_PREP) { launchSingleTop = true }
+            com.lyo.app.notifications.StudyReminders.openTestPrep = false
+        }
+    }
+
     val showBottomBar = currentRoute in bottomItems.map { it.route }
 
     Scaffold(

@@ -210,7 +210,7 @@ class RootViewModel: ObservableObject {
 
     func logout() async {
         // Notify services before logout
-        PushNotificationService.shared.onUserLogout()
+        await PushNotificationService.shared.onUserLogout()
         SyncService.shared.disconnect()
         
         do {

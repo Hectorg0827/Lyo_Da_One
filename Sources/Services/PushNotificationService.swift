@@ -16,6 +16,7 @@ final class PushNotificationService: NSObject {
     // Cached device token
     private var deviceToken: String?
     private var isRegisteredWithBackend = false
+    private var registeredDeviceId: String?
     
     private override init() {
         super.init()
@@ -54,8 +55,9 @@ final class PushNotificationService: NSObject {
     /// Called by AppDelegate when device token is received
     func didRegisterForRemoteNotifications(deviceToken: Data) {
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        if self.deviceToken != tokenString { isRegisteredWithBackend = false }
         self.deviceToken = tokenString
-        Log.push.info("Device token received: \(tokenString.prefix(20))...")
+        Log.push.info("Device token received")
         
         // Auto-register with backend if user is logged in
         Task {
@@ -94,6 +96,7 @@ final class PushNotificationService: NSObject {
         )
         
         isRegisteredWithBackend = true
+        registeredDeviceId = response.id
         Log.push.info("Device registered with backend: \(response.id)")
         return response
     }
@@ -113,15 +116,20 @@ final class PushNotificationService: NSObject {
     
     /// Called when user logs in - trigger device registration
     func onUserLogin() {
+        isRegisteredWithBackend = false
         Task {
+            await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
             await registerDeviceIfNeeded()
         }
     }
     
     /// Called when user logs out - unregister device
-    func onUserLogout() {
+    func onUserLogout() async {
+        if let id = registeredDeviceId { try? await unregisterDevice(deviceId: id) }
+        registeredDeviceId = nil
         isRegisteredWithBackend = false
-        // Optionally call unregister endpoint here
+        await MainActor.run { UIApplication.shared.unregisterForRemoteNotifications() }
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
     
     // MARK: - Get Registered Devices
@@ -167,11 +175,8 @@ final class PushNotificationService: NSObject {
         let content = notification.request.content
         Log.push.info("📬 Foreground notification: \(content.title) - \(content.body)")
         
-        // Extract custom data
-        let userInfo = content.userInfo
-        if let action = userInfo["action"] as? String {
-            handleNotificationAction(action, data: userInfo)
-        }
+        // Receiving a reminder must not navigate away from an active lesson.
+        // Its destination is opened only after the learner taps it.
     }
     
     /// Process notification tap when user interacts with it
@@ -208,6 +213,9 @@ final class PushNotificationService: NSObject {
         case "open_feed":
             NotificationCenter.default.post(name: .openFeed, object: nil)
             
+        case "open_test_prep":
+            Task { @MainActor in DeepLinkHandler.shared.pendingAction = .openTestPrep }
+
         case "open_chat":
             NotificationCenter.default.post(name: .openChat, object: nil)
             
@@ -289,15 +297,7 @@ struct PushDeviceResponse: Codable, Identifiable {
     let isActive: Bool
     let registeredAt: String
     
-    enum CodingKeys: String, CodingKey {
-        case id
-        case deviceToken = "device_token"
-        case deviceType = "device_type"
-        case appVersion = "app_version"
-        case osVersion = "os_version"
-        case isActive = "is_active"
-        case registeredAt = "registered_at"
-    }
+
 }
 
 struct NotificationPreferences: Codable {

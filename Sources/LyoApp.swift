@@ -162,6 +162,7 @@ class DeepLinkHandler: ObservableObject {
         case openLesson(courseId: String, lessonId: String)
         case openProfile(userId: String)
         case openChat
+        case openTestPrep
         case openChallenge(code: String)
     }
     

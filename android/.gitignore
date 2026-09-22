@@ -8,3 +8,6 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Firebase app configuration is supplied by the release environment.
+app/google-services.json

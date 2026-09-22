@@ -54,6 +54,22 @@ fun TestPrepScreen(nav: NavHostController) {
     }
     LaunchedEffect(Unit) { load() }
 
+    fun enableReminders() {
+        scope.launch {
+            busy = true; error = null
+            try {
+                com.lyo.app.notifications.StudyReminders.enable(context)
+                notice = if (com.lyo.app.notifications.StudyReminders.deliveryEnabled)
+                    "Study reminders are on for this device."
+                else "Preference saved. Study reminders are currently unavailable."
+            } catch (failure: Exception) { error = failure.message ?: "Could not enable reminders. Please retry." }
+            finally { busy = false }
+        }
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) enableReminders() else notice = "Notifications are off. Your study schedule is still available here."
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !busy) scope.launch {
             busy = true; error = null
@@ -201,6 +217,22 @@ fun TestPrepScreen(nav: NavHostController) {
                     } else Text(session.status)
                 } }
             }
+        }
+        if (saved?.plan != null) item {
+            val reminders = com.lyo.app.notifications.StudyReminders
+            OutlinedButton(enabled = !busy, onClick = {
+                if (reminders.enabled) scope.launch {
+                    busy = true
+                    try { reminders.disable(); notice = "Reminders are off on this device." }
+                    finally { busy = false }
+                } else if (!reminders.configured(context)) {
+                    notice = "Study reminders are not available in this version yet."
+                } else if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                    androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else enableReminders()
+            }) { Text(if (reminders.enabled) "Turn off reminders on this device" else "Remind me to study") }
         }
         if (loaded) item {
             (saved?.profile?.materials.orEmpty() + materials).forEach { Text(it.name) }
