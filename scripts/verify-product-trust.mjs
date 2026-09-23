@@ -676,6 +676,38 @@ requireText(
   'The Classroom caption is no longer announced to screen readers'
 );
 
+// The caption is a rolling window, not a clamp.
+//
+// `line-clamp` keeps the FIRST lines that fit, so the moment the teacher said
+// more than two lines the learner was left staring at a frozen opening while
+// every newly spoken word was painted out of sight below it. Long
+// explanations were captioned only at the start, and nothing on screen
+// admitted the rest existed.
+rejectPattern(
+  captionSync,
+  /line-clamp-/,
+  'The caption clamps to its first lines again, hiding everything spoken after them'
+);
+requireText(
+  captionSync,
+  'data-lyo-caption-scroller',
+  'The caption is no longer a scrollable window a learner can read back'
+);
+// Following the tail is only right while words arrive at speaking pace. With
+// the voice off the whole line is revealed at once, and scrolling to the
+// bottom there opens every caption at its last line, past text nobody read.
+requirePattern(
+  captionSync,
+  /const paced = voiceOn && caption\?\.speaker !== 'You'/,
+  'The caption follows the tail even when nothing is pacing it'
+);
+// The scrollbar is hidden, so something else must say the text continues.
+requireText(
+  captionSync,
+  'hasMoreBelow',
+  'The caption hides its overflow with nothing saying there is more'
+);
+
 // ── 3n. The Classroom's controls are reachable and its accents mean one thing ─
 //
 // Three desk controls at 32px tall, two of them fixed-width and one flexing,
@@ -836,6 +868,10 @@ const REQUIRED_RULES = [
   'The rung vocabulary lost its shared definitions',
   'Recognition lost the caveat that separates it from knowing something',
   'A rung can be labelled without being recognised',
+  'The caption clamps to its first lines again, hiding everything spoken after them',
+  'The caption is no longer a scrollable window a learner can read back',
+  'The caption follows the tail even when nothing is pacing it',
+  'The caption hides its overflow with nothing saying there is more',
 ];
 
 for (const rule of REQUIRED_RULES) {
