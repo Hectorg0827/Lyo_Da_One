@@ -6,7 +6,6 @@ import { CalendarClock, GraduationCap, Loader2, Send, Target } from 'lucide-reac
 
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
-import { TEST_PREP_OPENING_TURN } from '@/lib/entry-contract.mjs';
 import {
   completionSummary,
   daysLabel,
@@ -217,8 +216,7 @@ export default function TestPrepPage() {
       <main className="mx-auto max-w-2xl px-4 py-16">
         <h1 className="text-2xl font-semibold text-white">Get ready for your test</h1>
         <p className="mt-3 text-white/70">
-          A study plan is tied to your account, so you&apos;ll need to sign in to build one. You
-          can start talking it through right now without an account.
+          Sign in to tell Lyo about your test, build a study plan, and pick up where you left off.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
@@ -228,10 +226,10 @@ export default function TestPrepPage() {
             Sign in
           </Link>
           <Link
-            href={`/chat?prompt=${encodeURIComponent(TEST_PREP_OPENING_TURN)}`}
+            href="/auth/signup"
             className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white"
           >
-            Just talk it through
+            Create account
           </Link>
         </div>
       </main>
