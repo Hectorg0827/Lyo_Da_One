@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { authReturnPath } from '@/lib/auth-return.mjs';
 
 const containerVariants = {
   hidden: { opacity: 0, y: 24 },
@@ -66,6 +67,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [resumeTestPrep, setResumeTestPrep] = useState(false);
+
+  useEffect(() => {
+    setResumeTestPrep(authReturnPath(window.location.search) === '/test-prep');
+  }, []);
 
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
@@ -78,7 +84,7 @@ export default function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      router.push('/');
+      router.push(authReturnPath(window.location.search));
     } catch (reason) {
       setError(reason instanceof Error && reason.message ? reason.message : 'Invalid email or password.');
     }
@@ -198,7 +204,7 @@ export default function LoginPage() {
           <p className="text-center text-sm text-secondary">
             New to LYO?{' '}
             <Link
-              href="/auth/signup"
+              href={resumeTestPrep ? '/auth/signup?next=%2Ftest-prep' : '/auth/signup'}
               className="font-semibold text-[#a78bfa] transition-colors duration-150 hover:text-[#6366f1]"
             >
               Sign up
