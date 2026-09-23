@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { authReturnPath } from '@/lib/auth-return.mjs';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 
 // ── Animation variants ─────────────────────────────────────────────────────────
@@ -124,6 +125,11 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState('');
+  const [resumeTestPrep, setResumeTestPrep] = useState(false);
+
+  useEffect(() => {
+    setResumeTestPrep(authReturnPath(window.location.search) === '/test-prep');
+  }, []);
 
   const pwStrength = getPasswordStrength(password);
 
@@ -144,7 +150,7 @@ export default function SignupPage() {
     }
     try {
       await signup(email, password, displayName);
-      router.push('/');
+      router.push(authReturnPath(window.location.search));
     } catch {
       setError('Something went wrong. Please try again.');
     }
@@ -327,7 +333,7 @@ export default function SignupPage() {
           <p className="text-center text-sm text-secondary">
             Already have an account?{' '}
             <Link
-              href="/auth/login"
+              href={resumeTestPrep ? '/auth/login?next=%2Ftest-prep' : '/auth/login'}
               className="font-semibold text-[#a78bfa] hover:text-[#6366f1] transition-colors duration-150"
             >
               Log in

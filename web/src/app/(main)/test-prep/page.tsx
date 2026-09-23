@@ -220,13 +220,13 @@ export default function TestPrepPage() {
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
-            href="/auth/login"
+            href="/auth/login?next=%2Ftest-prep"
             className="rounded-xl bg-white px-5 py-3 font-medium text-black"
           >
             Sign in
           </Link>
           <Link
-            href="/auth/signup"
+            href="/auth/signup?next=%2Ftest-prep"
             className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white"
           >
             Create account
