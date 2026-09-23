@@ -69,6 +69,8 @@ const lessonView = readCode('web/src/components/courses/LessonView.tsx');
 const learningProgress = readCode('web/src/lib/learning-progress.ts');
 const classroomStore = readCode('web/src/stores/classroom-store.ts');
 const evidenceRecord = readCode('web/src/components/classroom/EvidenceRecord.tsx');
+const markdownConfig = readCode('web/src/components/chat/markdown-config.tsx');
+const testPrepCard = readCode('web/src/components/chat/TestPrepReadyCard.tsx');
 const chatStore = readCode('web/src/stores/chat-store.ts');
 
 // ── 1. No fabricated learner activity ────────────────────────────────────────
@@ -825,6 +827,41 @@ requirePattern(
 // label — the same rule normalizeEvidenceKind follows for scoring.
 requireText(learnerModel, 'function rungClaim', 'A rung can be labelled without being recognised');
 
+// ── 3q. A link in chat has to be a link ──────────────────────────────────────
+//
+// There was no anchor renderer in chat's markdown config, so every link Lyo
+// sent fell through to an unstyled default `<a>` that inherited the bubble's
+// text colour. The Test Prep handoff said "Open [Test Prep](...)" and the
+// learner saw body text with nothing to tap: the link was in the message the
+// whole time and invisible.
+requirePattern(
+  markdownConfig,
+  /\ba:\s*ChatLink\b/,
+  'Chat markdown lost its link renderer and anchors are invisible again'
+);
+// Chat text is model-produced, so a href is untrusted input and an anchor is
+// execution one click away.
+requireText(markdownConfig, 'classifyChatLink', 'Chat renders a href without checking its scheme');
+requireText(markdownConfig, 'rel="noopener noreferrer"', 'An external chat link can reach window.opener');
+
+// ── 3r. The Test Prep handoff ────────────────────────────────────────────────
+//
+// The card offering "Start now" may only appear when the server says a plan
+// exists. Reading it out of the reply text is how a client ends up offering to
+// start a plan that was never built.
+requireText(testPrepCard, 'sessionEntryHref', 'Start now stopped using the shared session entry contract');
+rejectPattern(
+  testPrepCard,
+  /includes\(['"]Test Prep|message\.content/,
+  'The Test Prep card is sniffing the reply text instead of reading the handoff'
+);
+// A session with no topic cannot open a Classroom, so it is not offered.
+requirePattern(
+  testPrepCard,
+  /handoff\.next_session \? sessionEntryHref/,
+  'Start now is offered for a session the server never named'
+);
+
 const REQUIRED_RULES = [
   'The client sends its own session score',
   'The client puts a session score in a request body',
@@ -872,6 +909,12 @@ const REQUIRED_RULES = [
   'The caption is no longer a scrollable window a learner can read back',
   'The caption follows the tail even when nothing is pacing it',
   'The caption hides its overflow with nothing saying there is more',
+  'Chat markdown lost its link renderer and anchors are invisible again',
+  'Chat renders a href without checking its scheme',
+  'An external chat link can reach window.opener',
+  'Start now stopped using the shared session entry contract',
+  'The Test Prep card is sniffing the reply text instead of reading the handoff',
+  'Start now is offered for a session the server never named',
 ];
 
 for (const rule of REQUIRED_RULES) {

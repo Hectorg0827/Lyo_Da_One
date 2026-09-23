@@ -1,9 +1,12 @@
 'use client';
 
+import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import { classifyChatLink } from '@/lib/chat-links.mjs';
 
 /**
  * Normalize TeX bracket/paren delimiters into the dollar delimiters understood
@@ -75,7 +78,52 @@ export const MARKDOWN_MATH_PLUGINS = {
   rehypePlugins: [rehypeKatex],
 };
 
+/**
+ * A link inside a chat message.
+ *
+ * There was no anchor renderer here at all, so every link Lyo has ever sent
+ * fell through to react-markdown's default `<a>` — which inherits the bubble's
+ * text colour and carries no underline. The Test Prep handoff says "Open
+ * [Test Prep](…)" and the learner saw the words "Test Prep" in body text with
+ * nothing to tap. The link was in the message the whole time and invisible.
+ *
+ * Internal links go through the router so the conversation survives the
+ * navigation; external links open in a new tab, are marked as leaving, and
+ * carry `rel="noopener noreferrer"`. A href that is neither — `javascript:`,
+ * `data:`, a protocol-relative host — renders as plain text rather than as an
+ * anchor, because this text is model-produced and an anchor is a click away
+ * from execution.
+ */
+function ChatLink({ href, children }: { href?: string; children?: React.ReactNode }) {
+  const link = classifyChatLink(href);
+  const style =
+    'font-semibold text-lyo-300 underline decoration-lyo-300/40 underline-offset-2 '
+    + 'transition-colors hover:text-lyo-200 hover:decoration-lyo-200';
+
+  if (link.kind === 'internal') {
+    return <Link href={link.href} className={style}>{children}</Link>;
+  }
+  if (link.kind === 'external') {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${style} inline-flex items-baseline gap-0.5`}
+      >
+        {children}
+        <ExternalLink size={12} className="translate-y-px opacity-70" aria-hidden />
+        <span className="sr-only">(opens in a new tab)</span>
+      </a>
+    );
+  }
+  // Not a link we will render. The words stay; the anchor does not.
+  return <>{children}</>;
+}
+
 export const markdownComponents = {
+  // Links
+  a: ChatLink,
   // Paragraphs
   p: ({ children }: { children?: React.ReactNode }) => (
     <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>

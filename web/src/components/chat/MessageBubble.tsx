@@ -5,8 +5,9 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Copy, Check, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, TestPrepHandoff } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
+import TestPrepReadyCard from './TestPrepReadyCard';
 import MascotAvatar from './MascotAvatar';
 import BlockRenderer from './blocks/BlockRenderer';
 import { canRenderBlock } from './blocks/can-render';
@@ -150,6 +151,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const displayContent = ocData ? ocData.cleanText : message.content;
   const normalizedAssistantContent = isUser ? displayContent : normalizeLatexDelimiters(displayContent);
   const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
+  const testPrepHandoff = (message.metadata as { testPrep?: TestPrepHandoff } | undefined)?.testPrep;
   const displayType = ocData ? 'course_proposal' : message.type;
 
   // Determine if this specific card is active and currently generating in the store
@@ -267,6 +269,10 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             )}
           </div>
         )}
+
+        {/* The Test Prep handoff: sent by the server only once a plan exists,
+            so the card is never rendered from a phrase in the reply text. */}
+        {!isUser && testPrepHandoff && <TestPrepReadyCard handoff={testPrepHandoff} />}
 
         {/* Server-suggested follow-up directions for this turn. */}
         {!isUser && message.suggestedActions && message.suggestedActions.length > 0 && (
