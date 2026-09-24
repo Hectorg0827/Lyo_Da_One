@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { classifyChatLink } from './chat-links.mjs';
+import { classifyUntrustedLink } from './untrusted-links.mjs';
 
 // ─── An app link stays in the app ────────────────────────────────────────────
 
@@ -10,22 +10,22 @@ test('a link to our own domain becomes a route, not a page load', () => {
   // as an absolute URL that is a full reload: the learner leaves the running
   // app and loses the conversation they are in.
   assert.deepEqual(
-    classifyChatLink('https://lyoai.app/test-prep'),
+    classifyUntrustedLink('https://lyoai.app/test-prep'),
     { kind: 'internal', href: '/test-prep' },
   );
   assert.deepEqual(
-    classifyChatLink('https://www.lyoai.app/test-prep?from=chat#today'),
+    classifyUntrustedLink('https://www.lyoai.app/test-prep?from=chat#today'),
     { kind: 'internal', href: '/test-prep?from=chat#today' },
   );
 });
 
 test('a path is already a route', () => {
-  assert.deepEqual(classifyChatLink('/test-prep'), { kind: 'internal', href: '/test-prep' });
+  assert.deepEqual(classifyUntrustedLink('/test-prep'), { kind: 'internal', href: '/test-prep' });
 });
 
 test('a link somewhere else is external and says so', () => {
   assert.deepEqual(
-    classifyChatLink('https://example.com/x'),
+    classifyUntrustedLink('https://example.com/x'),
     { kind: 'external', href: 'https://example.com/x' },
   );
 });
@@ -35,24 +35,50 @@ test('a link somewhere else is external and says so', () => {
 test('a script URL never becomes an anchor', () => {
   // Chat text is generated. An anchor carrying javascript: is execution one
   // click away, so it is not rendered as a link at all.
-  assert.equal(classifyChatLink('javascript:alert(1)').kind, 'unsafe');
-  assert.equal(classifyChatLink('JavaScript:alert(1)').kind, 'unsafe');
-  assert.equal(classifyChatLink('data:text/html,<script>').kind, 'unsafe');
+  assert.equal(classifyUntrustedLink('javascript:alert(1)').kind, 'unsafe');
+  assert.equal(classifyUntrustedLink('JavaScript:alert(1)').kind, 'unsafe');
+  assert.equal(classifyUntrustedLink('data:text/html,<script>').kind, 'unsafe');
 });
 
 test('a protocol-relative URL is not mistaken for a path', () => {
   // `//evil.com` starts with a slash and is an external origin, which is the
   // one case where "looks like a path" is wrong.
-  assert.equal(classifyChatLink('//evil.com').kind, 'unsafe');
+  assert.equal(classifyUntrustedLink('//evil.com').kind, 'unsafe');
 });
 
 test('nothing is not a link', () => {
   for (const value of ['', '   ', null, undefined]) {
-    assert.equal(classifyChatLink(value).kind, 'unsafe');
+    assert.equal(classifyUntrustedLink(value).kind, 'unsafe');
   }
 });
 
 // ─── The renderer that was missing ───────────────────────────────────────────
+
+test('every anchor built from an unauthored URL goes through the checker', () => {
+  // The hole was systemic, not a chat bug: classroom source attributions,
+  // chat media blocks, message attachments and community meeting links were
+  // all raw <a href={...}> with no scheme check. The community one is the
+  // sharpest — there the author of the URL and its reader are different
+  // people.
+  const sites = [
+    '../components/classroom/BoardElementView.tsx',
+    '../components/chat/blocks/BlockRenderer.tsx',
+    '../components/chat/MessageBubble.tsx',
+    '../app/(main)/community/page.tsx',
+  ];
+  for (const site of sites) {
+    const source = readFileSync(new URL(site, import.meta.url), 'utf8');
+    assert.match(source, /UntrustedLink/, `${site} builds an anchor without the checker`);
+  }
+});
+
+test('an unsafe URL keeps its label and loses its anchor', () => {
+  // Refusing to render the text as well would make content vanish from the
+  // page; refusing only the anchor leaves the words and removes the click.
+  const source = readFileSync(new URL('../components/UntrustedLink.tsx', import.meta.url), 'utf8');
+  assert.match(source, /kind === 'unsafe'[\s\S]{0,160}<span/);
+  assert.match(source, /rel="noopener noreferrer"/);
+});
 
 test('chat markdown renders anchors at all', () => {
   // There was no `a` component, so every link Lyo ever sent fell through to
@@ -60,7 +86,7 @@ test('chat markdown renders anchors at all', () => {
   // link was in the message and invisible.
   const source = readFileSync(new URL('../components/chat/markdown-config.tsx', import.meta.url), 'utf8');
   assert.match(source, /\ba:\s*ChatLink\b/);
-  assert.match(source, /classifyChatLink/);
+  assert.match(source, /classifyUntrustedLink/);
   // Internal links go through the router; external ones cannot reach opener.
   assert.match(source, /next\/link/);
   assert.match(source, /rel="noopener noreferrer"/);

@@ -13,6 +13,7 @@ import {
 } from '../markdown-config';
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
+import UntrustedLink from '@/components/UntrustedLink';
 
 const inlineMarkdownComponents = {
   ...markdownComponents,
@@ -222,9 +223,9 @@ function GenericBlock({ block }: { block: ChatBlock }) {
   const url = str('url');
   if (url) {
     return (
-      <a href={url} target="_blank" rel="noreferrer" className="text-sm text-lyo-300 underline">
+      <UntrustedLink href={url} className="text-sm text-lyo-300 underline">
         {str('caption') ?? str('alt') ?? url}
-      </a>
+      </UntrustedLink>
     );
   }
 

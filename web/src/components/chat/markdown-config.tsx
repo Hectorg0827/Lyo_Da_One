@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { classifyChatLink } from '@/lib/chat-links.mjs';
+import { classifyUntrustedLink } from '@/lib/untrusted-links.mjs';
 
 /**
  * Normalize TeX bracket/paren delimiters into the dollar delimiters understood
@@ -95,7 +95,7 @@ export const MARKDOWN_MATH_PLUGINS = {
  * from execution.
  */
 function ChatLink({ href, children }: { href?: string; children?: React.ReactNode }) {
-  const link = classifyChatLink(href);
+  const link = classifyUntrustedLink(href);
   const style =
     'font-semibold text-lyo-300 underline decoration-lyo-300/40 underline-offset-2 '
     + 'transition-colors hover:text-lyo-200 hover:decoration-lyo-200';

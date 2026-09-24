@@ -1,9 +1,11 @@
 /**
- * How a link inside a chat message is resolved.
+ * How a link nobody on this team wrote is resolved.
  *
- * Chat text is model-produced and the server also writes links into it — the
- * Test Prep handoff says "Open [Test Prep](https://lyoai.app/test-prep)". Two
- * things follow from that, and this module exists for both.
+ * Three kinds of URL reach this app's anchors without a developer ever seeing
+ * them: model-produced links inside chat and lesson text, server-written ones
+ * like the Test Prep handoff's "Open [Test Prep](/test-prep)", and URLs one
+ * learner typed that another learner's browser will render — a community
+ * event's meeting link. Two things follow, and this module exists for both.
  *
  * **An app link must stay in the app.** Written as an absolute URL on the
  * product's own domain, a plain anchor is a full page load: the learner leaves
@@ -16,11 +18,19 @@
  * generated. Only http, https and mailto survive; everything else is dropped
  * rather than sanitised into something that might still run.
  *
+ * Every anchor built from a URL this app did not author goes through here.
+ *
  * `.mjs` so the Node test runner can import it directly, matching the other
  * shared contracts in this folder.
  */
 
-/** Hosts that are this product, and whose links belong in the router. */
+/**
+ * Hosts that are this product, and whose links belong in the router.
+ *
+ * `localhost` is included so the same code path is exercised in development
+ * as in production; it is not a trust decision, since an attacker gains
+ * nothing by pointing at the victim's own machine.
+ */
 export const APP_HOSTS = Object.freeze([
   'lyoai.app',
   'www.lyoai.app',
@@ -37,7 +47,7 @@ const SAFE_SCHEMES = Object.freeze(['http:', 'https:', 'mailto:']);
  * `{ kind: 'external', href }` for a safe link elsewhere, and
  * `{ kind: 'unsafe' }` for anything that must not become an anchor at all.
  */
-export function classifyChatLink(href) {
+export function classifyUntrustedLink(href) {
   const raw = (href ?? '').toString().trim();
   if (!raw) return { kind: 'unsafe' };
 

@@ -71,6 +71,8 @@ const classroomStore = readCode('web/src/stores/classroom-store.ts');
 const evidenceRecord = readCode('web/src/components/classroom/EvidenceRecord.tsx');
 const markdownConfig = readCode('web/src/components/chat/markdown-config.tsx');
 const testPrepCard = readCode('web/src/components/chat/TestPrepReadyCard.tsx');
+const untrustedLink = readCode('web/src/components/UntrustedLink.tsx');
+const boardElement = readCode('web/src/components/classroom/BoardElementView.tsx');
 const chatStore = readCode('web/src/stores/chat-store.ts');
 
 // ── 1. No fabricated learner activity ────────────────────────────────────────
@@ -841,7 +843,7 @@ requirePattern(
 );
 // Chat text is model-produced, so a href is untrusted input and an anchor is
 // execution one click away.
-requireText(markdownConfig, 'classifyChatLink', 'Chat renders a href without checking its scheme');
+requireText(markdownConfig, 'classifyUntrustedLink', 'Chat renders a href without checking its scheme');
 requireText(markdownConfig, 'rel="noopener noreferrer"', 'An external chat link can reach window.opener');
 
 // ── 3r. The Test Prep handoff ────────────────────────────────────────────────
@@ -861,6 +863,56 @@ requirePattern(
   /handoff\.next_session \? sessionEntryHref/,
   'Start now is offered for a session the server never named'
 );
+
+// ── 3s. No anchor is built from a URL we did not author ──────────────────────
+//
+// Three kinds of URL reach this app's anchors without a developer seeing them:
+// model-produced links in chat and lesson text, server-written ones like the
+// Test Prep handoff, and URLs one learner typed that another learner's browser
+// renders — a community event's meeting link. None were scheme-checked, so
+// `href="javascript:..."` was a click away from running in the reader's
+// session. The community case is the sharpest: author and reader are different
+// people.
+//
+// This rule is the general one. It scans every production component for an
+// anchor whose href is an expression, and requires the file to go through the
+// shared checker. Hard-coded routes are untouched — those we wrote.
+{
+  const componentFiles = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(`../${dir}`, import.meta.url), { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const next = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(next);
+      else if (entry.name.endsWith('.tsx')) componentFiles.push(next);
+    }
+  };
+  walk('web/src');
+
+  // An <a href={expr}> where expr is not a literal path we wrote.
+  const dynamicAnchor = /<a\s[^>]*href=\{(?!['"`]\/)/;
+  const offenders = componentFiles.filter((file) => {
+    const source = readCode(file);
+    if (!dynamicAnchor.test(source)) return false;
+    return !source.includes('classifyUntrustedLink');
+  });
+
+  checked.add('An anchor is built from an unchecked URL');
+  if (offenders.length) {
+    failures.push(
+      'An anchor is built from an unchecked URL: '
+      + `${offenders.join(', ')} — use <UntrustedLink> or classifyUntrustedLink`
+    );
+  }
+}
+
+// The shared checker is what every one of those sites depends on.
+requireText(untrustedLink, 'classifyUntrustedLink', 'The shared link component stopped checking schemes');
+requireText(untrustedLink, 'rel="noopener noreferrer"', 'An external link can reach window.opener');
+// Diagram source is model-produced; mermaid's sanitiser is pinned rather than
+// inherited, so an upgrade changing the default cannot turn a lesson into
+// markup that runs.
+requireText(boardElement, "securityLevel: 'strict'", 'Mermaid renders model-authored source unsanitised');
 
 const REQUIRED_RULES = [
   'The client sends its own session score',
@@ -915,6 +967,10 @@ const REQUIRED_RULES = [
   'Start now stopped using the shared session entry contract',
   'The Test Prep card is sniffing the reply text instead of reading the handoff',
   'Start now is offered for a session the server never named',
+  'An anchor is built from an unchecked URL',
+  'The shared link component stopped checking schemes',
+  'An external link can reach window.opener',
+  'Mermaid renders model-authored source unsanitised',
 ];
 
 for (const rule of REQUIRED_RULES) {

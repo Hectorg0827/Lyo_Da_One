@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import type { ChatMessage, TestPrepHandoff } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
 import TestPrepReadyCard from './TestPrepReadyCard';
+import UntrustedLink from '@/components/UntrustedLink';
 import MascotAvatar from './MascotAvatar';
 import BlockRenderer from './blocks/BlockRenderer';
 import { canRenderBlock } from './blocks/can-render';
@@ -233,11 +234,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                     attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
                   )}>
                     {attachments.map((attachment) => (
-                      <a
+                      <UntrustedLink
                         key={`${attachment.url}-${attachment.name}`}
                         href={attachment.url}
-                        target="_blank"
-                        rel="noreferrer"
                         className="block min-w-0 rounded-xl overflow-hidden bg-black/20 border border-white/15 hover:border-white/30 transition-colors"
                         title={`Open ${attachment.name}`}
                       >
@@ -254,7 +253,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                             <span className="text-xs font-medium truncate">{attachment.name}</span>
                           </span>
                         )}
-                      </a>
+                      </UntrustedLink>
                     ))}
                   </div>
                 )}

@@ -36,6 +36,7 @@ import type {
   LearningNodeCategory,
   User,
 } from '@/types'
+import UntrustedLink from '@/components/UntrustedLink'
 
 type CommunityTab = 'Around Me' | 'My Community' | 'Activity'
 type ViewMode = 'map' | 'list'
@@ -210,10 +211,10 @@ function NodeDrawer({
       <div className="mt-4 flex flex-wrap gap-2">
         {primaryLabel && <button disabled={busy} onClick={onPrimary} className="rounded-xl bg-lyo-500 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{busy ? 'Updating…' : primaryLabel}</button>}
         <button disabled={busy} onClick={onToggleSave} className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10 disabled:opacity-50"><Bookmark className={cn('h-3.5 w-3.5', node.is_saved && 'fill-current text-lyo-300')} />{node.is_saved ? 'Saved' : 'Save'}</button>
-        {meetingUrl && <a href={meetingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" />Join online</a>}
+        {meetingUrl && <UntrustedLink href={meetingUrl} className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" />Join online</UntrustedLink>}
         {node.course_id && <button onClick={onOpenCourse} className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10"><GraduationCap className="h-3.5 w-3.5" />Course</button>}
         <button onClick={onAskLyo} className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10"><Bot className="h-3.5 w-3.5" />Ask Lyo</button>
-        {sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" />Details</a>}
+        {sourceUrl && <UntrustedLink href={sourceUrl} className="flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" />Details</UntrustedLink>}
       </div>
     </article>
   )
