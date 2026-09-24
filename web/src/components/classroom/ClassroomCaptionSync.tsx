@@ -110,6 +110,77 @@ export default function ClassroomCaptionSync() {
 
   const words = useMemo(() => wordsFor(caption?.text ?? ''), [caption?.text]);
 
+  // ── Roll-up, the way broadcast captions work ──────────────────────────────
+  //
+  // The strip is two lines tall (three with the voice off), and the caption
+  // used to be clamped to that with `line-clamp`. A clamp keeps the FIRST two
+  // lines, so the moment the teacher said more than fitted, the learner was
+  // left staring at a frozen opening while every newly spoken word was
+  // painted out of sight below it. Long explanations were effectively
+  // captioned only at the start.
+  //
+  // Broadcast roll-up captions do the opposite: the window holds the most
+  // recent lines and older ones leave the top. That is a scroll container
+  // pinned to its own bottom — which also, for free, lets a learner who
+  // missed something scroll back up and read it, and the text is still there
+  // to find.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // Following the tail is the default, but it must yield: yanking someone
+  // back to the bottom while they are reading what they just missed is worse
+  // than the clipping this replaces.
+  const followingRef = useRef(true);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
+
+  // Whether the words are arriving at speaking pace.
+  //
+  // This is the distinction that decides which end of the text to show. With
+  // the voice on, words appear as they are spoken, so the newest line is the
+  // one being said and the tail is what to follow. With the voice off — or
+  // when the line is the learner's own — the reveal above hands over the
+  // whole sentence at once, and there is no pace but the reader's. Following
+  // the tail there would open every caption at its last line and skip them
+  // past text nobody had read.
+  const paced = voiceOn && caption?.speaker !== 'You';
+
+  const measure = () => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const distanceFromBottom =
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    setHasMoreBelow(distanceFromBottom > 4);
+    return distanceFromBottom;
+  };
+
+  const onScroll = () => {
+    const distanceFromBottom = measure();
+    if (distanceFromBottom === undefined) return;
+    // A small tolerance: sub-pixel layout and momentum scrolling rarely land
+    // exactly on the bottom, and a strict check would silently stop following.
+    followingRef.current = distanceFromBottom <= 4;
+  };
+
+  // A new caption is a new sentence: start it from the top and follow again.
+  useEffect(() => {
+    followingRef.current = true;
+    if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
+    measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caption?.text, caption?.speaker]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    if (paced && followingRef.current) {
+      // Instant, never smooth. A smooth scroll per revealed word reads as
+      // jitter rather than motion, and it would still be animating when the
+      // next word lands.
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+    measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealedCount, paced, voiceOn]);
+
+
   const cancelFrames = () => {
     if (audioFrameRef.current !== null) {
       cancelAnimationFrame(audioFrameRef.current);
@@ -328,12 +399,42 @@ export default function ClassroomCaptionSync() {
       className="pointer-events-none absolute inset-0 flex min-w-0 items-center"
     >
       {caption && (
-        <p className={`${voiceOn ? 'line-clamp-2 text-[14px] leading-5 sm:text-[15px] sm:leading-[22px]' : 'line-clamp-3 text-base leading-6 sm:text-lg sm:leading-7'} text-white/95`}>
-          <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
-            {caption.speaker}:
-          </span>
-          <span>“{visibleWords.join(' ')}”</span>
-        </p>
+        <div className="relative flex w-full min-w-0 items-center">
+        <div
+          ref={scrollerRef}
+          onScroll={onScroll}
+          data-lyo-caption-scroller="true"
+          // `overscroll-contain` so reaching the end of the caption does not
+          // hand the gesture to the page behind it; `pointer-events-auto`
+          // because the wrapper disables them and reading back is the point.
+          // Each max-height is the line-height beside it multiplied by the
+          // number of lines the window holds — 2x20 and 2x22 with the voice on,
+          // 3x24 and 3x28 without. The two must be edited together: a mismatch
+          // shows a sliced half line at the bottom edge, which reads as a
+          // rendering fault rather than as more text below.
+          className={`pointer-events-auto w-full overflow-y-auto overscroll-contain
+            [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
+            ${voiceOn
+              ? 'max-h-10 text-[14px] leading-5 sm:max-h-[44px] sm:text-[15px] sm:leading-[22px]'
+              : 'max-h-[72px] text-base leading-6 sm:max-h-[84px] sm:text-lg sm:leading-7'}`}
+        >
+          <p className="text-white/95">
+            <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
+              {caption.speaker}:
+            </span>
+            <span>“{visibleWords.join(' ')}”</span>
+          </p>
+        </div>
+        {/* The scrollbar is hidden to keep the strip clean, so something else
+            has to say that the caption continues below — otherwise this is
+            the same silent truncation in a new shape. */}
+        {hasMoreBelow && (
+          <span
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-3.5
+              bg-gradient-to-t from-[#111936] via-[#111936]/70 to-transparent"
+          />
+        )}
+        </div>
       )}
     </div>,
     target,

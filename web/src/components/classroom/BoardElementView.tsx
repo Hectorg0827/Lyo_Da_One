@@ -15,6 +15,7 @@ import {
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 import { TeachingVisualView } from './TeachingVisualView';
+import UntrustedLink from '@/components/UntrustedLink';
 
 let mermaidReady: Promise<typeof import('mermaid')> | null = null;
 function loadMermaid() {
@@ -22,6 +23,11 @@ function loadMermaid() {
     mermaidReady = import('mermaid').then((m) => {
       m.default.initialize({
         startOnLoad: false,
+        // Diagram source is model-produced. 'strict' sanitises HTML in labels
+        // and ignores click/script directives. It is mermaid's default, and
+        // stated here so an upgrade that changes the default cannot quietly
+        // turn lesson content into markup that runs.
+        securityLevel: 'strict',
         theme: 'dark',
         darkMode: true,
         themeVariables: {
@@ -587,14 +593,12 @@ export function BoardElementView({
                 <>
                   {' · '}
                   {el.sourceUrl ? (
-                    <a
+                    <UntrustedLink
                       href={el.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
                       className="underline hover:text-white/75"
                     >
                       {el.attribution}
-                    </a>
+                    </UntrustedLink>
                   ) : el.attribution}
                 </>
               )}

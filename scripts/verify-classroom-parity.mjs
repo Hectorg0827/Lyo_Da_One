@@ -99,8 +99,20 @@ requireText(iosClassroom, 'URLQueryItem(name: "client_contract_version", value: 
 // gate must fail.
 requireText(webPage, 'data-classroom-caption-target', 'Web single caption mount');
 rejectText(webPage, 'revealedWords', 'Web duplicate caption renderer');
-requireText(webCaption, 'line-clamp-2', 'Web two-line audio caption');
-requireText(webCaption, 'line-clamp-3', 'Web silent-mode teaching caption');
+// The caption window is two lines with audio and three without. It used to be
+// pinned here as `line-clamp-2` / `line-clamp-3`, which fixed the height by
+// fixing the *mechanism* — and that mechanism was the bug: a clamp keeps the
+// first lines that fit, so everything the teacher said past line two was
+// painted out of sight and the strip froze on its opening words.
+//
+// So these pin the sizes, which are the parity contract, and leave how the
+// window holds them to the implementation. The heights are the line-height
+// multiplied by the number of lines: 2x20 / 2x22 with audio, 3x24 / 3x28
+// without.
+requireText(webCaption, 'max-h-10', 'Web two-line audio caption');
+requireText(webCaption, 'sm:max-h-[44px]', 'Web two-line audio caption at sm');
+requireText(webCaption, 'max-h-[72px]', 'Web silent-mode teaching caption');
+requireText(webCaption, 'sm:max-h-[84px]', 'Web silent-mode teaching caption at sm');
 requireText(webPage, 'min-h-11 min-w-11', 'Web permanent exit touch target');
 requireText(webPage, '> Challenge', 'Web Challenge action');
 requireText(webPage, '> Raise hand', 'Web Raise hand action');

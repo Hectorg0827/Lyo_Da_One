@@ -151,6 +151,31 @@ export interface ConceptSummary {
 }
 
 /**
+ * What Chat is handed once a study plan actually exists.
+ *
+ * Mirrors `ChatTurnResult.handoff` in `lyo_app/study_plans/chat.py`. It is
+ * sent only when the plan is real, so its presence — not a phrase in the reply
+ * text — is what lets Chat offer to open Test Prep or start the next session.
+ *
+ * `next_session` is null when the plan has nothing left to start, or when the
+ * soonest session carries no topic and so could not open a Classroom. The plan
+ * is still handed over; only the start is withheld.
+ */
+export interface TestPrepHandoff {
+  plan_id: string;
+  subject: string;
+  test_date: string | null;
+  /** The in-app route, never an absolute URL. */
+  path: string;
+  next_session: {
+    id: string;
+    topic: string;
+    session_type: string | null;
+    scheduled_at: string | null;
+  } | null;
+}
+
+/**
  * One rung of one concept, as the learner actually demonstrated it.
  *
  * Mirrors `RungRecord` in `lyo_app/events/concept_record.py`. A rung absent

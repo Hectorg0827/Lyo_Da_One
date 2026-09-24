@@ -8,6 +8,7 @@ import type {
   CheckAnswerResult,
   SessionSummary,
   DueReviewItem,
+  TestPrepHandoff,
 } from '@/types';
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -529,6 +530,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   };
                 }),
               }));
+            }
+          } else if (chunk.type === 'test_prep_ready') {
+            // The server says a study plan now exists. Attached rather than
+            // parsed out of the reply text: matching on a sentence is how a
+            // client ends up offering "Start now" for a plan that was never
+            // built. Absent event, no card — the link in the text still works.
+            const handoff = blockContent as unknown as TestPrepHandoff | undefined;
+            if (handoff?.plan_id) {
+              receivedContent = true;
+              patchAiMessage({ metadata: { testPrep: handoff } });
             }
           } else if (chunk.type === 'smart_blocks') {
             // Structured lesson content. Previously fell through every branch
