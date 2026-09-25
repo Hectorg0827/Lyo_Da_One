@@ -7,10 +7,13 @@ import { cn } from '@/lib/utils';
 // (iOS overlay / DiscoverView parity), so they opt out of the shell's page
 // padding and max-width.
 const IMMERSIVE_ROUTES = ['/chat', '/classroom', '/discover'];
+// The Community map is full-bleed; its detail and editor pages are not.
+const IMMERSIVE_EXACT_ROUTES = ['/community'];
 
 export default function MainContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isImmersive = IMMERSIVE_ROUTES.some((r) => pathname.startsWith(r));
+  const isImmersive =
+    IMMERSIVE_ROUTES.some((r) => pathname.startsWith(r)) || IMMERSIVE_EXACT_ROUTES.includes(pathname);
 
   if (isImmersive) {
     return <main className="flex-1 min-h-0 overflow-hidden">{children}</main>;

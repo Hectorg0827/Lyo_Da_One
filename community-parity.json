@@ -53,7 +53,7 @@
       { "file": "android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt", "markers": ["nearbyLearning", "myCommunity", "saveLearningNode", "createPrivateLesson"] }
     ],
     "web": [
-      { "file": "web/src/app/(main)/community/page.tsx", "markers": ["Around Me", "My Community", "CommunityEventMap", "NodeDrawer", "community_updated"] },
+      { "file": "web/src/app/(main)/community/page.tsx", "markers": ["Around Me", "My Community", "CommunityEventMap", "NodePreview", "community_updated"] },
       { "file": "web/src/components/community/CommunityEventMap.tsx", "markers": ["L.map", "L.marker", "tileLayer"] },
       { "file": "web/src/lib/api.ts", "markers": ["nearby", "saveNode", "unsaveNode", "createTutor"] }
     ]

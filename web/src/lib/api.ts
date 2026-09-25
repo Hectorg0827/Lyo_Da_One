@@ -20,12 +20,26 @@ import type {
   DueReviewItem,
   LearningNode,
   LearningNodeCategory,
+  LearningNodeDetail,
   LearningNodeKind,
   MyCommunityResponse,
   NearbyLearningResponse,
+  CommunityEventInput,
+  CommunityEventRecord,
+  PlaceSuggestion,
+  RSVPStatus,
+  SearchResolution,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
+
+function localTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // The backend stores this as session_id, a VARCHAR(64); older builds wrote
 // 40-char "web-<uuid>" ids to localStorage, so clamp on read as well.
@@ -73,6 +87,33 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+/**
+ * Readable text from any backend error body. The API answers in three
+ * shapes: FastAPI's `{detail}` (string or validation list) and the app's
+ * `{error: {message, details: {validation_errors}}}` envelope. A field-level
+ * validation message ("The event must end after it starts") beats the
+ * generic "Request validation failed".
+ */
+export function errorMessageFrom(body: unknown, status: number): string {
+  const record = (body && typeof body === 'object' ? body : {}) as Record<string, any>;
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+  const clean = (value: string) => value.replace(/^Value error,\s*/i, '');
+  const envelope = record.error && typeof record.error === 'object' ? record.error : null;
+  const validation: unknown[] =
+    envelope?.details?.validation_errors ??
+    (Array.isArray(record.detail) ? record.detail : []);
+  for (const item of validation) {
+    const message = text((item as Record<string, unknown>)?.message) ?? text((item as Record<string, unknown>)?.msg);
+    if (message) return clean(message);
+  }
+  return (
+    text(record.detail) ??
+    text(envelope?.message) ??
+    text(record.message) ??
+    `HTTP ${status}`
+  );
 }
 
 /**
@@ -136,10 +177,7 @@ async function request<T>(
         // logout both misleads the caller and, on a required call, throws a
         // signed-in learner out over an unrelated server error.
         const body = await retry!.json().catch(() => ({ detail: 'Request failed' }));
-        throw new ApiError(
-          body.detail || body.message || `HTTP ${retry!.status}`,
-          retry!.status
-        );
+        throw new ApiError(errorMessageFrom(body, retry!.status), retry!.status);
       }
 
       case NOT_SIGNED_IN:
@@ -157,7 +195,7 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'Request failed' }));
-    throw new ApiError(body.detail || body.message || `HTTP ${res.status}`, res.status);
+    throw new ApiError(errorMessageFrom(body, res.status), res.status);
   }
 
   if (res.status === 204) return undefined as T;
@@ -1001,10 +1039,15 @@ export const api = {
       includeOnline?: boolean;
       includeInstitutions?: boolean;
       limit?: number;
+      when?: 'today' | 'week' | null;
+      freeOnly?: boolean;
+      placeTypes?: string[];
+      timeZone?: string;
+      signal?: AbortSignal;
     }) {
       const query = new URLSearchParams({
-        lat: String(params.latitude),
-        lng: String(params.longitude),
+        lat: params.latitude.toFixed(5),
+        lng: params.longitude.toFixed(5),
         radius_km: String(params.radiusKm ?? 15),
         include_online: String(params.includeOnline ?? true),
         include_institutions: String(params.includeInstitutions ?? true),
@@ -1012,11 +1055,95 @@ export const api = {
       });
       if (params.categories?.length) query.set('categories', params.categories.join(','));
       if (params.query?.trim()) query.set('q', params.query.trim());
-      return request<NearbyLearningResponse>(`/community/nearby?${query}`);
+      if (params.when) query.set('when', params.when);
+      if (params.freeOnly) query.set('free_only', 'true');
+      if (params.placeTypes?.length) query.set('place_types', params.placeTypes.join(','));
+      const timeZone = params.timeZone ?? localTimeZone();
+      if (timeZone) query.set('tz', timeZone);
+      return request<NearbyLearningResponse>(`/community/nearby?${query}`, { signal: params.signal });
     },
 
-    async me() {
-      return request<MyCommunityResponse>('/community/me');
+    async me(origin?: { latitude: number; longitude: number } | null) {
+      const query = new URLSearchParams();
+      if (origin) {
+        query.set('lat', origin.latitude.toFixed(4));
+        query.set('lng', origin.longitude.toFixed(4));
+      }
+      const timeZone = localTimeZone();
+      if (timeZone) query.set('tz', timeZone);
+      const suffix = query.toString() ? `?${query}` : '';
+      return request<MyCommunityResponse>(`/community/me${suffix}`);
+    },
+
+    /** Full detail for any map item (events include past and cancelled). */
+    async node(kind: LearningNodeKind, nodeId: string, origin?: { latitude: number; longitude: number } | null) {
+      const query = new URLSearchParams();
+      if (origin) {
+        query.set('lat', origin.latitude.toFixed(4));
+        query.set('lng', origin.longitude.toFixed(4));
+      }
+      const timeZone = localTimeZone();
+      if (timeZone) query.set('tz', timeZone);
+      return request<LearningNodeDetail>(
+        `/community/nodes/${kind}/${encodeURIComponent(nodeId)}?${query}`,
+      );
+    },
+
+    /** Place vs. topic: "Queens" moves the map, "Spanish classes" filters it. */
+    async resolveSearch(text: string, origin?: { latitude: number; longitude: number } | null) {
+      const query = new URLSearchParams({ q: text.trim() });
+      if (origin) {
+        query.set('lat', origin.latitude.toFixed(3));
+        query.set('lng', origin.longitude.toFixed(3));
+      }
+      return request<SearchResolution>(`/community/search/resolve?${query}`);
+    },
+
+    async geocode(text: string, origin?: { latitude: number; longitude: number } | null) {
+      const query = new URLSearchParams({ q: text.trim(), limit: '6' });
+      if (origin) {
+        query.set('lat', origin.latitude.toFixed(3));
+        query.set('lng', origin.longitude.toFixed(3));
+      }
+      return request<PlaceSuggestion[]>(`/community/geocode?${query}`);
+    },
+
+    async setRsvp(eventId: string, status: RSVPStatus) {
+      return request<LearningNode>(`/community/events/${eventId}/rsvp`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+    },
+
+    async clearRsvp(eventId: string) {
+      return request<void>(`/community/events/${eventId}/rsvp`, { method: 'DELETE' });
+    },
+
+    async reportEvent(eventId: string, reason: string, description?: string) {
+      return request<{ status: 'received' | 'already_reported'; message: string }>(
+        `/community/events/${eventId}/report`,
+        { method: 'POST', body: JSON.stringify({ reason, description: description || undefined }) },
+      );
+    },
+
+    async updateEvent(eventId: string, payload: Partial<CommunityEventInput> & { status?: 'cancelled' | 'scheduled' }) {
+      return request<CommunityEventRecord>(`/community/events/${eventId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    async deleteEvent(eventId: string) {
+      return request<void>(`/community/events/${eventId}`, { method: 'DELETE' });
+    },
+
+    /** Fire-and-forget product analytics. Never sends coordinates. */
+    track(name: string, properties: Record<string, string | number | boolean | null> = {}) {
+      void request<void>('/community/analytics/events', {
+        method: 'POST',
+        body: JSON.stringify({ name, platform: 'web', properties }),
+        optionalAuth: true,
+      }).catch(() => undefined);
     },
 
     async saveNode(node: LearningNode) {
@@ -1071,21 +1198,8 @@ export const api = {
       return request<Record<string, unknown>[]>('/community/events');
     },
 
-    async createEvent(payload: {
-      title: string;
-      description?: string;
-      event_type: 'study_session' | 'workshop' | 'class' | 'seminar' | 'lecture' | 'discussion' | 'project_showcase' | 'networking' | 'office_hours' | 'other';
-      start_time: string;
-      end_time: string;
-      location?: string;
-      is_online?: boolean;
-      meeting_url?: string;
-      max_attendees?: number;
-      timezone: string;
-      latitude?: number;
-      longitude?: number;
-    }) {
-      return request<Record<string, unknown>>('/community/events', {
+    async createEvent(payload: CommunityEventInput) {
+      return request<CommunityEventRecord>('/community/events', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -1111,7 +1225,7 @@ export const api = {
     },
 
     async event(eventId: string) {
-      return request<Record<string, unknown>>(`/community/events/${eventId}`);
+      return request<CommunityEventRecord>(`/community/events/${eventId}`);
     },
 
     async attendEvent(eventId: string) {
