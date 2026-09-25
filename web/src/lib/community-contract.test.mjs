@@ -179,3 +179,28 @@ test('errors become learner-facing copy', () => {
   assert.equal(friendlyError({ status: 429, message: "You've reached today's event limit." }).body, "You've reached today's event limit.");
   assert.equal(friendlyError({ status: 422, message: 'Request validation failed' }).body, 'Please check the details and try again.');
 });
+
+test('invite codes are read from a pasted link or a bare code, and nothing else', async () => {
+  const { inviteTokenFromText, invitePath } = await import('./community-contract.mjs');
+  const token = 'Zx9_aB-3cD4eF5gH6iJ7kL8mN';
+  assert.equal(inviteTokenFromText(`https://lyoai.app/community/invite/${token}`), token);
+  assert.equal(inviteTokenFromText(`  https://lyoai.app/community/invite/${token}?utm=x  `), token);
+  assert.equal(inviteTokenFromText(token), token);
+  assert.equal(inviteTokenFromText('https://lyoai.app/community/events/42'), null);
+  assert.equal(inviteTokenFromText('short'), null);
+  assert.equal(inviteTokenFromText(''), null);
+  assert.equal(invitePath(token), `/community/invite/${token}`);
+});
+
+test('invite links say how they are used and why they stopped working', async () => {
+  const { describeInviteLink } = await import('./community-contract.mjs');
+  const now = new Date('2026-09-25T12:00:00Z');
+  assert.equal(
+    describeInviteLink({ active: true, use_count: 2, max_uses: 5, expires_at: '2026-09-30T12:00:00Z' }, now, 'en-US', 'UTC'),
+    'Used 2 of 5 · Expires Sep 30',
+  );
+  assert.equal(describeInviteLink({ active: true, use_count: 1, max_uses: null, expires_at: null }, now), 'Used 1 time');
+  assert.equal(describeInviteLink({ active: false, use_count: 1, max_uses: 1 }, now), 'Used 1 of 1 · Used up');
+  assert.equal(describeInviteLink({ active: false, use_count: 0, expires_at: '2026-09-01T00:00:00Z' }, now), 'Used 0 times · Expired');
+  assert.equal(describeInviteLink({ active: false, use_count: 3 }, now), 'Used 3 times · Turned off');
+});

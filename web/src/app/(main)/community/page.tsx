@@ -8,8 +8,10 @@ import {
   Calendar,
   ChevronRight,
   GraduationCap,
+  Link2,
   Loader2,
   LocateFixed,
+  MailOpen,
   MapPin,
   MessageCircle,
   Plus,
@@ -38,6 +40,8 @@ import {
   DEFAULT_RADIUS_KM,
   NEARBY_RADIUS_KM,
   detailPath,
+  inviteTokenFromText,
+  invitePath,
   filtersToQuery,
   friendlyError,
   shouldOfferAreaSearch,
@@ -815,6 +819,39 @@ function AccountList({
   )
 }
 
+/** Paste an invite link (or code) someone sent in a message or email. */
+function InviteLinkForm() {
+  const router = useRouter()
+  const [value, setValue] = useState('')
+  const [invalid, setInvalid] = useState(false)
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    const token = inviteTokenFromText(value)
+    if (!token) {
+      setInvalid(true)
+      return
+    }
+    router.push(invitePath(token))
+  }
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2 rounded-3xl border border-white/[0.08] bg-white/[0.03] p-4 sm:flex-row sm:items-end">
+      <label className="flex-1 text-sm text-white/70">
+        <span className="flex items-center gap-2 font-medium text-white"><Link2 className="h-4 w-4 text-lyo-300" aria-hidden="true" />Have an invite link?</span>
+        <input
+          value={value}
+          onChange={(event) => { setValue(event.target.value); setInvalid(false) }}
+          placeholder="Paste it here"
+          aria-invalid={invalid}
+          aria-describedby={invalid ? 'invite-link-error' : undefined}
+          className="mt-1.5 min-h-[44px] w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/35 focus:border-lyo-500 focus:outline-none"
+        />
+        {invalid && <span id="invite-link-error" className="mt-1 block text-xs text-amber-200">That doesn&apos;t look like a Lyo invite link.</span>}
+      </label>
+      <button type="submit" disabled={!value.trim()} className="min-h-[44px] rounded-xl bg-lyo-500 px-4 text-sm font-semibold text-white hover:bg-lyo-400 disabled:opacity-50">Open invite</button>
+    </form>
+  )
+}
+
 function MyCommunitySection({
   loading,
   error,
@@ -840,10 +877,15 @@ function MyCommunitySection({
   const going = (data.going ?? []).map(withOverride)
   const interested = (data.interested ?? []).map(withOverride)
   const hosting = (data.hosting ?? []).map(withOverride)
+  const invited = (data.invited ?? []).map(withOverride)
   const groups = data.joined_groups
   return (
     <div className="space-y-4">
       <p className="text-sm text-white/50">Synced to your Lyo account — the same on web, iPhone, iPad, and Android.</p>
+      {invited.length > 0 && (
+        <AccountList title="Invited" icon={MailOpen} nodes={invited} empty="" onOpen={onOpen} />
+      )}
+      <InviteLinkForm />
       <div className="grid gap-4 lg:grid-cols-2">
         <AccountList title="Going" icon={Ticket} nodes={going} empty="Events you RSVP to appear here." onOpen={onOpen} />
         <AccountList title="Interested" icon={Star} nodes={interested} empty="Mark events as interested to keep an eye on them." onOpen={onOpen} />

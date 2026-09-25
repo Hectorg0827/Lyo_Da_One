@@ -99,3 +99,13 @@ export function detailPath(node: Pick<LearningNode, 'kind' | 'id'>): string;
 export function buildIcs(node: LearningNode, pageUrl?: string): string | null;
 export function googleCalendarUrl(node: LearningNode): string | null;
 export function friendlyError(error: unknown, action?: string): FriendlyError;
+
+export function inviteTokenFromText(text: string | null | undefined): string | null;
+export function invitePath(token: string): string;
+export const INVITE_STATUS_COPY: Record<'expired' | 'revoked' | 'used_up' | 'ended' | 'cancelled', { title: string; body: string }>;
+export function describeInviteLink(
+  link: { active: boolean; use_count: number; max_uses?: number | null; expires_at?: string | null },
+  now?: Date,
+  locale?: string,
+  timeZone?: string,
+): string;

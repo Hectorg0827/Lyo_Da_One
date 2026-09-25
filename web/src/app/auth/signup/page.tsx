@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { authReturnPath } from '@/lib/auth-return.mjs';
+import { authReturnPath, authSwitchHref } from '@/lib/auth-return.mjs';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 
 // ── Animation variants ─────────────────────────────────────────────────────────
@@ -126,9 +126,11 @@ export default function SignupPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState('');
   const [resumeTestPrep, setResumeTestPrep] = useState(false);
+  const [switchHref, setSwitchHref] = useState('/auth/login');
 
   useEffect(() => {
     setResumeTestPrep(authReturnPath(window.location.search) === '/test-prep');
+    setSwitchHref(authSwitchHref('/auth/login', window.location.search));
   }, []);
 
   const pwStrength = getPasswordStrength(password);
@@ -333,7 +335,7 @@ export default function SignupPage() {
           <p className="text-center text-sm text-secondary">
             Already have an account?{' '}
             <Link
-              href={resumeTestPrep ? '/auth/login?next=%2Ftest-prep' : '/auth/login'}
+              href={switchHref}
               className="font-semibold text-[#a78bfa] hover:text-[#6366f1] transition-colors duration-150"
             >
               Log in

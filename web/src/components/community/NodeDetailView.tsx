@@ -35,7 +35,9 @@ import {
 } from '@/lib/community-contract.mjs'
 import { cn } from '@/lib/utils'
 import type { LearningNode, LearningNodeKind } from '@/types'
+import { useAuthStore } from '@/stores/auth-store'
 import CommunityEventMap from './CommunityEventMap'
+import EventInvitePanel from './EventInvitePanel'
 import { NodeRow, ResultSkeleton, StateMessage } from './CommunityResults'
 import { CategoryBadge, IconAction, LifecyclePill, NodeFacts, RsvpControl, shareNode } from './NodePreview'
 
@@ -110,6 +112,8 @@ function downloadIcs(node: LearningNode) {
  */
 export default function NodeDetailView({ kind, nodeId }: { kind: LearningNodeKind; nodeId: string }) {
   const router = useRouter()
+  const authUserId = useAuthStore((state) => state.user?.id)
+  const currentUserId = authUserId == null ? null : Number(authUserId)
   const [origin, setOrigin] = useState<{ latitude: number; longitude: number } | null>(null)
 
   // Distance is a bonus: only when location permission was already granted.
@@ -219,6 +223,7 @@ export default function NodeDetailView({ kind, nodeId }: { kind: LearningNodeKin
   const busy = actions.busy.has(node.key)
   const isEvent = node.kind === 'event'
   const canEdit = Boolean(detail.data?.can_edit)
+  const invitesOnly = node.visibility === 'private' || node.visibility === 'unlisted'
   const directions = directionsUrl(node)
   const website = safeWebUrl(node.website_url)
   const meeting = safeWebUrl(node.meeting_url)
@@ -245,6 +250,9 @@ export default function NodeDetailView({ kind, nodeId }: { kind: LearningNodeKin
           <LifecyclePill node={node} />
           {node.visibility && node.visibility !== 'public' && (
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/60">{node.visibility === 'unlisted' ? 'Unlisted' : 'Private'}</span>
+          )}
+          {node.is_invited && !canEdit && (
+            <span className="rounded-full bg-lyo-500/20 px-2 py-0.5 text-[11px] font-semibold text-lyo-200">You&apos;re invited</span>
           )}
         </div>
         <h1 id="node-title" className="font-display text-2xl font-semibold leading-tight text-white md:text-3xl">{node.title}</h1>
@@ -360,6 +368,9 @@ export default function NodeDetailView({ kind, nodeId }: { kind: LearningNodeKin
                 <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete event
               </button>
             </section>
+          )}
+          {canEdit && isEvent && invitesOnly && !closed && (
+            <EventInvitePanel node={node} currentUserId={currentUserId} />
           )}
           {isEvent && !canEdit && (
             <button type="button" onClick={() => setDialog('report')} className="flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm text-white/50 hover:bg-white/5 hover:text-white/80">

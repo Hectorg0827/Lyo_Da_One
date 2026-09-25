@@ -524,6 +524,8 @@ export interface LearningNode {
   relevance?: string | null;
   is_owner?: boolean;
   is_full?: boolean | null;
+  /** The viewer is on this event's guest list (invite link or by name). */
+  is_invited?: boolean;
 }
 
 export type EventLifecycle = 'upcoming' | 'today' | 'live' | 'past' | 'cancelled';
@@ -560,6 +562,8 @@ export interface MyCommunityResponse {
   hosting?: LearningNode[];
   going?: LearningNode[];
   interested?: LearningNode[];
+  /** Upcoming events the learner was invited to and has not answered yet. */
+  invited?: LearningNode[];
 }
 
 /** The full event row, as returned by /community/events/{id}. */
@@ -591,6 +595,48 @@ export interface CommunityEventRecord {
   attendance_mode?: AttendanceMode | null;
   attendee_count?: number | null;
   is_full?: boolean | null;
+}
+
+export interface EventInvite {
+  id: number;
+  token: string;
+  url: string;
+  created_at: string;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  use_count: number;
+  active: boolean;
+}
+
+export interface EventGuest {
+  user: CommunityUserPreview;
+  source: 'link' | 'direct';
+  invited_at: string;
+  rsvp_status?: RSVPStatus | null;
+}
+
+export interface EventInvitesResponse {
+  links: EventInvite[];
+  guests: EventGuest[];
+}
+
+export type InviteStatus = 'valid' | 'expired' | 'revoked' | 'used_up' | 'ended' | 'cancelled';
+
+export interface InvitePreview {
+  status: InviteStatus;
+  already_guest: boolean;
+  is_host: boolean;
+  event_id: number;
+  title: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  timezone?: string | null;
+  location_name?: string | null;
+  attendance_mode?: AttendanceMode | null;
+  visibility?: EventVisibility | null;
+  host?: CommunityUserPreview | null;
+  organizer_name?: string | null;
+  image_url?: string | null;
 }
 
 export interface LearningNodeDetail {

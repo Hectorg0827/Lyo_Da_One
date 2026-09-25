@@ -29,6 +29,10 @@ import type {
   PlaceSuggestion,
   RSVPStatus,
   SearchResolution,
+  EventGuest,
+  EventInvite,
+  EventInvitesResponse,
+  InvitePreview,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
@@ -1135,6 +1139,48 @@ export const api = {
 
     async deleteEvent(eventId: string) {
       return request<void>(`/community/events/${eventId}`, { method: 'DELETE' });
+    },
+
+    // ── Invitations (host) ──
+    async invitations(eventId: string) {
+      return request<EventInvitesResponse>(`/community/events/${eventId}/invites`);
+    },
+
+    async createInvite(eventId: string, options: { max_uses?: number | null; expires_in_days?: number | null } = {}) {
+      return request<EventInvite>(`/community/events/${eventId}/invites`, {
+        method: 'POST',
+        body: JSON.stringify(options),
+      });
+    },
+
+    async revokeInvite(eventId: string, inviteId: number) {
+      return request<void>(`/community/events/${eventId}/invites/${inviteId}`, { method: 'DELETE' });
+    },
+
+    async inviteGuest(eventId: string, userId: number) {
+      return request<EventGuest>(`/community/events/${eventId}/guests`, {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId }),
+      });
+    },
+
+    async removeGuest(eventId: string, userId: number) {
+      return request<void>(`/community/events/${eventId}/guests/${userId}`, { method: 'DELETE' });
+    },
+
+    // ── Invitations (guest) ──
+    /** `optionalAuth`: a signed-out visitor is asked to sign in, not bounced away from the invite. */
+    async invitePreview(token: string) {
+      return request<InvitePreview>(`/community/invites/${encodeURIComponent(token)}`, { optionalAuth: true });
+    },
+
+    async acceptInvite(token: string) {
+      const query = new URLSearchParams();
+      const timeZone = localTimeZone();
+      if (timeZone) query.set('tz', timeZone);
+      return request<LearningNode>(`/community/invites/${encodeURIComponent(token)}/accept?${query}`, {
+        method: 'POST',
+      });
     },
 
     /** Fire-and-forget product analytics. Never sends coordinates. */

@@ -365,3 +365,48 @@ export function friendlyError(error, action = 'load nearby learning opportunitie
   }
   return { title: `We couldn't ${action}.`, body: 'Please try again in a moment.', retry: true };
 }
+
+// ---------------------------------------------------------------------------
+// Invitations
+// ---------------------------------------------------------------------------
+
+const INVITE_TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
+const INVITE_IN_URL = /\/community\/invite\/([A-Za-z0-9_-]{16,64})(?:[/?#]|$)/;
+
+/** The token from a pasted invite link or bare code, or null. */
+export function inviteTokenFromText(text) {
+  const value = String(text ?? '').trim();
+  if (!value) return null;
+  if (INVITE_TOKEN.test(value)) return value;
+  const match = value.match(INVITE_IN_URL);
+  return match ? match[1] : null;
+}
+
+export function invitePath(token) {
+  return `/community/invite/${token}`;
+}
+
+/** What someone holding a link that no longer works is told. */
+export const INVITE_STATUS_COPY = {
+  expired: { title: 'This invite has expired', body: 'Ask the host to send you a new link.' },
+  revoked: { title: 'This invite was turned off', body: 'The host turned off this link. Ask them for a new one.' },
+  used_up: { title: 'This invite has been used up', body: 'It was used as many times as the host allowed. Ask them for a new one.' },
+  ended: { title: 'This event has ended', body: 'You can still browse other learning events near you.' },
+  cancelled: { title: 'This event was cancelled', body: 'The host cancelled it, so it no longer takes guests.' },
+};
+
+/** "Used 2 of 5 · Expires Sep 30", or why a link stopped working. */
+export function describeInviteLink(link, now = new Date(), locale = undefined, timeZone = undefined) {
+  const uses = link.max_uses
+    ? `Used ${link.use_count} of ${link.max_uses}`
+    : `Used ${link.use_count} ${link.use_count === 1 ? 'time' : 'times'}`;
+  const expires = link.expires_at ? new Date(link.expires_at) : null;
+  if (!link.active) {
+    if (link.max_uses && link.use_count >= link.max_uses) return `${uses} · Used up`;
+    if (expires && expires <= now) return `${uses} · Expired`;
+    return `${uses} · Turned off`;
+  }
+  if (!expires || Number.isNaN(expires.getTime())) return uses;
+  const day = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone }).format(expires);
+  return `${uses} · Expires ${day}`;
+}
