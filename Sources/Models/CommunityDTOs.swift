@@ -296,6 +296,8 @@ struct APILearningNode: Codable, Identifiable, Equatable {
     var relevance: String? = nil
     var isOwner: Bool? = nil
     var isFull: Bool? = nil
+    /// On this event's guest list (a private or unlisted invitation).
+    var isInvited: Bool? = nil
 }
 
 struct APINearbyLearningResponse: Decodable {
@@ -391,6 +393,76 @@ struct APICommunityMeResponse: Decodable {
     var hosting: [APILearningNode]?
     var going: [APILearningNode]?
     var interested: [APILearningNode]?
+    /// Upcoming events this account was invited to and hasn't answered yet.
+    var invited: [APILearningNode]?
+}
+
+// MARK: - Private event invitations
+
+/// A shareable invite link. Only the host ever sees these.
+struct APIEventInvite: Decodable, Identifiable, Equatable {
+    let id: Int
+    let token: String
+    let url: String
+    let createdAt: String
+    let expiresAt: String?
+    let maxUses: Int?
+    let useCount: Int
+    let active: Bool
+}
+
+/// Someone on the guest list, and how they answered.
+struct APIEventGuest: Decodable, Identifiable, Equatable {
+    let user: APIUserPreview
+    /// "link" (joined with an invite link) or "direct" (invited by name).
+    let source: String
+    let invitedAt: String
+    let rsvpStatus: String?
+
+    var id: Int { user.id }
+}
+
+struct APIEventInvitesResponse: Decodable, Equatable {
+    var links: [APIEventInvite]
+    var guests: [APIEventGuest]
+}
+
+/// What an invite link opens, before the learner accepts it.
+struct APIInvitePreview: Decodable, Equatable {
+    /// valid, expired, revoked, used_up, ended, or cancelled.
+    let status: String
+    let alreadyGuest: Bool
+    let isHost: Bool
+    let eventId: Int
+    let title: String
+    let startsAt: String?
+    let endsAt: String?
+    let timezone: String?
+    let locationName: String?
+    let attendanceMode: String?
+    let visibility: String?
+    let host: APIUserPreview?
+    let organizerName: String?
+    let imageUrl: String?
+}
+
+struct APIInviteCreateRequest: Encodable {
+    /// nil means anyone with the link can use it until it expires.
+    let maxUses: Int?
+    let expiresInDays: Int
+
+    enum CodingKeys: String, CodingKey { case maxUses, expiresInDays }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        // Sent explicitly as null so "anyone" is never mistaken for a default.
+        try container.encode(maxUses, forKey: .maxUses)
+        try container.encode(expiresInDays, forKey: .expiresInDays)
+    }
+}
+
+struct APIGuestCreateRequest: Encodable {
+    let userId: Int
 }
 
 struct APICreatePrivateLessonRequest: Codable {

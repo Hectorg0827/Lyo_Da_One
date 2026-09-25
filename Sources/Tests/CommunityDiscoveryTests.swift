@@ -383,3 +383,101 @@ final class CommunityContractDecodingTests: XCTestCase {
         XCTAssertTrue(start.hasSuffix("Z") || start.contains("+"), start)
     }
 }
+
+// Private event invitations: the same rules as the web invite page and panel.
+final class CommunityInviteTests: XCTestCase {
+    private let token = "Ab3_xY-9Ab3_xY-9Ab3_xY-9"
+
+    func testInviteCodesAreReadFromALinkOrABareCodeAndNothingElse() {
+        XCTAssertEqual(CommunityDiscovery.inviteToken(from: "https://lyoai.app/community/invite/\(token)"), token)
+        XCTAssertEqual(CommunityDiscovery.inviteToken(from: "  https://lyoai.app/community/invite/\(token)?utm=x  "), token)
+        XCTAssertEqual(CommunityDiscovery.inviteToken(from: "lyoapp://community/invite/\(token)"), token)
+        XCTAssertEqual(CommunityDiscovery.inviteToken(from: "Join me! https://lyoai.app/community/invite/\(token)"), token)
+        XCTAssertEqual(CommunityDiscovery.inviteToken(from: token), token)
+        XCTAssertNil(CommunityDiscovery.inviteToken(from: "https://lyoai.app/community/events/42"))
+        XCTAssertNil(CommunityDiscovery.inviteToken(from: "https://lyoai.app/community/invite/\(token) thanks"))
+        XCTAssertNil(CommunityDiscovery.inviteToken(from: "short"))
+        XCTAssertNil(CommunityDiscovery.inviteToken(from: ""))
+        XCTAssertNil(CommunityDiscovery.inviteToken(from: "https://lyoai.app/community/invite/<script>alert(1)</script>"))
+        XCTAssertEqual(CommunityDiscovery.invitePath(token), "/community/invite/\(token)")
+        XCTAssertEqual(CommunityDiscovery.inviteURL(token)?.absoluteString, "https://lyoai.app/community/invite/\(token)")
+    }
+
+    private func link(_ json: String) throws -> APIEventInvite {
+        try JSONDecoder.lyoDecoder.decode(APIEventInvite.self, from: Data(json.utf8))
+    }
+
+    func testInviteLinksSayHowTheyAreUsedAndWhyTheyStopped() throws {
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let locale = Locale(identifier: "en_US")
+        let now = try XCTUnwrap(CommunityDiscovery.parseDate("2026-09-20T12:00:00Z"))
+        let base = #""id":1,"token":"t","url":"https://lyoai.app/community/invite/t","created_at":"2026-09-01T00:00:00Z""#
+        let limited = try link("{\(base),\"expires_at\":\"2026-09-30T12:00:00Z\",\"max_uses\":5,\"use_count\":2,\"active\":true}")
+        XCTAssertEqual(CommunityDiscovery.describeInviteLink(limited, now: now, timeZone: utc, locale: locale), "Used 2 of 5 · Expires Sep 30")
+        let unlimited = try link("{\(base),\"use_count\":1,\"active\":true}")
+        XCTAssertEqual(CommunityDiscovery.describeInviteLink(unlimited, now: now, timeZone: utc, locale: locale), "Used 1 time")
+        let full = try link("{\(base),\"max_uses\":1,\"use_count\":1,\"active\":false}")
+        XCTAssertEqual(CommunityDiscovery.describeInviteLink(full, now: now), "Used 1 of 1 · Used up")
+        let expired = try link("{\(base),\"expires_at\":\"2026-09-10T00:00:00Z\",\"use_count\":0,\"active\":false}")
+        XCTAssertEqual(CommunityDiscovery.describeInviteLink(expired, now: now), "Used 0 times · Expired")
+        let revoked = try link("{\(base),\"expires_at\":\"2026-09-30T00:00:00Z\",\"use_count\":3,\"active\":false}")
+        XCTAssertEqual(CommunityDiscovery.describeInviteLink(revoked, now: now), "Used 3 times · Turned off")
+    }
+
+    func testGuestRowsAndClosedInvitesReadPlainly() throws {
+        let guest = try JSONDecoder.lyoDecoder.decode(
+            APIEventGuest.self,
+            from: Data(#"{"user":{"id":7,"name":"Ana"},"source":"link","invited_at":"2026-09-01T00:00:00Z","rsvp_status":"going"}"#.utf8)
+        )
+        XCTAssertEqual(CommunityDiscovery.describeGuest(guest), "Going · Joined with a link")
+        let named = try JSONDecoder.lyoDecoder.decode(
+            APIEventGuest.self,
+            from: Data(#"{"user":{"id":8,"name":"Cara"},"source":"direct","invited_at":"2026-09-01T00:00:00Z"}"#.utf8)
+        )
+        XCTAssertEqual(CommunityDiscovery.describeGuest(named), "No reply yet · Invited by name")
+
+        XCTAssertNil(CommunityDiscovery.inviteNotice(for: "valid"))
+        for status in ["expired", "revoked", "used_up", "ended", "cancelled", "something_new"] {
+            XCTAssertNotNil(CommunityDiscovery.inviteNotice(for: status), status)
+        }
+        XCTAssertEqual(CommunityDiscovery.inviteNotice(for: "revoked")?.title, "This invite was turned off")
+        XCTAssertEqual(CommunityDiscovery.inviteError(LyoError.network(.notFound)).title, "This invite link isn't valid")
+    }
+
+    func testOnlyHostsOfOpenPrivateOrUnlistedEventsManageInvites() throws {
+        let privateEvent = try makeNode(["visibility": "private", "lifecycle": "upcoming"])
+        XCTAssertTrue(CommunityDiscovery.canManageInvites(privateEvent, canEdit: true))
+        XCTAssertFalse(CommunityDiscovery.canManageInvites(privateEvent, canEdit: false))
+        XCTAssertTrue(CommunityDiscovery.canManageInvites(try makeNode(["visibility": "unlisted"]), canEdit: true))
+        XCTAssertFalse(CommunityDiscovery.canManageInvites(try makeNode(["visibility": "public"]), canEdit: true))
+        XCTAssertFalse(CommunityDiscovery.canManageInvites(
+            try makeNode(["visibility": "private", "lifecycle": "cancelled"]), canEdit: true))
+        XCTAssertFalse(CommunityDiscovery.canManageInvites(
+            try makeNode(["visibility": "private", "lifecycle": "past"]), canEdit: true))
+    }
+
+    func testInviteRequestsAndResponsesMatchTheBackend() throws {
+        let anyone = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder.lyoEncoder.encode(APIInviteCreateRequest(maxUses: nil, expiresInDays: 30))
+        ) as? [String: Any])
+        XCTAssertTrue(anyone["max_uses"] is NSNull, "anyone is sent as an explicit null")
+        XCTAssertEqual(anyone["expires_in_days"] as? Int, 30)
+        let guest = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder.lyoEncoder.encode(APIGuestCreateRequest(userId: 12))
+        ) as? [String: Any])
+        XCTAssertEqual(guest["user_id"] as? Int, 12)
+
+        let preview = try JSONDecoder.lyoDecoder.decode(APIInvitePreview.self, from: Data(#"""
+        {"status":"valid","already_guest":false,"is_host":false,"event_id":42,"title":"Private chemistry lab",
+         "starts_at":"2026-09-27T22:00:00Z","ends_at":null,"timezone":"America/New_York","location_name":"Hunter College",
+         "attendance_mode":"in_person","visibility":"private","host":{"id":3,"name":"Ben","avatar":null},
+         "organizer_name":"Ben Okafor","image_url":null}
+        """#.utf8))
+        XCTAssertEqual(preview.eventId, 42)
+        XCTAssertEqual(preview.organizerName, "Ben Okafor")
+
+        let invited = try makeNode(["is_invited": true, "visibility": "private"])
+        XCTAssertEqual(invited.isInvited, true)
+        XCTAssertNil(try makeNode().isInvited, "older payloads without the flag still decode")
+    }
+}

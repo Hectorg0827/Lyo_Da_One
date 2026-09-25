@@ -16,6 +16,7 @@ struct CommunityNodeDetailView: View {
     @State private var loadError: CommunityDiscovery.FriendlyError?
     @State private var showCalendar = false
     @State private var showReport = false
+    @State private var showInvites = false
     @State private var confirmation: Confirmation?
     @State private var working = false
     @Environment(\.openURL) private var openURL
@@ -83,6 +84,11 @@ struct CommunityNodeDetailView: View {
                 .ignoresSafeArea()
             }
         }
+        .sheet(isPresented: $showInvites) {
+            if let node = detail?.node {
+                CommunityInviteManagerView(node: node, viewModel: viewModel)
+            }
+        }
         .confirmationDialog("Report this event", isPresented: $showReport, titleVisibility: .visible) {
             ForEach(Self.reportReasons) { reason in
                 Button(reason.label) {
@@ -134,7 +140,7 @@ struct CommunityNodeDetailView: View {
                     .accessibilityHidden(true)
                 }
 
-                header(node)
+                header(node, canEdit: detail.canEdit)
 
                 if loadError != nil {
                     Label("Couldn't refresh. Showing what we had.", systemImage: "clock.arrow.circlepath")
@@ -174,6 +180,11 @@ struct CommunityNodeDetailView: View {
                 if detail.canEdit, let record = detail.event {
                     section("Your event") {
                         VStack(spacing: 8) {
+                            if CommunityDiscovery.canManageInvites(node, canEdit: detail.canEdit) {
+                                ownerButton("Invite people", icon: "person.crop.circle.badge.plus") {
+                                    showInvites = true
+                                }
+                            }
                             ownerButton("Edit event", icon: "pencil") { editEvent(record) }
                             if node.lifecycle != "cancelled" && node.lifecycle != "past" {
                                 ownerButton("Cancel event", icon: "xmark.circle", color: DesignTokens.Colors.warning) {
@@ -211,7 +222,7 @@ struct CommunityNodeDetailView: View {
         .refreshable { await load() }
     }
 
-    private func header(_ node: APILearningNode) -> some View {
+    private func header(_ node: APILearningNode, canEdit: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Label(node.categoryLabel, systemImage: node.categoryIcon)
@@ -224,6 +235,14 @@ struct CommunityNodeDetailView: View {
                         .padding(.vertical, 3)
                         .background(node.statusBadgeColor.opacity(0.18), in: Capsule())
                         .foregroundStyle(node.statusBadgeColor)
+                }
+                if node.isInvited == true && !canEdit {
+                    Text("You're invited")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(DesignTokens.Colors.accent.opacity(0.2), in: Capsule())
+                        .foregroundStyle(DesignTokens.Colors.accent)
                 }
             }
             Text(node.title)

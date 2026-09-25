@@ -73,6 +73,12 @@ struct CommunityBeacon: Identifiable {
     var distance: Double?
 }
 
+/// An invite waiting to be opened (from a link, a paste, or a notification).
+struct CommunityInviteToken: Identifiable, Equatable {
+    let token: String
+    var id: String { token }
+}
+
 // MARK: - Map-first Community state
 
 /// Learning Around Me on iOS. Everything that belongs to the learner (saves,
@@ -124,6 +130,8 @@ final class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDel
     @Published var sheetDetent: SheetDetent = .collapsed
     @Published var people: [APISearchUser] = []
     @Published var selectedPerson: APISearchUser?
+    /// An invite link opened from outside the app or pasted in My Community.
+    @Published var pendingInvite: CommunityInviteToken?
     /// A short confirmation or failure line shown as a toast.
     @Published var toastMessage: String?
     @Published var errorMessage: String?
@@ -973,6 +981,86 @@ final class CommunityViewModel: NSObject, ObservableObject, CLLocationManagerDel
         selectedPin = pin
         region.center = pin.coordinate
         mapCameraPosition = .region(region)
+    }
+
+    // MARK: - Invitations (private and unlisted events)
+
+    /// Opens the accept screen for a pasted link or code. False when the text
+    /// isn't a Lyo invite, so the field can say so.
+    @discardableResult
+    func openInvite(fromText text: String) -> Bool {
+        guard let token = CommunityDiscovery.inviteToken(from: text) else { return false }
+        pendingInvite = CommunityInviteToken(token: token)
+        return true
+    }
+
+    /// The host's invite links and guest list.
+    func loadInvitations(eventId: String) async throws -> APIEventInvitesResponse {
+        try await network.request(
+            Endpoints.Community.eventInvitations(eventId: eventId),
+            cachePolicy: .reloadIgnoringCache
+        )
+    }
+
+    func createInvite(eventId: String, maxUses: Int?, expiresInDays: Int) async throws -> APIEventInvite {
+        let link: APIEventInvite = try await network.request(
+            Endpoints.Community.createEventInvite(
+                eventId: eventId,
+                request: APIInviteCreateRequest(maxUses: maxUses, expiresInDays: expiresInDays)
+            ),
+            cachePolicy: .reloadIgnoringCache
+        )
+        track("community_invite_created", ["max_uses": maxUses.map(String.init) ?? "any", "days": String(expiresInDays)])
+        return link
+    }
+
+    func revokeInvite(eventId: String, inviteId: Int) async throws {
+        let _: EmptyResponse = try await network.request(
+            Endpoints.Community.revokeEventInvite(eventId: eventId, inviteId: inviteId),
+            cachePolicy: .reloadIgnoringCache
+        )
+    }
+
+    /// Invites one Lyo member by account; the backend notifies them everywhere.
+    func inviteMember(eventId: String, userId: Int) async throws -> APIEventGuest {
+        try await network.request(
+            Endpoints.Community.inviteEventGuest(eventId: eventId, request: APIGuestCreateRequest(userId: userId)),
+            cachePolicy: .reloadIgnoringCache
+        )
+    }
+
+    func removeGuest(eventId: String, userId: Int) async throws {
+        let _: EmptyResponse = try await network.request(
+            Endpoints.Community.removeEventGuest(eventId: eventId, userId: userId),
+            cachePolicy: .reloadIgnoringCache
+        )
+    }
+
+    /// Lyo members matching a name, for inviting by name (never the host).
+    func searchMembers(_ text: String, excluding userId: Int?) async throws -> [APISearchUser] {
+        let response: APISearchResponse = try await network.request(
+            Endpoints.Search.search(query: text, type: "users", limit: 8, offset: 0),
+            cachePolicy: .reloadIgnoringCache
+        )
+        return (response.users ?? []).filter { $0.id != userId }
+    }
+
+    func previewInvite(token: String) async throws -> APIInvitePreview {
+        try await network.request(Endpoints.Community.invitePreview(token: token), cachePolicy: .reloadIgnoringCache)
+    }
+
+    /// Puts this account on the guest list (every device sees the event).
+    /// Safe to repeat: accepting twice returns the same event.
+    func acceptInvite(token: String) async throws -> APILearningNode {
+        let node: APILearningNode = try await network.request(
+            Endpoints.Community.acceptInvite(token: token),
+            cachePolicy: .reloadIgnoringCache
+        )
+        track("community_invite_accepted", ["visibility": node.visibility ?? "private"])
+        details.removeValue(forKey: node.key)
+        revision += 1
+        refreshAccount()
+        return node
     }
 
     // MARK: - Feedback and analytics

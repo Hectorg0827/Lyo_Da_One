@@ -164,6 +164,7 @@ class DeepLinkHandler: ObservableObject {
         case openChat
         case openTestPrep
         case openChallenge(code: String)
+        case openCommunityInvite(token: String)
     }
     
     private init() {}
@@ -209,6 +210,13 @@ class DeepLinkHandler: ObservableObject {
             // lyoapp://chat
             print("💬 Opening chat")
             pendingAction = .openChat
+
+        case "community":
+            // lyoapp://community/invite/{code}
+            if pathComponents.first == "invite",
+               let token = CommunityDiscovery.inviteToken(from: url.absoluteString) {
+                pendingAction = .openCommunityInvite(token: token)
+            }
 
         case "challenge":
             // lyoapp://challenge/{code}

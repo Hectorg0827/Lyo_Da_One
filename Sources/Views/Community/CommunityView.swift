@@ -94,6 +94,18 @@ struct CommunityView: View {
             CommunityPersonSheet(person: person)
                 .presentationDetents([.medium])
         }
+        .sheet(item: $viewModel.pendingInvite) { invite in
+            CommunityInviteAcceptView(token: invite.token, viewModel: viewModel) { route in
+                viewModel.pendingInvite = nil
+                path.append(route)
+            }
+        }
+        .onReceive(DeepLinkHandler.shared.$pendingAction) { action in
+            // lyoapp://community/invite/<code> from a message or email.
+            guard case .openCommunityInvite(let token) = action else { return }
+            viewModel.pendingInvite = CommunityInviteToken(token: token)
+            DeepLinkHandler.shared.clearPendingAction()
+        }
         .overlay(alignment: .bottom) {
             if let message = viewModel.toastMessage {
                 CommunityToast(message: message)
@@ -1029,6 +1041,14 @@ private struct MyCommunityAccountView: View {
             if let account = viewModel.myCommunity {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     accountHeader
+
+                    if let invited = account.invited, !invited.isEmpty {
+                        sectionTitle("Invited", icon: "envelope.open.fill")
+                        ForEach(invited, id: \.key) { node in
+                            LearningNodeRow(node: node) { openRoute(CommunityNodeRoute(node)) }
+                        }
+                    }
+                    CommunityInviteLinkField(viewModel: viewModel)
 
                     section("Going", icon: "checkmark.circle.fill",
                             nodes: account.going ?? [],

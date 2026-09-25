@@ -456,6 +456,122 @@ enum CommunityDiscovery {
         URL(string: webBaseURL + detailPath(kind: kind, id: id))
     }
 
+    // MARK: - Invitations
+
+    private static let inviteTokenCharacters = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    )
+    private static let invitePathMarker = "/community/invite/"
+
+    static func isInviteToken(_ value: String) -> Bool {
+        (16...64).contains(value.count) &&
+            value.unicodeScalars.allSatisfy { inviteTokenCharacters.contains($0) }
+    }
+
+    /// The invite code in a pasted link (https://lyoai.app/community/invite/…,
+    /// lyoapp://community/invite/…) or a bare code; nil for anything else.
+    static func inviteToken(from text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        if isInviteToken(value) { return value }
+        guard let marker = value.range(of: invitePathMarker) else { return nil }
+        let rest = value[marker.upperBound...]
+        let end = rest.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? rest.endIndex
+        let candidate = String(rest[..<end])
+        return isInviteToken(candidate) ? candidate : nil
+    }
+
+    static func invitePath(_ token: String) -> String { "\(invitePathMarker)\(token)" }
+
+    static func inviteURL(_ token: String) -> URL? { URL(string: webBaseURL + invitePath(token)) }
+
+    struct InviteNotice: Equatable {
+        let title: String
+        let body: String
+    }
+
+    /// What someone holding a link that no longer works is told.
+    static let inviteStatusNotices: [String: InviteNotice] = [
+        "expired": InviteNotice(title: "This invite has expired", body: "Ask the host to send you a new link."),
+        "revoked": InviteNotice(
+            title: "This invite was turned off",
+            body: "The host turned off this link. Ask them for a new one."
+        ),
+        "used_up": InviteNotice(
+            title: "This invite has been used up",
+            body: "It was used as many times as the host allowed. Ask them for a new one."
+        ),
+        "ended": InviteNotice(title: "This event has ended", body: "You can still browse other learning events near you."),
+        "cancelled": InviteNotice(
+            title: "This event was cancelled",
+            body: "The host cancelled it, so it no longer takes guests."
+        ),
+    ]
+
+    /// Why a link can't be used, or nil when it can ("valid").
+    static func inviteNotice(for status: String) -> InviteNotice? {
+        guard status != "valid" else { return nil }
+        return inviteStatusNotices[status]
+            ?? InviteNotice(title: "This invite can't be used", body: "Ask the host to send you a new link.")
+    }
+
+    /// A wrong or deleted link reads differently from a network problem.
+    static func inviteError(_ error: Error) -> FriendlyError {
+        if let lyoError = error as? LyoError, case .network(.notFound) = lyoError {
+            return FriendlyError(
+                title: "This invite link isn't valid",
+                body: "Check that you copied the whole link, or ask the host for a new one.",
+                retry: false
+            )
+        }
+        return friendlyError(error, action: "open this invite")
+    }
+
+    /// "Used 2 of 5 · Expires Sep 30", or why a link stopped working.
+    static func describeInviteLink(
+        _ link: APIEventInvite,
+        now: Date = Date(),
+        timeZone: TimeZone = .current,
+        locale: Locale = .current
+    ) -> String {
+        let uses: String
+        if let maxUses = link.maxUses {
+            uses = "Used \(link.useCount) of \(maxUses)"
+        } else {
+            uses = "Used \(link.useCount) \(link.useCount == 1 ? "time" : "times")"
+        }
+        let expires = parseDate(link.expiresAt)
+        if !link.active {
+            if let maxUses = link.maxUses, link.useCount >= maxUses { return "\(uses) · Used up" }
+            if let expires, expires <= now { return "\(uses) · Expired" }
+            return "\(uses) · Turned off"
+        }
+        guard let expires else { return uses }
+        let day = DateFormatter()
+        day.locale = locale
+        day.timeZone = timeZone
+        day.setLocalizedDateFormatFromTemplate("MMMd")
+        return "\(uses) · Expires \(day.string(from: expires))"
+    }
+
+    /// "Going · Joined with a link" for one row of the host's guest list.
+    static func describeGuest(_ guest: APIEventGuest) -> String {
+        let answer: String
+        switch guest.rsvpStatus {
+        case "going": answer = "Going"
+        case "interested": answer = "Interested"
+        default: answer = "No reply yet"
+        }
+        return "\(answer) · \(guest.source == "direct" ? "Invited by name" : "Joined with a link")"
+    }
+
+    /// Hosts manage invitations for private and unlisted events that are still on.
+    static func canManageInvites(_ node: APILearningNode, canEdit: Bool) -> Bool {
+        guard canEdit, node.kind == "event" else { return false }
+        guard node.visibility == "private" || node.visibility == "unlisted" else { return false }
+        return node.lifecycle != "past" && node.lifecycle != "cancelled"
+    }
+
     /// Optimistic RSVP: the counts a learner sees the instant they tap.
     static func applyingRSVP(_ status: String?, to node: APILearningNode) -> APILearningNode {
         var next = node

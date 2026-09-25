@@ -1112,6 +1112,15 @@ enum Endpoints {
         case deleteEvent(eventId: String)
         case trackAnalytics(event: APICommunityAnalyticsEvent)
 
+        // Private event invitations
+        case eventInvitations(eventId: String)
+        case createEventInvite(eventId: String, request: APIInviteCreateRequest)
+        case revokeEventInvite(eventId: String, inviteId: Int)
+        case inviteEventGuest(eventId: String, request: APIGuestCreateRequest)
+        case removeEventGuest(eventId: String, userId: Int)
+        case invitePreview(token: String)
+        case acceptInvite(token: String)
+
         // Study Groups
         case getStudyGroups(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
         case getStudyGroup(id: String)
@@ -1167,6 +1176,14 @@ enum Endpoints {
             case .updateEvent(let id, _), .deleteEvent(let id):
                 return "/api/v1/community/events/\(id)"
             case .trackAnalytics: return "/api/v1/community/analytics/events"
+            case .eventInvitations(let id), .createEventInvite(let id, _):
+                return "/api/v1/community/events/\(id)/invites"
+            case .revokeEventInvite(let id, let inviteId):
+                return "/api/v1/community/events/\(id)/invites/\(inviteId)"
+            case .inviteEventGuest(let id, _): return "/api/v1/community/events/\(id)/guests"
+            case .removeEventGuest(let id, let userId): return "/api/v1/community/events/\(id)/guests/\(userId)"
+            case .invitePreview(let token): return "/api/v1/community/invites/\(token)"
+            case .acceptInvite(let token): return "/api/v1/community/invites/\(token)/accept"
 
             // Study Groups
             case .getStudyGroups: return "/api/v1/community/study-groups"
@@ -1211,18 +1228,19 @@ enum Endpoints {
                  .learningNodeDetail, .resolveSearch, .geocode,
                  .getStudyGroups, .getStudyGroup, .getEvents, .getEvent,
                  .getListings, .getListing, .getInstitutions, .getInstitution, .searchInstitutions,
-                 .getBeacons, .getAvailableSlots:
+                 .getBeacons, .getAvailableSlots, .eventInvitations, .invitePreview:
                 return .get
 
             case .createStudyGroup, .createStudyGroupRequest, .joinStudyGroup,
                  .createEvent, .createEventRequest, .registerForEvent,
                  .createPrivateLesson,
                  .createListing, .createQuestion, .answerQuestion,
-                 .createBooking, .reportEvent, .trackAnalytics:
+                 .createBooking, .reportEvent, .trackAnalytics,
+                 .createEventInvite, .inviteEventGuest, .acceptInvite:
                 return .post
 
             case .leaveStudyGroup, .unregisterFromEvent, .unsaveLearningNode,
-                 .clearEventRSVP, .deleteEvent:
+                 .clearEventRSVP, .deleteEvent, .revokeEventInvite, .removeEventGuest:
                 return .delete
 
             case .updateListing, .saveLearningNode, .setEventRSVP:
@@ -1252,6 +1270,12 @@ enum Endpoints {
 
             case .trackAnalytics(let event):
                 return event
+
+            case .createEventInvite(_, let request):
+                return request
+
+            case .inviteEventGuest(_, let request):
+                return request
 
             case .createStudyGroup(let group):
                 return group
@@ -1316,6 +1340,10 @@ enum Endpoints {
                     items.append(URLQueryItem(name: "lat", value: String(format: "%.3f", lat)))
                     items.append(URLQueryItem(name: "lng", value: String(format: "%.3f", lng)))
                 }
+                items.append(URLQueryItem(name: "tz", value: TimeZone.current.identifier))
+
+            case .acceptInvite:
+                // Only the time zone, so times read right on the event it returns.
                 items.append(URLQueryItem(name: "tz", value: TimeZone.current.identifier))
 
             case .resolveSearch(let query, let lat, let lng),
