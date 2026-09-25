@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { authReturnPath } from '@/lib/auth-return.mjs';
+import { authReturnPath, authSwitchHref } from '@/lib/auth-return.mjs';
 
 const containerVariants = {
   hidden: { opacity: 0, y: 24 },
@@ -34,9 +34,10 @@ function AuthInput({
   placeholder: string;
   rightSlot?: React.ReactNode;
 }) {
+  const id = useId();
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold uppercase tracking-wider text-secondary">{label}</label>
+      <label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-secondary">{label}</label>
       <div
         className="flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-200 focus-within:ring-1 focus-within:ring-[#6366f1]/60"
         style={{
@@ -46,6 +47,7 @@ function AuthInput({
       >
         <Icon size={16} className="shrink-0 text-secondary" />
         <input
+          id={id}
           type={type}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -68,9 +70,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [resumeTestPrep, setResumeTestPrep] = useState(false);
+  const [switchHref, setSwitchHref] = useState('/auth/signup');
 
   useEffect(() => {
     setResumeTestPrep(authReturnPath(window.location.search) === '/test-prep');
+    setSwitchHref(authSwitchHref('/auth/signup', window.location.search));
   }, []);
 
   async function handleLogin(event: React.FormEvent) {
@@ -204,7 +208,7 @@ export default function LoginPage() {
           <p className="text-center text-sm text-secondary">
             New to LYO?{' '}
             <Link
-              href={resumeTestPrep ? '/auth/signup?next=%2Ftest-prep' : '/auth/signup'}
+              href={switchHref}
               className="font-semibold text-[#a78bfa] transition-colors duration-150 hover:text-[#6366f1]"
             >
               Sign up

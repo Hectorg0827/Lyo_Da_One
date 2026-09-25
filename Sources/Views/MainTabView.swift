@@ -303,6 +303,9 @@ extension MainTabView {
                 case .openCourse(let courseId):
                     navigateToCourse(courseId)
                     deepLinkHandler.clearPendingAction()
+                case .openCommunityInvite:
+                    // The Community screen opens the invitation and clears it.
+                    selectedTab = .community
                 default:
                     break
                 }

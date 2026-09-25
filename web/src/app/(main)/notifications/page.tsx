@@ -159,7 +159,9 @@ function notificationHref(notification: AppNotification): string | null {
     case 'group':
       return `/community?group=${encodeURIComponent(targetId)}`;
     case 'event':
-      return `/community?event=${encodeURIComponent(targetId)}`;
+    case 'community_event':
+      // Invitations and event updates open the event's own page.
+      return `/community/events/${encodeURIComponent(targetId)}`;
     default:
       return null;
   }

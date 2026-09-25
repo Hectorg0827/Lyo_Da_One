@@ -21,6 +21,7 @@ const createHub = read('android/app/src/main/java/com/lyo/app/ui/screens/create/
 const createClip = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreateClipScreen.kt');
 const createPost = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreatePostScreen.kt');
 const createCommunity = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreateCommunityItemScreen.kt');
+const communityViewModel = read('android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityMapViewModel.kt');
 
 const expectedOrder = [
   'BottomItem(Routes.HOME, "Focus"',
@@ -64,7 +65,8 @@ requireText(createClip, 'ApiClient.api.createClip', 'Android clip publish');
 requireText(createClip, 'ActivityResultContracts.GetContent()', 'Android system media picker');
 requireText(createPost, 'ApiClient.api.createCommunityPost', 'Android community post publish');
 requireText(createCommunity, 'ApiClient.api.createStudyGroup', 'Android study group publish');
-requireText(createCommunity, 'ApiClient.api.createCommunityEvent', 'Android event publish');
-requireText(createCommunity, 'end.isAfter(start)', 'Android event time validation');
+requireText(createCommunity, 'vm.createEvent(', 'Android event publish');
+requireText(communityViewModel, 'api.createCommunityEvent(request)', 'Android event publish request');
+requireText(createCommunity, 'endAt.isAfter(startAt)', 'Android event time validation');
 
 console.log('Android primary navigation and complete Create workflows match the supported iOS product hierarchy.');

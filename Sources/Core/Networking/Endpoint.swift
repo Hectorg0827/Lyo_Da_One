@@ -1097,9 +1097,29 @@ enum Endpoints {
     enum Community: Endpoint {
         // Map-first discovery and account-owned state
         case nearbyLearning(lat: Double, lng: Double, radius: Double, categories: [String], query: String?)
+        case discoverNearby(params: CommunityNearbyParams)
         case getMyCommunity
+        case getMyCommunityNear(lat: Double?, lng: Double?)
         case saveLearningNode(kind: String, id: String, snapshot: APILearningNode)
         case unsaveLearningNode(kind: String, id: String)
+        case learningNodeDetail(kind: String, id: String, lat: Double?, lng: Double?)
+        case resolveSearch(query: String, lat: Double?, lng: Double?)
+        case geocode(query: String, lat: Double?, lng: Double?)
+        case setEventRSVP(eventId: String, status: String)
+        case clearEventRSVP(eventId: String)
+        case reportEvent(eventId: String, request: APIEventReportRequest)
+        case updateEvent(eventId: String, request: APIUpdateEventRequest)
+        case deleteEvent(eventId: String)
+        case trackAnalytics(event: APICommunityAnalyticsEvent)
+
+        // Private event invitations
+        case eventInvitations(eventId: String)
+        case createEventInvite(eventId: String, request: APIInviteCreateRequest)
+        case revokeEventInvite(eventId: String, inviteId: Int)
+        case inviteEventGuest(eventId: String, request: APIGuestCreateRequest)
+        case removeEventGuest(eventId: String, userId: Int)
+        case invitePreview(token: String)
+        case acceptInvite(token: String)
 
         // Study Groups
         case getStudyGroups(filters: CommunityFilter?, location: CLLocationCoordinate2D?)
@@ -1141,11 +1161,29 @@ enum Endpoints {
 
         var path: String {
             switch self {
-            case .nearbyLearning: return "/api/v1/community/nearby"
-            case .getMyCommunity: return "/api/v1/community/me"
+            case .nearbyLearning, .discoverNearby: return "/api/v1/community/nearby"
+            case .getMyCommunity, .getMyCommunityNear: return "/api/v1/community/me"
             case .saveLearningNode(let kind, let id, _),
                  .unsaveLearningNode(let kind, let id):
                 return "/api/v1/community/saved-nodes/\(kind)/\(id)"
+            case .learningNodeDetail(let kind, let id, _, _):
+                return "/api/v1/community/nodes/\(kind)/\(id)"
+            case .resolveSearch: return "/api/v1/community/search/resolve"
+            case .geocode: return "/api/v1/community/geocode"
+            case .setEventRSVP(let id, _), .clearEventRSVP(let id):
+                return "/api/v1/community/events/\(id)/rsvp"
+            case .reportEvent(let id, _): return "/api/v1/community/events/\(id)/report"
+            case .updateEvent(let id, _), .deleteEvent(let id):
+                return "/api/v1/community/events/\(id)"
+            case .trackAnalytics: return "/api/v1/community/analytics/events"
+            case .eventInvitations(let id), .createEventInvite(let id, _):
+                return "/api/v1/community/events/\(id)/invites"
+            case .revokeEventInvite(let id, let inviteId):
+                return "/api/v1/community/events/\(id)/invites/\(inviteId)"
+            case .inviteEventGuest(let id, _): return "/api/v1/community/events/\(id)/guests"
+            case .removeEventGuest(let id, let userId): return "/api/v1/community/events/\(id)/guests/\(userId)"
+            case .invitePreview(let token): return "/api/v1/community/invites/\(token)"
+            case .acceptInvite(let token): return "/api/v1/community/invites/\(token)/accept"
 
             // Study Groups
             case .getStudyGroups: return "/api/v1/community/study-groups"
@@ -1186,24 +1224,30 @@ enum Endpoints {
 
         var method: HTTPMethod {
             switch self {
-            case .nearbyLearning, .getMyCommunity,
+            case .nearbyLearning, .discoverNearby, .getMyCommunity, .getMyCommunityNear,
+                 .learningNodeDetail, .resolveSearch, .geocode,
                  .getStudyGroups, .getStudyGroup, .getEvents, .getEvent,
                  .getListings, .getListing, .getInstitutions, .getInstitution, .searchInstitutions,
-                 .getBeacons, .getAvailableSlots:
+                 .getBeacons, .getAvailableSlots, .eventInvitations, .invitePreview:
                 return .get
 
             case .createStudyGroup, .createStudyGroupRequest, .joinStudyGroup,
                  .createEvent, .createEventRequest, .registerForEvent,
                  .createPrivateLesson,
                  .createListing, .createQuestion, .answerQuestion,
-                 .createBooking:
+                 .createBooking, .reportEvent, .trackAnalytics,
+                 .createEventInvite, .inviteEventGuest, .acceptInvite:
                 return .post
 
-            case .leaveStudyGroup, .unregisterFromEvent, .unsaveLearningNode:
+            case .leaveStudyGroup, .unregisterFromEvent, .unsaveLearningNode,
+                 .clearEventRSVP, .deleteEvent, .revokeEventInvite, .removeEventGuest:
                 return .delete
 
-            case .updateListing, .saveLearningNode:
+            case .updateListing, .saveLearningNode, .setEventRSVP:
                 return .put
+
+            case .updateEvent:
+                return .patch
 
             case .deleteListing:
                 return .delete
@@ -1214,6 +1258,24 @@ enum Endpoints {
             switch self {
             case .saveLearningNode(_, _, let snapshot):
                 return APILearningNodeSaveRequest(snapshot: snapshot)
+
+            case .setEventRSVP(_, let status):
+                return APIRSVPRequest(status: status)
+
+            case .reportEvent(_, let request):
+                return request
+
+            case .updateEvent(_, let request):
+                return request
+
+            case .trackAnalytics(let event):
+                return event
+
+            case .createEventInvite(_, let request):
+                return request
+
+            case .inviteEventGuest(_, let request):
+                return request
 
             case .createStudyGroup(let group):
                 return group
@@ -1266,6 +1328,30 @@ enum Endpoints {
                 }
                 if let query, !query.isEmpty {
                     items.append(URLQueryItem(name: "q", value: query))
+                }
+
+            case .discoverNearby(let params):
+                items.append(contentsOf: params.queryItems)
+
+            case .getMyCommunityNear(let lat, let lng),
+                 .learningNodeDetail(_, _, let lat, let lng):
+                // The viewer's own position, only for distances: ~100 m is enough.
+                if let lat, let lng {
+                    items.append(URLQueryItem(name: "lat", value: String(format: "%.3f", lat)))
+                    items.append(URLQueryItem(name: "lng", value: String(format: "%.3f", lng)))
+                }
+                items.append(URLQueryItem(name: "tz", value: TimeZone.current.identifier))
+
+            case .acceptInvite:
+                // Only the time zone, so times read right on the event it returns.
+                items.append(URLQueryItem(name: "tz", value: TimeZone.current.identifier))
+
+            case .resolveSearch(let query, let lat, let lng),
+                 .geocode(let query, let lat, let lng):
+                items.append(URLQueryItem(name: "q", value: query))
+                if let lat, let lng {
+                    items.append(URLQueryItem(name: "lat", value: String(format: "%.3f", lat)))
+                    items.append(URLQueryItem(name: "lng", value: String(format: "%.3f", lng)))
                 }
 
             case .getStudyGroups(let filters, let location),

@@ -13,6 +13,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.lyo.app.notifications.StudyReminders.openTestPrep = intent.getBooleanExtra("open_test_prep", false)
+        com.lyo.app.ui.screens.community.PendingCommunityInvite.capture(intent?.dataString)
         enableEdgeToEdge()
         setContent {
             LyoTheme {
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         com.lyo.app.notifications.StudyReminders.openTestPrep = intent.getBooleanExtra("open_test_prep", false)
+        com.lyo.app.ui.screens.community.PendingCommunityInvite.capture(intent.dataString)
     }
 
 }

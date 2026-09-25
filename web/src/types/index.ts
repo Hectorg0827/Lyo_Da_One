@@ -503,7 +503,46 @@ export interface LearningNode {
   image_url?: string | null;
   source: string;
   source_url?: string | null;
+  // Contract 4 — all optional so older payloads still type-check.
+  lifecycle?: EventLifecycle | null;
+  rsvp_status?: RSVPStatus | null;
+  going_count?: number | null;
+  interested_count?: number | null;
+  is_free?: boolean | null;
+  price_amount?: number | null;
+  currency?: string | null;
+  organizer_name?: string | null;
+  venue_name?: string | null;
+  address?: string | null;
+  attendance_mode?: AttendanceMode | null;
+  visibility?: EventVisibility | null;
+  website_url?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  opening_hours?: string | null;
+  place_type?: string | null;
+  relevance?: string | null;
+  is_owner?: boolean;
+  is_full?: boolean | null;
+  /** The viewer is on this event's guest list (invite link or by name). */
+  is_invited?: boolean;
 }
+
+export type EventLifecycle = 'upcoming' | 'today' | 'live' | 'past' | 'cancelled';
+export type RSVPStatus = 'going' | 'interested';
+export type AttendanceMode = 'in_person' | 'online' | 'hybrid';
+export type EventVisibility = 'public' | 'unlisted' | 'private';
+export type CommunityEventType =
+  | 'study_session'
+  | 'workshop'
+  | 'class'
+  | 'seminar'
+  | 'lecture'
+  | 'discussion'
+  | 'project_showcase'
+  | 'networking'
+  | 'office_hours'
+  | 'other';
 
 export interface NearbyLearningResponse {
   items: LearningNode[];
@@ -511,6 +550,7 @@ export interface NearbyLearningResponse {
   center_longitude: number;
   radius_km: number;
   fetched_at: string;
+  degraded_sources?: string[];
 }
 
 export interface MyCommunityResponse {
@@ -519,6 +559,137 @@ export interface MyCommunityResponse {
   saved_nodes: LearningNode[];
   following: CommunityUserPreview[];
   updated_at: string;
+  hosting?: LearningNode[];
+  going?: LearningNode[];
+  interested?: LearningNode[];
+  /** Upcoming events the learner was invited to and has not answered yet. */
+  invited?: LearningNode[];
+}
+
+/** The full event row, as returned by /community/events/{id}. */
+export interface CommunityEventRecord {
+  id: number;
+  title: string;
+  description?: string | null;
+  event_type: CommunityEventType;
+  location?: string | null;
+  is_online: boolean;
+  meeting_url?: string | null;
+  max_attendees?: number | null;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  status: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
+  organizer_id: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  image_url?: string | null;
+  visibility: EventVisibility;
+  price_type: 'free' | 'paid';
+  price_amount?: number | null;
+  currency?: string | null;
+  website_url?: string | null;
+  organizer_name?: string | null;
+  venue_name?: string | null;
+  address?: string | null;
+  attendance_mode?: AttendanceMode | null;
+  attendee_count?: number | null;
+  is_full?: boolean | null;
+}
+
+export interface EventInvite {
+  id: number;
+  token: string;
+  url: string;
+  created_at: string;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  use_count: number;
+  active: boolean;
+}
+
+export interface EventGuest {
+  user: CommunityUserPreview;
+  source: 'link' | 'direct';
+  invited_at: string;
+  rsvp_status?: RSVPStatus | null;
+}
+
+export interface EventInvitesResponse {
+  links: EventInvite[];
+  guests: EventGuest[];
+}
+
+export type InviteStatus = 'valid' | 'expired' | 'revoked' | 'used_up' | 'ended' | 'cancelled';
+
+export interface InvitePreview {
+  status: InviteStatus;
+  already_guest: boolean;
+  is_host: boolean;
+  event_id: number;
+  title: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  timezone?: string | null;
+  location_name?: string | null;
+  attendance_mode?: AttendanceMode | null;
+  visibility?: EventVisibility | null;
+  host?: CommunityUserPreview | null;
+  organizer_name?: string | null;
+  image_url?: string | null;
+}
+
+export interface LearningNodeDetail {
+  node: LearningNode;
+  related: LearningNode[];
+  can_edit: boolean;
+  event?: CommunityEventRecord | null;
+}
+
+export interface PlaceSuggestion {
+  name: string;
+  label: string;
+  kind: string;
+  latitude: number;
+  longitude: number;
+  radius_km: number;
+  is_area: boolean;
+}
+
+export interface SearchResolution {
+  query: string;
+  intent: 'topic' | 'place' | 'mixed';
+  topic?: string | null;
+  terms: string[];
+  categories: LearningNodeCategory[];
+  place?: PlaceSuggestion | null;
+  places: PlaceSuggestion[];
+}
+
+export interface CommunityEventInput {
+  title: string;
+  description?: string | null;
+  event_type: CommunityEventType;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  attendance_mode: AttendanceMode;
+  is_online: boolean;
+  location?: string | null;
+  venue_name?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  meeting_url?: string | null;
+  website_url?: string | null;
+  image_url?: string | null;
+  organizer_name?: string | null;
+  max_attendees?: number | null;
+  price_type: 'free' | 'paid';
+  price_amount?: number | null;
+  currency?: string | null;
+  visibility: EventVisibility;
+  client_request_id?: string;
 }
 
 // ---- Gamification ----

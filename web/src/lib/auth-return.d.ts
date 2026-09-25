@@ -1,1 +1,2 @@
-export function authReturnPath(search: string): '/' | '/test-prep';
+export function authReturnPath(search: string): string;
+export function authSwitchHref(page: string, search: string): string;

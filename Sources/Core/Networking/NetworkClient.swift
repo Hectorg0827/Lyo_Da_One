@@ -313,6 +313,14 @@ actor NetworkClient {
             case 500...599:
                 throw LyoError.network(.serverError(httpResponse.statusCode))
 
+            case 409, 422:
+                // Conflicts and rejected input carry a learner-readable reason
+                // in the backend envelope ("This event is full").
+                if let message = Self.envelopeMessage(from: data) {
+                    throw LyoError.serverError(message)
+                }
+                throw LyoError.network(.unknown(httpResponse.statusCode))
+
             default:
                 throw LyoError.network(.unknown(httpResponse.statusCode))
             }
@@ -439,6 +447,17 @@ actor NetworkClient {
     }
 
     // MARK: - Helper Methods
+
+    /// The specific message from `{"error": {"message": …}}` or FastAPI's
+    /// `{"detail": "…"}`, skipping the envelope's generic placeholders.
+    static func envelopeMessage(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let raw = (object["error"] as? [String: Any])?["message"] as? String ?? object["detail"] as? String
+        guard let message = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty,
+              !message.hasPrefix("HTTP "), message != "HTTP error occurred",
+              message != "Request validation failed" else { return nil }
+        return message
+    }
 
     private func shouldRetry(error: Error) -> Bool {
         // Retry on network errors, timeouts, and 5xx server errors

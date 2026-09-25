@@ -302,6 +302,11 @@ data class CreateStudyGroupRequest(
     val longitude: Double? = null,
 )
 
+/**
+ * Create-event payload. Times are ISO-8601 instants (the backend stores UTC).
+ * `clientRequestId` makes a retried or double-tapped submit return the first
+ * event instead of creating a duplicate.
+ */
 data class CreateCommunityEventRequest(
     val title: String,
     val description: String? = null,
@@ -309,12 +314,52 @@ data class CreateCommunityEventRequest(
     val location: String? = null,
     @SerializedName("is_online") val isOnline: Boolean = false,
     @SerializedName("meeting_url") val meetingUrl: String? = null,
-    @SerializedName("max_attendees") val maxAttendees: Int = 50,
+    @SerializedName("max_attendees") val maxAttendees: Int? = null,
     @SerializedName("start_time") val startTime: String,
     @SerializedName("end_time") val endTime: String,
     val timezone: String,
     val latitude: Double? = null,
     val longitude: Double? = null,
+    @SerializedName("attendance_mode") val attendanceMode: String? = null,
+    @SerializedName("venue_name") val venueName: String? = null,
+    val address: String? = null,
+    @SerializedName("website_url") val websiteUrl: String? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+    @SerializedName("organizer_name") val organizerName: String? = null,
+    @SerializedName("price_type") val priceType: String? = null,
+    @SerializedName("price_amount") val priceAmount: Double? = null,
+    val currency: String? = null,
+    val visibility: String? = null,
+    @SerializedName("client_request_id") val clientRequestId: String? = null,
+)
+
+/** The full event row returned by create, update, and node detail. */
+data class CommunityEventRecordDto(
+    val id: Long,
+    val title: String,
+    val description: String? = null,
+    @SerializedName("event_type") val eventType: String = "other",
+    val location: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean = false,
+    @SerializedName("meeting_url") val meetingUrl: String? = null,
+    @SerializedName("max_attendees") val maxAttendees: Int? = null,
+    @SerializedName("start_time") val startTime: String,
+    @SerializedName("end_time") val endTime: String,
+    val timezone: String? = null,
+    val status: String = "scheduled",
+    @SerializedName("organizer_id") val organizerId: Long = 0,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+    val visibility: String? = null,
+    @SerializedName("price_type") val priceType: String? = null,
+    @SerializedName("price_amount") val priceAmount: Double? = null,
+    val currency: String? = null,
+    @SerializedName("website_url") val websiteUrl: String? = null,
+    @SerializedName("organizer_name") val organizerName: String? = null,
+    @SerializedName("venue_name") val venueName: String? = null,
+    val address: String? = null,
+    @SerializedName("attendance_mode") val attendanceMode: String? = null,
 )
 
 data class CommunityUserPreviewDto(
@@ -352,7 +397,34 @@ data class LearningNodeDto(
     @SerializedName("image_url") val imageUrl: String? = null,
     val source: String = "lyo",
     @SerializedName("source_url") val sourceUrl: String? = null,
-)
+    // Contract 4. Optional so older payloads (and saved snapshots) still decode.
+    val lifecycle: String? = null,
+    @SerializedName("rsvp_status") val rsvpStatus: String? = null,
+    @SerializedName("going_count") val goingCount: Int? = null,
+    @SerializedName("interested_count") val interestedCount: Int? = null,
+    @SerializedName("is_free") val isFree: Boolean? = null,
+    @SerializedName("price_amount") val priceAmount: Double? = null,
+    val currency: String? = null,
+    @SerializedName("organizer_name") val organizerName: String? = null,
+    @SerializedName("venue_name") val venueName: String? = null,
+    val address: String? = null,
+    @SerializedName("attendance_mode") val attendanceMode: String? = null,
+    val visibility: String? = null,
+    @SerializedName("website_url") val websiteUrl: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    @SerializedName("opening_hours") val openingHours: String? = null,
+    @SerializedName("place_type") val placeType: String? = null,
+    val relevance: String? = null,
+    @SerializedName("is_owner") val isOwner: Boolean? = null,
+    @SerializedName("is_full") val isFull: Boolean? = null,
+    /** On this event's guest list (a private or unlisted invitation). */
+    @SerializedName("is_invited") val isInvited: Boolean? = null,
+) {
+    val isGoing: Boolean get() = rsvpStatus == "going" || (rsvpStatus == null && isAttending)
+    val isInterested: Boolean get() = rsvpStatus == "interested"
+    val hasEnded: Boolean get() = lifecycle == "past" || lifecycle == "cancelled"
+}
 
 data class NearbyLearningResponseDto(
     val items: List<LearningNodeDto> = emptyList(),
@@ -360,6 +432,49 @@ data class NearbyLearningResponseDto(
     @SerializedName("center_longitude") val centerLongitude: Double,
     @SerializedName("radius_km") val radiusKm: Double,
     @SerializedName("fetched_at") val fetchedAt: String,
+    // Sources that failed for this request; the rest of the map is valid.
+    @SerializedName("degraded_sources") val degradedSources: List<String>? = null,
+)
+
+/** Everything the full detail screen needs in one request. */
+data class LearningNodeDetailDto(
+    val node: LearningNodeDto,
+    val related: List<LearningNodeDto> = emptyList(),
+    @SerializedName("can_edit") val canEdit: Boolean = false,
+    val event: CommunityEventRecordDto? = null,
+)
+
+data class RsvpRequest(val status: String)
+
+data class EventReportRequest(val reason: String, val description: String? = null)
+
+data class EventReportResponseDto(val status: String, val message: String)
+
+data class PlaceSuggestionDto(
+    val name: String,
+    val label: String,
+    val kind: String,
+    val latitude: Double,
+    val longitude: Double,
+    @SerializedName("radius_km") val radiusKm: Double,
+    @SerializedName("is_area") val isArea: Boolean,
+)
+
+data class SearchResolutionDto(
+    val query: String,
+    val intent: String,
+    val topic: String? = null,
+    val terms: List<String> = emptyList(),
+    val categories: List<String> = emptyList(),
+    val place: PlaceSuggestionDto? = null,
+    val places: List<PlaceSuggestionDto> = emptyList(),
+)
+
+/** Privacy-respecting product analytics: a name and small properties, never a location. */
+data class CommunityAnalyticsEventDto(
+    val name: String,
+    val platform: String = "android",
+    val properties: Map<String, String> = emptyMap(),
 )
 
 data class LearningNodeSaveRequest(val snapshot: LearningNodeDto)
@@ -370,7 +485,67 @@ data class MyCommunityResponseDto(
     @SerializedName("saved_nodes") val savedNodes: List<LearningNodeDto> = emptyList(),
     val following: List<CommunityUserPreviewDto> = emptyList(),
     @SerializedName("updated_at") val updatedAt: String,
+    val hosting: List<LearningNodeDto>? = null,
+    val going: List<LearningNodeDto>? = null,
+    val interested: List<LearningNodeDto>? = null,
+    /** Upcoming events this account was invited to and hasn't answered yet. */
+    val invited: List<LearningNodeDto>? = null,
 )
+
+// ── Private event invitations ────────────────────────────────────────────────
+
+/** A shareable invite link. Only the host ever sees these. */
+data class EventInviteDto(
+    val id: Long,
+    val token: String,
+    val url: String,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("expires_at") val expiresAt: String? = null,
+    @SerializedName("max_uses") val maxUses: Int? = null,
+    @SerializedName("use_count") val useCount: Int = 0,
+    val active: Boolean = true,
+)
+
+/** Someone on the guest list, and how they answered. */
+data class EventGuestDto(
+    val user: CommunityUserPreviewDto,
+    /** "link" (joined with an invite link) or "direct" (invited by name). */
+    val source: String,
+    @SerializedName("invited_at") val invitedAt: String,
+    @SerializedName("rsvp_status") val rsvpStatus: String? = null,
+)
+
+data class EventInvitesResponseDto(
+    val links: List<EventInviteDto> = emptyList(),
+    val guests: List<EventGuestDto> = emptyList(),
+)
+
+/** What an invite link opens, before the learner accepts it. */
+data class InvitePreviewDto(
+    /** valid, expired, revoked, used_up, ended, or cancelled. */
+    val status: String,
+    @SerializedName("already_guest") val alreadyGuest: Boolean = false,
+    @SerializedName("is_host") val isHost: Boolean = false,
+    @SerializedName("event_id") val eventId: Long,
+    val title: String,
+    @SerializedName("starts_at") val startsAt: String? = null,
+    @SerializedName("ends_at") val endsAt: String? = null,
+    val timezone: String? = null,
+    @SerializedName("location_name") val locationName: String? = null,
+    @SerializedName("attendance_mode") val attendanceMode: String? = null,
+    val visibility: String? = null,
+    val host: CommunityUserPreviewDto? = null,
+    @SerializedName("organizer_name") val organizerName: String? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+)
+
+/** A new invite link; a null max_uses (omitted) means anyone with the link. */
+data class EventInviteCreateRequest(
+    @SerializedName("max_uses") val maxUses: Int? = null,
+    @SerializedName("expires_in_days") val expiresInDays: Int = 30,
+)
+
+data class EventGuestCreateRequest(@SerializedName("user_id") val userId: Long)
 
 data class CreatePrivateLessonRequest(
     val title: String,

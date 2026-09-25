@@ -167,17 +167,14 @@ export default function CreateSheet({
         });
         finish('Study group created', '/community/groups');
       } else {
-        const start = new Date(eventStart);
-        const end = new Date(start.getTime() + 60 * 60 * 1000);
-        await api.community.createEvent({
-          title: eventTitle.trim(),
-          description: eventDescription.trim() || undefined,
-          event_type: 'study_session',
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        });
-        finish('Event created', '/community');
+        // Events need a place on the map (or a link), so the quick sheet
+        // hands its draft to the full event editor instead of publishing an
+        // event nobody nearby could ever find.
+        const draft = new URLSearchParams({ title: eventTitle.trim() });
+        if (eventDescription.trim()) draft.set('description', eventDescription.trim());
+        if (eventStart) draft.set('start', new Date(eventStart).toISOString());
+        onClose();
+        router.push(`/community/events/new?${draft}`);
       }
     } catch {
       toast.error(`Couldn't create that ${eventKind}. Please try again.`);
@@ -360,7 +357,7 @@ export default function CreateSheet({
                     </label>
                   )}
                   <PrimaryButton
-                    label={eventKind === 'event' ? 'Create Event' : 'Create Study Group'}
+                    label={eventKind === 'event' ? 'Continue' : 'Create Study Group'}
                     color={active.color}
                     busy={busy}
                     disabled={!eventTitle.trim() || (eventKind === 'event' && !eventStart)}
