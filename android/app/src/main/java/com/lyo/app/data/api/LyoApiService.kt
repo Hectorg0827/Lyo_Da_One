@@ -9,6 +9,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Part
@@ -192,10 +193,47 @@ interface LyoApiService {
         @Query("include_online") includeOnline: Boolean = true,
         @Query("include_institutions") includeInstitutions: Boolean = true,
         @Query("limit") limit: Int = 150,
+        @Query("when") timeWindow: String? = null,
+        @Query("free_only") freeOnly: Boolean? = null,
+        @Query("place_types") placeTypes: String? = null,
+        @Query("tz") timeZone: String? = null,
     ): NearbyLearningResponseDto
 
+    /** Account-owned Community state. `lat`/`lng` only compute distances. */
     @GET("community/me")
-    suspend fun myCommunity(): MyCommunityResponseDto
+    suspend fun myCommunity(
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+        @Query("tz") timeZone: String? = null,
+    ): MyCommunityResponseDto
+
+    @GET("community/nodes/{kind}/{nodeId}")
+    suspend fun learningNodeDetail(
+        @Path("kind") kind: String,
+        @Path("nodeId") nodeId: String,
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+        @Query("tz") timeZone: String? = null,
+    ): LearningNodeDetailDto
+
+    /** Decide whether a search is a place (move the map) or a topic (filter). */
+    @GET("community/search/resolve")
+    suspend fun resolveCommunitySearch(
+        @Query("q") query: String,
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+    ): SearchResolutionDto
+
+    @GET("community/geocode")
+    suspend fun geocodeCommunityPlace(
+        @Query("q") query: String,
+        @Query("lat") latitude: Double? = null,
+        @Query("lng") longitude: Double? = null,
+        @Query("limit") limit: Int = 5,
+    ): List<PlaceSuggestionDto>
+
+    @POST("community/analytics/events")
+    suspend fun trackCommunityEvent(@Body body: CommunityAnalyticsEventDto): Response<Unit>
 
     @PUT("community/saved-nodes/{kind}/{nodeId}")
     suspend fun saveLearningNode(
@@ -226,7 +264,33 @@ interface LyoApiService {
     suspend fun events(): List<EventDto>
 
     @POST("community/events")
-    suspend fun createCommunityEvent(@Body body: CreateCommunityEventRequest): EventDto
+    suspend fun createCommunityEvent(@Body body: CreateCommunityEventRequest): CommunityEventRecordDto
+
+    /** Partial update; the body is raw JSON so an emptied field can be sent as null. */
+    @PATCH("community/events/{eventId}")
+    suspend fun updateCommunityEvent(
+        @Path("eventId") eventId: String,
+        @Body body: RequestBody,
+    ): CommunityEventRecordDto
+
+    @DELETE("community/events/{eventId}")
+    suspend fun deleteCommunityEvent(@Path("eventId") eventId: String): Response<Unit>
+
+    /** RSVP "going" or "interested"; safe to repeat from any device. */
+    @PUT("community/events/{eventId}/rsvp")
+    suspend fun setEventRsvp(
+        @Path("eventId") eventId: String,
+        @Body body: RsvpRequest,
+    ): LearningNodeDto
+
+    @DELETE("community/events/{eventId}/rsvp")
+    suspend fun clearEventRsvp(@Path("eventId") eventId: String): Response<Unit>
+
+    @POST("community/events/{eventId}/report")
+    suspend fun reportCommunityEvent(
+        @Path("eventId") eventId: String,
+        @Body body: EventReportRequest,
+    ): EventReportResponseDto
 
     @POST("community/events/{eventId}/attend")
     suspend fun attendEvent(@Path("eventId") eventId: String): JsonObject

@@ -101,6 +101,9 @@ struct APICreateStudyGroupRequest: Codable {
     let longitude: Double?
 }
 
+/// Create-event payload. Times encode as ISO-8601 instants with an offset;
+/// the backend stores them as UTC. `clientRequestId` makes a retried or
+/// double-tapped submit return the first event instead of a duplicate.
 struct APICreateEducationalEventRequest: Codable {
     let title: String
     let description: String?
@@ -108,13 +111,134 @@ struct APICreateEducationalEventRequest: Codable {
     let location: String?
     let isOnline: Bool
     let meetingUrl: String?
-    let maxAttendees: Int
+    let maxAttendees: Int?
     let startTime: Date
     let endTime: Date
     let timezone: String
     let latitude: Double?
     let longitude: Double?
+    var attendanceMode: String? = nil
+    var venueName: String? = nil
+    var address: String? = nil
+    var websiteUrl: String? = nil
+    var imageUrl: String? = nil
+    var organizerName: String? = nil
+    var priceType: String? = nil
+    var priceAmount: Double? = nil
+    var currency: String? = nil
+    var visibility: String? = nil
+    var clientRequestId: String? = nil
+}
 
+/// Event update. Fields left nil are not sent, so an edit never touches
+/// something the host did not change; keys in `cleared` are sent as explicit
+/// nulls so a host can remove an optional detail (a website, a capacity).
+struct APIUpdateEventRequest: Encodable {
+    var title: String? = nil
+    var description: String? = nil
+    var eventType: String? = nil
+    var location: String? = nil
+    var isOnline: Bool? = nil
+    var meetingUrl: String? = nil
+    var maxAttendees: Int? = nil
+    var startTime: Date? = nil
+    var endTime: Date? = nil
+    var timezone: String? = nil
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var attendanceMode: String? = nil
+    var venueName: String? = nil
+    var address: String? = nil
+    var websiteUrl: String? = nil
+    var imageUrl: String? = nil
+    var organizerName: String? = nil
+    var priceType: String? = nil
+    var priceAmount: Double? = nil
+    var currency: String? = nil
+    var visibility: String? = nil
+    var status: String? = nil
+    /// snake_case keys to clear, e.g. "website_url".
+    var cleared: Set<String> = []
+
+    /// Optional details a host may remove; required fields are never cleared.
+    static let clearableKeys: Set<String> = [
+        "description", "location", "meeting_url", "max_attendees", "latitude", "longitude",
+        "venue_name", "address", "website_url", "image_url", "organizer_name",
+        "price_amount", "currency",
+    ]
+
+    private struct Key: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init(_ value: String) { stringValue = value }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { return nil }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: Key.self)
+        func put<Value: Encodable>(_ name: String, _ value: Value?) throws {
+            if let value {
+                try container.encode(value, forKey: Key(name))
+            } else if cleared.contains(name), Self.clearableKeys.contains(name) {
+                try container.encodeNil(forKey: Key(name))
+            }
+        }
+        try put("title", title)
+        try put("description", description)
+        try put("event_type", eventType)
+        try put("location", location)
+        try put("is_online", isOnline)
+        try put("meeting_url", meetingUrl)
+        try put("max_attendees", maxAttendees)
+        try put("start_time", startTime)
+        try put("end_time", endTime)
+        try put("timezone", timezone)
+        try put("latitude", latitude)
+        try put("longitude", longitude)
+        try put("attendance_mode", attendanceMode)
+        try put("venue_name", venueName)
+        try put("address", address)
+        try put("website_url", websiteUrl)
+        try put("image_url", imageUrl)
+        try put("organizer_name", organizerName)
+        try put("price_type", priceType)
+        try put("price_amount", priceAmount)
+        try put("currency", currency)
+        try put("visibility", visibility)
+        try put("status", status)
+    }
+}
+
+/// The full event row returned by /community/events/{id} and in node detail.
+struct APICommunityEventRecord: Decodable, Identifiable, Equatable {
+    let id: Int
+    let title: String
+    let description: String?
+    let eventType: String
+    let location: String?
+    let isOnline: Bool
+    let meetingUrl: String?
+    let maxAttendees: Int?
+    let startTime: String
+    let endTime: String
+    let timezone: String?
+    let status: String
+    let organizerId: Int
+    let latitude: Double?
+    let longitude: Double?
+    let imageUrl: String?
+    let visibility: String?
+    let priceType: String?
+    let priceAmount: Double?
+    let currency: String?
+    let websiteUrl: String?
+    let organizerName: String?
+    let venueName: String?
+    let address: String?
+    let attendanceMode: String?
+    let attendeeCount: Int?
+    let isFull: Bool?
 }
 
 // MARK: - Learning Around Me
@@ -123,34 +247,55 @@ struct APICreateEducationalEventRequest: Codable {
 /// attendance, and save flags are computed by the backend for the signed-in
 /// account; clients never treat device storage as the source of truth.
 struct APILearningNode: Codable, Identifiable, Equatable {
-    let key: String
-    let kind: String
-    let category: String
-    let id: String
-    let title: String
-    let description: String?
-    let latitude: Double?
-    let longitude: Double?
-    let distanceKm: Double?
-    let locationName: String?
-    let isOnline: Bool
-    let meetingUrl: String?
-    let startsAt: String?
-    let endsAt: String?
-    let timezone: String?
-    let host: APIUserPreview?
-    let memberCount: Int?
-    let attendeeCount: Int?
-    let capacity: Int?
-    let isJoined: Bool
-    let isAttending: Bool
-    let isSaved: Bool
-    let courseId: Int?
-    let lessonId: Int?
-    let studyGroupId: Int?
-    let imageUrl: String?
-    let source: String
-    let sourceUrl: String?
+    var key: String
+    var kind: String
+    var category: String
+    var id: String
+    var title: String
+    var description: String?
+    var latitude: Double?
+    var longitude: Double?
+    var distanceKm: Double?
+    var locationName: String?
+    var isOnline: Bool
+    var meetingUrl: String?
+    var startsAt: String?
+    var endsAt: String?
+    var timezone: String?
+    var host: APIUserPreview?
+    var memberCount: Int?
+    var attendeeCount: Int?
+    var capacity: Int?
+    var isJoined: Bool
+    var isAttending: Bool
+    var isSaved: Bool
+    var courseId: Int?
+    var lessonId: Int?
+    var studyGroupId: Int?
+    var imageUrl: String?
+    var source: String
+    var sourceUrl: String?
+    // Contract 4. Optional so older payloads (and saved snapshots) decode.
+    var lifecycle: String? = nil
+    var rsvpStatus: String? = nil
+    var goingCount: Int? = nil
+    var interestedCount: Int? = nil
+    var isFree: Bool? = nil
+    var priceAmount: Double? = nil
+    var currency: String? = nil
+    var organizerName: String? = nil
+    var venueName: String? = nil
+    var address: String? = nil
+    var attendanceMode: String? = nil
+    var visibility: String? = nil
+    var websiteUrl: String? = nil
+    var phone: String? = nil
+    var email: String? = nil
+    var openingHours: String? = nil
+    var placeType: String? = nil
+    var relevance: String? = nil
+    var isOwner: Bool? = nil
+    var isFull: Bool? = nil
 }
 
 struct APINearbyLearningResponse: Decodable {
@@ -159,6 +304,57 @@ struct APINearbyLearningResponse: Decodable {
     let centerLongitude: Double
     let radiusKm: Double
     let fetchedAt: String
+    let degradedSources: [String]?
+}
+
+/// Everything the full detail screen needs in one request.
+struct APILearningNodeDetail: Decodable {
+    var node: APILearningNode
+    let related: [APILearningNode]
+    let canEdit: Bool
+    let event: APICommunityEventRecord?
+}
+
+struct APIRSVPRequest: Encodable {
+    let status: String
+}
+
+struct APIEventReportRequest: Encodable {
+    let reason: String
+    let description: String?
+}
+
+struct APIEventReportResponse: Decodable {
+    let status: String
+    let message: String
+}
+
+struct APIPlaceSuggestion: Decodable, Identifiable, Equatable {
+    let name: String
+    let label: String
+    let kind: String
+    let latitude: Double
+    let longitude: Double
+    let radiusKm: Double
+    let isArea: Bool
+
+    var id: String { "\(latitude),\(longitude),\(label)" }
+}
+
+struct APISearchResolution: Decodable {
+    let query: String
+    let intent: String
+    let topic: String?
+    let terms: [String]
+    let categories: [String]
+    let place: APIPlaceSuggestion?
+    let places: [APIPlaceSuggestion]
+}
+
+struct APICommunityAnalyticsEvent: Encodable {
+    let name: String
+    let platform: String
+    let properties: [String: String]
 }
 
 struct APILearningNodeSaveRequest: Encodable {
@@ -189,9 +385,12 @@ struct APIAccountCommunityEvent: Decodable, Identifiable {
 struct APICommunityMeResponse: Decodable {
     let joinedGroups: [APIAccountStudyGroup]
     let attendingEvents: [APIAccountCommunityEvent]
-    let savedNodes: [APILearningNode]
+    var savedNodes: [APILearningNode]
     let following: [APIUserPreview]
     let updatedAt: String
+    var hosting: [APILearningNode]?
+    var going: [APILearningNode]?
+    var interested: [APILearningNode]?
 }
 
 struct APICreatePrivateLessonRequest: Codable {

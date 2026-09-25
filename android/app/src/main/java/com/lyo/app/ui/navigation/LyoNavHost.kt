@@ -43,6 +43,7 @@ import com.lyo.app.ui.screens.chat.ChatScreen
 import com.lyo.app.ui.screens.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
+import com.lyo.app.ui.screens.community.CommunityNodeDetailScreen
 import com.lyo.app.ui.screens.community.LearningAroundCommunityScreen
 import com.lyo.app.ui.screens.community.ReliablePostDetailScreen
 import com.lyo.app.ui.screens.create.CreateClipScreen
@@ -82,6 +83,8 @@ object Routes {
     const val CREATE_GROUP = "create/group"
     const val CREATE_EVENT = "create/event"
     const val CREATE_TUTOR = "create/tutor"
+    const val EDIT_EVENT = "create/event/edit/{eventId}"
+    const val COMMUNITY_NODE = "community/node/{kind}/{nodeId}"
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
@@ -98,6 +101,8 @@ object Routes {
     const val SETTINGS = "settings"
 
     fun postDetail(postId: String) = "community/$postId"
+    fun communityNode(kind: String, nodeId: String) = "community/node/$kind/${android.net.Uri.encode(nodeId)}"
+    fun editEvent(eventId: String) = "create/event/edit/$eventId"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun classroom(courseId: String) = "classroom/$courseId"
     fun userProfile(userId: String) = "profile/$userId"
@@ -198,6 +203,13 @@ private fun LyoNavHost() {
                     teachingMode = entry.arguments?.getString("mode") ?: "solo")
             }
             composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }
+            composable(Routes.COMMUNITY_NODE) { entry ->
+                CommunityNodeDetailScreen(
+                    nav = nav,
+                    kind = entry.arguments?.getString("kind") ?: "",
+                    nodeId = entry.arguments?.getString("nodeId") ?: "",
+                )
+            }
             composable(Routes.POST_DETAIL) { entry ->
                 ReliablePostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")
             }
@@ -214,6 +226,13 @@ private fun LyoNavHost() {
             }
             composable(Routes.CREATE_TUTOR) {
                 CreateCommunityItemScreen(nav = nav, createGroup = false, createTutor = true)
+            }
+            composable(Routes.EDIT_EVENT) { entry ->
+                CreateCommunityItemScreen(
+                    nav = nav,
+                    createGroup = false,
+                    editEventId = entry.arguments?.getString("eventId"),
+                )
             }
             composable(Routes.STORIES) { StoriesScreen(nav) }
             composable(Routes.COURSES) { CoursesScreen(nav) }

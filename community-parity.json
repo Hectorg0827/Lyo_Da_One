@@ -1,21 +1,84 @@
 {
   "$schema": "Community release contract shared by iOS, Android, and web",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "referencePlatform": "shared-backend-contract",
-  "responsiveRule": "Every client opens on Learning Around Me with a multi-marker geographic canvas; lists, account state, and activity are supporting layers.",
+  "responsiveRule": "Every client opens on Learning Around Me with a multi-marker, clustered geographic canvas. Phones use a collapsed/medium/expanded bottom sheet; tablets and desktop place results beside the map. Panning never refetches: 'Search this area' does.",
   "canonicalBackend": "https://api.lyoai.app",
   "defaultTab": "Around Me",
-  "tabs": ["Around Me", "My Community", "Activity"],
-  "nodeCategories": ["event", "workshop", "class", "study_group", "tutor", "library", "museum", "educational_center"],
-  "nodeKinds": ["event", "study_group", "private_lesson", "institution"],
-  "viewModes": ["map", "list"],
-  "creation": ["post", "group", "event", "tutor"],
-  "accountOwnedState": ["saved_nodes", "joined_groups", "attending_events", "following"],
-  "locationPolicy": "Device location is an ephemeral query input. Saves, joins, RSVPs, follows, and user-created learning nodes are stored by authenticated user_id on the backend.",
-  "postTypes": ["text", "question_discussion", "study_tip"],
-  "postActions": ["like", "bookmark", "comment", "share"],
-  "commentActions": ["create", "like", "delete"],
-  "mapActions": ["select_without_navigation", "save", "join", "leave", "attend", "open_course", "ask_lyo", "open_source"],
+  "tabs": [
+    "Around Me",
+    "My Community",
+    "Activity"
+  ],
+  "nodeCategories": [
+    "event",
+    "workshop",
+    "class",
+    "study_group",
+    "tutor",
+    "library",
+    "museum",
+    "educational_center"
+  ],
+  "nodeKinds": [
+    "event",
+    "study_group",
+    "private_lesson",
+    "institution"
+  ],
+  "viewModes": [
+    "map",
+    "list"
+  ],
+  "creation": [
+    "post",
+    "group",
+    "event",
+    "tutor"
+  ],
+  "accountOwnedState": [
+    "saved_nodes",
+    "joined_groups",
+    "attending_events",
+    "hosting",
+    "going",
+    "interested",
+    "following"
+  ],
+  "locationPolicy": "Device location is an ephemeral query input, rounded before it is sent for distances, never stored, and never shown to other people. Saves, joins, RSVPs, follows, and user-created learning nodes are stored by authenticated user_id on the backend.",
+  "postTypes": [
+    "text",
+    "question_discussion",
+    "study_tip"
+  ],
+  "postActions": [
+    "like",
+    "bookmark",
+    "comment",
+    "share"
+  ],
+  "commentActions": [
+    "create",
+    "like",
+    "delete"
+  ],
+  "mapActions": [
+    "select_without_navigation",
+    "search_this_area",
+    "cluster_zoom",
+    "save",
+    "join",
+    "leave",
+    "rsvp_going",
+    "rsvp_interested",
+    "directions",
+    "share",
+    "add_to_calendar",
+    "report",
+    "open_course",
+    "ask_lyo",
+    "open_source"
+  ],
   "apiPrefix": "/community",
   "canonicalEndpoints": [
     "/community/nearby",
@@ -31,7 +94,13 @@
     "/community/study-groups/{groupId}/leave",
     "/community/events",
     "/community/events/{eventId}/attend",
-    "/community/lessons"
+    "/community/lessons",
+    "/community/nodes/{kind}/{nodeId}",
+    "/community/events/{eventId}/rsvp",
+    "/community/events/{eventId}/report",
+    "/community/search/resolve",
+    "/community/geocode",
+    "/community/analytics/events"
   ],
   "design": {
     "primary": "#6366F1",
@@ -43,19 +112,228 @@
   },
   "evidence": {
     "ios": [
-      { "file": "Sources/Views/Community/CommunityView.swift", "markers": ["case aroundMe", "LearningAroundMap", "LearningNodeDrawer", "MyCommunityAccountView", "CommunityFeedView"] },
-      { "file": "Sources/ViewModels/CommunityViewModel.swift", "markers": ["nearbyLearning", "getMyCommunity", "saveLearningNode", "community_updated"] },
-      { "file": "Sources/Views/Community/CreateCommunityItemSheet.swift", "markers": ["case tutor", "Place at the current map center", "createPrivateLesson"] }
+      {
+        "file": "Sources/Views/Community/CommunityView.swift",
+        "markers": [
+          "case aroundMe",
+          "LearningAroundMap",
+          "LearningNodePreview",
+          "CommunityBottomSheet",
+          "Search this area",
+          "MyCommunityAccountView",
+          "CommunityFeedView"
+        ]
+      },
+      {
+        "file": "Sources/ViewModels/CommunityViewModel.swift",
+        "markers": [
+          "discoverNearby",
+          "getMyCommunityNear",
+          "saveLearningNode",
+          "setEventRSVP",
+          "resolveSearch",
+          "runOptimistic",
+          "restoringParticipation",
+          "community_updated",
+          "trackAnalytics"
+        ]
+      },
+      {
+        "file": "Sources/Services/CommunityDiscovery.swift",
+        "markers": [
+          "shouldOfferAreaSearch",
+          "func cluster(",
+          "friendlyError",
+          "directionsURL"
+        ]
+      },
+      {
+        "file": "Sources/Views/Community/CommunityNodeDetailView.swift",
+        "markers": [
+          "loadDetail",
+          "EKEventEditViewController",
+          "ShareLink",
+          "reportEvent",
+          "deleteEvent",
+          "cancelEvent"
+        ]
+      },
+      {
+        "file": "Sources/Views/Community/CreateCommunityItemSheet.swift",
+        "markers": [
+          "case tutor",
+          "createPrivateLesson",
+          "clientRequestId",
+          "attendanceMode",
+          "geocode",
+          "updateEvent"
+        ]
+      },
+      {
+        "file": "Sources/Tests/CommunityDiscoveryTests.swift",
+        "markers": [
+          "testFiltersCombineCategoriesAndNarrowWithModifiers",
+          "testErrorsBecomeLearnerFacingCopy"
+        ]
+      }
     ],
     "android": [
-      { "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/LearningAroundCommunityScreen.kt", "markers": ["Around Me", "LearningMapWebView", "LearningNodeSheet", "MyCommunityTab", "community_updated"] },
-      { "file": "android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt", "markers": ["LearningAroundCommunityScreen", "CREATE_TUTOR"] },
-      { "file": "android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt", "markers": ["nearbyLearning", "myCommunity", "saveLearningNode", "createPrivateLesson"] }
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/LearningAroundCommunityScreen.kt",
+        "markers": [
+          "Around Me",
+          "LearningMapWebView",
+          "LearningNodeSheet",
+          "CommunityBottomSheet",
+          "Search this area",
+          "MyCommunityTab"
+        ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityMapViewModel.kt",
+        "markers": [
+          "api.nearbyLearning(",
+          "api.myCommunity(",
+          "saveLearningNode",
+          "setEventRsvp",
+          "resolveCommunitySearch",
+          "runOptimistic",
+          "restoreParticipation",
+          "community_updated"
+        ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityDiscovery.kt",
+        "markers": [
+          "shouldOfferAreaSearch",
+          "friendlyError",
+          "directionsUrl"
+        ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityNodeDetailScreen.kt",
+        "markers": [
+          "loadDetail",
+          "CalendarContract",
+          "ACTION_SEND",
+          "reportEvent",
+          "deleteEvent",
+          "cancelEvent"
+        ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt",
+        "markers": [
+          "LearningAroundCommunityScreen",
+          "CommunityNodeDetailScreen",
+          "CREATE_TUTOR",
+          "EDIT_EVENT"
+        ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt",
+        "markers": [
+          "nearbyLearning",
+          "myCommunity",
+          "saveLearningNode",
+          "createPrivateLesson",
+          "setEventRsvp",
+          "learningNodeDetail"
+        ]
+      },
+      {
+        "file": "android/app/src/test/java/com/lyo/app/ui/screens/community/CommunityDiscoveryTest.kt",
+        "markers": [
+          "filtersCombineCategoriesAndNarrowWithModifiers",
+          "errorsBecomeLearnerFacingCopy"
+        ]
+      }
     ],
     "web": [
-      { "file": "web/src/app/(main)/community/page.tsx", "markers": ["Around Me", "My Community", "CommunityEventMap", "NodePreview", "community_updated"] },
-      { "file": "web/src/components/community/CommunityEventMap.tsx", "markers": ["L.map", "L.marker", "tileLayer"] },
-      { "file": "web/src/lib/api.ts", "markers": ["nearby", "saveNode", "unsaveNode", "createTutor"] }
+      {
+        "file": "web/src/app/(main)/community/page.tsx",
+        "markers": [
+          "Around Me",
+          "My Community",
+          "CommunityEventMap",
+          "NodePreview",
+          "Search this area",
+          "community_updated"
+        ]
+      },
+      {
+        "file": "web/src/components/community/CommunityEventMap.tsx",
+        "markers": [
+          "L.map",
+          "L.marker",
+          "tileLayer"
+        ]
+      },
+      {
+        "file": "web/src/components/community/NodeDetailView.tsx",
+        "markers": [
+          "setRsvp",
+          "googleCalendarUrl",
+          "report"
+        ]
+      },
+      {
+        "file": "web/src/lib/community-contract.mjs",
+        "markers": [
+          "shouldOfferAreaSearch",
+          "clusterNodes",
+          "friendlyError",
+          "directionsUrl"
+        ]
+      },
+      {
+        "file": "web/src/lib/api.ts",
+        "markers": [
+          "nearby",
+          "saveNode",
+          "unsaveNode",
+          "createTutor",
+          "setRsvp",
+          "resolveSearch"
+        ]
+      }
     ]
-  }
+  },
+  "filters": [
+    "events",
+    "libraries",
+    "museums",
+    "classes",
+    "workshops",
+    "study_groups",
+    "schools",
+    "learning_centers",
+    "tutors",
+    "free",
+    "today",
+    "week",
+    "nearby"
+  ],
+  "eventLifecycle": [
+    "upcoming",
+    "today",
+    "live",
+    "past",
+    "cancelled"
+  ],
+  "rsvpStatuses": [
+    "going",
+    "interested"
+  ],
+  "analyticsEvents": [
+    "community_opened",
+    "community_search",
+    "community_filter_selected",
+    "community_marker_opened",
+    "community_event_opened",
+    "community_event_created",
+    "community_event_saved",
+    "community_event_rsvp",
+    "community_location_permission_denied"
+  ]
 }
