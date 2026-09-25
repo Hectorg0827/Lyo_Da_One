@@ -1,6 +1,8 @@
 package com.lyo.app.ui.screens.community
 
 import com.google.gson.JsonParser
+import com.lyo.app.data.api.EventGuestDto
+import com.lyo.app.data.api.EventInviteDto
 import com.lyo.app.data.api.LearningNodeDto
 import java.io.IOException
 import java.net.URI
@@ -310,6 +312,105 @@ object CommunityDiscovery {
         else "/community/places/$kind/${encodeComponent(id)}"
 
     fun shareUrl(kind: String, id: String): String = WEB_BASE_URL + detailPath(kind, id)
+
+    // ── Invitations ──────────────────────────────────────────────────────────
+
+    private val inviteTokenPattern = Regex("^[A-Za-z0-9_-]{16,64}$")
+    private val inviteInUrlPattern = Regex("/community/invite/([A-Za-z0-9_-]{16,64})(?:[/?#]|$)")
+
+    /**
+     * The invite code in a pasted link (https://lyoai.app/community/invite/…,
+     * lyoapp://community/invite/…) or a bare code; null for anything else.
+     */
+    fun inviteTokenFromText(text: String?): String? {
+        val value = text?.trim().orEmpty()
+        if (value.isEmpty()) return null
+        if (inviteTokenPattern.matches(value)) return value
+        return inviteInUrlPattern.find(value)?.groupValues?.get(1)
+    }
+
+    /** The invite code in a link the app was opened with; a bare code or any other link is ignored. */
+    fun inviteTokenFromAppLink(data: String?): String? {
+        if (data.isNullOrBlank() || "/community/invite/" !in data) return null
+        return inviteTokenFromText(data)
+    }
+
+    fun invitePath(token: String): String = "/community/invite/$token"
+
+    fun inviteUrl(token: String): String = WEB_BASE_URL + invitePath(token)
+
+    data class InviteNotice(val title: String, val body: String)
+
+    /** What someone holding a link that no longer works is told. */
+    val inviteStatusNotices: Map<String, InviteNotice> = mapOf(
+        "expired" to InviteNotice("This invite has expired", "Ask the host to send you a new link."),
+        "revoked" to InviteNotice("This invite was turned off", "The host turned off this link. Ask them for a new one."),
+        "used_up" to InviteNotice(
+            "This invite has been used up",
+            "It was used as many times as the host allowed. Ask them for a new one.",
+        ),
+        "ended" to InviteNotice("This event has ended", "You can still browse other learning events near you."),
+        "cancelled" to InviteNotice("This event was cancelled", "The host cancelled it, so it no longer takes guests."),
+    )
+
+    /** Why a link can't be used, or null when it can ("valid"). */
+    fun inviteNotice(status: String): InviteNotice? {
+        if (status == "valid") return null
+        return inviteStatusNotices[status]
+            ?: InviteNotice("This invite can't be used", "Ask the host to send you a new link.")
+    }
+
+    /** A wrong or deleted link reads differently from a network problem. */
+    fun inviteError(error: Throwable): FriendlyError {
+        if (error is HttpException && error.code() == 404) {
+            return FriendlyError(
+                "This invite link isn't valid",
+                "Check that you copied the whole link, or ask the host for a new one.",
+                retry = false,
+            )
+        }
+        return friendlyError(error, "open this invite")
+    }
+
+    /** "Used 2 of 5 · Expires Sep 30", or why a link stopped working. */
+    fun describeInviteLink(
+        link: EventInviteDto,
+        now: Instant = Instant.now(),
+        zone: ZoneId = ZoneId.systemDefault(),
+        locale: Locale = Locale.getDefault(),
+    ): String {
+        val maxUses = link.maxUses
+        val uses = if (maxUses != null) {
+            "Used ${link.useCount} of $maxUses"
+        } else {
+            "Used ${link.useCount} ${if (link.useCount == 1) "time" else "times"}"
+        }
+        val expires = parseInstant(link.expiresAt)
+        if (!link.active) {
+            if (maxUses != null && link.useCount >= maxUses) return "$uses · Used up"
+            if (expires != null && !expires.isAfter(now)) return "$uses · Expired"
+            return "$uses · Turned off"
+        }
+        if (expires == null) return uses
+        return "$uses · Expires ${expires.atZone(zone).format(DateTimeFormatter.ofPattern("MMM d", locale))}"
+    }
+
+    /** "Going · Joined with a link" for one row of the host's guest list. */
+    fun describeGuest(guest: EventGuestDto): String {
+        val answer = when (guest.rsvpStatus) {
+            "going" -> "Going"
+            "interested" -> "Interested"
+            else -> "No reply yet"
+        }
+        return "$answer · ${if (guest.source == "direct") "Invited by name" else "Joined with a link"}"
+    }
+
+    /** Hosts manage invitations for private and unlisted events that are still on. */
+    fun canManageInvites(node: LearningNodeDto, canEdit: Boolean): Boolean {
+        if (!canEdit || node.kind != "event") return false
+        if (node.visibility != "private" && node.visibility != "unlisted") return false
+        return node.lifecycle != "past" && node.lifecycle != "cancelled"
+    }
 
     /** Optimistic RSVP: the counts a learner sees the instant they tap. */
     fun applyingRsvp(status: String?, node: LearningNodeDto): LearningNodeDto {

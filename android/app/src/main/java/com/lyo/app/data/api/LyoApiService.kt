@@ -292,6 +292,46 @@ interface LyoApiService {
         @Body body: EventReportRequest,
     ): EventReportResponseDto
 
+    // ── Private event invitations (host manages; guests accept) ──
+
+    @GET("community/events/{eventId}/invites")
+    suspend fun eventInvitations(@Path("eventId") eventId: String): EventInvitesResponseDto
+
+    @POST("community/events/{eventId}/invites")
+    suspend fun createEventInvite(
+        @Path("eventId") eventId: String,
+        @Body body: EventInviteCreateRequest,
+    ): EventInviteDto
+
+    @DELETE("community/events/{eventId}/invites/{inviteId}")
+    suspend fun revokeEventInvite(
+        @Path("eventId") eventId: String,
+        @Path("inviteId") inviteId: Long,
+    ): Response<Unit>
+
+    /** Invite one Lyo member by account; the backend notifies them everywhere. */
+    @POST("community/events/{eventId}/guests")
+    suspend fun inviteEventGuest(
+        @Path("eventId") eventId: String,
+        @Body body: EventGuestCreateRequest,
+    ): EventGuestDto
+
+    @DELETE("community/events/{eventId}/guests/{userId}")
+    suspend fun removeEventGuest(
+        @Path("eventId") eventId: String,
+        @Path("userId") userId: Long,
+    ): Response<Unit>
+
+    @GET("community/invites/{token}")
+    suspend fun invitePreview(@Path("token") token: String): InvitePreviewDto
+
+    /** Join the guest list with a link; safe to repeat. */
+    @POST("community/invites/{token}/accept")
+    suspend fun acceptInvite(
+        @Path("token") token: String,
+        @Query("tz") timeZone: String? = null,
+    ): LearningNodeDto
+
     @POST("community/events/{eventId}/attend")
     suspend fun attendEvent(@Path("eventId") eventId: String): JsonObject
 

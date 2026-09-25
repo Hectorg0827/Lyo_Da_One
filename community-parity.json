@@ -1,6 +1,6 @@
 {
   "$schema": "Community release contract shared by iOS, Android, and web",
-  "version": "4.0.0",
+  "version": 5,
   "referencePlatform": "shared-backend-contract",
   "responsiveRule": "Every client opens on Learning Around Me with a multi-marker, clustered geographic canvas. Phones use a collapsed/medium/expanded bottom sheet; tablets and desktop place results beside the map. Panning never refetches: 'Search this area' does.",
   "canonicalBackend": "https://api.lyoai.app",
@@ -43,7 +43,8 @@
     "hosting",
     "going",
     "interested",
-    "following"
+    "following",
+    "invited"
   ],
   "locationPolicy": "Device location is an ephemeral query input, rounded before it is sent for distances, never stored, and never shown to other people. Saves, joins, RSVPs, follows, and user-created learning nodes are stored by authenticated user_id on the backend.",
   "postTypes": [
@@ -77,7 +78,9 @@
     "report",
     "open_course",
     "ask_lyo",
-    "open_source"
+    "open_source",
+    "invite_people",
+    "accept_invite"
   ],
   "apiPrefix": "/community",
   "canonicalEndpoints": [
@@ -100,7 +103,13 @@
     "/community/events/{eventId}/report",
     "/community/search/resolve",
     "/community/geocode",
-    "/community/analytics/events"
+    "/community/analytics/events",
+    "/community/events/{eventId}/invites",
+    "/community/events/{eventId}/invites/{inviteId}",
+    "/community/events/{eventId}/guests",
+    "/community/events/{eventId}/guests/{userId}",
+    "/community/invites/{token}",
+    "/community/invites/{token}/accept"
   ],
   "design": {
     "primary": "#6366F1",
@@ -175,6 +184,30 @@
           "testFiltersCombineCategoriesAndNarrowWithModifiers",
           "testErrorsBecomeLearnerFacingCopy"
         ]
+      },
+      {
+        "file": "Sources/Views/Community/CommunityInviteViews.swift",
+        "markers": [
+          "CommunityInviteManagerView",
+          "CommunityInviteAcceptView",
+          "CommunityInviteLinkField",
+          "UIPasteboard",
+          "removeGuest",
+          "acceptInvite"
+        ]
+      },
+      {
+        "file": "Sources/Tests/CommunityDiscoveryTests.swift",
+        "markers": [
+          "testInviteCodesAreReadFromALinkOrABareCodeAndNothingElse",
+          "testOnlyHostsOfOpenPrivateOrUnlistedEventsManageInvites"
+        ]
+      },
+      {
+        "file": "Sources/LyoApp.swift",
+        "markers": [
+          "openCommunityInvite"
+        ]
       }
     ],
     "android": [
@@ -247,6 +280,37 @@
           "filtersCombineCategoriesAndNarrowWithModifiers",
           "errorsBecomeLearnerFacingCopy"
         ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityInviteScreens.kt",
+        "markers": [
+          "EventInvitesScreen",
+          "CommunityInviteScreen",
+          "InviteLinkField",
+          "PendingCommunityInvite",
+          "removeGuest",
+          "acceptInvite"
+        ]
+      },
+      {
+        "file": "android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt",
+        "markers": [
+          "EVENT_INVITES",
+          "COMMUNITY_INVITE"
+        ]
+      },
+      {
+        "file": "android/app/src/main/AndroidManifest.xml",
+        "markers": [
+          "android:scheme=\"lyoapp\" android:host=\"community\""
+        ]
+      },
+      {
+        "file": "android/app/src/test/java/com/lyo/app/ui/screens/community/CommunityDiscoveryTest.kt",
+        "markers": [
+          "inviteCodesAreReadFromALinkOrABareCodeAndNothingElse",
+          "onlyHostsOfOpenPrivateOrUnlistedEventsManageInvites"
+        ]
       }
     ],
     "web": [
@@ -296,6 +360,22 @@
           "setRsvp",
           "resolveSearch"
         ]
+      },
+      {
+        "file": "web/src/components/community/EventInvitePanel.tsx",
+        "markers": [
+          "createInvite",
+          "revokeInvite",
+          "inviteGuest",
+          "removeGuest"
+        ]
+      },
+      {
+        "file": "web/src/app/(main)/community/invite/[token]/page.tsx",
+        "markers": [
+          "invitePreview",
+          "acceptInvite"
+        ]
       }
     ]
   },
@@ -334,6 +414,8 @@
     "community_event_created",
     "community_event_saved",
     "community_event_rsvp",
-    "community_location_permission_denied"
+    "community_location_permission_denied",
+    "community_invite_created",
+    "community_invite_accepted"
   ]
 }

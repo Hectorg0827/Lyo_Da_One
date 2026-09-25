@@ -418,6 +418,8 @@ data class LearningNodeDto(
     val relevance: String? = null,
     @SerializedName("is_owner") val isOwner: Boolean? = null,
     @SerializedName("is_full") val isFull: Boolean? = null,
+    /** On this event's guest list (a private or unlisted invitation). */
+    @SerializedName("is_invited") val isInvited: Boolean? = null,
 ) {
     val isGoing: Boolean get() = rsvpStatus == "going" || (rsvpStatus == null && isAttending)
     val isInterested: Boolean get() = rsvpStatus == "interested"
@@ -486,7 +488,64 @@ data class MyCommunityResponseDto(
     val hosting: List<LearningNodeDto>? = null,
     val going: List<LearningNodeDto>? = null,
     val interested: List<LearningNodeDto>? = null,
+    /** Upcoming events this account was invited to and hasn't answered yet. */
+    val invited: List<LearningNodeDto>? = null,
 )
+
+// ── Private event invitations ────────────────────────────────────────────────
+
+/** A shareable invite link. Only the host ever sees these. */
+data class EventInviteDto(
+    val id: Long,
+    val token: String,
+    val url: String,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("expires_at") val expiresAt: String? = null,
+    @SerializedName("max_uses") val maxUses: Int? = null,
+    @SerializedName("use_count") val useCount: Int = 0,
+    val active: Boolean = true,
+)
+
+/** Someone on the guest list, and how they answered. */
+data class EventGuestDto(
+    val user: CommunityUserPreviewDto,
+    /** "link" (joined with an invite link) or "direct" (invited by name). */
+    val source: String,
+    @SerializedName("invited_at") val invitedAt: String,
+    @SerializedName("rsvp_status") val rsvpStatus: String? = null,
+)
+
+data class EventInvitesResponseDto(
+    val links: List<EventInviteDto> = emptyList(),
+    val guests: List<EventGuestDto> = emptyList(),
+)
+
+/** What an invite link opens, before the learner accepts it. */
+data class InvitePreviewDto(
+    /** valid, expired, revoked, used_up, ended, or cancelled. */
+    val status: String,
+    @SerializedName("already_guest") val alreadyGuest: Boolean = false,
+    @SerializedName("is_host") val isHost: Boolean = false,
+    @SerializedName("event_id") val eventId: Long,
+    val title: String,
+    @SerializedName("starts_at") val startsAt: String? = null,
+    @SerializedName("ends_at") val endsAt: String? = null,
+    val timezone: String? = null,
+    @SerializedName("location_name") val locationName: String? = null,
+    @SerializedName("attendance_mode") val attendanceMode: String? = null,
+    val visibility: String? = null,
+    val host: CommunityUserPreviewDto? = null,
+    @SerializedName("organizer_name") val organizerName: String? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+)
+
+/** A new invite link; a null max_uses (omitted) means anyone with the link. */
+data class EventInviteCreateRequest(
+    @SerializedName("max_uses") val maxUses: Int? = null,
+    @SerializedName("expires_in_days") val expiresInDays: Int = 30,
+)
+
+data class EventGuestCreateRequest(@SerializedName("user_id") val userId: Long)
 
 data class CreatePrivateLessonRequest(
     val title: String,

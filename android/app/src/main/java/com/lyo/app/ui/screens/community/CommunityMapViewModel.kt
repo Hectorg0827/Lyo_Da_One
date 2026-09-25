@@ -14,7 +14,13 @@ import com.lyo.app.data.api.CommunityAnalyticsEventDto
 import com.lyo.app.data.api.CommunityEventRecordDto
 import com.lyo.app.data.api.CommunityPostDto
 import com.lyo.app.data.api.CreateCommunityEventRequest
+import com.lyo.app.data.api.EventGuestCreateRequest
+import com.lyo.app.data.api.EventGuestDto
+import com.lyo.app.data.api.EventInviteCreateRequest
+import com.lyo.app.data.api.EventInviteDto
+import com.lyo.app.data.api.EventInvitesResponseDto
 import com.lyo.app.data.api.EventReportRequest
+import com.lyo.app.data.api.InvitePreviewDto
 import com.lyo.app.data.api.LearningNodeDetailDto
 import com.lyo.app.data.api.LearningNodeDto
 import com.lyo.app.data.api.LearningNodeSaveRequest
@@ -22,6 +28,7 @@ import com.lyo.app.data.api.MyCommunityResponseDto
 import com.lyo.app.data.api.NearbyLearningResponseDto
 import com.lyo.app.data.api.PlaceSuggestionDto
 import com.lyo.app.data.api.RsvpRequest
+import com.lyo.app.data.api.SearchUserDto
 import com.lyo.app.data.sync.SyncClient
 import java.util.TimeZone
 import kotlin.math.max
@@ -697,6 +704,48 @@ class CommunityMapViewModel : ViewModel() {
                 _messages.tryEmit(CommunityDiscovery.friendlyError(e, "send your report").message)
             }
         }
+    }
+
+    // ── Invitations (private and unlisted events) ─────────────────────────────
+
+    /** The host's invite links and guest list. */
+    suspend fun loadInvitations(eventId: String): EventInvitesResponseDto = api.eventInvitations(eventId)
+
+    suspend fun createInvite(eventId: String, maxUses: Int?, expiresInDays: Int): EventInviteDto {
+        val link = api.createEventInvite(eventId, EventInviteCreateRequest(maxUses, expiresInDays))
+        track("community_invite_created", mapOf("max_uses" to (maxUses?.toString() ?: "any"), "days" to expiresInDays.toString()))
+        return link
+    }
+
+    suspend fun revokeInvite(eventId: String, inviteId: Long) {
+        api.revokeEventInvite(eventId, inviteId).requireSuccess()
+    }
+
+    /** Invites one Lyo member by account; the backend notifies them everywhere. */
+    suspend fun inviteMember(eventId: String, userId: Long): EventGuestDto =
+        api.inviteEventGuest(eventId, EventGuestCreateRequest(userId))
+
+    suspend fun removeGuest(eventId: String, userId: Long) {
+        api.removeEventGuest(eventId, userId).requireSuccess()
+    }
+
+    /** Lyo members matching a name, for inviting by name (never the host). */
+    suspend fun searchMembers(text: String, excludingId: Long?): List<SearchUserDto> =
+        api.search(text, "users", 8).users.orEmpty().filter { it.idStr.isNotEmpty() && it.idStr != excludingId?.toString() }
+
+    suspend fun previewInvite(token: String): InvitePreviewDto = api.invitePreview(token)
+
+    /**
+     * Puts this account on the guest list, so every device sees the event.
+     * Safe to repeat: accepting twice returns the same event.
+     */
+    suspend fun acceptInvite(token: String): LearningNodeDto {
+        val node = api.acceptInvite(token, zoneId)
+        track("community_invite_accepted", mapOf("visibility" to (node.visibility ?: "private")))
+        details.remove(node.key)
+        revision += 1
+        if (started) refreshAccount()
+        return node
     }
 
     /** Address suggestions for the event location picker, biased to the map. */

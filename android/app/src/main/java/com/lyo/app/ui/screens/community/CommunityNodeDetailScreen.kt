@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.School
@@ -317,6 +318,17 @@ private fun DetailContent(
                 Icon(categoryIcon(node.category), contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                 Text(node.categoryLabel(), color = color, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 StatusBadge(node)
+                if (node.isInvited == true && !detail.canEdit) {
+                    Surface(color = LyoPurple.copy(alpha = 0.2f), shape = RoundedCornerShape(50)) {
+                        Text(
+                            "You're invited",
+                            color = LyoPurple,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
+                }
             }
             Text(
                 node.title,
@@ -388,6 +400,11 @@ private fun DetailContent(
         if (detail.canEdit && record != null) {
             DetailSection("Your event") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (CommunityDiscovery.canManageInvites(node, detail.canEdit)) {
+                        DetailAction("Invite people", Icons.Default.PersonAdd, enabled = !working) {
+                            onNavigate(Routes.eventInvites(record.id.toString()))
+                        }
+                    }
                     DetailAction("Edit event", Icons.Default.Edit, enabled = !working) { onEdit(record.id) }
                     if (node.lifecycle != "cancelled" && node.lifecycle != "past") {
                         DetailAction("Cancel event", Icons.Default.Cancel, tint = WarningAmber, enabled = !working) { onConfirm(Confirm.CANCEL) }

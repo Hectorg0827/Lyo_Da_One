@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationSearching
+import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Person
@@ -991,6 +992,11 @@ private fun MyCommunityTab(vm: CommunityMapViewModel, nav: NavHostController) {
                 }
             }
         }
+        state.invited?.takeIf { it.isNotEmpty() }?.let { invited ->
+            item { SectionTitle(Icons.Default.MailOutline, "Invited") }
+            items(invited, key = { "Invited:${it.key}" }) { node -> LearningNodeCard(node = node, onClick = { openNode(node) }) }
+        }
+        item { InviteLinkField(onOpen = { token -> nav.navigate(Routes.communityInvite(token)) }) }
         nodeSection(Icons.Default.CheckCircle, "Going", state.going.orEmpty(), "Events you RSVP to appear here on every device.", openNode)
         if (state.going == null && state.attendingEvents.isNotEmpty()) {
             // Older backends list RSVPs only as attending events.

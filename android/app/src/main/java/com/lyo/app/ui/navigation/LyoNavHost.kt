@@ -85,6 +85,8 @@ object Routes {
     const val CREATE_TUTOR = "create/tutor"
     const val EDIT_EVENT = "create/event/edit/{eventId}"
     const val COMMUNITY_NODE = "community/node/{kind}/{nodeId}"
+    const val EVENT_INVITES = "community/event/{eventId}/invites"
+    const val COMMUNITY_INVITE = "community/invite/{token}"
     const val STORIES = "stories"
     const val COURSES = "courses"
     const val COURSE_DETAIL = "courses/{courseId}"
@@ -103,6 +105,8 @@ object Routes {
     fun postDetail(postId: String) = "community/$postId"
     fun communityNode(kind: String, nodeId: String) = "community/node/$kind/${android.net.Uri.encode(nodeId)}"
     fun editEvent(eventId: String) = "create/event/edit/$eventId"
+    fun eventInvites(eventId: String) = "community/event/$eventId/invites"
+    fun communityInvite(token: String) = "community/invite/$token"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun classroom(courseId: String) = "classroom/$courseId"
     fun userProfile(userId: String) = "profile/$userId"
@@ -150,6 +154,15 @@ private fun LyoNavHost() {
         if (Session.isAuthenticated && com.lyo.app.notifications.StudyReminders.openTestPrep) {
             nav.navigate(Routes.TEST_PREP) { launchSingleTop = true }
             com.lyo.app.notifications.StudyReminders.openTestPrep = false
+        }
+    }
+
+    // An invite link the app was opened with; it waits for sign-in.
+    LaunchedEffect(Session.isAuthenticated, com.lyo.app.ui.screens.community.PendingCommunityInvite.token) {
+        val token = com.lyo.app.ui.screens.community.PendingCommunityInvite.token
+        if (Session.isAuthenticated && token != null) {
+            com.lyo.app.ui.screens.community.PendingCommunityInvite.token = null
+            nav.navigate(Routes.communityInvite(token)) { launchSingleTop = true }
         }
     }
 
@@ -208,6 +221,18 @@ private fun LyoNavHost() {
                     nav = nav,
                     kind = entry.arguments?.getString("kind") ?: "",
                     nodeId = entry.arguments?.getString("nodeId") ?: "",
+                )
+            }
+            composable(Routes.EVENT_INVITES) { entry ->
+                com.lyo.app.ui.screens.community.EventInvitesScreen(
+                    nav = nav,
+                    eventId = entry.arguments?.getString("eventId") ?: "",
+                )
+            }
+            composable(Routes.COMMUNITY_INVITE) { entry ->
+                com.lyo.app.ui.screens.community.CommunityInviteScreen(
+                    nav = nav,
+                    token = entry.arguments?.getString("token") ?: "",
                 )
             }
             composable(Routes.POST_DETAIL) { entry ->

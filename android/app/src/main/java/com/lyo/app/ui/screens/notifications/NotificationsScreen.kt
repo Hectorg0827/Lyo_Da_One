@@ -96,6 +96,8 @@ private fun supportedNotificationRoute(notification: NotificationDto): String? {
         "post" -> Routes.postDetail(targetId)
         "user", "profile" -> Routes.userProfile(targetId)
         "course" -> Routes.courseDetail(targetId)
+        // Invitations and event updates open the event's own page.
+        "event", "community_event" -> Routes.communityNode("event", targetId)
         else -> null
     }
 }
