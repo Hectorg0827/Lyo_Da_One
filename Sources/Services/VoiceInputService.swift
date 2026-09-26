@@ -105,6 +105,9 @@ class VoiceInputService: ObservableObject {
             let granted = await requestPermissions()
             guard granted else { throw VoiceInputError.permissionDenied }
         }
+        // A learner can leave the step while the permission sheet is open.
+        // Do not activate a microphone for a checkpoint that no longer exists.
+        try Task.checkCancellation()
         
         let locale = language.isEmpty || language.lowercased() == "auto"
             ? Locale.current : Locale(identifier: language)

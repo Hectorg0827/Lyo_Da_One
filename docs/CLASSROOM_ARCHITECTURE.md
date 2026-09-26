@@ -1045,8 +1045,9 @@ sends `submit_transfer` with the component id; transcript alone sends nothing.
 
 Tapping either microphone calls `bargeIn()` before asking for permission or
 opening the recognizer. Typing also stops teacher speech. The recognizer now
-uses the checkpoint's language (or the device locale for `auto`) instead of an
-unconditional English locale. Dictation stops on submit and on scene change;
+uses the checkpoint's language, including a director prompt's teacher message
+(or the device locale for `auto`), instead of an unconditional English locale.
+Dictation stops on submit, lesson-map navigation and scene change;
 failed permission or unavailable recognition leaves the typed answer available.
 Web and Android already route their application microphones to their answers.
 

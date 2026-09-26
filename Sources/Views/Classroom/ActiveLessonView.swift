@@ -63,6 +63,7 @@ struct ActiveLessonView: View {
         // reads and continues past).
         var promptOptions: [String]? = nil
         var requiresOpenResponse: Bool = false
+        var languageCode: String? = nil
         var teachingExamples: [LiveLessonBlock] = []
         var teachingVisual: ClassroomTeachingVisual? = nil
         var activityId: String? = nil
@@ -665,8 +666,10 @@ struct LyoBoardView: View {
     var onPromptSubmit: (String) -> Void = { _ in }
     @StateObject private var voiceInput = VoiceInputService.shared
     @State private var dictating = false
+    @State private var recordingStepId: String?
     @State private var dictationBase = ""
     @State private var dictationError: String?
+    @State private var dictationTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -732,13 +735,20 @@ struct LyoBoardView: View {
             if step.isAnswerableByVoice && !interactionCompleted { toggleDictation() }
         }
         .onChange(of: voiceInput.transcript) { _, text in
-            if dictating { reflectionText = String((dictationBase + text).prefix(2000)) }
+            if dictating && recordingStepId == step.id {
+                reflectionText = String((dictationBase + text).prefix(2000))
+            }
         }
         .onChange(of: voiceInput.isRecording) { _, recording in
             if dictating && !recording {
                 dictating = false
+                recordingStepId = nil
                 if let error = voiceInput.error { dictationError = error.localizedDescription }
             }
+        }
+        .onChange(of: step.id) { _, _ in
+            stopDictation()
+            dictationError = nil
         }
         .onChange(of: reflectionText) { _, text in
             if !text.isEmpty && step.isAnswerableByVoice { onLearnerInputStart() }
@@ -762,20 +772,25 @@ struct LyoBoardView: View {
         dictationBase = reflectionText.isEmpty ? "" : reflectionText.trimmingCharacters(in: .whitespaces) + " "
         dictationError = nil
         dictating = true
+        recordingStepId = step.id
         voiceInput.transcript = ""
         let language: String
         if case .some(.classroomInput(let component)) = step.supporting {
-            language = component.languageCode ?? "auto"
+            language = component.languageCode ?? step.languageCode ?? "auto"
         } else {
-            language = "auto"
+            language = step.languageCode ?? "auto"
         }
-        Task {
+        let targetStepId = step.id
+        dictationTask = Task {
             do {
                 try await voiceInput.startRecording(language: language)
-                if !dictating { voiceInput.stopRecording() }
+                if recordingStepId == targetStepId && !dictating { voiceInput.stopRecording() }
             } catch {
-                dictationError = error.localizedDescription
-                dictating = false
+                if recordingStepId == targetStepId {
+                    dictationError = error.localizedDescription
+                    dictating = false
+                    recordingStepId = nil
+                }
             }
         }
     }
@@ -783,6 +798,9 @@ struct LyoBoardView: View {
     private func stopDictation() {
         guard dictating else { return }
         dictating = false
+        recordingStepId = nil
+        dictationTask?.cancel()
+        dictationTask = nil
         voiceInput.stopRecording()
     }
 
