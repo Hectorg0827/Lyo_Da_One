@@ -8,6 +8,8 @@ export interface ClassroomEntry {
   objective?: string;
   courseId?: string;
   lessonId?: string;
+  /** Free-topic pathways may file demonstrations under each saved unit. */
+  recordScope?: 'unit' | 'topic';
   /** The learner's optional answers. Each is dropped when unrecognised. */
   level?: ClassroomLevel | string | null;
   minutes?: number | string | null;

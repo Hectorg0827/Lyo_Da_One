@@ -919,11 +919,9 @@ included with the topic and objective, so a "Customer Segmentation" lesson in
 "Digital Marketing" does not disappear into other subjects just because its
 title is absent from the course description.
 
-**What this does not fix.** A free-topic session files every unit under one
-concept — the topic — so a marketing class shows one card rather than one per
-skill. Per-unit concept ids would give the record the shape §11's example
-implies, and would also be the third time this codebase changed where evidence
-lands; §7.6 is the account of what that cost last time. Not attempted here.
+The next change addresses free-topic sessions that expand into multiple units.
+It is described in §11.8 because this is the third change to where evidence
+lands, and §7.6 explains why the distinction matters to study-plan readiness.
 
 ### 11.6 Eight learners, eight lessons
 
@@ -993,3 +991,44 @@ with no account of the error in it.
 - **Nobody has sat a 15-minute lesson in the product.** The acceptance test in
   the brief that asks whether a learner *feels* listened to cannot be run from
   here.
+
+### 11.8 One record card per skill in a free-topic pathway
+
+The free-topic front door now requests `record_scope=unit` on the WebSocket
+welcome. iOS's `GENERATE:` free-topic entry does the same. The backend accepts
+that request only when it actually plans multiple units and has no resolved
+authored lesson title. It saves the scope inside `GuidedState`, so a reconnect
+from another device cannot move a later answer to a different concept.
+
+Each unit's saved title now names both the `QuizCard`/`InputField` and the
+durable outbox evidence for its diagnostic and practice checkpoints. The
+normal evidence writer still applies `slugify_skill` before projection, and
+the planner rejects titles that would collide after the 80-character slug
+limit. The frontend renders the real record returned by the server; it never
+creates an evidence card from the plan. To place earlier unit cards under this
+class after a device reconnect, scene metadata carries the names of the units
+already reached, and the web record panel uses those as display identities.
+It does not expose the private task rubric or claim mastery for unseen units.
+The shared record slug now preserves non-Latin letters and numbers, so a
+Chinese or Korean skill does not collapse to `general`; ASCII keys retain their
+previous form. Web handles both the ordinary streamed scene and the nested
+fast-welcome envelope, whose components arrive only inside that first message.
+Historical `general` rows cannot be assigned back to individual non-Latin
+skills because their original titles were discarded at write time.
+
+Focused routes keep the existing key: an authored lesson uses its resolved
+lesson title; a scheduled Test Prep session or weak-concept practice uses its
+topic. This preserves readiness's lookup of the concept just practised. Old
+saved sessions also default to their original topic scope. A single-unit
+free-topic lesson keeps the topic, so a direct lesson on a named skill remains
+the same concept Chat and spaced repetition use.
+iOS generated due-review cards save their focused intent, including across a
+restart, and pass it to the classroom even though their ID starts `GENERATE:`.
+
+The scripted three-unit simulation now checks three distinct concept ids in
+questions and in outbox evidence; focused practice checks one topic id, and a
+JSON restore checks that the scope and checkpoint survive reconnect. The web
+record test places an earlier unit in this class using scene metadata when
+its earlier board is absent. These are orchestration checks. They do not
+verify a real model chooses stable, useful skill titles across separate
+sessions, nor do they exercise two live devices against production.

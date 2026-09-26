@@ -5,6 +5,20 @@ import SwiftUI
 /// Comprehensive smoke tests for LiveClassroom UI wiring
 @MainActor
 final class LiveClassroomSmokeTests: XCTestCase {
+
+    func testGeneratedReviewRetainsFocusedIdentityAcrossSavedCards() throws {
+        let review = UIStackItem(type: .course, title: "Review: Fractions",
+                                 courseId: "GENERATE:fractions", focusedConcept: true)
+        let restored = try JSONDecoder().decode(UIStackItem.self, from: JSONEncoder().encode(review))
+        XCTAssertEqual(restored.focusedConcept, true)
+
+        // Older saved cards had no scope flag and continue to open as free-topic classes.
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(review)) as? [String: Any])
+        legacy.removeValue(forKey: "focusedConcept")
+        let oldCard = try JSONDecoder().decode(UIStackItem.self,
+                                               from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertNil(oldCard.focusedConcept)
+    }
     
     var viewModel: LiveClassroomViewModel!
     

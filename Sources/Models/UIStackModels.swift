@@ -37,6 +37,10 @@ struct UIStackItem: Identifiable, Codable, Equatable {
     
     /// Optional context links
     var courseId: String?
+    /// A generated review targets one existing mastery concept, even if its
+    /// classroom planner creates several practice steps. Optional so saved
+    /// cards from earlier app versions decode as ordinary free-topic classes.
+    var focusedConcept: Bool?
     var lessonId: String?
     var collabRoomId: String?
     var chatKey: String?
@@ -55,6 +59,7 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         updatedAt: Date = Date(),
         progress: Double? = nil,
         courseId: String? = nil,
+        focusedConcept: Bool? = nil,
         lessonId: String? = nil,
         collabRoomId: String? = nil,
         chatKey: String? = nil,
@@ -70,6 +75,7 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         self.updatedAt = updatedAt
         self.progress = progress
         self.courseId = courseId
+        self.focusedConcept = focusedConcept
         self.lessonId = lessonId
         self.collabRoomId = collabRoomId
         self.chatKey = chatKey

@@ -97,7 +97,8 @@ class LivingClassroomService: ObservableObject {
         lessonId: String? = nil,
         topic: String? = nil,
         language: String = "auto",
-        durationMinutes: Int? = nil
+        durationMinutes: Int? = nil,
+        recordScope: String = "topic"
     ) {
         self.topic = (topic?.isEmpty == false ? topic! : sessionId)
 
@@ -163,6 +164,7 @@ class LivingClassroomService: ObservableObject {
                     URLQueryItem(name: "topic", value: resolvedTopic),
                     URLQueryItem(name: "language", value: language),
                     URLQueryItem(name: "mode", value: "solo"),
+                    URLQueryItem(name: "record_scope", value: recordScope == "unit" ? "unit" : "topic"),
                     // The Director plans a lesson to fit this. A scheduled
                     // study session carries its own length, and sending 10 for
                     // a 45-minute slot has the server plan a quarter of the

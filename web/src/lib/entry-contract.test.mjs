@@ -162,6 +162,13 @@ test('practice still names an objective so the Director has an intent', () => {
   const params = new URLSearchParams(practiceEntryHref('Compare fractions').split('?')[1]);
   assert.equal(params.get('objective'), 'Practise and apply Compare fractions');
   assert.equal(params.get('topic'), 'Compare fractions');
+  assert.equal(params.get('recordScope'), null, 'scheduled practice must keep the plan topic key');
+});
+
+test('a free topic can request per-unit records without changing focused entries', () => {
+  const params = query(classroomEntryHref({ topic: 'Digital Marketing', recordScope: 'unit' }));
+  assert.equal(params.get('recordScope'), 'unit');
+  assert.equal(query(classroomEntryHref({ topic: 'Digital Marketing', recordScope: 'typo' })).get('recordScope'), null);
 });
 
 test('review still enters review mode', () => {

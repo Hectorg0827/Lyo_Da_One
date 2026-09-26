@@ -182,6 +182,9 @@ struct LivingClassroomView: View {
     /// the two in MainTabView open a classroom that was never scheduled, and
     /// nil keeps the behaviour they have today.
     var durationMinutes: Int? = nil
+    /// A scheduled study session needs evidence on the plan's topic key.
+    /// Other GENERATE: sessions may show one record card per planned skill.
+    var focusedConcept: Bool = false
 
     @StateObject private var service = LivingClassroomService()
     @StateObject private var sessionTimer = ClassroomTimer(duration: 300)
@@ -331,7 +334,8 @@ struct LivingClassroomView: View {
                 sessionId: courseId,
                 courseId: courseId,
                 topic: courseTitle,
-                durationMinutes: durationMinutes
+                durationMinutes: durationMinutes,
+                recordScope: courseId.hasPrefix("GENERATE:") && !focusedConcept ? "unit" : "topic"
             )
             if let durationMinutes {
                 sessionTimer.duration = TimeInterval(durationMinutes * 60)

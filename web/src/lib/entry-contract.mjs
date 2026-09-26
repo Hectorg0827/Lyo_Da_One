@@ -120,7 +120,7 @@ export function normalizeSessionMinutes(minutes) {
  * the URL it always did and the Classroom's own defaults still apply.
  */
 export function classroomEntryHref({
-  topic, mode, objective, courseId, lessonId, level, minutes, language,
+  topic, mode, objective, courseId, lessonId, level, minutes, language, recordScope,
 } = {}) {
   const cleanTopic = (topic ?? '').trim();
   if (!cleanTopic) return null;
@@ -135,6 +135,7 @@ export function classroomEntryHref({
   if (mode !== undefined) params.set('mode', normalizeClassroomMode(mode));
   if (courseId) params.set('courseId', courseId);
   if (lessonId) params.set('lessonId', lessonId);
+  if (recordScope === 'unit') params.set('recordScope', 'unit');
 
   const cleanLevel = normalizeLevel(level);
   if (cleanLevel) params.set('difficulty', cleanLevel);
