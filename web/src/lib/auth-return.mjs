@@ -3,11 +3,12 @@ const INVITE_PATH = /^\/community\/invite\/[A-Za-z0-9_-]{16,64}$/;
 
 /**
  * Where to go after logging in or signing up. Only known in-app destinations
- * are allowed (Test Prep, or an event invite link), never an arbitrary URL.
+ * are allowed (Test Prep, Community, or an event invite link), never an
+ * arbitrary URL.
  */
 export function authReturnPath(search) {
   const next = new URLSearchParams(search).get('next');
-  if (next === '/test-prep') return '/test-prep';
+  if (next === '/test-prep' || next === '/community') return next;
   if (next && INVITE_PATH.test(next)) return next;
   return '/';
 }
