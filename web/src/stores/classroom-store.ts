@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
 import { updateCourseProgress } from '@/lib/stack';
-import { transcriptLabelFor } from '@/lib/learner-model.mjs';
+import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import type {
   ClassroomContractConnection,
@@ -156,6 +156,7 @@ interface ClassroomStore {
 
   board: BoardElement[];        // the live board
   boardHistory: BoardElement[][]; // erased boards (flip back through)
+  recordConcepts: string[]; // saved plan identities restored on scene start
   viewingBoard: number;         // -1 = live, else history index
 
   caption: Caption | null;      // the line being spoken right now
@@ -861,6 +862,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       }
       case 'scene_start':
+        set({ recordConcepts: conceptsFromClassScene(msg.scene) });
         // A new scene invalidates every older queued or playing turn.
         stopPlayer();
         turnQueue = [];
@@ -942,6 +944,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     languageCode: 'auto',
     board: [],
     boardHistory: [],
+    recordConcepts: [],
     viewingBoard: -1,
     caption: null,
     activeSpeaker: null,
@@ -985,7 +988,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         sessionId,
         objective: connection.objective || '',
         languageCode: connection.language || 'auto',
-        board: [], boardHistory: [], viewingBoard: -1,
+        board: [], boardHistory: [], recordConcepts: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
         progressCurrent: 0, progressTotal: 1,

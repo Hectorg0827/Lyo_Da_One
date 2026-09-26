@@ -79,7 +79,8 @@ struct TestPrepView: View {
             LivingClassroomView(
                 courseId: entry.courseId,
                 courseTitle: entry.title,
-                durationMinutes: entry.durationMinutes
+                durationMinutes: entry.durationMinutes,
+                focusedConcept: true
             )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)

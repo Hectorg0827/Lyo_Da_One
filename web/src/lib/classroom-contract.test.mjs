@@ -36,6 +36,16 @@ test('invalid modes fail safely to solo teacher mode', () => {
   assert.equal(normalizeClassroomMode('party'), 'solo');
 });
 
+test('unit record scope reaches the teaching engine only when explicitly requested', () => {
+  const base = 'https://api.lyoapp.com';
+  const expanded = new URL(buildClassroomWsUrl(base, {
+    topic: 'Digital Marketing', recordScope: 'unit', durationMinutes: 30,
+  }, null));
+  const focused = new URL(buildClassroomWsUrl(base, { topic: 'Quadratic equations' }, null));
+  assert.equal(expanded.searchParams.get('record_scope'), 'unit');
+  assert.equal(focused.searchParams.get('record_scope'), null);
+});
+
 test('transfer evidence requires a substantive response', () => {
   assert.equal(isTransferReady('too short', 6), false);
   assert.equal(isTransferReady('I apply the ratio by scaling every value equally', 6), true);

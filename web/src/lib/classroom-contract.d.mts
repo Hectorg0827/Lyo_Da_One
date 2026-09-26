@@ -4,6 +4,7 @@ export type HintLevel = 'nudge' | 'principle' | 'worked_step' | 'full_example' |
 export interface ClassroomContractConnection {
   topic: string;
   sessionId?: string;
+  recordScope?: 'unit' | 'topic';
   objective?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
   mode?: ClassroomMode;

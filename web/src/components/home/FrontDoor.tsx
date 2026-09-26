@@ -97,6 +97,7 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
   const enterClassroom = () => {
     const href = classroomEntryHref({
       topic: trimmed,
+      recordScope: 'unit',
       level: level || undefined,
       minutes: minutes === '' ? undefined : minutes,
       language,

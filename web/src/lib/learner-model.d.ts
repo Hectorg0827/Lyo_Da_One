@@ -102,6 +102,9 @@ export function conceptsShownInClass(
   boardHistory?: BoardElement[][],
 ): string[];
 
+/** Saved plan identities from the server's scene metadata. */
+export function conceptsFromClassScene(scene: unknown): string[];
+
 /**
  * Is this concept part of one of the named subjects? Matches whole words of
  * the slug in either direction, never a substring or a single shared word.

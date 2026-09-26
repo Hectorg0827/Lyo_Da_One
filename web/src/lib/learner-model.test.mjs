@@ -21,6 +21,7 @@ import {
   conceptLabel,
   conceptKey,
   conceptsShownInClass,
+  conceptsFromClassScene,
   concernsSubject,
   partitionRecordBySubject,
 } from './learner-model.mjs';
@@ -392,6 +393,24 @@ test('the record uses the lesson identity carried by the scene, not only the cou
   const { inClass, elsewhere } = partitionRecordBySubject(
     concepts, 'Digital Marketing', 'Apply marketing to a launch', ...lessonConcepts,
   );
+  assert.deepEqual(inClass.map((c) => c.concept_id), ['customer_segmentation']);
+  assert.deepEqual(elsewhere.map((c) => c.concept_id), ['long_division']);
+});
+
+test('the saved plan places earlier skills in this class after a device reconnect', () => {
+  const scene = { metadata: {
+    target_concepts: ['Customer Segmentation', 'Marketing Positioning', 'Customer Segmentation'],
+  } };
+  const planConcepts = conceptsFromClassScene(scene);
+  assert.deepEqual(planConcepts, ['customer_segmentation', 'marketing_positioning']);
+  assert.deepEqual(conceptsFromClassScene({ metadata: { target_concepts: 'not a list' } }), []);
+
+  // A new device only has the current question on its board. Earlier
+  // evidence is still filed on its own skill and still leads in this class.
+  const currentBoard = [{ kind: 'transfer', input: { concept_id: 'Marketing Positioning' } }];
+  const concepts = [{ concept_id: 'customer_segmentation' }, { concept_id: 'long_division' }];
+  const { inClass, elsewhere } = partitionRecordBySubject(concepts,
+    'Digital Marketing', ...conceptsShownInClass(currentBoard), ...planConcepts);
   assert.deepEqual(inClass.map((c) => c.concept_id), ['customer_segmentation']);
   assert.deepEqual(elsewhere.map((c) => c.concept_id), ['long_division']);
 });

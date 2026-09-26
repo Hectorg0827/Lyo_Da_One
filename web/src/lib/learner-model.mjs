@@ -517,6 +517,17 @@ export function conceptsShownInClass(board = [], boardHistory = []) {
   return [...seen];
 }
 
+/** Skill identities the saved teaching plan has reached. The server sends
+ * them with scene start after a reconnect, when earlier boards are absent on
+ * this device. They select which real record cards lead, never create evidence.
+ */
+export function conceptsFromClassScene(scene) {
+  const names = scene?.metadata?.target_concepts;
+  if (!Array.isArray(names)) return [];
+  return [...new Set(names.filter((name) => typeof name === 'string')
+    .map(conceptKey).filter(Boolean))];
+}
+
 /** Whole `_`-separated words of a concept key, in order. */
 function keyWords(key) {
   return key ? key.split('_').filter(Boolean) : [];

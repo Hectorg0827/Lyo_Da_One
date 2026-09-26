@@ -61,6 +61,7 @@ function ClassroomStage() {
   const courseId = params.get('courseId') || topic;
   const lessonId = params.get('lessonId') || undefined;
   const objective = params.get('objective') || `Understand and apply ${topic}`;
+  const recordScope = params.get('recordScope') === 'unit' ? 'unit' : 'topic';
   const language = params.get('language') || 'auto';
   const difficultyParam = params.get('difficulty');
   const difficulty: ClassroomConnection['difficulty'] = difficultyParam === 'beginner'
@@ -90,6 +91,7 @@ function ClassroomStage() {
     courseId,
     lessonId,
     objective,
+    recordScope,
     difficulty,
     mode,
     durationMinutes,
@@ -98,7 +100,7 @@ function ClassroomStage() {
   };
 
   const {
-    status, board, boardHistory, viewingBoard, caption, activeSpeaker, prompt,
+    status, board, boardHistory, recordConcepts, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
     progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
@@ -128,7 +130,7 @@ function ClassroomStage() {
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, lessonId, objective, difficulty, mode, durationMinutes, animationsOff, language]);
+  }, [topic, courseId, lessonId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language]);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
@@ -728,7 +730,7 @@ function ClassroomStage() {
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3">
                 {notebookTab === 'record' ? (
-                  <EvidenceRecord subjects={[topic, objective, ...lessonConcepts]} />
+                  <EvidenceRecord subjects={[topic, objective, ...lessonConcepts, ...recordConcepts]} />
                 ) : (
                   <div className="space-y-2.5">
                     {transcript.length === 0 && (
