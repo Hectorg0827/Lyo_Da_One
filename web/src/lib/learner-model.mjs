@@ -483,8 +483,8 @@ const CONCEPT_KEY_MAX = 80;
  *
  * This is the client twin of `slugify_skill`. Both sides have to agree or
  * nothing below matches anything: evidence is filed under the slug of the
- * lesson title or topic, and the only thing a classroom knows about itself is
- * that same human text.
+ * lesson title or topic. The classroom receives the current lesson's identity
+ * on its QuizCard or InputField, even when the launch URL names only a course.
  */
 export function conceptKey(text) {
   const slug = (text ?? '')
@@ -494,6 +494,27 @@ export function conceptKey(text) {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
   return slug.slice(0, CONCEPT_KEY_MAX);
+}
+
+/**
+ * Lesson identities the server actually put on classroom questions. The
+ * course title and its description cannot name every lesson in an authored
+ * course, while the QuizCard and InputField already carry the concept whose
+ * evidence the server files. Keep identities from boards visited this session
+ * so advancing to a new scene does not move earlier work to "other subjects".
+ */
+export function conceptsShownInClass(board = [], boardHistory = []) {
+  const seen = new Set();
+  for (const scene of [...boardHistory, board]) {
+    if (!Array.isArray(scene)) continue;
+    for (const element of scene) {
+      const raw = element?.kind === 'quiz' ? element.quiz?.concept_id
+        : element?.kind === 'transfer' ? element.input?.concept_id : null;
+      const key = conceptKey(raw);
+      if (key) seen.add(key);
+    }
+  }
+  return [...seen];
 }
 
 /** Whole `_`-separated words of a concept key, in order. */

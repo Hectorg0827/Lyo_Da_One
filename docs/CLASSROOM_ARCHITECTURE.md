@@ -858,7 +858,7 @@ a conversation; it makes it a lecture with a clicker.
 | "What you've shown" scoped to the class, with other subjects one tap away | `web/src/components/classroom/EvidenceRecord.tsx`, `web/src/lib/learner-model.mjs` |
 | The probe as a rendered contract sample on all three platforms | `Sources/Tests/Fixtures/GuidedTeaching.json` (`diagnostic`) and the iOS/Android/web tests over it |
 
-**Evidence integrity.** A correct *unaided* probe is the strongest thing this
+**Evidence integrity.** A correct *unaided open answer with a reason* is the strongest thing this
 engine can record — performance before instruction — and is filed as
 `explanation`, never `transfer`, because transfer is defined relative to
 something taught and nothing was. An incorrect probe writes **no** evidence at
@@ -866,7 +866,10 @@ all rather than a zero: "measured at zero on a skill never taught" is a claim
 about a learner that asking before teaching cannot support, and §7.3's rule that
 never-assessed and assessed-at-zero must stay distinguishable applies here more
 than anywhere. A probe can never complete a unit; the gate still wants an unaided
-independent application.
+independent application. A diagnostic must ask for a judgement and reason in
+the learner's own words. A saved multiple-choice diagnostic with a correct tap
+starts guided practice but does not award an explanation rung or skip teaching;
+its answer key and feedback are withheld from the client.
 
 **Why the clients needed no code change.** The probe is a `TeacherMessage`, an
 `ExampleBlock` and an `InputField` — components web, iOS and Android already
@@ -910,7 +913,11 @@ concept inside a prose subject needs two words in common, or "apply marketing to
 a product launch" would claim a concept named `product`. Anything it cannot place
 stays visible under other subjects rather than being hidden: being unsure which
 class a demonstration came from is not a reason to stop showing a learner their
-own work.
+own work. The current and earlier boards also supply the server's actual
+`concept_id` from their QuizCard or InputField. Those lesson identities are
+included with the topic and objective, so a "Customer Segmentation" lesson in
+"Digital Marketing" does not disappear into other subjects just because its
+title is absent from the course description.
 
 **What this does not fix.** A free-topic session files every unit under one
 concept — the topic — so a marketing class shows one card rather than one per
@@ -964,10 +971,15 @@ with no account of the error in it.
   recovery tests, and ignoring the probe's result fails 3 simulations.
 - 197 web library tests pass; `npx tsc --noEmit` and `next build` are clean; all
   six parity/trust gates pass.
-- **The iOS and Android tests added here were not run.** There is no macOS
-  toolchain and no Android SDK in this workstream, so CI's `ios` and `android`
-  jobs are the authoritative check for `testTheOpeningProbeAsks…` and
-  `the opening probe renders as a question…`.
+- **The iOS and Android tests were not run locally.** The initial PR CI did run
+  `Build & Test (iOS)` and `Build (Android)` successfully, including the
+  classroom contracts. New changes require a fresh green CI run.
+- Review uncovered two backend cases the scripted opening had missed: choice
+  diagnostics could send their key to the client and treat a lucky tap as an
+  explanation, and the orient prompt requested four steps although its schema
+  accepts at most three. The opening now requires an open answer with a reason,
+  saved choice probes cannot award explanation, and the prompt asks for 2–3
+  steps. The web record also reads the actual lesson concept from scenes.
 - **No live model produced any of this.** Every backend test scripts the
   teacher. What is verified is the orchestration — which move runs when, what it
   may claim, what it records — not the quality of a real diagnostic question.

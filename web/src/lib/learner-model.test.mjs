@@ -20,6 +20,7 @@ import {
   nextStepLabel,
   conceptLabel,
   conceptKey,
+  conceptsShownInClass,
   concernsSubject,
   partitionRecordBySubject,
 } from './learner-model.mjs';
@@ -375,6 +376,24 @@ test('a class claims its own concepts in either direction', () => {
   // The lesson title and the topic are both worth checking: evidence lands on
   // whichever the session had.
   assert.ok(concernsSubject('positioning', 'Marketing', 'Positioning'));
+});
+
+test('the record uses the lesson identity carried by the scene, not only the course title', () => {
+  const priorBoard = [{ kind: 'quiz', quiz: { concept_id: 'Customer Segmentation' } }];
+  const currentBoard = [
+    { kind: 'transfer', input: { concept_id: 'Marketing Positioning' } },
+    { kind: 'chalk', text: 'The current example' },
+    { kind: 'quiz', quiz: { concept_id: 'Customer Segmentation' } },
+  ];
+  const lessonConcepts = conceptsShownInClass(currentBoard, [priorBoard]);
+  assert.deepEqual(lessonConcepts, ['customer_segmentation', 'marketing_positioning']);
+
+  const concepts = [{ concept_id: 'customer_segmentation' }, { concept_id: 'long_division' }];
+  const { inClass, elsewhere } = partitionRecordBySubject(
+    concepts, 'Digital Marketing', 'Apply marketing to a launch', ...lessonConcepts,
+  );
+  assert.deepEqual(inClass.map((c) => c.concept_id), ['customer_segmentation']);
+  assert.deepEqual(elsewhere.map((c) => c.concept_id), ['long_division']);
 });
 
 test('a prose subject cannot claim a one-word concept by coincidence', () => {

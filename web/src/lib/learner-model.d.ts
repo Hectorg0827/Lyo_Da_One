@@ -1,4 +1,5 @@
 import type { HintLevel } from './classroom-contract';
+import type { BoardElement } from '../stores/classroom-store';
 
 export type EvidenceKind =
   | 'exposure'
@@ -94,6 +95,12 @@ export function hasConceptEvidence(
  * `slugify_skill` in `lyo_app/ai/lesson_composer.py`.
  */
 export function conceptKey(text: string | null | undefined): string;
+
+/** Concept identities supplied by the server on this session's questions. */
+export function conceptsShownInClass(
+  board?: BoardElement[],
+  boardHistory?: BoardElement[][],
+): string[];
 
 /**
  * Is this concept part of one of the named subjects? Matches whole words of
