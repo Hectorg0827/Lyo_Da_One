@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
 import { authSwitchHref } from '@/lib/auth-return.mjs';
-import { totalUnread, unreadBadge, unreadLabel } from '@/lib/unread.mjs';
+import { UNREAD_CHANGED_EVENT, totalUnread, unreadBadge, unreadLabel } from '@/lib/unread.mjs';
 
 const UNREAD_REFRESH_MS = 60_000;
 
@@ -17,8 +17,8 @@ const UNREAD_REFRESH_MS = 60_000;
  * Real unread counts for the signed-in account, from the server. A failed
  * check keeps the last known counts rather than inventing any. Checked when
  * the app opens, on returning to the tab, every minute while it is visible,
- * and on leaving the inbox pages (so reading clears the badge), not on every
- * navigation.
+ * on leaving the inbox pages, and when a page reports that it marked
+ * something read (so reading clears the badge), not on every navigation.
  */
 function useUnreadCounts(enabled: boolean, pathname: string) {
   const inboxKey =
@@ -49,10 +49,12 @@ function useUnreadCounts(enabled: boolean, pathname: string) {
     }, UNREAD_REFRESH_MS);
     const onFocus = () => void refresh();
     window.addEventListener('focus', onFocus);
+    window.addEventListener(UNREAD_CHANGED_EVENT, onFocus);
     return () => {
       cancelled = true;
       clearInterval(timer);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener(UNREAD_CHANGED_EVENT, onFocus);
     };
   }, [enabled, inboxKey]);
 
