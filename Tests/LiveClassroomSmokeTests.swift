@@ -19,6 +19,22 @@ final class LiveClassroomSmokeTests: XCTestCase {
                                                from: JSONSerialization.data(withJSONObject: legacy))
         XCTAssertNil(oldCard.focusedConcept)
     }
+
+    func testOpeningApplicationOffersDictationOnItsAnswerField() {
+        let framing = SDUIComponent(id: "opening", type: .teacherMessage,
+                                    content: "Consider this example. What would you do?")
+        let question = SDUIComponent(id: "probe", type: .inputField,
+                                     content: "Explain your choice and why.",
+                                     question: "What would you do, and why?",
+                                     actionIntent: "submit_transfer")
+        let steps = ActiveLessonAdapter.steps(from: [framing, question])
+        XCTAssertTrue(steps.contains { step in
+            guard step.isAnswerableByVoice,
+                  case .some(.classroomInput(let component)) = step.supporting else { return false }
+            return component.id == question.id
+        })
+        XCTAssertFalse(ActiveLessonAdapter.steps(from: [framing]).contains { $0.isAnswerableByVoice })
+    }
     
     var viewModel: LiveClassroomViewModel!
     

@@ -487,6 +487,7 @@ struct LivingClassroomView: View {
                     actionData: ["message": response]
                 )
             },
+            onLearnerInputStart: { service.bargeIn() },
             onBack: { dismiss() },
             onMenu: { withAnimation { showDrawer.toggle() } },
             onMic: { openAskOverlay(for: nil) },

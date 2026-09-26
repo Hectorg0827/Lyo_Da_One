@@ -1032,3 +1032,23 @@ record test places an earlier unit in this class using scene metadata when
 its earlier board is absent. These are orchestration checks. They do not
 verify a real model chooses stable, useful skill titles across separate
 sessions, nor do they exercise two live devices against production.
+
+### 11.9 Speaking an answer to the opening question on iOS
+
+The primary `ActiveLessonView` previously sent its dock microphone to Ask Lyo,
+even while an `InputField` diagnostic waited for an answer. That path sends a
+`user_message` and the engine treats it as a question, so saying the answer
+could not route the lesson or earn evidence. The live board now has dictation
+beside open responses and application checks, and the dock microphone targets
+that same answer field while one is waiting. The normal checkpoint Submit still
+sends `submit_transfer` with the component id; transcript alone sends nothing.
+
+Tapping either microphone calls `bargeIn()` before asking for permission or
+opening the recognizer. Typing also stops teacher speech. The recognizer now
+uses the checkpoint's language (or the device locale for `auto`) instead of an
+unconditional English locale. Dictation stops on submit and on scene change;
+failed permission or unavailable recognition leaves the typed answer available.
+Web and Android already route their application microphones to their answers.
+
+This is a code-path and build check. No device microphone, speech accuracy,
+acoustic interruption timing, or fifteen-minute spoken lesson has been tested.
