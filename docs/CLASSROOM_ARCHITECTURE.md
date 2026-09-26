@@ -964,12 +964,14 @@ with no account of the error in it.
 
 ### 11.7 Verification, and its limits
 
-- 841 backend tests pass, including 17 in `tests/test_diagnostic_first.py` and
-  12 in `tests/test_learner_simulations.py`. Those were checked against
+- The original branch baseline was 841 passing backend tests, including 17 in
+  `tests/test_diagnostic_first.py` and 12 in `tests/test_learner_simulations.py`.
+  The reviewed changes pass 30 focused Classroom tests; full CI on the updated
+  branch is the remaining gate. The original tests were checked against
   mutations: reverting the opening to `orient` fails 14, writing a zero for a
   wrong probe fails 3, returning the apology to the teacher's voice fails 2
   recovery tests, and ignoring the probe's result fails 3 simulations.
-- 197 web library tests pass; `npx tsc --noEmit` and `next build` are clean; all
+- 198 web library tests pass; `npx tsc --noEmit` and `next build` are clean; all
   six parity/trust gates pass.
 - **The iOS and Android tests were not run locally.** The initial PR CI did run
   `Build & Test (iOS)` and `Build (Android)` successfully, including the
@@ -980,6 +982,11 @@ with no account of the error in it.
   accepts at most three. The opening now requires an open answer with a reason,
   saved choice probes cannot award explanation, and the prompt asks for 2–3
   steps. The web record also reads the actual lesson concept from scenes.
+- The backend now exports `lyo_classroom_model_seconds` by operation, provider
+  and outcome, and `lyo_classroom_model_tokens_total` by operation and provider.
+  A fake-provider check proved the counters and the unavailable path. They do
+  not log learner text or claim a dollar cost; real lesson latency and usage
+  still need to be observed before model routing changes.
 - **No live model produced any of this.** Every backend test scripts the
   teacher. What is verified is the orchestration — which move runs when, what it
   may claim, what it records — not the quality of a real diagnostic question.
