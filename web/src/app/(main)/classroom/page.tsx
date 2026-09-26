@@ -723,7 +723,7 @@ function ClassroomStage() {
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3">
                 {notebookTab === 'record' ? (
-                  <EvidenceRecord />
+                  <EvidenceRecord subjects={[topic, objective]} />
                 ) : (
                   <div className="space-y-2.5">
                     {transcript.length === 0 && (

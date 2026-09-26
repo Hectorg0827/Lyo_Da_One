@@ -43,3 +43,34 @@ test('paced teaching has an explicit canonical CTA and the first task is support
   assert.equal(faded.min_words, 1);
   assert.match(faded.question, /1\/__/);
 });
+
+test('a unit opens by asking, with no worked example and no way to move on unanswered', () => {
+  const components = fixture.scenes.diagnostic.components;
+  // One teacher line, then the floor is the learner's. The probe is asked
+  // before anything is taught, so there is a question and nothing to walk
+  // through — this is the scene that replaced opening every unit with a
+  // lecture, and the shape is the whole point of it.
+  assert.equal(components.filter(c => c.type === 'TeacherMessage').length, 1);
+  const input = components.find(c => c.type === 'InputField');
+  assert.ok(input, 'the opening scene must ask the learner something');
+  assert.ok(input.question.trim().length > 0);
+
+  // A Continue here would make answering optional, which is the monologue
+  // with an extra tap.
+  assert.equal(components.some(c => c.type === 'CTAButton'), false);
+
+  // Nothing on the wire tells the learner what the answer is. The probe is
+  // graded by the server against a rubric it keeps.
+  assert.equal(JSON.stringify(components).includes('example_answer'), false);
+  assert.equal(JSON.stringify(components).includes('criteria'), false);
+  assert.deepEqual(input.expected_keywords ?? [], []);
+
+  // It is scored as an explanation, never as transfer: transfer is defined
+  // relative to something taught, and nothing has been.
+  assert.equal(input.evidence_type, 'explanation');
+
+  // And no teaching visual: the comparison tool's own description explains why
+  // the answer is the answer. A probe's board may carry the situation, never
+  // the reasoning.
+  assert.equal(components.some(c => c.block_type === 'teaching_visual'), false);
+});

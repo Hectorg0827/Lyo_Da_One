@@ -787,3 +787,153 @@ The product-trust gate also pins the Phase B invariants: mastery requiring all
 three strong forms, skipped questions staying neutral, the client never
 declaring its own correctness, one mastery scale across renderers, and the
 transcript naming the rung actually asked for.
+
+---
+
+## 11. Phase G — the classroom asks before it explains
+
+### 11.1 A correction this document owed itself: the Director is not on the live path
+
+Sections 2 and 4 above classify `ai_classroom/scene_lifecycle_engine.py`'s
+`ClassroomDirector` and `SceneCompiler` as the classroom's decision-making core.
+They are not. `SceneLifecycleEngine.process_trigger` routes **every** turn
+through `_process_adaptive_trigger`, which builds a context and hands it to
+`AdaptiveSession.run`. `ClassroomDirector.decide_scene` and
+`SceneCompiler.compile_scene` have no live callers at all.
+
+This matters because the two paths disagree about almost everything, and reading
+the wrong one leads to the wrong diagnosis. The dead path's teaching prompt
+tells the model **"Do not ask a question in the speech; the server presents the
+checkpoint next"**, ends every instruction scene with a Continue button, and
+grades free text by counting how many words of the learning objective the
+learner echoed back (`expected_transfer_keywords` → `score_transfer_response`) —
+which would award the ladder's strongest rungs for vocabulary matching.
+
+The live path does none of that. `AdaptiveSession` + `AdaptiveTeacher` already
+implement most of what a live teacher needs: a scaffolding fade
+(orient → model → guided → faded → independent), semantic evaluation with
+verdicts and grounded quotes, `validate_evaluation` refusing evidence the
+learner did not provide, detours that pause a demonstration and return to the
+exact checkpoint, and a completion gate that wants an unaided independent
+application.
+
+So the honest finding is not "the classroom generates content instead of
+teaching". It is that the live engine had **one** unconditional opening, and
+that opening was a lecture.
+
+**Classification, corrected.** `ClassroomDirector`, `SceneCompiler`,
+`expected_transfer_keywords`, `score_transfer_response` and `describe_transfer_gap`
+are **SAFE_TO_REMOVE** on the live path and **LEGACY_ACTIVE** only in the sense
+that `tests/test_ai_classroom_teaching_loop.py` still exercises them. They were
+left in place rather than deleted in this phase: removing 1,900 lines of
+unreachable engine is its own change with its own review, and doing it inside a
+pedagogical one would hide the pedagogy in the diff.
+
+### 11.2 The root cause of the lecture, precisely located
+
+Every unit began at `phase="orient"`, whose contract is `task=null` plus two to
+four demonstration beats, each revealed by a Continue tap. So a unit opened with
+three to five consecutive teacher beats and the learner's first opportunity to
+produce a word arrived after all of them — and it opened that way whether they
+had never met the skill or could already perform it, because **nothing ever
+asked**.
+
+A tap is not participation. Pacing prepared speech behind taps does not make it
+a conversation; it makes it a lecture with a clicker.
+
+### 11.3 What landed
+
+| Change | Where (`LyoBackendJune`) |
+| --- | --- |
+| `diagnose` as the opening move of every unit: one framing line, one real question, no teaching | `adaptive_teaching.py` (`DiagnosticTurn`, `turn_schema`) |
+| Routing from what the learner showed — already has it → fade support; has part → guided; not yet → teach | `adaptive_session.py` (`after_diagnostic`) |
+| A probe is never a failure: no `support_attempts`, no skip mark, no reteaching of an unshown answer | `adaptive_session.py` |
+| Declining a probe, or wanting help on one, starts the teaching instead of hinting at the answer | `adaptive_session.py` |
+| A ceiling of four consecutive teacher beats, enforced where beats are authored | `adaptive_teaching.py` (`MAX_CONSECUTIVE_TEACHER_BEATS`) |
+| Technical failures out of teacher dialogue, onto the board beside Retry | `adaptive_session.py` (`paused_notice` / `paused_teaching`), `scene_lifecycle_engine.py` |
+| The v1 state migration no longer fires on fresh construction | `adaptive_teaching.py` (`GuidedState.migrate`) |
+
+| Change | Where (this repo) |
+| --- | --- |
+| "What you've shown" scoped to the class, with other subjects one tap away | `web/src/components/classroom/EvidenceRecord.tsx`, `web/src/lib/learner-model.mjs` |
+| The probe as a rendered contract sample on all three platforms | `Sources/Tests/Fixtures/GuidedTeaching.json` (`diagnostic`) and the iOS/Android/web tests over it |
+
+**Evidence integrity.** A correct *unaided* probe is the strongest thing this
+engine can record — performance before instruction — and is filed as
+`explanation`, never `transfer`, because transfer is defined relative to
+something taught and nothing was. An incorrect probe writes **no** evidence at
+all rather than a zero: "measured at zero on a skill never taught" is a claim
+about a learner that asking before teaching cannot support, and §7.3's rule that
+never-assessed and assessed-at-zero must stay distinguishable applies here more
+than anywhere. A probe can never complete a unit; the gate still wants an unaided
+independent application.
+
+**Why the clients needed no code change.** The probe is a `TeacherMessage`, an
+`ExampleBlock` and an `InputField` — components web, iOS and Android already
+render. Regenerating `GuidedTeaching.json` was the whole client-side delivery,
+and the three suites that consume it now each assert the probe renders as a
+question with no Continue, no teaching visual and no answer key.
+
+### 11.4 Two things found while building it
+
+**The state migration was overwriting fresh sessions.** `GuidedState.migrate`
+read an absent `version` as `1`, so the v1 repair fired on every fresh in-code
+construction and overwrote the phase the caller had just chosen. Nothing noticed
+while a new session always wanted `orient` anyway — it meant a new session could
+not start anywhere else, and it silently discarded the opening probe before it
+reached a learner. Every stored payload carries its version, because every write
+goes through `model_dump()`, so the guard is now an explicit `== 1`.
+
+**The teacher was apologising for the backend.** `AdaptiveSession.unavailable`
+put "I couldn't prepare the next step. This interruption doesn't count as a wrong
+answer." in a `TeacherMessage` — narrated aloud, in the voice of the person
+teaching, on every generation failure. It was the most-repeated line in the
+product. The failure still has to be visible, since it is what Retry is for, so
+it moved to the board beside that control while the teacher goes on teaching
+from material the session already holds. The sync warning moved the same way.
+
+### 11.5 "What you've shown" was showing every subject at once
+
+`GET /personalization/concepts/record` returns the learner's whole record and
+takes no subject. Rendered unfiltered inside the classroom's Notebook it listed
+long division beside customer segmentation, which reads as the teacher having
+lost track of which lesson this is.
+
+The scoping is client-side and deliberately so: which concepts to *show first*
+is presentation, and inventing a server-side fuzzy match over `concept_id`
+would make the server assert a relationship it has no data for. Evidence is
+filed under `slugify_skill(lesson_title or topic)`, so `conceptKey` in
+`learner-model.mjs` mirrors that slug exactly and `concernsSubject` matches whole
+words of it in either direction — asymmetrically, because a subject inside a
+concept is a specialisation (`marketing` claims `marketing_fundamentals`) while a
+concept inside a prose subject needs two words in common, or "apply marketing to
+a product launch" would claim a concept named `product`. Anything it cannot place
+stays visible under other subjects rather than being hidden: being unsure which
+class a demonstration came from is not a reason to stop showing a learner their
+own work.
+
+**What this does not fix.** A free-topic session files every unit under one
+concept — the topic — so a marketing class shows one card rather than one per
+skill. Per-unit concept ids would give the record the shape §11's example
+implies, and would also be the third time this codebase changed where evidence
+lands; §7.6 is the account of what that cost last time. Not attempted here.
+
+### 11.6 Verification, and its limits
+
+- 829 backend tests pass, including 17 new ones in
+  `tests/test_diagnostic_first.py`. Those were checked against mutations:
+  reverting the opening to `orient` fails 14, writing a zero for a wrong probe
+  fails 3, and returning the apology to the teacher's voice fails 2 recovery
+  tests.
+- 196 web library tests pass; `npx tsc --noEmit` and `next build` are clean; all
+  five parity/trust gates pass.
+- **The iOS and Android tests added here were not run.** There is no macOS
+  toolchain and no Android SDK in this workstream, so CI's `ios` and `android`
+  jobs are the authoritative check for `testTheOpeningProbeAsks…` and
+  `the opening probe renders as a question…`.
+- **No live model produced any of this.** Every backend test scripts the
+  teacher. What is verified is the orchestration — which move runs when, what it
+  may claim, what it records — not the quality of a real diagnostic question.
+- **Nobody has sat a 15-minute lesson in the product.** The acceptance test in
+  the brief that asks whether a learner *feels* listened to cannot be run from
+  here.

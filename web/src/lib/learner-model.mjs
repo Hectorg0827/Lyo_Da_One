@@ -468,3 +468,110 @@ export function conceptLabel(conceptId) {
   const words = raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Untitled concept';
 }
+
+// ─── Which of a learner's concepts belong to the class they are in ───────────
+
+/**
+ * How long a concept key may be. Mirrors `slugify_skill`'s own cap in
+ * `lyo_app/ai/lesson_composer.py`: the server truncates there, so a longer
+ * subject typed here would never match the id it produced.
+ */
+const CONCEPT_KEY_MAX = 80;
+
+/**
+ * The server's concept id for a piece of subject text.
+ *
+ * This is the client twin of `slugify_skill`. Both sides have to agree or
+ * nothing below matches anything: evidence is filed under the slug of the
+ * lesson title or topic, and the only thing a classroom knows about itself is
+ * that same human text.
+ */
+export function conceptKey(text) {
+  const slug = (text ?? '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug.slice(0, CONCEPT_KEY_MAX);
+}
+
+/** Whole `_`-separated words of a concept key, in order. */
+function keyWords(key) {
+  return key ? key.split('_').filter(Boolean) : [];
+}
+
+/** Does `words` contain `run` as a consecutive whole-word run? */
+function containsRun(words, run) {
+  if (run.length === 0 || run.length > words.length) return false;
+  for (let start = 0; start + run.length <= words.length; start += 1) {
+    if (run.every((word, offset) => words[start + offset] === word)) return true;
+  }
+  return false;
+}
+
+/**
+ * Is this concept part of the subject currently being taught?
+ *
+ * WHY THIS IS NEEDED
+ *
+ * `/concepts/record` answers "what has this learner shown?" — about
+ * everything, ever. Rendered unfiltered inside a marketing class it listed
+ * long division and Spanish verbs next to segmentation, which reads as the
+ * teacher having lost track of what lesson this is.
+ *
+ * WHAT IT MATCHES, AND WHAT IT WILL NOT
+ *
+ * Evidence is filed under the slug of the lesson title, or of the topic when
+ * there is no authored lesson. So the honest match is on whole words of those
+ * keys, in either direction: a `marketing` class claims
+ * `marketing_fundamentals`, and a `customer_segmentation_for_launch` lesson is
+ * claimed by a `customer_segmentation` subject.
+ *
+ * It deliberately does not match on substrings or on single shared words. `art`
+ * must not claim `cartography`, and one word in common ("introduction",
+ * "basics", "python") is a coincidence, not a subject.
+ *
+ * The two directions are not symmetric, and the asymmetry is the point. A
+ * subject wholly inside a concept is a specialisation of it, so `marketing`
+ * claims `marketing_fundamentals` however short the subject is. A concept
+ * wholly inside a subject is the other real case — a short lesson slug against
+ * a topic written as prose — but there a one-word concept would be claimed by
+ * any subject that happens to contain that word, so `product` is not claimed by
+ * "apply marketing to a product launch". Two words in common is a subject; one
+ * is a coincidence.
+ *
+ * A concept this cannot place is shown to the learner under everything else
+ * rather than hidden: being unsure which class something belongs to is not a
+ * reason to stop showing a learner their own work.
+ */
+export function concernsSubject(conceptId, ...subjects) {
+  const concept = keyWords(conceptKey(conceptId));
+  if (concept.length === 0) return false;
+  return subjects.some((subject) => {
+    const words = keyWords(conceptKey(subject));
+    if (words.length === 0) return false;
+    // The subject, specialised by this concept.
+    if (containsRun(concept, words)) return true;
+    // This concept, named inside a subject written as prose.
+    return concept.length >= 2 && containsRun(words, concept);
+  });
+}
+
+/**
+ * Split a learner's record into the class they are in and everything else.
+ *
+ * Order within each group is left as the server sent it — most recently worked
+ * on first — because that ordering is a fact about the learner's work and this
+ * function's job is only to say which class each concept belongs to.
+ */
+export function partitionRecordBySubject(concepts = [], ...subjects) {
+  const named = subjects.filter((subject) => keyWords(conceptKey(subject)).length > 0);
+  if (named.length === 0) return { inClass: [], elsewhere: [...concepts] };
+  const inClass = [];
+  const elsewhere = [];
+  for (const concept of concepts) {
+    (concernsSubject(concept?.concept_id, ...named) ? inClass : elsewhere).push(concept);
+  }
+  return { inClass, elsewhere };
+}

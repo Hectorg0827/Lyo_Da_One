@@ -32,6 +32,36 @@ final class GuidedTeachingTests: XCTestCase {
         }
     }
 
+    func testTheOpeningProbeAsksBeforeAnythingIsTaughtAndShipsNoAnswerKey() throws {
+        // A unit now opens by finding out where the learner is, before anything
+        // is taught. It reaches iOS through the components iOS already renders,
+        // which is why the new opening needed no client change — only this
+        // fixture regenerated. These assertions keep it that way.
+        let fixture = try fixtures()
+        let components = try XCTUnwrap(fixture.scenes["diagnostic"]?.components)
+        let step = try XCTUnwrap(ActiveLessonAdapter.steps(from: components).first)
+
+        // The learner is asked something, and asked it in their own words.
+        guard case .classroomInput(let input)? = step.supporting else {
+            return XCTFail("The opening probe must ask for the learner's own answer")
+        }
+        XCTAssertFalse((input.question ?? "").isEmpty)
+
+        // One teacher line, then the floor is the learner's.
+        XCTAssertEqual(components.filter { $0.type == .teacherMessage }.count, 1)
+
+        // A Continue here would make answering optional, which is the
+        // monologue with an extra tap.
+        XCTAssertNil(components.first { $0.type == .ctaButton })
+        XCTAssertNil(step.primaryActionIntent)
+
+        // The learner writes a short answer, not an essay. The rubric and the
+        // rung this evidence counts as are server-side and `SDUIComponent`
+        // does not decode them, so nothing here can leak either — which is
+        // what `teaching-activity.test.mjs` asserts against the raw payload.
+        XCTAssertEqual(input.minWords, 1)
+    }
+
     func testGuidedChoiceRetainsItsExampleAndVisualWhileFadedPracticeAsksForOneNumber() throws {
         let fixture = try fixtures()
         let guided = try XCTUnwrap(ActiveLessonAdapter.steps(from: fixture.scenes["guided"]!.components).first)

@@ -8,6 +8,7 @@ import {
   EVIDENCE_KINDS,
   conceptLabel,
   nextStepLabel,
+  partitionRecordBySubject,
   rungClaim,
   stateHeadline,
 } from '@/lib/learner-model.mjs';
@@ -39,11 +40,25 @@ import {
  *  - A failed read says so. An empty record means "you have not shown
  *    anything yet", which is a statement about the learner; a request that
  *    failed is not evidence for it, and `unavailable` keeps the two apart.
+ *
+ * WHY IT TAKES A SUBJECT
+ *
+ * `/concepts/record` is the learner's whole record, across every subject they
+ * have ever worked on. Rendered unfiltered inside a marketing class it listed
+ * long division beside customer segmentation, which reads as the teacher
+ * having lost track of which lesson this is.
+ *
+ * So this class's own evidence leads, and the rest stays reachable one tap
+ * away. Reachable, not removed: the other work is still the learner's, the
+ * match is a rule about slugs rather than a fact the server asserted, and
+ * anything it cannot place belongs where the learner can still see it. The
+ * grouping is presentation only — no claim about a learner is computed here.
  */
-export default function EvidenceRecord() {
+export default function EvidenceRecord({ subjects = [] }: { subjects?: (string | null | undefined)[] }) {
   const [record, setRecord] = useState<LearnerRecord | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showingOthers, setShowingOthers] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -89,15 +104,57 @@ export default function EvidenceRecord() {
     );
   }
 
+  const { inClass, elsewhere } = partitionRecordBySubject(concepts, ...subjects);
+  // Without a subject to scope by there is one list, which is what this was
+  // before. Never a silent empty panel because the scoping found nothing to
+  // compare against.
+  const scoped = subjects.some((subject) => (subject ?? '').trim().length > 0);
+
   return (
     <div className="space-y-3">
       <p className="text-[12px] leading-relaxed text-white/45">
         Read from what you actually demonstrated. Being taught something does not
         appear here; showing it does.
       </p>
-      {concepts.map((concept) => (
+
+      {!scoped && concepts.map((concept) => (
         <ConceptCard key={concept.concept_id} concept={concept} />
       ))}
+
+      {scoped && (
+        <>
+          {inClass.length > 0 ? (
+            inClass.map((concept) => (
+              <ConceptCard key={concept.concept_id} concept={concept} />
+            ))
+          ) : (
+            <p className="px-1 py-1 text-[13px] leading-relaxed text-white/45">
+              Nothing from this class yet. Answering a checkpoint here is what
+              puts something in this part of your record.
+            </p>
+          )}
+
+          {elsewhere.length > 0 && (
+            <div className="border-t border-white/10 pt-2.5">
+              <button
+                type="button"
+                onClick={() => setShowingOthers((open) => !open)}
+                aria-expanded={showingOthers}
+                className="w-full text-left text-[12px] font-semibold text-white/50 hover:text-white/75"
+              >
+                {showingOthers ? 'Hide' : 'Show'} {elsewhere.length} from other subjects
+              </button>
+              {showingOthers && (
+                <div className="mt-2.5 space-y-3">
+                  {elsewhere.map((concept) => (
+                    <ConceptCard key={concept.concept_id} concept={concept} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
