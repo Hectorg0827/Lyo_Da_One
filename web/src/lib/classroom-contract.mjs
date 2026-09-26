@@ -11,6 +11,23 @@ export function normalizeClassroomMode(value) {
   return CLASSROOM_MODES.includes(value) ? value : 'solo';
 }
 
+/** The fast welcome uses a nested scene_stream envelope and sends no
+ * component_render messages. Normal scene_start streams components separately. */
+export function classroomSceneStart(message) {
+  if (message?.type === 'scene_stream') {
+    const scene = message.data?.scene;
+    return {
+      scene,
+      inlineComponents: Array.isArray(scene?.components) ? scene.components : [],
+    };
+  }
+  if (message?.event_type === 'scene_start' || message?.type === 'scene_start'
+      || message?.event_type === 'SCENE_START') {
+    return { scene: message.scene, inlineComponents: [] };
+  }
+  return null;
+}
+
 export function buildClassroomWsUrl(apiUrl, connection, token) {
   const base = apiUrl.replace(/^http/, 'ws').replace(/\/$/, '');
   const params = new URLSearchParams({

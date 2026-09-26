@@ -226,7 +226,10 @@ struct MainTabView: View {
             if let data = liveClassroomData {
                 LivingClassroomView(
                     courseId: data.courseId,
-                    courseTitle: data.courseTitle
+                    courseTitle: data.courseTitle,
+                    focusedConcept: uiStackStore.items.first(where: {
+                        $0.type == .course && $0.courseId == data.courseId
+                    })?.focusedConcept == true
                 )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)
@@ -236,7 +239,10 @@ struct MainTabView: View {
             if let data = livingClassroomData {
                 LivingClassroomView(
                     courseId: data.courseId,
-                    courseTitle: data.courseTitle
+                    courseTitle: data.courseTitle,
+                    focusedConcept: uiStackStore.items.first(where: {
+                        $0.type == .course && $0.courseId == data.courseId
+                    })?.focusedConcept == true
                 )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)

@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
-import { buildClassroomWsUrl } from '@/lib/classroom-contract.mjs';
+import { buildClassroomWsUrl, classroomSceneStart } from '@/lib/classroom-contract.mjs';
 import { updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
@@ -862,7 +862,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         break;
       }
       case 'scene_start':
-        set({ recordConcepts: conceptsFromClassScene(msg.scene) });
+      case 'SCENE_START':
+      case 'scene_stream': {
+        const start = classroomSceneStart(msg);
+        set({ recordConcepts: conceptsFromClassScene(start?.scene) });
         // A new scene invalidates every older queued or playing turn.
         stopPlayer();
         turnQueue = [];
@@ -876,7 +879,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           caption: null,
           activeSpeaker: null,
         });
+        // Only the ad-hoc fast welcome carries its content exclusively in
+        // the scene; the ordinary scene_start is followed by component_render.
+        for (const component of start?.inlineComponents ?? []) {
+          if (component?.type) handleComponent(component as ClassroomComponent);
+        }
         break;
+      }
       case 'scene_complete':
         set({ waitingForScene: false });
         break;

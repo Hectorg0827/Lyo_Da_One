@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildClassroomWsUrl,
+  classroomSceneStart,
   isTransferReady,
   normalizeClassroomMode,
 } from './classroom-contract.mjs';
@@ -44,6 +45,19 @@ test('unit record scope reaches the teaching engine only when explicitly request
   const focused = new URL(buildClassroomWsUrl(base, { topic: 'Quadratic equations' }, null));
   assert.equal(expanded.searchParams.get('record_scope'), 'unit');
   assert.equal(focused.searchParams.get('record_scope'), null);
+});
+
+test('nested fast welcome restores saved skill identities and renders its only components', () => {
+  const scene = {
+    metadata: { target_concepts: ['Customer Segmentation', 'Marketing Positioning'] },
+    components: [{ type: 'TeacherMessage', component_id: 'opening', text: 'What do you know?' }],
+  };
+  const fast = classroomSceneStart({ type: 'scene_stream', data: { event_type: 'SCENE_START', scene } });
+  assert.equal(fast.scene, scene);
+  assert.deepEqual(fast.inlineComponents, scene.components);
+  const normal = classroomSceneStart({ event_type: 'scene_start', scene });
+  assert.equal(normal.scene, scene);
+  assert.deepEqual(normal.inlineComponents, []); // separately streamed; no duplicate teacher speech
 });
 
 test('transfer evidence requires a substantive response', () => {

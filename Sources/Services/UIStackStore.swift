@@ -93,7 +93,8 @@ final class UIStackStore: ObservableObject {
                 upsertCourse(
                     courseId: "GENERATE:\(skill)",
                     title: "Review: \(skill.capitalized)",
-                    subtitle: "Due for a quick refresher"
+                    subtitle: "Due for a quick refresher",
+                    focusedConcept: true
                 )
             }
         }
@@ -106,6 +107,7 @@ final class UIStackStore: ObservableObject {
         courseId: String,
         title: String,
         subtitle: String? = nil,
+        focusedConcept: Bool? = nil,
         progress: Double? = nil,
         lessonCount: Int? = nil,
         completedLessons: Int? = nil
@@ -121,6 +123,7 @@ final class UIStackStore: ObservableObject {
             updatedAt: Date(),
             progress: progress ?? existing?.progress,
             courseId: courseId,
+            focusedConcept: focusedConcept ?? existing?.focusedConcept,
             lessonCount: lessonCount ?? existing?.lessonCount,
             completedLessons: completedLessons ?? existing?.completedLessons
         )

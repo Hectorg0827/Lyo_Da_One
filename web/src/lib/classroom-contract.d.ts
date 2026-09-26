@@ -18,6 +18,10 @@ export interface ClassroomContractConnection {
 export const CLASSROOM_MODES: readonly ClassroomMode[];
 export const HINT_LEVELS: readonly HintLevel[];
 export function normalizeClassroomMode(value?: string): ClassroomMode;
+export function classroomSceneStart(message: unknown): {
+  scene: unknown;
+  inlineComponents: Array<{ type?: string; [key: string]: unknown }>;
+} | null;
 export function buildClassroomWsUrl(
   apiUrl: string,
   connection: ClassroomContractConnection,

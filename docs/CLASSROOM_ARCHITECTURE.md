@@ -1009,6 +1009,12 @@ creates an evidence card from the plan. To place earlier unit cards under this
 class after a device reconnect, scene metadata carries the names of the units
 already reached, and the web record panel uses those as display identities.
 It does not expose the private task rubric or claim mastery for unseen units.
+The shared record slug now preserves non-Latin letters and numbers, so a
+Chinese or Korean skill does not collapse to `general`; ASCII keys retain their
+previous form. Web handles both the ordinary streamed scene and the nested
+fast-welcome envelope, whose components arrive only inside that first message.
+Historical `general` rows cannot be assigned back to individual non-Latin
+skills because their original titles were discarded at write time.
 
 Focused routes keep the existing key: an authored lesson uses its resolved
 lesson title; a scheduled Test Prep session or weak-concept practice uses its
@@ -1016,6 +1022,8 @@ topic. This preserves readiness's lookup of the concept just practised. Old
 saved sessions also default to their original topic scope. A single-unit
 free-topic lesson keeps the topic, so a direct lesson on a named skill remains
 the same concept Chat and spaced repetition use.
+iOS generated due-review cards save their focused intent, including across a
+restart, and pass it to the classroom even though their ID starts `GENERATE:`.
 
 The scripted three-unit simulation now checks three distinct concept ids in
 questions and in outbox evidence; focused practice checks one topic id, and a
