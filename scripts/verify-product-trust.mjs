@@ -793,7 +793,22 @@ requirePattern(
 // label — the same rule normalizeEvidenceKind follows for scoring.
 requireText(learnerModel, 'function rungClaim', 'A rung can be labelled without being recognised');
 
+// The top bar's unread badges are the learner's own notifications and
+// messages. A hard-coded dot or number told every visitor, signed in or
+// not, that something was waiting for them.
+const topBar = readCode('web/src/components/layout/TopBar.tsx');
+rejectPattern(topBar, />\s*\d+\s*<\/span>/, 'The top bar shows a hard-coded unread count');
+requireText(topBar, 'api.notifications.unreadCount()', 'The top bar notification badge is not read from the server');
+requireText(topBar, 'api.messages.unreadConversations()', 'The top bar message badge is not read from the server');
+requirePattern(topBar, /notificationBadge\s*&&/, 'The top bar notification dot shows even with nothing unread');
+requirePattern(topBar, /!isAuthenticated\s*\?/, 'The top bar shows account badges to a signed-out visitor');
+
 const REQUIRED_RULES = [
+  'The top bar shows a hard-coded unread count',
+  'The top bar notification badge is not read from the server',
+  'The top bar message badge is not read from the server',
+  'The top bar notification dot shows even with nothing unread',
+  'The top bar shows account badges to a signed-out visitor',
   'The client sends its own session score',
   'The client puts a session score in a request body',
   'Client declares its own correctness',
