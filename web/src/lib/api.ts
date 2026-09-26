@@ -1007,6 +1007,11 @@ export const api = {
       return request<{ conversations: Record<string, unknown>[] }>('/messages/conversations');
     },
 
+    /** Unread messages for the top bar badge; a background check never signs anyone out. */
+    async unreadConversations() {
+      return request<{ conversations: Record<string, unknown>[] }>('/messages/conversations', { optionalAuth: true });
+    },
+
     async getMessages(conversationId: string, page = 1) {
       return request<{ messages: Record<string, unknown>[]; total: number }>(
         `/messages/conversations/${conversationId}?page=${page}`
@@ -1437,8 +1442,9 @@ export const api = {
     async markAllRead() {
       return request('/notifications/read-all', { method: 'POST' });
     },
+    /** For the top bar badge: a background check never signs anyone out. */
     async unreadCount() {
-      return request<{ count: number }>('/notifications/unread-count');
+      return request<{ count: number }>('/notifications/unread-count', { optionalAuth: true });
     },
   },
 

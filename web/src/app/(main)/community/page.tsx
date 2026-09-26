@@ -266,12 +266,26 @@ export default function CommunityPage() {
   const [area, setArea] = useState<Area>(DEFAULT_AREA)
   const [mapView, setMapView] = useState<MapView>({ ...DEFAULT_AREA, token: 0 })
   const [visibleArea, setVisibleArea] = useState<SearchArea | null>(null)
+  // Where the map sat after the app last moved it. "Search this area" appears
+  // only once the learner has moved away from that, never on first load: a
+  // tall phone screen always shows more than the searched circle.
+  const [viewBaseline, setViewBaseline] = useState<SearchArea | null>(null)
+  // After the learner moves the map, a layout resize must not reset that.
+  const learnerMoved = useRef(false)
   const [locationNoticeDismissed, setLocationNoticeDismissed] = useState(false)
 
   const moveTo = useCallback((next: Area) => {
     setArea(next)
     setMapView((current) => ({ ...next, token: current.token + 1 }))
     setVisibleArea(null)
+    setViewBaseline(null)
+    learnerMoved.current = false
+  }, [])
+
+  const onViewportChange = useCallback((next: SearchArea, programmatic: boolean) => {
+    setVisibleArea(next)
+    if (!programmatic) learnerMoved.current = true
+    else if (!learnerMoved.current) setViewBaseline(next)
   }, [])
 
   const locate = useCallback((explicit: boolean) => {
@@ -506,12 +520,14 @@ export default function CommunityPage() {
     setClusterKeys(null)
   }, [])
 
-  const showAreaButton = shouldOfferAreaSearch({ ...area, radiusKm }, visibleArea)
+  const showAreaButton = shouldOfferAreaSearch(viewBaseline, visibleArea)
   const searchThisArea = () => {
     if (!visibleArea) return
     api.community.track('community_search_area', { radius_km: Math.round(visibleArea.radiusKm) })
     setArea({ ...visibleArea, label: 'This area' })
-    setVisibleArea(null)
+    // What is on screen now is what was searched.
+    setViewBaseline(visibleArea)
+    learnerMoved.current = false
     setSelectedKey(null)
     setClusterKeys(null)
   }
@@ -711,7 +727,7 @@ export default function CommunityPage() {
               setSelectedKey(null)
               setSheet('medium')
             }}
-            onViewportChange={setVisibleArea}
+            onViewportChange={onViewportChange}
             padding={isDesktop ? { top: 72, bottom: selectedNode ? 340 : 24, left: 24, right: 72 } : { top: 150, bottom: sheetPx + 96, left: 16, right: 16 }}
           />
         </div>

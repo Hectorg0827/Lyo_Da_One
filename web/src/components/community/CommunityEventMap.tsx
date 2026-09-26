@@ -19,6 +19,18 @@ export interface MapView extends SearchArea {
   token: number
 }
 
+/**
+ * A layout resize is not the learner moving the map. Leaflet fires moveend
+ * synchronously inside invalidateSize (only when the size changed), so the
+ * flag covers exactly that event and a still-running fit keeps its own flag.
+ */
+function resizeQuietly(map: LeafletMap, programmaticMove: { current: boolean }) {
+  const pending = programmaticMove.current
+  programmaticMove.current = true
+  map.invalidateSize()
+  programmaticMove.current = pending
+}
+
 export interface CommunityEventMapProps {
   nodes: LearningNode[]
   view: MapView
@@ -26,7 +38,11 @@ export interface CommunityEventMapProps {
   userLocation?: { latitude: number; longitude: number } | null
   onSelect: (node: LearningNode) => void
   onClusterSelect?: (members: LearningNode[]) => void
-  onViewportChange?: (area: SearchArea) => void
+  /**
+   * The visible area after every move. `programmatic` is true when the app
+   * moved the map (a search, locate me, a resize), false when the learner did.
+   */
+  onViewportChange?: (area: SearchArea, programmatic: boolean) => void
   /** Space covered by overlays (px) so a selected pin is never hidden. */
   padding?: { top: number; bottom: number; left: number; right: number }
   className?: string
@@ -101,6 +117,12 @@ export default function CommunityEventMap({
   const markerLayerRef = useRef<LayerGroup | null>(null)
   const userLayerRef = useRef<LayerGroup | null>(null)
   const appliedViewToken = useRef<number | null>(null)
+  // Set before the app moves the map; the next moveend is then not the learner's.
+  const programmaticMove = useRef(false)
+  // Whether the learner has panned or zoomed since the app last framed a view.
+  const learnerMoved = useRef(false)
+  const viewRef = useRef(view)
+  viewRef.current = view
   const [mapReady, setMapReady] = useState(false)
   const [zoomTick, setZoomTick] = useState(0)
 
@@ -109,6 +131,25 @@ export default function CommunityEventMap({
   callbacks.current = { onSelect, onClusterSelect, onViewportChange }
   const paddingRef = useRef(padding)
   paddingRef.current = padding
+
+  /**
+   * The layout changed size (first paint, a rotated phone, the desktop split
+   * appearing). Until the learner touches the map, re-frame the searched area
+   * for the new size so the map always opens on what was searched, not on a
+   * wider view that depends on how fast the page laid out.
+   */
+  const settleLayout = (map: LeafletMap) => {
+    resizeQuietly(map, programmaticMove)
+    const L = leafletRef.current
+    if (!L || learnerMoved.current) return
+    const pad = paddingRef.current
+    programmaticMove.current = true
+    map.fitBounds(boundsFor(L, viewRef.current), {
+      paddingTopLeft: [pad.left, pad.top],
+      paddingBottomRight: [pad.right, pad.bottom],
+      animate: false,
+    })
+  }
 
   useEffect(() => {
     let disposed = false
@@ -127,7 +168,35 @@ export default function CommunityEventMap({
         worldCopyJump: true,
         minZoom: 3,
       })
+      // Listen before the first fit so the starting view is known too. The
+      // app's own moves are reported at once, so where it framed the map is
+      // always known before any drag that follows; the learner's moves settle
+      // for a moment first so a drag is one report, not dozens.
+      const reportViewport = (programmatic: boolean) => {
+        const bounds = map.getBounds()
+        callbacks.current.onViewportChange?.(
+          areaForBounds({
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest(),
+          }),
+          programmatic,
+        )
+      }
+      map.on('moveend', () => {
+        const programmatic = programmaticMove.current
+        programmaticMove.current = false
+        if (programmatic) {
+          reportViewport(true)
+          return
+        }
+        learnerMoved.current = true
+        clearTimeout(viewportTimer)
+        viewportTimer = setTimeout(() => reportViewport(false), 250)
+      })
       const initialPad = paddingRef.current
+      programmaticMove.current = true
       map.fitBounds(boundsFor(L, view), {
         paddingTopLeft: [initialPad.left, initialPad.top],
         paddingBottomRight: [initialPad.right, initialPad.bottom],
@@ -141,23 +210,9 @@ export default function CommunityEventMap({
       markerLayerRef.current = L.layerGroup().addTo(map)
       userLayerRef.current = L.layerGroup().addTo(map)
       map.on('zoomend', () => setZoomTick((tick) => tick + 1))
-      map.on('moveend', () => {
-        clearTimeout(viewportTimer)
-        viewportTimer = setTimeout(() => {
-          const bounds = map.getBounds()
-          callbacks.current.onViewportChange?.(
-            areaForBounds({
-              north: bounds.getNorth(),
-              south: bounds.getSouth(),
-              east: bounds.getEast(),
-              west: bounds.getWest(),
-            }),
-          )
-        }, 250)
-      })
       setMapReady(true)
       requestAnimationFrame(() => {
-        if (mapRef.current === map) map.invalidateSize()
+        if (mapRef.current === map) settleLayout(map)
       })
     })
     return () => {
@@ -179,7 +234,7 @@ export default function CommunityEventMap({
     const container = containerRef.current
     if (!map || !container || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => {
-      if (mapRef.current === map) map.invalidateSize()
+      if (mapRef.current === map) settleLayout(map)
     })
     observer.observe(container)
     return () => observer.disconnect()
@@ -192,6 +247,10 @@ export default function CommunityEventMap({
     if (!map || !L || !mapReady || appliedViewToken.current === view.token) return
     appliedViewToken.current = view.token
     const pad = paddingRef.current
+    // A new search area: frame it, and follow layout changes again until the
+    // learner moves. fitBounds always ends in exactly one moveend.
+    learnerMoved.current = false
+    programmaticMove.current = true
     map.fitBounds(boundsFor(L, view), {
       paddingTopLeft: [pad.left, pad.top],
       paddingBottomRight: [pad.right, pad.bottom],

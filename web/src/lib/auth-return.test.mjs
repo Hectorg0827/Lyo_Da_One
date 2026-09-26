@@ -27,3 +27,11 @@ test('an event invite link survives login, and nothing that only looks like one'
   assert.equal(authSwitchHref('/auth/login', '?next=%2Ftest-prep'), '/auth/login?next=%2Ftest-prep');
   assert.equal(authSwitchHref('/auth/login', ''), '/auth/login');
 });
+
+test('signing in from the top bar on Community comes back to Community', () => {
+  assert.equal(authReturnPath('?next=%2Fcommunity'), '/community');
+  assert.equal(authSwitchHref('/auth/login', '?next=%2Fcommunity'), '/auth/login?next=%2Fcommunity');
+  // Other pages still return home, never to an arbitrary or look-alike path.
+  assert.equal(authSwitchHref('/auth/login', '?next=%2Fcommunity%2Fevents%2F4'), '/auth/login');
+  assert.equal(authReturnPath('?next=%2Fcommunity%2F..%2Fauth'), '/');
+});

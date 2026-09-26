@@ -5,13 +5,67 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Bell, MessageSquare, Search, User, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
+import { authSwitchHref } from '@/lib/auth-return.mjs';
+import { totalUnread, unreadBadge, unreadLabel } from '@/lib/unread.mjs';
+
+const UNREAD_REFRESH_MS = 60_000;
+
+/**
+ * Real unread counts for the signed-in account, from the server. A failed
+ * check keeps the last known counts rather than inventing any. Checked when
+ * the app opens, on returning to the tab, every minute while it is visible,
+ * and on leaving the inbox pages (so reading clears the badge), not on every
+ * navigation.
+ */
+function useUnreadCounts(enabled: boolean, pathname: string) {
+  const inboxKey =
+    pathname.startsWith('/messages') || pathname.startsWith('/notifications') ? pathname : 'elsewhere';
+  const [counts, setCounts] = useState({ notifications: 0, messages: 0 });
+
+  useEffect(() => {
+    if (!enabled) {
+      setCounts({ notifications: 0, messages: 0 });
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      const [notifications, messages] = await Promise.allSettled([
+        api.notifications.unreadCount(),
+        api.messages.unreadConversations(),
+      ]);
+      if (cancelled) return;
+      setCounts((current) => ({
+        notifications:
+          notifications.status === 'fulfilled' ? Number(notifications.value?.count) || 0 : current.notifications,
+        messages: messages.status === 'fulfilled' ? totalUnread(messages.value?.conversations) : current.messages,
+      }));
+    };
+    void refresh();
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void refresh();
+    }, UNREAD_REFRESH_MS);
+    const onFocus = () => void refresh();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [enabled, inboxKey]);
+
+  return counts;
+}
 
 export function TopBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
+  const { user, isAuthenticated, isLoading, logout } = useAuthStore();
+  const unread = useUnreadCounts(isAuthenticated, pathname);
+  const notificationBadge = unreadBadge(unread.notifications);
+  const messageBadge = unreadBadge(unread.messages);
 
   const [searchValue, setSearchValue] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -42,6 +96,9 @@ export function TopBar() {
   if (pathname.startsWith('/classroom')) {
     return null;
   }
+
+  const iconLinkClass =
+    'relative p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors';
 
   return (
     <header
@@ -80,109 +137,116 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* Right: Action buttons */}
-      <div className="flex items-center gap-1 shrink-0">
-        {/* Notifications */}
+      {/* Right: account actions. Signed out, there is nothing personal to show. */}
+      {isLoading ? (
+        <div className="h-10 w-24 shrink-0" aria-hidden="true" />
+      ) : !isAuthenticated ? (
         <Link
-          href="/notifications"
-          className="relative p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
-          aria-label="Notifications"
+          href={authSwitchHref('/auth/login', `?next=${encodeURIComponent(pathname)}`)}
+          className="shrink-0 rounded-xl bg-[#6366f1] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#818cf8]"
         >
-          <Bell className="w-5 h-5" />
-          {/* Red dot indicator */}
-          <span
-            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500"
-            aria-hidden="true"
-          />
+          Sign in
         </Link>
+      ) : (
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Notifications: a dot only when something is actually unread */}
+          <Link href="/notifications" className={iconLinkClass} aria-label={unreadLabel('Notifications', unread.notifications)}>
+            <Bell className="w-5 h-5" />
+            {notificationBadge && (
+              <span
+                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500"
+                aria-hidden="true"
+                data-testid="notifications-unread"
+              />
+            )}
+          </Link>
 
-        {/* Messages */}
-        <Link
-          href="/messages"
-          className="relative p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
-          aria-label="Messages"
-        >
-          <MessageSquare className="w-5 h-5" />
-          {/* Count badge */}
-          <span
-            className="absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-[#6366f1] text-white text-[9px] font-bold leading-none"
-            aria-hidden="true"
-          >
-            2
-          </span>
-        </Link>
+          {/* Messages: the real number of unread messages */}
+          <Link href="/messages" className={iconLinkClass} aria-label={unreadLabel('Messages', unread.messages)}>
+            <MessageSquare className="w-5 h-5" />
+            {messageBadge && (
+              <span
+                className="absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-[#6366f1] text-white text-[9px] font-bold leading-none"
+                aria-hidden="true"
+                data-testid="messages-unread"
+              >
+                {messageBadge}
+              </span>
+            )}
+          </Link>
 
-        {/* User avatar + dropdown */}
-        <div className="relative ml-1" ref={dropdownRef}>
-          <button
-            onClick={() => setDropdownOpen((o) => !o)}
-            className="rounded-full ring-2 ring-transparent hover:ring-[#6366f1]/50 transition-all focus-visible:outline-none focus-visible:ring-[#6366f1]/60"
-            aria-label="Open profile menu"
-            aria-expanded={dropdownOpen}
-            aria-haspopup="menu"
-          >
-            <Avatar
-              name={user?.displayName ?? 'User'}
-              src={user?.avatar || undefined}
-              size="md"
-            />
-          </button>
-
-          {/* Dropdown menu */}
-          {dropdownOpen && (
-            <div
-              role="menu"
-              className={cn(
-                'absolute right-0 mt-2 w-48 py-1 rounded-xl',
-                'bg-[#0d0f18]/95 backdrop-blur-2xl border border-white/12',
-                'shadow-xl shadow-black/40',
-                'z-50',
-              )}
+          {/* User avatar + dropdown */}
+          <div className="relative ml-1" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((o) => !o)}
+              className="rounded-full ring-2 ring-transparent hover:ring-[#6366f1]/50 transition-all focus-visible:outline-none focus-visible:ring-[#6366f1]/60"
+              aria-label="Open profile menu"
+              aria-expanded={dropdownOpen}
+              aria-haspopup="menu"
             >
-              {/* User info header */}
-              {user && (
-                <div className="px-4 py-2 border-b border-white/5">
-                  <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                    {user.displayName}
-                  </p>
-                  <p className="text-xs text-[var(--text-secondary)] truncate">{user.email}</p>
-                </div>
-              )}
+              <Avatar
+                name={user?.displayName || user?.username || 'You'}
+                src={user?.avatar || undefined}
+                size="md"
+              />
+            </button>
 
-              <Link
-                href="/profile"
-                role="menuitem"
-                onClick={() => setDropdownOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
+            {/* Dropdown menu */}
+            {dropdownOpen && (
+              <div
+                role="menu"
+                className={cn(
+                  'absolute right-0 mt-2 w-48 py-1 rounded-xl',
+                  'bg-[#0d0f18]/95 backdrop-blur-2xl border border-white/12',
+                  'shadow-xl shadow-black/40',
+                  'z-50',
+                )}
               >
-                <User className="w-4 h-4 shrink-0" />
-                Profile
-              </Link>
+                {/* User info header */}
+                {user && (
+                  <div className="px-4 py-2 border-b border-white/5">
+                    <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                      {user.displayName}
+                    </p>
+                    <p className="text-xs text-[var(--text-secondary)] truncate">{user.email}</p>
+                  </div>
+                )}
 
-              <Link
-                href="/settings"
-                role="menuitem"
-                onClick={() => setDropdownOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
-              >
-                <Settings className="w-4 h-4 shrink-0" />
-                Settings
-              </Link>
-
-              <div className="border-t border-white/5 mt-1 pt-1">
-                <button
+                <Link
+                  href="/profile"
                   role="menuitem"
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                  onClick={() => setDropdownOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
                 >
-                  <LogOut className="w-4 h-4 shrink-0" />
-                  Logout
-                </button>
+                  <User className="w-4 h-4 shrink-0" />
+                  Profile
+                </Link>
+
+                <Link
+                  href="/settings"
+                  role="menuitem"
+                  onClick={() => setDropdownOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
+                >
+                  <Settings className="w-4 h-4 shrink-0" />
+                  Settings
+                </Link>
+
+                <div className="border-t border-white/5 mt-1 pt-1">
+                  <button
+                    role="menuitem"
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4 shrink-0" />
+                    Logout
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }
