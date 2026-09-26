@@ -918,15 +918,52 @@ skill. Per-unit concept ids would give the record the shape §11's example
 implies, and would also be the third time this codebase changed where evidence
 lands; §7.6 is the account of what that cost last time. Not attempted here.
 
-### 11.6 Verification, and its limits
+### 11.6 Eight learners, eight lessons
 
-- 829 backend tests pass, including 17 new ones in
-  `tests/test_diagnostic_first.py`. Those were checked against mutations:
-  reverting the opening to `orient` fails 14, writing a zero for a wrong probe
-  fails 3, and returning the apology to the teacher's voice fails 2 recovery
-  tests.
-- 196 web library tests pass; `npx tsc --noEmit` and `next build` are clean; all
-  five parity/trust gates pass.
+`tests/test_learner_simulations.py` drives the real `AdaptiveSession` with a
+scripted learner per profile from the brief. One unit each, since that is where
+the divergence lives; the last test runs a three-unit session for the properties
+only a whole session can break.
+
+| profile | moves the teacher chose | turns | longest teacher run | mastered | for review |
+| --- | --- | --- | --- | --- | --- |
+| BEGINNER | diagnose → orient → guided → faded → independent | 5 | 3 | yes | — |
+| CONFIDENT_BUT_WRONG | diagnose → orient → guided → reteach → guided → faded → independent | 7 | 3 | yes | — |
+| ADVANCED | diagnose → faded → independent | 3 | 1 | yes | — |
+| QUIET | diagnose → guided → faded → independent | 4 | 1 | yes | — |
+| CURIOUS | diagnose → orient → answer_question → answer_question → guided → faded → independent | 7 | 4 | yes | — |
+| STRUGGLING | diagnose → orient → guided → reteach → guided → prerequisite | 6 | 3 | no | unit 0 |
+| FAST_LEARNER | diagnose → faded → independent | 3 | 1 | yes | — |
+| INTERRUPTER | diagnose → orient → answer_question → answer_question → guided → faded → independent | 7 | 4 | yes | — |
+
+The row that matters is the shape of the table rather than any line in it.
+`test_no_two_learners_get_the_same_lesson` is the one assertion that catches a
+relapse to content delivery: every profile test above it can keep passing while
+the engine quietly converges on one script — a `diagnose` whose result is
+ignored, say — so the divergence is asserted directly. Two mutations confirm it
+bites: ignoring a correct probe fails three tests including that one, and
+ignoring a partial probe fails two.
+
+**A flaw in the first version of this harness, worth recording.** A choice
+checkpoint is graded from the tapped option's own `correct` flag and never
+reaches the evaluator — the server will not ask a model whether a learner
+pressed the right button. The harness sent the correct option every time and
+scripted the verdict only through the evaluator, so five profiles silently
+became learners who got everything right, and five tests asserted the wrong
+thing while four passed. It also surfaced that the shared fixture's distractor
+carried no `misconception`, so nothing in the whole suite exercised the choice
+path's misconception capture: a tapped wrong answer reached the learner record
+with no account of the error in it.
+
+### 11.7 Verification, and its limits
+
+- 841 backend tests pass, including 17 in `tests/test_diagnostic_first.py` and
+  12 in `tests/test_learner_simulations.py`. Those were checked against
+  mutations: reverting the opening to `orient` fails 14, writing a zero for a
+  wrong probe fails 3, returning the apology to the teacher's voice fails 2
+  recovery tests, and ignoring the probe's result fails 3 simulations.
+- 197 web library tests pass; `npx tsc --noEmit` and `next build` are clean; all
+  six parity/trust gates pass.
 - **The iOS and Android tests added here were not run.** There is no macOS
   toolchain and no Android SDK in this workstream, so CI's `ios` and `android`
   jobs are the authoritative check for `testTheOpeningProbeAsks…` and

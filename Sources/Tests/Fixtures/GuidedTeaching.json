@@ -1,11 +1,11 @@
 {
   "scenes": {
     "diagnostic": {
-      "scene_id": "709407f9-539e-4782-9d15-58da2df745e6",
+      "scene_id": "828a6c45-de1f-4236-9bee-22a879d85ba7",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "34e5cb8f-aeaa-4b01-82de-c51e478ff786",
+          "component_id": "e9d20afd-0279-4f09-ad62-75ceaa8fa54f",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -22,7 +22,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "5a42bc00-768c-4d01-9d0d-e5ac7c0dcecc",
+          "component_id": "b8b99347-deee-419c-94ed-ddab7c1532be",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -44,7 +44,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "ff11cf41-994e-40ba-a2a0-4767fb91cdeb",
+          "component_id": "ab8e24b4-7998-4c43-adfa-07d2e4ac3dab",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -61,7 +61,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "3f529419-a4d7-4e9a-93a9-c9b9b5e41842",
+          "component_id": "78f12103-4f2f-4381-ad5b-eb6a694c69d0",
           "type": "InputField",
           "priority": 4,
           "animation": "fade_in",
@@ -96,7 +96,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.742517"
+        "creation_timestamp": "2026-09-26T16:24:21.096692"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -105,11 +105,11 @@
       "fallback_scene_id": null
     },
     "orientation": {
-      "scene_id": "0f4359ae-596e-4ad1-8ddb-3c782116d3b2",
+      "scene_id": "069870ad-a3ab-4f03-a6a5-a26a16fcaa89",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "8ace383c-c15f-44fd-bdfe-e0b9feb7c1fa",
+          "component_id": "6808f39f-b075-4a8b-9010-c398b6f1be5f",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -126,7 +126,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "6949e861-d613-4ee8-985f-e2776fd3461d",
+          "component_id": "619bb074-55d8-498e-958a-abd842cdfdba",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -148,7 +148,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "811ddfd3-b2ca-48ce-b1da-e487bbde31e6",
+          "component_id": "bfe3ac90-8188-48ff-b52b-669034f4c44c",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -165,7 +165,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:83125578-5870-42d0-b8cd-f2229f1eedc4",
+          "component_id": "visual:3ae29b2e-7119-45b9-a9d6-9bd046e64a84",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -194,7 +194,7 @@
           }
         },
         {
-          "component_id": "83125578-5870-42d0-b8cd-f2229f1eedc4",
+          "component_id": "3ae29b2e-7119-45b9-a9d6-9bd046e64a84",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -224,7 +224,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.744394"
+        "creation_timestamp": "2026-09-26T16:24:21.098554"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -233,11 +233,11 @@
       "fallback_scene_id": null
     },
     "model_1": {
-      "scene_id": "7237130b-c7a1-4419-81db-b420937de7a6",
+      "scene_id": "aa9bb7d9-5761-4456-bdad-04f10a46a8d6",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "736f03e0-6e70-4969-a52e-45da9e68a1ea",
+          "component_id": "29047048-b88d-4774-8e82-eacc26911601",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -254,7 +254,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "90c634d2-43f6-4ef9-a163-2a702805d380",
+          "component_id": "3272ad4b-3a7f-4274-84e9-4cebe82a85c8",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -276,7 +276,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "e93d5580-c7c9-4aeb-b1b8-9e8c641b70e7",
+          "component_id": "3ae8e767-9798-4594-b68c-0447b609884e",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -293,7 +293,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:7d37e664-e403-4ef5-8d83-4a71dad1a508",
+          "component_id": "visual:041dd5b0-8e2f-483f-89af-48254e108dd5",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -331,7 +331,7 @@
           }
         },
         {
-          "component_id": "7d37e664-e403-4ef5-8d83-4a71dad1a508",
+          "component_id": "041dd5b0-8e2f-483f-89af-48254e108dd5",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -361,7 +361,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.745421"
+        "creation_timestamp": "2026-09-26T16:24:21.099558"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -370,11 +370,11 @@
       "fallback_scene_id": null
     },
     "model_2": {
-      "scene_id": "4dd1d87d-88aa-4bcd-9e15-4aac223cbf76",
+      "scene_id": "4bb50141-17b4-446a-a3fa-d88ed93d10ee",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "bbdb62bd-6b61-4a64-889c-291e6adc68ba",
+          "component_id": "6c3c5829-a173-49db-9a95-509bbe7e9b62",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -391,7 +391,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "105fc9bf-c5e6-4613-8aa9-028f9ab13c36",
+          "component_id": "53553b51-1c87-4aad-9f19-d173c3e652eb",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -413,7 +413,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "cff4ce35-901a-4b96-a547-26a37b1c7095",
+          "component_id": "9f5e0d7e-df23-48eb-9c8f-53f2de8353d0",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -430,7 +430,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:6656bb44-f84e-4164-895d-5ddc6789e484",
+          "component_id": "visual:89c71575-5ebb-43ce-9d68-674686486c9c",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -472,7 +472,7 @@
           }
         },
         {
-          "component_id": "6656bb44-f84e-4164-895d-5ddc6789e484",
+          "component_id": "89c71575-5ebb-43ce-9d68-674686486c9c",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -502,7 +502,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.746264"
+        "creation_timestamp": "2026-09-26T16:24:21.100414"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -511,11 +511,11 @@
       "fallback_scene_id": null
     },
     "guided": {
-      "scene_id": "9c615738-f9d7-4092-b590-afb1151dc098",
+      "scene_id": "6774f3a5-f16b-45f5-b161-b3b64b2a2846",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "4c1321ea-a3fb-464f-bc97-ccb6d4751fab",
+          "component_id": "04155bd9-709c-40cf-9c8a-83baa81542f2",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -532,7 +532,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "382245a9-85ca-404b-8030-ebbd60ea02a8",
+          "component_id": "94e22593-44d8-4bac-8779-1675c1f03e5a",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -554,7 +554,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "6155478f-c4f4-4b49-a593-e22c4ae21b9d",
+          "component_id": "86ec83b0-07be-4999-bbdf-5c8966e9d157",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -571,7 +571,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:808879b1-8f17-462f-b664-6dd004b3b0bf",
+          "component_id": "visual:5ee16924-413f-48fd-b6e0-6b33c7976036",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -609,7 +609,7 @@
           }
         },
         {
-          "component_id": "808879b1-8f17-462f-b664-6dd004b3b0bf",
+          "component_id": "5ee16924-413f-48fd-b6e0-6b33c7976036",
           "type": "QuizCard",
           "priority": 4,
           "animation": "fade_in",
@@ -662,7 +662,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.747787"
+        "creation_timestamp": "2026-09-26T16:24:21.102068"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -671,11 +671,11 @@
       "fallback_scene_id": null
     },
     "faded": {
-      "scene_id": "4193dccb-bec9-475a-a085-3358a759139c",
+      "scene_id": "18159c0a-ba95-4cc8-85ef-cb7925708538",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "8297f2e1-2071-4c45-bb87-c1f4c18cc15b",
+          "component_id": "81a38092-812b-4af8-87fd-1591b95854d4",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -692,7 +692,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "86f54657-cdcc-4beb-9cc7-29d459400da5",
+          "component_id": "90add658-8525-4452-9811-010fde875e54",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -714,7 +714,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "e41642de-eac5-45cb-95da-e5c752acaf94",
+          "component_id": "64225a6f-2b8a-45e3-8975-b1f60615b4aa",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -731,7 +731,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "6eeb7a93-69b6-4c57-bce6-44050292027c",
+          "component_id": "b5e98b33-50d6-4277-aa00-e633e1666227",
           "type": "InputField",
           "priority": 4,
           "animation": "fade_in",
@@ -766,7 +766,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.750408"
+        "creation_timestamp": "2026-09-26T16:24:21.104430"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -775,11 +775,11 @@
       "fallback_scene_id": null
     },
     "independent": {
-      "scene_id": "6b9573f1-4515-4f0c-a95e-def9f5bde16d",
+      "scene_id": "f8ceed3c-75c4-45a3-a2d1-8d677da063b8",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "65cf8b29-80dc-4241-867b-8a519fb840cd",
+          "component_id": "59910119-6a55-47e1-af36-8687e0c4c7f7",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -796,7 +796,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "fe039382-6754-401e-8c11-53712567ab8c",
+          "component_id": "ef6ffeaf-f655-4e16-b1b7-5a9d75eca5d7",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -818,7 +818,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "a840f6de-894f-40e0-b8a6-d0e8d25db608",
+          "component_id": "b8144a24-64e5-40be-98e9-b750961627f5",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -835,7 +835,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "44eb2d54-d930-4bcd-b827-8e514c87dfbe",
+          "component_id": "5d660358-7c41-448d-8258-0ae6b5c6d81d",
           "type": "InputField",
           "priority": 4,
           "animation": "fade_in",
@@ -870,7 +870,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.751634"
+        "creation_timestamp": "2026-09-26T16:24:21.105740"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -879,11 +879,11 @@
       "fallback_scene_id": null
     },
     "summary": {
-      "scene_id": "2a920ac2-b4ad-46af-b3a2-2b80d8d9f02a",
+      "scene_id": "2d60291f-489b-434c-9779-84cdda46ae62",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "39c37490-e991-4036-8b89-0364089fe394",
+          "component_id": "06e993fd-8ae7-412f-841f-c9328fa4dedb",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -900,7 +900,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "47d3da06-d398-4208-8e26-416e08a8610c",
+          "component_id": "ce55f191-5614-4be8-b0e8-75a99c9de7d8",
           "type": "TeacherMessage",
           "priority": 0,
           "animation": "fade_in",
@@ -920,7 +920,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "4882bc2c-8e51-4e7e-be11-4bce951c1df4",
+          "component_id": "e6ebdda4-cfac-423e-a3be-46ba31e9bccd",
           "type": "ExampleBlock",
           "priority": 0,
           "animation": "fade_in",
@@ -937,7 +937,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "c88f1110-6a50-4724-a096-c10d9fa7a41f",
+          "component_id": "206e234d-ead7-47d9-9f21-417ca7c7314c",
           "type": "ExampleBlock",
           "priority": 0,
           "animation": "fade_in",
@@ -954,7 +954,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "f055b408-65b6-4d8c-98ee-a5f9abf6fc90",
+          "component_id": "72a8fe44-9b60-492d-8322-3a8b8b7f55a9",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -984,7 +984,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-26T16:12:17.752455"
+        "creation_timestamp": "2026-09-26T16:24:21.106577"
       },
       "trigger_conditions": null,
       "success_conditions": null,

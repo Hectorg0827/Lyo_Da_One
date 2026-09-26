@@ -74,3 +74,30 @@ test('a unit opens by asking, with no worked example and no way to move on unans
   // the reasoning.
   assert.equal(components.some(c => c.block_type === 'teaching_visual'), false);
 });
+
+test("a distractor's misconception is the server's diagnosis, not the learner's to read", () => {
+  // Every distractor names the misconception choosing it would reveal — that is
+  // what makes reteaching able to address the actual error. It is a judgement
+  // about the learner, made for the next teaching turn, and it must not travel
+  // with the question they are still answering.
+  const options = Object.values(fixture.scenes)
+    .flatMap(scene => scene.components)
+    .filter(c => c.type === 'QuizCard')
+    .flatMap(c => c.options ?? []);
+  assert.ok(options.length > 0, 'there must be a choice checkpoint to check');
+  for (const option of options) {
+    // The field exists on the wire model and is always empty. It is the
+    // server's diagnosis of what picking this option would say about the
+    // learner, and it is for the next teaching turn, not for the person still
+    // choosing.
+    assert.equal(option.misconception_tag ?? null, null);
+    assert.equal(option.remediation_hint ?? null, null);
+  }
+
+  const raw = JSON.stringify(fixture.scenes);
+  assert.equal(raw.includes('more_pieces_means_more_each'), false);
+  // Nor the private rubric, the model answer, or the grader's own criteria.
+  for (const secret of ['example_answer', 'criteria']) {
+    assert.equal(raw.includes(secret), false, secret);
+  }
+});
