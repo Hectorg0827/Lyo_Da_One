@@ -3,6 +3,12 @@
  * with nothing unread (or no account) there is no badge at all.
  */
 
+/**
+ * Fired on window by a page that has just marked something read on the
+ * server, so the top bar re-checks now rather than at its next minute.
+ */
+export const UNREAD_CHANGED_EVENT = 'lyo:unread-changed';
+
 /** Badge text for an unread count: nothing at zero, "9+" past nine. */
 export function unreadBadge(count) {
   const value = Number(count);

@@ -10,6 +10,7 @@ import { useSyncEvents } from '@/hooks/use-sync';
 import { api } from '@/lib/api';
 import type { Conversation, DirectMessage, User } from '@/types';
 import { conversationIdFromSearch, conversationListState } from '@/lib/messages-view.mjs';
+import { UNREAD_CHANGED_EVENT } from '@/lib/unread.mjs';
 
 type Person = { id: number; username: string; name: string; avatar_url: string | null };
 
@@ -247,10 +248,13 @@ export default function MessagesPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeMessages.length]);
 
-  // Mark conversation as read when opened
+  // Mark conversation as read when opened, then let the top bar's count catch up
   useEffect(() => {
     if (activeConvId) {
-      api.messages.markRead(activeConvId).catch(() => {});
+      api.messages
+        .markRead(activeConvId)
+        .then(() => window.dispatchEvent(new Event(UNREAD_CHANGED_EVENT)))
+        .catch(() => {});
     }
   }, [activeConvId]);
 
