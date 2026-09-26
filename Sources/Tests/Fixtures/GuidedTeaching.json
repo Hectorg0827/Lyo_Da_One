@@ -1,11 +1,115 @@
 {
   "scenes": {
-    "orientation": {
-      "scene_id": "b0e61cfc-9ca5-421b-ba7c-247125526cb5",
+    "diagnostic": {
+      "scene_id": "828a6c45-de1f-4236-9bee-22a879d85ba7",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "6f8b76ec-e0d5-4875-b237-1b7589f2c962",
+          "component_id": "e9d20afd-0279-4f09-ad62-75ceaa8fa54f",
+          "type": "ProgressBar",
+          "priority": 0,
+          "animation": "fade_in",
+          "delay_ms": 0,
+          "duration_ms": null,
+          "accessibility_label": null,
+          "language_code": "en-US",
+          "show_if": null,
+          "current": 0,
+          "total": 1,
+          "show_percentage": true,
+          "show_fraction": false,
+          "label": "Where you're starting",
+          "color_scheme": "blue"
+        },
+        {
+          "component_id": "b8b99347-deee-419c-94ed-ddab7c1532be",
+          "type": "TeacherMessage",
+          "priority": 1,
+          "animation": "fade_in",
+          "delay_ms": 0,
+          "duration_ms": null,
+          "accessibility_label": null,
+          "language_code": "en-US",
+          "show_if": null,
+          "text": "Before I explain anything, I want to see where you're starting from.",
+          "emotion": "encouraging",
+          "audio_mood": "calm",
+          "audio_url": null,
+          "avatar_expression": null,
+          "background_color": "#F8F9FA",
+          "concept_tags": [
+            "Fraction skill 1"
+          ],
+          "difficulty_level": "beginner",
+          "source_attributions": []
+        },
+        {
+          "component_id": "ab8e24b4-7998-4c43-adfa-07d2e4ac3dab",
+          "type": "ExampleBlock",
+          "priority": 2,
+          "animation": "fade_in",
+          "delay_ms": 0,
+          "duration_ms": null,
+          "accessibility_label": null,
+          "language_code": "en-US",
+          "show_if": null,
+          "title": "Where you're starting · Two identical pizzas",
+          "content": "One pizza is cut into 2 equal pieces. The other is cut into 3.",
+          "example_type": "real_world",
+          "interactive": false,
+          "code_language": null,
+          "syntax_highlighting": true
+        },
+        {
+          "component_id": "78f12103-4f2f-4381-ad5b-eb6a694c69d0",
+          "type": "InputField",
+          "priority": 4,
+          "animation": "fade_in",
+          "delay_ms": 0,
+          "duration_ms": null,
+          "accessibility_label": null,
+          "language_code": "en-US",
+          "show_if": null,
+          "placeholder": "Name the bigger piece and give your reason.",
+          "question": "Two identical pizzas sit on the table. One is cut into 2 equal pieces, the other into 3.\n\nTake one piece from each. Which piece is bigger, and how can you tell?\n\nName the bigger piece and give your reason.",
+          "action_intent": "submit_transfer",
+          "concept_id": "Fractions",
+          "evidence_type": "explanation",
+          "source_attributions": [],
+          "validation_level": "lenient",
+          "expected_keywords": [],
+          "min_words": 1,
+          "max_words": 200,
+          "min_score": 0.25,
+          "auto_capitalize": true,
+          "spell_check": true,
+          "multiline": true
+        }
+      ],
+      "state": "pending",
+      "metadata": {
+        "concept_tags": [],
+        "difficulty_level": "beginner",
+        "estimated_duration_seconds": 30,
+        "prerequisite_concepts": [],
+        "target_concepts": [],
+        "user_mastery_context": null,
+        "frustration_level": 0.0,
+        "scene_source": "ai_generated",
+        "creation_timestamp": "2026-09-26T16:24:21.096692"
+      },
+      "trigger_conditions": null,
+      "success_conditions": null,
+      "failure_conditions": null,
+      "next_scene_id": null,
+      "fallback_scene_id": null
+    },
+    "orientation": {
+      "scene_id": "069870ad-a3ab-4f03-a6a5-a26a16fcaa89",
+      "scene_type": "instruction",
+      "components": [
+        {
+          "component_id": "6808f39f-b075-4a8b-9010-c398b6f1be5f",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -22,7 +126,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "51badcb1-c8fe-4af9-a480-1401007746a5",
+          "component_id": "619bb074-55d8-498e-958a-abd842cdfdba",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -31,7 +135,7 @@
           "accessibility_label": null,
           "language_code": "en-US",
           "show_if": null,
-          "text": "Imagine sharing a snack with a friend. Today we'll find which fraction gives the larger piece. I'll show you one example, then we'll try the next step together.",
+          "text": "No problem — let's build it from the start. Imagine sharing a snack with a friend. Today we'll find which fraction gives the larger piece. I'll show you one example, then we'll try the next step together.",
           "emotion": "encouraging",
           "audio_mood": "calm",
           "audio_url": null,
@@ -44,7 +148,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "52c77c04-b297-45ab-a026-74dc0d78a448",
+          "component_id": "bfe3ac90-8188-48ff-b52b-669034f4c44c",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -61,7 +165,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:97e4d566-6811-486a-9b1c-c914bd7fde49",
+          "component_id": "visual:3ae29b2e-7119-45b9-a9d6-9bd046e64a84",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -90,7 +194,7 @@
           }
         },
         {
-          "component_id": "97e4d566-6811-486a-9b1c-c914bd7fde49",
+          "component_id": "3ae29b2e-7119-45b9-a9d6-9bd046e64a84",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -120,7 +224,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.665716"
+        "creation_timestamp": "2026-09-26T16:24:21.098554"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -129,11 +233,11 @@
       "fallback_scene_id": null
     },
     "model_1": {
-      "scene_id": "7a1c6490-be14-4f35-a435-720ab6de19f5",
+      "scene_id": "aa9bb7d9-5761-4456-bdad-04f10a46a8d6",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "1bf8cf66-02ca-4174-81ab-6d6f012853ca",
+          "component_id": "29047048-b88d-4774-8e82-eacc26911601",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -150,7 +254,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "410f057b-539b-4585-906b-1a425a7dd616",
+          "component_id": "3272ad4b-3a7f-4274-84e9-4cebe82a85c8",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -172,7 +276,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "6aef97da-72fc-4a14-9404-4bf0fb664fda",
+          "component_id": "3ae8e767-9798-4594-b68c-0447b609884e",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -189,7 +293,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:e8c06d7d-d0d2-4ee5-9501-01dc4d5740bc",
+          "component_id": "visual:041dd5b0-8e2f-483f-89af-48254e108dd5",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -227,7 +331,7 @@
           }
         },
         {
-          "component_id": "e8c06d7d-d0d2-4ee5-9501-01dc4d5740bc",
+          "component_id": "041dd5b0-8e2f-483f-89af-48254e108dd5",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -257,7 +361,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.666594"
+        "creation_timestamp": "2026-09-26T16:24:21.099558"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -266,11 +370,11 @@
       "fallback_scene_id": null
     },
     "model_2": {
-      "scene_id": "6f35cc93-aede-4558-8123-34cc768a95fc",
+      "scene_id": "4bb50141-17b4-446a-a3fa-d88ed93d10ee",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "3a8a6c25-bab9-4894-91fa-9e1ce2d2a1c3",
+          "component_id": "6c3c5829-a173-49db-9a95-509bbe7e9b62",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -287,7 +391,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "b2a687dd-4167-4689-a1e6-f5b16bd342f8",
+          "component_id": "53553b51-1c87-4aad-9f19-d173c3e652eb",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -309,7 +413,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "adec9f2d-a173-4819-adf3-d5c28f8a4129",
+          "component_id": "9f5e0d7e-df23-48eb-9c8f-53f2de8353d0",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -326,7 +430,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:37dcb936-1502-4f83-ab8e-2644c3573bc9",
+          "component_id": "visual:89c71575-5ebb-43ce-9d68-674686486c9c",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -368,7 +472,7 @@
           }
         },
         {
-          "component_id": "37dcb936-1502-4f83-ab8e-2644c3573bc9",
+          "component_id": "89c71575-5ebb-43ce-9d68-674686486c9c",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -398,7 +502,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.667312"
+        "creation_timestamp": "2026-09-26T16:24:21.100414"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -407,11 +511,11 @@
       "fallback_scene_id": null
     },
     "guided": {
-      "scene_id": "4ab19359-633f-4350-bab7-cd9b8304e957",
+      "scene_id": "6774f3a5-f16b-45f5-b161-b3b64b2a2846",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "0dcc9f20-ae4d-4484-95a6-4b5a2318a932",
+          "component_id": "04155bd9-709c-40cf-9c8a-83baa81542f2",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -428,7 +532,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "71e11d64-dc16-496b-bfe9-16e7f2729f6d",
+          "component_id": "94e22593-44d8-4bac-8779-1675c1f03e5a",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -437,7 +541,7 @@
           "accessibility_label": null,
           "language_code": "en-US",
           "show_if": null,
-          "text": "Equal pieces are comparable when they come from the same whole. More cuts make each piece smaller.",
+          "text": "No problem — let's build it from the start. Equal pieces are comparable when they come from the same whole. More cuts make each piece smaller.",
           "emotion": "encouraging",
           "audio_mood": "calm",
           "audio_url": null,
@@ -450,7 +554,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "a141a942-3d29-4632-8814-5927d6715494",
+          "component_id": "86ec83b0-07be-4999-bbdf-5c8966e9d157",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -467,7 +571,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "visual:2d6d27be-8473-494d-a94e-2a7fb10205cd",
+          "component_id": "visual:5ee16924-413f-48fd-b6e0-6b33c7976036",
           "type": "LessonBlock",
           "priority": 3,
           "animation": "fade_in",
@@ -505,7 +609,7 @@
           }
         },
         {
-          "component_id": "2d6d27be-8473-494d-a94e-2a7fb10205cd",
+          "component_id": "5ee16924-413f-48fd-b6e0-6b33c7976036",
           "type": "QuizCard",
           "priority": 4,
           "animation": "fade_in",
@@ -514,7 +618,7 @@
           "accessibility_label": null,
           "language_code": "en-US",
           "show_if": null,
-          "question": "In example 2, two identical pizzas are cut into halves and thirds.\n\nWhich single piece is larger?",
+          "question": "In example 3, two identical pizzas are cut into halves and thirds.\n\nWhich single piece is larger?",
           "options": [
             {
               "id": "a",
@@ -558,7 +662,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.668646"
+        "creation_timestamp": "2026-09-26T16:24:21.102068"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -567,11 +671,11 @@
       "fallback_scene_id": null
     },
     "faded": {
-      "scene_id": "c485d17c-dce3-4d7d-b4db-27eb536229f2",
+      "scene_id": "18159c0a-ba95-4cc8-85ef-cb7925708538",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "5516458f-aa8e-4d64-9b18-c14ebece6da8",
+          "component_id": "81a38092-812b-4af8-87fd-1591b95854d4",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -588,7 +692,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "8afb08bf-f3ce-46f3-9705-1b7b19d8c8ee",
+          "component_id": "90add658-8525-4452-9811-010fde875e54",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -610,7 +714,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "2df7bd03-eefc-4f8f-9e1e-51d96ed396dc",
+          "component_id": "64225a6f-2b8a-45e3-8975-b1f60615b4aa",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -627,7 +731,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "52b5c4c4-4482-406e-801f-7b041ebd6e4e",
+          "component_id": "b5e98b33-50d6-4277-aa00-e633e1666227",
           "type": "InputField",
           "priority": 4,
           "animation": "fade_in",
@@ -662,7 +766,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.669483"
+        "creation_timestamp": "2026-09-26T16:24:21.104430"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -671,11 +775,11 @@
       "fallback_scene_id": null
     },
     "independent": {
-      "scene_id": "274bf6e3-46e3-4dec-92da-b5f0af02f439",
+      "scene_id": "f8ceed3c-75c4-45a3-a2d1-8d677da063b8",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "23de2bf6-d43c-407d-87ff-4d3dd54d159a",
+          "component_id": "59910119-6a55-47e1-af36-8687e0c4c7f7",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -692,7 +796,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "96249d84-69fb-4298-a0b0-387c516e3686",
+          "component_id": "ef6ffeaf-f655-4e16-b1b7-5a9d75eca5d7",
           "type": "TeacherMessage",
           "priority": 1,
           "animation": "fade_in",
@@ -714,7 +818,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "eeb9541d-ea6c-4dc7-b8b4-ef38742b2bc8",
+          "component_id": "b8144a24-64e5-40be-98e9-b750961627f5",
           "type": "ExampleBlock",
           "priority": 2,
           "animation": "fade_in",
@@ -731,7 +835,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "d2d7b0a2-9b42-4dce-8357-37743d382c75",
+          "component_id": "5d660358-7c41-448d-8258-0ae6b5c6d81d",
           "type": "InputField",
           "priority": 4,
           "animation": "fade_in",
@@ -766,7 +870,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.670412"
+        "creation_timestamp": "2026-09-26T16:24:21.105740"
       },
       "trigger_conditions": null,
       "success_conditions": null,
@@ -775,11 +879,11 @@
       "fallback_scene_id": null
     },
     "summary": {
-      "scene_id": "dc39c750-d085-467d-a640-9fc9bb2c3c64",
+      "scene_id": "2d60291f-489b-434c-9779-84cdda46ae62",
       "scene_type": "instruction",
       "components": [
         {
-          "component_id": "7c2628ef-6652-4c26-9509-c61d46e7c33a",
+          "component_id": "06e993fd-8ae7-412f-841f-c9328fa4dedb",
           "type": "ProgressBar",
           "priority": 0,
           "animation": "fade_in",
@@ -796,7 +900,7 @@
           "color_scheme": "blue"
         },
         {
-          "component_id": "de9cb6ac-0a07-4381-8247-805f0abb3fb9",
+          "component_id": "ce55f191-5614-4be8-b0e8-75a99c9de7d8",
           "type": "TeacherMessage",
           "priority": 0,
           "animation": "fade_in",
@@ -816,7 +920,7 @@
           "source_attributions": []
         },
         {
-          "component_id": "c28be0f8-301e-41d6-b838-eb669a40f66f",
+          "component_id": "e6ebdda4-cfac-423e-a3be-46ba31e9bccd",
           "type": "ExampleBlock",
           "priority": 0,
           "animation": "fade_in",
@@ -833,7 +937,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "1464033e-d313-4195-bb9f-1c395f4c3ae7",
+          "component_id": "206e234d-ead7-47d9-9f21-417ca7c7314c",
           "type": "ExampleBlock",
           "priority": 0,
           "animation": "fade_in",
@@ -850,7 +954,7 @@
           "syntax_highlighting": true
         },
         {
-          "component_id": "c1821650-3fab-4b2b-a0c0-6d9fc3c08564",
+          "component_id": "72a8fe44-9b60-492d-8322-3a8b8b7f55a9",
           "type": "CTAButton",
           "priority": 0,
           "animation": "fade_in",
@@ -880,7 +984,7 @@
         "user_mastery_context": null,
         "frustration_level": 0.0,
         "scene_source": "ai_generated",
-        "creation_timestamp": "2026-09-13T21:35:53.670841"
+        "creation_timestamp": "2026-09-26T16:24:21.106577"
       },
       "trigger_conditions": null,
       "success_conditions": null,

@@ -43,3 +43,61 @@ test('paced teaching has an explicit canonical CTA and the first task is support
   assert.equal(faded.min_words, 1);
   assert.match(faded.question, /1\/__/);
 });
+
+test('a unit opens by asking, with no worked example and no way to move on unanswered', () => {
+  const components = fixture.scenes.diagnostic.components;
+  // One teacher line, then the floor is the learner's. The probe is asked
+  // before anything is taught, so there is a question and nothing to walk
+  // through — this is the scene that replaced opening every unit with a
+  // lecture, and the shape is the whole point of it.
+  assert.equal(components.filter(c => c.type === 'TeacherMessage').length, 1);
+  const input = components.find(c => c.type === 'InputField');
+  assert.ok(input, 'the opening scene must ask the learner something');
+  assert.ok(input.question.trim().length > 0);
+
+  // A Continue here would make answering optional, which is the monologue
+  // with an extra tap.
+  assert.equal(components.some(c => c.type === 'CTAButton'), false);
+
+  // Nothing on the wire tells the learner what the answer is. The probe is
+  // graded by the server against a rubric it keeps.
+  assert.equal(JSON.stringify(components).includes('example_answer'), false);
+  assert.equal(JSON.stringify(components).includes('criteria'), false);
+  assert.deepEqual(input.expected_keywords ?? [], []);
+
+  // It is scored as an explanation, never as transfer: transfer is defined
+  // relative to something taught, and nothing has been.
+  assert.equal(input.evidence_type, 'explanation');
+
+  // And no teaching visual: the comparison tool's own description explains why
+  // the answer is the answer. A probe's board may carry the situation, never
+  // the reasoning.
+  assert.equal(components.some(c => c.block_type === 'teaching_visual'), false);
+});
+
+test("a distractor's misconception is the server's diagnosis, not the learner's to read", () => {
+  // Every distractor names the misconception choosing it would reveal — that is
+  // what makes reteaching able to address the actual error. It is a judgement
+  // about the learner, made for the next teaching turn, and it must not travel
+  // with the question they are still answering.
+  const options = Object.values(fixture.scenes)
+    .flatMap(scene => scene.components)
+    .filter(c => c.type === 'QuizCard')
+    .flatMap(c => c.options ?? []);
+  assert.ok(options.length > 0, 'there must be a choice checkpoint to check');
+  for (const option of options) {
+    // The field exists on the wire model and is always empty. It is the
+    // server's diagnosis of what picking this option would say about the
+    // learner, and it is for the next teaching turn, not for the person still
+    // choosing.
+    assert.equal(option.misconception_tag ?? null, null);
+    assert.equal(option.remediation_hint ?? null, null);
+  }
+
+  const raw = JSON.stringify(fixture.scenes);
+  assert.equal(raw.includes('more_pieces_means_more_each'), false);
+  // Nor the private rubric, the model answer, or the grader's own criteria.
+  for (const secret of ['example_answer', 'criteria']) {
+    assert.equal(raw.includes(secret), false, secret);
+  }
+});

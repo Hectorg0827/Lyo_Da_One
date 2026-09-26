@@ -1,4 +1,5 @@
 import type { HintLevel } from './classroom-contract';
+import type { BoardElement } from '../stores/classroom-store';
 
 export type EvidenceKind =
   | 'exposure'
@@ -88,3 +89,34 @@ export function shouldLeadWithConcepts(
 export function hasConceptEvidence(
   summary: { total?: number } | null | undefined,
 ): boolean;
+
+/**
+ * The server's concept id for a piece of subject text — the client twin of
+ * `slugify_skill` in `lyo_app/ai/lesson_composer.py`.
+ */
+export function conceptKey(text: string | null | undefined): string;
+
+/** Concept identities supplied by the server on this session's questions. */
+export function conceptsShownInClass(
+  board?: BoardElement[],
+  boardHistory?: BoardElement[][],
+): string[];
+
+/**
+ * Is this concept part of one of the named subjects? Matches whole words of
+ * the slug in either direction, never a substring or a single shared word.
+ */
+export function concernsSubject(
+  conceptId: string | null | undefined,
+  ...subjects: (string | null | undefined)[]
+): boolean;
+
+/**
+ * Split a learner's record into the class they are in and everything else,
+ * preserving the server's ordering within each group. A concept this cannot
+ * place goes to `elsewhere` rather than being dropped.
+ */
+export function partitionRecordBySubject<T extends { concept_id?: string | null }>(
+  concepts: T[],
+  ...subjects: (string | null | undefined)[]
+): { inClass: T[]; elsewhere: T[] };

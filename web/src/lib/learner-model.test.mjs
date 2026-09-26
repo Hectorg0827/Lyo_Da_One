@@ -19,6 +19,10 @@ import {
   stateHeadline,
   nextStepLabel,
   conceptLabel,
+  conceptKey,
+  conceptsShownInClass,
+  concernsSubject,
+  partitionRecordBySubject,
 } from './learner-model.mjs';
 
 const strong = (kind) => ({ kind, confidence: 1 });
@@ -350,4 +354,96 @@ test('a failed read is not rendered as an empty record', () => {
   );
   assert.match(source, /unavailable/);
   assert.match(source, /not a reading of your/i);
+});
+
+// ─── Scoping a learner's record to the class they are in ────────────────────
+
+test('a concept key is the same slug the server files evidence under', () => {
+  // Mirrors slugify_skill in lyo_app/ai/lesson_composer.py.
+  assert.equal(conceptKey('Customer Segmentation'), 'customer_segmentation');
+  assert.equal(conceptKey('Square Roots!'), 'square_roots');
+  assert.equal(conceptKey('  spaced   out  '), 'spaced_out');
+  assert.equal(conceptKey('Hyphen-ated'), 'hyphen_ated');
+  assert.equal(conceptKey(''), '');
+  assert.equal(conceptKey(null), '');
+  assert.equal(conceptKey('x'.repeat(200)).length, 80);
+});
+
+test('a class claims its own concepts in either direction', () => {
+  assert.ok(concernsSubject('marketing_fundamentals', 'Marketing'));
+  assert.ok(concernsSubject('customer_segmentation', 'Customer segmentation for a launch'));
+  assert.ok(concernsSubject('marketing', 'marketing'));
+  // The lesson title and the topic are both worth checking: evidence lands on
+  // whichever the session had.
+  assert.ok(concernsSubject('positioning', 'Marketing', 'Positioning'));
+});
+
+test('the record uses the lesson identity carried by the scene, not only the course title', () => {
+  const priorBoard = [{ kind: 'quiz', quiz: { concept_id: 'Customer Segmentation' } }];
+  const currentBoard = [
+    { kind: 'transfer', input: { concept_id: 'Marketing Positioning' } },
+    { kind: 'chalk', text: 'The current example' },
+    { kind: 'quiz', quiz: { concept_id: 'Customer Segmentation' } },
+  ];
+  const lessonConcepts = conceptsShownInClass(currentBoard, [priorBoard]);
+  assert.deepEqual(lessonConcepts, ['customer_segmentation', 'marketing_positioning']);
+
+  const concepts = [{ concept_id: 'customer_segmentation' }, { concept_id: 'long_division' }];
+  const { inClass, elsewhere } = partitionRecordBySubject(
+    concepts, 'Digital Marketing', 'Apply marketing to a launch', ...lessonConcepts,
+  );
+  assert.deepEqual(inClass.map((c) => c.concept_id), ['customer_segmentation']);
+  assert.deepEqual(elsewhere.map((c) => c.concept_id), ['long_division']);
+});
+
+test('a prose subject cannot claim a one-word concept by coincidence', () => {
+  // "product" appearing in the objective is not a subject in common; the
+  // learner may have shown something about products in another class entirely.
+  assert.equal(concernsSubject('product', 'Apply marketing to a product launch'), false);
+  // Two words in common is a subject, so a real lesson slug still lands.
+  assert.ok(concernsSubject('product_launch', 'Apply marketing to a product launch'));
+  // A short subject still claims its own specialisations, in the other
+  // direction, however short it is.
+  assert.ok(concernsSubject('marketing_fundamentals', 'Marketing'));
+});
+
+test('a class does not claim a concept on a substring or one shared word', () => {
+  // "art" inside "cartography" is not a subject in common.
+  assert.equal(concernsSubject('cartography', 'Art'), false);
+  // One generic word in common is a coincidence.
+  assert.equal(concernsSubject('python_basics', 'Spanish basics'), false);
+  assert.equal(concernsSubject('long_division', 'Marketing'), false);
+  assert.equal(concernsSubject('', 'Marketing'), false);
+  assert.equal(concernsSubject('marketing', ''), false);
+});
+
+test('partitioning keeps the unplaceable visible instead of dropping it', () => {
+  const concepts = [
+    { concept_id: 'customer_segmentation' },
+    { concept_id: 'long_division' },
+    { concept_id: 'marketing_positioning' },
+  ];
+  const { inClass, elsewhere } = partitionRecordBySubject(concepts, 'Marketing', 'Customer segmentation');
+  assert.deepEqual(inClass.map((c) => c.concept_id), ['customer_segmentation', 'marketing_positioning']);
+  assert.deepEqual(elsewhere.map((c) => c.concept_id), ['long_division']);
+  // Nothing is lost: a learner's own work is never dropped because this could
+  // not tell which class it came from.
+  assert.equal(inClass.length + elsewhere.length, concepts.length);
+});
+
+test('with no subject named nothing is claimed for the class', () => {
+  const concepts = [{ concept_id: 'long_division' }];
+  const { inClass, elsewhere } = partitionRecordBySubject(concepts, '', null);
+  assert.deepEqual(inClass, []);
+  assert.deepEqual(elsewhere.map((c) => c.concept_id), ['long_division']);
+});
+
+test('server order is preserved inside each group', () => {
+  const concepts = [
+    { concept_id: 'marketing_positioning' },
+    { concept_id: 'customer_segmentation' },
+  ];
+  const { inClass } = partitionRecordBySubject(concepts, 'Marketing', 'Customer segmentation');
+  assert.deepEqual(inClass.map((c) => c.concept_id),
+    ['marketing_positioning', 'customer_segmentation']);
 });

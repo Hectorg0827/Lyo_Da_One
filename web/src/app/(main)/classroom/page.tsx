@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
@@ -22,6 +22,7 @@ import {
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 import { upsertCourseOnStart } from '@/lib/stack';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
+import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
@@ -104,6 +105,10 @@ function ClassroomStage() {
     askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
     setSpeechRate, viewBoard,
   } = useClassroomStore();
+  const lessonConcepts = useMemo(
+    () => conceptsShownInClass(board, boardHistory),
+    [board, boardHistory],
+  );
 
   const [question, setQuestion] = useState('');
   const [notebookOpen, setNotebookOpen] = useState(false);
@@ -723,7 +728,7 @@ function ClassroomStage() {
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3">
                 {notebookTab === 'record' ? (
-                  <EvidenceRecord />
+                  <EvidenceRecord subjects={[topic, objective, ...lessonConcepts]} />
                 ) : (
                   <div className="space-y-2.5">
                     {transcript.length === 0 && (

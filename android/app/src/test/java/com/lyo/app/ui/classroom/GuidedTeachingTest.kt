@@ -55,6 +55,38 @@ class GuidedTeachingTest {
         }
     }
 
+    @Test fun `the opening probe renders as a question with no worked example and no continue`() {
+        // A unit now opens by finding out where the learner is, before anything
+        // is taught. It reaches Android through the components Android already
+        // renders, which is why the new opening needed no client change — only
+        // this fixture regenerated. The assertions keep it that way.
+        val components = fixture().getAsJsonObject("scenes").getAsJsonObject("diagnostic")
+            .getAsJsonArray("components").map { gson.fromJson(it, ClassroomComponent::class.java) }
+
+        var board = emptyList<String>()
+        val rendered = mutableListOf<com.lyo.app.data.a2ui.A2uiComponent>()
+        for (component in components) {
+            val mutation = ClassroomBridge.onImmediateComponentRender(component, board)
+            board = mutation.boardChildren
+            rendered += mutation.messages.filterIsInstance<A2uiMessage.UpdateComponents>().flatMap { it.components }
+        }
+
+        // The learner is asked something, and asked it in their own words.
+        assertTrue(rendered.any { it.component == "TransferInput" })
+        // Not a choice: a probe with options would let a learner who has never
+        // met the skill guess their way past it.
+        assertFalse(rendered.any { it.component == "QuizCard" })
+        // One teacher line, then the floor is the learner's.
+        assertEquals(1, components.count { it.type == "TeacherMessage" })
+        // A Continue here would make answering optional, which is the
+        // monologue with an extra tap.
+        assertTrue(components.none { it.type == "CTAButton" })
+        // No teaching visual either: the comparison tool's own description
+        // explains why the answer is the answer, and a probe's board may carry
+        // the situation but never the reasoning.
+        assertTrue(components.none { it.block_type == "teaching_visual" })
+    }
+
     @Test fun `exploration sends bounded values without a grading or continue action`() {
         val action = A2uiAction(name = "update_activity", surfaceId = ClassroomBridge.SURFACE_ID,
             sourceComponentId = "visual:step-1", timestamp = "2026-01-01T00:00:00Z",
