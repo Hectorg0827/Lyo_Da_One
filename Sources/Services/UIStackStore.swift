@@ -11,6 +11,7 @@ final class UIStackStore: ObservableObject {
     @Published private(set) var items: [UIStackItem] = []
 
     private let userDefaultsKey = "lyo_ui_stack_items"
+    private let defaults: UserDefaults
     private let repository = LyoRepository.shared
 
     /// courseId (== the backend's content_id) → the real backend row id,
@@ -19,7 +20,8 @@ final class UIStackStore: ObservableObject {
     /// single progress tick.
     private var backendItemIdsByCourseId: [String: Int] = [:]
 
-    private init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         loadFromDisk()
     }
 
@@ -377,14 +379,14 @@ final class UIStackStore: ObservableObject {
     private func saveToDisk() {
         do {
             let data = try JSONEncoder().encode(items)
-            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+            defaults.set(data, forKey: userDefaultsKey)
         } catch {
             print("UIStackStore: Failed to save to disk: \(error)")
         }
     }
 
     private func loadFromDisk() {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else {
+        guard let data = defaults.data(forKey: userDefaultsKey) else {
             return
         }
 

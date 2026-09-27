@@ -1056,3 +1056,5 @@ This is a code-path and build check. No device microphone, speech accuracy,
 acoustic interruption timing, or fifteen-minute spoken lesson has been tested.
 The adapter's voice and language checks live in `Sources/Tests`, the path
 XcodeGen includes in `LyoTests`; legacy files under `Tests` are not run by CI.
+The focused-review test saves and reloads through `UIStackStore` with an
+isolated defaults suite, including an older card without the scope flag.

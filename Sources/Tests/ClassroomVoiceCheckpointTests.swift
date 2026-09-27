@@ -5,17 +5,22 @@ import XCTest
 @MainActor
 final class ClassroomVoiceCheckpointTests: XCTestCase {
     func testGeneratedReviewRetainsFocusedIdentityAcrossSavedCards() throws {
-        let review = UIStackItem(type: .course, title: "Review: Fractions",
-                                 courseId: "GENERATE:fractions", focusedConcept: true)
-        let restored = try JSONDecoder().decode(UIStackItem.self, from: JSONEncoder().encode(review))
-        XCTAssertEqual(restored.focusedConcept, true)
+        let suiteName = "ClassroomVoiceCheckpointTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        // Older saved cards had no scope flag and continue to open as free-topic classes.
-        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(review)) as? [String: Any])
-        legacy.removeValue(forKey: "focusedConcept")
-        let oldCard = try JSONDecoder().decode(UIStackItem.self,
-                                               from: JSONSerialization.data(withJSONObject: legacy))
-        XCTAssertNil(oldCard.focusedConcept)
+        let store = UIStackStore(defaults: defaults)
+        store.upsertCourse(courseId: "GENERATE:fractions", title: "Review: Fractions",
+                           focusedConcept: true)
+        // Updating a due-review card's progress/title must keep its focused identity.
+        store.upsertCourse(courseId: "GENERATE:fractions", title: "Review: Fractions again")
+        // Older saved cards have no scope flag and still open as free-topic classes.
+        store.upsert(UIStackItem(type: .course, title: "Older class",
+                                 courseId: "GENERATE:legacy"))
+
+        let restored = UIStackStore(defaults: defaults)
+        XCTAssertEqual(restored.items.first(where: { $0.courseId == "GENERATE:fractions" })?.focusedConcept, true)
+        XCTAssertNil(restored.items.first(where: { $0.courseId == "GENERATE:legacy" })?.focusedConcept)
     }
 
     func testOpeningApplicationOffersDictationOnItsAnswerField() {
