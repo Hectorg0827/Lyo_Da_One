@@ -31,7 +31,7 @@ class GuidedTeachingTest {
 
     @Test fun `modelled example and visual survive alongside a canonical Continue action`() {
         val scenes = fixture().getAsJsonObject("scenes")
-        for (name in listOf("orientation", "model_1", "model_2", "guided")) {
+        for (name in listOf("orientation", "focused_example", "model_1", "model_2", "guided")) {
             val components = scenes.getAsJsonObject(name).getAsJsonArray("components").map {
                 gson.fromJson(it, ClassroomComponent::class.java)
             }
@@ -55,11 +55,12 @@ class GuidedTeachingTest {
         }
     }
 
-    @Test fun `the opening probe renders as a question with no worked example and no continue`() {
-        // A unit now opens by finding out where the learner is, before anything
-        // is taught. It reaches Android through the components Android already
-        // renders, which is why the new opening needed no client change — only
-        // this fixture regenerated. The assertions keep it that way.
+    @Test fun `the opening probe renders as one tap with no worked example and no continue`() {
+        // A unit opens by finding out where the learner is, before anything is
+        // taught, and it asks with one tap: a learner who has never met the
+        // skill can still answer it. It reaches Android through the components
+        // Android already renders, which is why the opening needed no client
+        // change — only this fixture regenerated. These assertions keep it so.
         val components = fixture().getAsJsonObject("scenes").getAsJsonObject("diagnostic")
             .getAsJsonArray("components").map { gson.fromJson(it, ClassroomComponent::class.java) }
 
@@ -71,11 +72,22 @@ class GuidedTeachingTest {
             rendered += mutation.messages.filterIsInstance<A2uiMessage.UpdateComponents>().flatMap { it.components }
         }
 
-        // The learner is asked something, and asked it in their own words.
-        assertTrue(rendered.any { it.component == "TransferInput" })
-        // Not a choice: a probe with options would let a learner who has never
-        // met the skill guess their way past it.
-        assertFalse(rendered.any { it.component == "QuizCard" })
+        // The learner is asked something, and one tap answers it.
+        assertTrue(rendered.any { it.component == "QuizCard" })
+        assertFalse(rendered.any { it.component == "TransferInput" })
+        // Four options: the answer, two named misconceptions, and somewhere to
+        // say "not sure yet", so not knowing never forces a guess.
+        val options = components.single { it.type == "QuizCard" }.options!!
+        assertEquals(4, options.size)
+        // No key on the device while the learner is still deciding. Android
+        // reads a null is_correct as a neutral selection, and its feedback
+        // lookup must find nothing to tell them either way.
+        assertTrue(options.all { it.is_correct == null })
+        assertTrue(options.all { it.feedback_correct == null && it.feedback_incorrect == null })
+        // Nor the misconception each distractor reveals: that is the server's
+        // diagnosis, made for the next teaching turn, not for the person still
+        // choosing.
+        assertTrue(options.all { it.misconception_tag == null })
         // One teacher line, then the floor is the learner's.
         assertEquals(1, components.count { it.type == "TeacherMessage" })
         // A Continue here would make answering optional, which is the

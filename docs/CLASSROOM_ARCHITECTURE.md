@@ -871,6 +871,11 @@ the learner's own words. A saved multiple-choice diagnostic with a correct tap
 starts guided practice but does not award an explanation rung or skip teaching;
 its answer key and feedback are withheld from the client.
 
+> **Superseded by §12.** The opening question is now multiple choice by
+> contract, and open-answer probes exist only in sessions saved before that
+> change. What survives unchanged: a tap earns no rung, skips no teaching it
+> has not shown, and never travels with its key.
+
 **Why the clients needed no code change.** The probe is a `TeacherMessage`, an
 `ExampleBlock` and an `InputField` — components web, iOS and Android already
 render. Regenerating `GuidedTeaching.json` was the whole client-side delivery,
@@ -1058,3 +1063,124 @@ The adapter's voice and language checks live in `Sources/Tests`, the path
 XcodeGen includes in `LyoTests`; legacy files under `Tests` are not run by CI.
 The focused-review test saves and reloads through `UIStackStore` with an
 isolated defaults suite, including an older card without the scope flag.
+
+---
+
+## 12. Phase H — the opening question is a tap, and a tap is a hypothesis
+
+### 12.1 What was wrong with asking well
+
+Phase G replaced the unconditional lecture with a real question, and made that
+question an open answer with a reason — on the argument that a choice "cannot
+establish that they can explain the skill". That argument is correct about
+evidence and wrong about openings.
+
+The probe is the first thing a unit asks, before it has taught anything or
+earned any patience. An empty box in front of a skill the learner may never
+have met asks them to produce prose about something they cannot name yet, and
+reads as a test whatever the copy above it says. The cheapest question is the
+one a learner who knows nothing can still answer, and that is a tap.
+
+Nothing is lost by making it one, because the open answer's strength was never
+being used: a probe already could not complete a unit, and the strongest thing
+it could record — `explanation` — is a rung the unit goes on to demand again in
+practice.
+
+### 12.2 The tap sets a ceiling, not a destination
+
+Four options cannot tell knowing something apart from picking it: a learner who
+has never met the skill lands on the right option once in four. So the answer
+buys a **ceiling** — the furthest this unit may fast-forward to — and the unit
+starts one rung *below* it. Being wrong about a tap then costs a learner who
+did know it one question they will get right, instead of dropping someone into
+practice they cannot do, which is what makes an opening question feel like the
+test it was never meant to be.
+
+| What the learner did | Ceiling | Starts at |
+| --- | --- | --- |
+| Tapped the correct option | `independent` | guided practice |
+| Tapped a near miss | `faded` | the one step it turns on |
+| Tapped a fundamental misconception | `guided` | the full example, aimed at it |
+| Tapped "I'm not sure yet" | none | the beginning |
+| Explained it correctly, unaided (saved session) | `independent` | faded practice |
+
+Each distractor names the misconception tapping it reveals **and** how far that
+leaves the learner from the skill (`near_miss` — has the idea, slipped on one
+step; `fundamental` — reasoning from a different model of the situation). That
+second field is what makes two wrong answers route differently: the near miss
+is shown the step their answer turned on, one beat rather than the whole
+derivation, while a fundamental misconception gets the example built.
+
+The ceiling can only ever make the unit move faster than the ladder would. It
+awards no rung, completes nothing, and **is withdrawn the moment real work
+contradicts it** — the first wrong practice answer clears it, and from there
+the unit is paced by what the learner does. The one place it buys back the time
+it cost is a unit with several component skills: a learner it placed at the top,
+who has since shown that on faded practice without extra help, does not drop
+back to supported practice for every remaining target.
+
+### 12.3 What a tap still may not do
+
+- **Earn evidence.** A correct tap writes nothing to the learner record.
+  Recognising the right answer among four is not a claim worth keeping, and the
+  record is for claims. An unaided open answer from a saved session still files
+  `explanation`, never `transfer`.
+- **Be a failure.** A wrong tap writes no evidence either — not a zero — adds
+  no `support_attempts`, marks nothing for review, and reteaches no answer the
+  learner was never given.
+- **Reach the client with its key.** `is_correct`, both feedback fields, the
+  misconception and the gap are all withheld for a diagnostic, so the device
+  cannot colour the tap or read the diagnosis while the learner is deciding.
+- **Be a gate.** "I'm not sure yet" is an option, and declining it, asking for
+  help on it, or asking a question during it all lead into teaching rather than
+  into a hint at the answer.
+
+### 12.4 What landed
+
+| Change | Where (`LyoBackendJune`) |
+| --- | --- |
+| The probe is multiple choice by contract: four options, two named misconceptions with a gap each, one abstention | `adaptive_teaching.py` (`DiagnosticTurn`, `TaskOption.gap`, `TaskOption.abstains`) |
+| The ceiling, the entry rung one below it, and the misconception carried into teaching | `adaptive_session.py` (`after_diagnostic`) |
+| The ceiling withdrawn by a wrong practice answer, and cleared with the unit | `adaptive_session.py` (`run`, `reset_unit`) |
+| Remaining component skills starting at faded once the tap is confirmed | `adaptive_session.py` (`after_success`) |
+| The compressed worked example a near miss earns | `adaptive_teaching.py` (`FocusedModelledTurn`, `turn_schema(move, focused)`) |
+| Authoring instructions for all of the above | `adaptive_teaching.py` (`AdaptiveTeacher.turn` prompt) |
+
+| Change | Where (this repo) |
+| --- | --- |
+| The probe as a rendered contract sample, now a `QuizCard` with its key withheld | `Sources/Tests/Fixtures/GuidedTeaching.json` (`diagnostic`) |
+| The compressed opening as its own contract sample | `Sources/Tests/Fixtures/GuidedTeaching.json` (`focused_example`) |
+| iOS, Android and web assertions over both | `Sources/Tests/GuidedTeachingTests.swift`, `android/.../GuidedTeachingTest.kt`, `web/src/lib/teaching-activity.test.mjs` |
+
+The clients needed no new code: the probe is a `TeacherMessage`, an
+`ExampleBlock` and a `QuizCard`, all of which web, iOS and Android already
+render, and `SDUIQuizOption` on iOS decodes an id and a label and nothing else.
+§11.9's dictation path is unaffected and now begins at the faded and
+independent checkpoints, which is where open responses still live.
+
+### 12.5 Verification, and its limits
+
+The backend suite is green at 863 passing with the probe's routing covered by
+`tests/test_diagnostic_first.py` (28 tests, including one that walks a unit
+twice to show a confirmed tap saving the second component skill from starting
+over, and one that drives the real `AdaptiveTeacher` to prove the compressed
+example is asked of the generator rather than trimmed afterwards). Eight
+scripted learners still get eight different lessons in
+`tests/test_learner_simulations.py`; that file's "partial" profile is now a
+near miss, since a tap has no partial, and its fingerprint counts the beats
+each learner sat through so a near miss and a beginner cannot collapse into one
+lesson unnoticed. All 203 web unit tests pass.
+
+What none of this shows: that a model writes a *good* four-option probe. The
+whole approach rests on distractors being positions real learners hold and on
+the gap being labelled honestly, and every test here uses authored fixtures.
+A probe whose distractors are filler would route confidently from noise, and
+nothing in CI would notice. The iOS and Android assertions are also unrun here
+(no Xcode or Android SDK in this environment) and were verified against the
+regenerated fixture's JSON instead.
+
+One deployment note: `GuidedState` forbids extra fields, so the two new ones
+mean a server rolled back below this change cannot read a session saved above
+it. That is how every earlier field here arrived, and it bounds a rollback to
+in-flight sessions rather than to saved learner evidence, which lives in the
+record and not in the session.

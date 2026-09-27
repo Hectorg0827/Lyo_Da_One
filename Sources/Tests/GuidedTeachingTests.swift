@@ -33,19 +33,25 @@ final class GuidedTeachingTests: XCTestCase {
     }
 
     func testTheOpeningProbeAsksBeforeAnythingIsTaughtAndShipsNoAnswerKey() throws {
-        // A unit now opens by finding out where the learner is, before anything
-        // is taught. It reaches iOS through the components iOS already renders,
-        // which is why the new opening needed no client change — only this
-        // fixture regenerated. These assertions keep it that way.
+        // A unit opens by finding out where the learner is, before anything is
+        // taught, and it asks with one tap: a learner who has never met the
+        // skill can still answer, where a blank box in front of an unfamiliar
+        // skill reads as a test. It reaches iOS through the components iOS
+        // already renders, which is why the opening needed no client change —
+        // only this fixture regenerated. These assertions keep it that way.
         let fixture = try fixtures()
         let components = try XCTUnwrap(fixture.scenes["diagnostic"]?.components)
         let step = try XCTUnwrap(ActiveLessonAdapter.steps(from: components).first)
 
-        // The learner is asked something, and asked it in their own words.
-        guard case .classroomInput(let input)? = step.supporting else {
-            return XCTFail("The opening probe must ask for the learner's own answer")
+        // The learner is asked something, and it is answerable in one tap.
+        guard case .classroomQuiz(let question)? = step.supporting else {
+            return XCTFail("The opening probe must be answerable with one tap")
         }
-        XCTAssertFalse((input.question ?? "").isEmpty)
+        // Four options: the answer, two named misconceptions, and somewhere to
+        // say "not sure yet" so that not knowing never forces a guess.
+        XCTAssertEqual(question.options?.count, 4)
+        XCTAssertFalse(step.requiresOpenResponse)
+        XCTAssertNil(components.first { $0.type == .inputField })
 
         // One teacher line, then the floor is the learner's.
         XCTAssertEqual(components.filter { $0.type == .teacherMessage }.count, 1)
@@ -55,11 +61,31 @@ final class GuidedTeachingTests: XCTestCase {
         XCTAssertNil(components.first { $0.type == .ctaButton })
         XCTAssertNil(step.primaryActionIntent)
 
-        // The learner writes a short answer, not an essay. The rubric and the
-        // rung this evidence counts as are server-side and `SDUIComponent`
-        // does not decode them, so nothing here can leak either — which is
-        // what `teaching-activity.test.mjs` asserts against the raw payload.
-        XCTAssertEqual(input.minWords, 1)
+        // Nothing on the board explains the answer above the question.
+        XCTAssertNil(step.teachingVisual)
+
+        // `SDUIQuizOption` decodes an id and a label and nothing else, so the
+        // key, the per-option feedback and the misconception each distractor
+        // reveals cannot reach this screen even if a payload carried them —
+        // which `teaching-activity.test.mjs` asserts against the raw payload.
+        XCTAssertEqual(question.options?.filter { !$0.label.isEmpty }.count, 4)
+    }
+
+    func testANearMissIsShownTheOneStepItTurnsOnRatherThanTheWholeExample() throws {
+        // Tapping the near miss on the probe says the learner has the idea and
+        // slipped on one step, so the example they get is cut to that step.
+        // Same components as `orientation`, less of the teacher.
+        let fixture = try fixtures()
+        let components = try XCTUnwrap(fixture.scenes["focused_example"]?.components)
+        let step = try XCTUnwrap(ActiveLessonAdapter.steps(from: components).first)
+
+        XCTAssertFalse(step.teachingExamples.isEmpty)
+        XCTAssertNotNil(step.teachingVisual)
+        XCTAssertEqual(step.primaryActionIntent, "continue")
+        // Teaching, not a question: the checkpoint comes after the step.
+        XCTAssertNil(step.supporting)
+        XCTAssertNil(components.first { $0.type == .quizCard })
+        XCTAssertNil(components.first { $0.type == .inputField })
     }
 
     func testGuidedChoiceRetainsItsExampleAndVisualWhileFadedPracticeAsksForOneNumber() throws {

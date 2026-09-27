@@ -44,35 +44,47 @@ test('paced teaching has an explicit canonical CTA and the first task is support
   assert.match(faded.question, /1\/__/);
 });
 
-test('a unit opens by asking, with no worked example and no way to move on unanswered', () => {
+test('a unit opens by asking, in one tap, with no worked example and no way to move on unanswered', () => {
   const components = fixture.scenes.diagnostic.components;
   // One teacher line, then the floor is the learner's. The probe is asked
   // before anything is taught, so there is a question and nothing to walk
   // through — this is the scene that replaced opening every unit with a
   // lecture, and the shape is the whole point of it.
   assert.equal(components.filter(c => c.type === 'TeacherMessage').length, 1);
-  const input = components.find(c => c.type === 'InputField');
-  assert.ok(input, 'the opening scene must ask the learner something');
-  assert.ok(input.question.trim().length > 0);
+  const card = components.find(c => c.type === 'QuizCard');
+  assert.ok(card, 'the opening scene must ask the learner something');
+  assert.ok(card.question.trim().length > 0);
+
+  // One tap answers it: the answer, two named misconceptions, and somewhere to
+  // say "not sure yet", so a learner who has never met the skill is never
+  // forced to guess and never faces an empty box.
+  assert.equal(card.options.length, 4);
+  assert.equal(components.some(c => c.type === 'InputField'), false);
 
   // A Continue here would make answering optional, which is the monologue
   // with an extra tap.
   assert.equal(components.some(c => c.type === 'CTAButton'), false);
 
-  // Nothing on the wire tells the learner what the answer is. The probe is
-  // graded by the server against a rubric it keeps.
-  assert.equal(JSON.stringify(components).includes('example_answer'), false);
-  assert.equal(JSON.stringify(components).includes('criteria'), false);
-  assert.deepEqual(input.expected_keywords ?? [], []);
-
-  // It is scored as an explanation, never as transfer: transfer is defined
-  // relative to something taught, and nothing has been.
-  assert.equal(input.evidence_type, 'explanation');
+  // Nothing on the wire tells the learner what the answer is, or colours their
+  // tap before the server has read it.
+  assert.ok(card.options.every(o => o.is_correct === null));
+  assert.ok(card.options.every(o => o.feedback_correct === null && o.feedback_incorrect === null));
 
   // And no teaching visual: the comparison tool's own description explains why
   // the answer is the answer. A probe's board may carry the situation, never
   // the reasoning.
   assert.equal(components.some(c => c.block_type === 'teaching_visual'), false);
+});
+
+
+test('a near miss is shown the one step it turns on, not the whole example', () => {
+  // Tapping the near miss says the learner has the idea and slipped on one
+  // step, so the opening is cut to that step: the same components as
+  // `orientation`, with less of the teacher in front of the learner.
+  const components = fixture.scenes.focused_example.components;
+  assert.ok(components.some(c => c.type === 'ExampleBlock'));
+  assert.equal(components.find(c => c.type === 'CTAButton').action_intent, 'continue');
+  assert.equal(components.some(c => c.type === 'QuizCard' || c.type === 'InputField'), false);
 });
 
 test("a distractor's misconception is the server's diagnosis, not the learner's to read", () => {
@@ -96,8 +108,12 @@ test("a distractor's misconception is the server's diagnosis, not the learner's 
 
   const raw = JSON.stringify(fixture.scenes);
   assert.equal(raw.includes('more_pieces_means_more_each'), false);
-  // Nor the private rubric, the model answer, or the grader's own criteria.
-  for (const secret of ['example_answer', 'criteria']) {
+  assert.equal(raw.includes('equal_wholes_means_equal_pieces'), false);
+  // Nor how far a distractor leaves the learner from the skill, nor which
+  // option lets them decline: the opening probe routes the whole unit from
+  // those, which is exactly why they are the server's to read and not the
+  // learner's.
+  for (const secret of ['near_miss', 'fundamental', 'abstains', 'example_answer', 'criteria']) {
     assert.equal(raw.includes(secret), false, secret);
   }
 });
