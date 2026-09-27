@@ -394,7 +394,7 @@ struct ActiveLessonView: View {
                             resetChromeTimer()
                         },
                         onMicTap: {
-                            if step.isAnswerableByVoice && !isInteractionCompleted {
+                            if currentStep?.isAnswerableByVoice == true && !isInteractionCompleted {
                                 dictationTrigger += 1
                             } else {
                                 onMic()
