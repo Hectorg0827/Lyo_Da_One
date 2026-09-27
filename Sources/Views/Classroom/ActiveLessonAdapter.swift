@@ -35,6 +35,7 @@ enum ActiveLessonAdapter {
         var pendingSpeakerName: String?
         var pendingSpeakerBadge: String?
         var pendingSpeakerImageName: String?
+        var pendingLanguageCode: String?
 
         var pendingSupporting: ActiveLessonView.LessonStep.SupportingBlock?
         var pendingExamples: [LiveLessonBlock] = []
@@ -57,6 +58,7 @@ enum ActiveLessonAdapter {
             guard let id = pendingId, let text = pendingText, !text.isEmpty else {
                 pendingId = nil; pendingText = nil
                 pendingSpeakerName = nil; pendingSpeakerBadge = nil; pendingSpeakerImageName = nil
+                pendingLanguageCode = nil
                 pendingSupporting = nil; pendingKeyTerm = nil
                 pendingExamples = []; pendingVisual = nil; pendingActivityId = nil
                 pendingPromptOptions = nil; pendingRequiresOpenResponse = false
@@ -73,6 +75,7 @@ enum ActiveLessonAdapter {
                 speakerImageName: pendingSpeakerImageName,
                 promptOptions: pendingPromptOptions,
                 requiresOpenResponse: pendingRequiresOpenResponse,
+                languageCode: pendingLanguageCode,
                 teachingExamples: pendingExamples,
                 teachingVisual: pendingVisual,
                 activityId: pendingActivityId
@@ -82,6 +85,7 @@ enum ActiveLessonAdapter {
             pendingSpeakerName = nil
             pendingSpeakerBadge = nil
             pendingSpeakerImageName = nil
+            pendingLanguageCode = nil
             pendingSupporting = nil
             pendingExamples = []; pendingVisual = nil; pendingActivityId = nil
             pendingKeyTerm = nil
@@ -124,6 +128,7 @@ enum ActiveLessonAdapter {
                             pendingId = "\(component.id)_turn_\(turnIndex)"
                             pendingText = turn.text
                             pendingSpeakerName = turn.speaker ?? "Teacher"
+                            pendingLanguageCode = component.languageCode
 
                             if turn.type == "user_prompt" {
                                 let options = (turn.options ?? []).filter { !$0.isEmpty }
@@ -229,6 +234,7 @@ enum ActiveLessonAdapter {
                     pendingSpeakerName = "Teacher"
                     pendingSpeakerBadge = "AI Teacher ✨"
                     pendingSpeakerImageName = nil
+                    pendingLanguageCode = component.languageCode
                 }
 
             case .lessonBlock:
@@ -283,6 +289,7 @@ enum ActiveLessonAdapter {
                     pendingSpeakerImageName = nil
                 }
                 pendingSupporting = .classroomInput(component)
+                pendingLanguageCode = component.languageCode ?? pendingLanguageCode
 
             // StudentPrompt and lightweight components are folded into the current
             // teaching text or skipped for now. Keeps the screen calm.
@@ -309,6 +316,7 @@ enum ActiveLessonAdapter {
                 speakerImageName: last.speakerImageName,
                 promptOptions: last.promptOptions,
                 requiresOpenResponse: last.requiresOpenResponse,
+                languageCode: last.languageCode,
                 teachingExamples: last.teachingExamples,
                 teachingVisual: last.teachingVisual,
                 activityId: last.activityId

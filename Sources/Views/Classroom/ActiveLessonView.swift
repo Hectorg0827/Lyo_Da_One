@@ -29,6 +29,7 @@ struct ActiveLessonView: View {
     /// what makes a mid-lesson question a real, backend-visible exchange
     /// instead of a line of text the learner just swipes past.
     var onPromptAnswer: (LessonStep, String) -> Void = { _, _ in }
+    var onLearnerInputStart: () -> Void = {}
     var onBack: () -> Void = {}
     var onMenu: () -> Void = {}
     var onMic: () -> Void = {}
@@ -62,6 +63,7 @@ struct ActiveLessonView: View {
         // reads and continues past).
         var promptOptions: [String]? = nil
         var requiresOpenResponse: Bool = false
+        var languageCode: String? = nil
         var teachingExamples: [LiveLessonBlock] = []
         var teachingVisual: ClassroomTeachingVisual? = nil
         var activityId: String? = nil
@@ -71,6 +73,12 @@ struct ActiveLessonView: View {
             case lessonBlock(LiveLessonBlock)
             case classroomQuiz(SDUIComponent)
             case classroomInput(SDUIComponent)
+        }
+
+        var isAnswerableByVoice: Bool {
+            if requiresOpenResponse { return true }
+            if case .some(.classroomInput(_)) = supporting { return true }
+            return false
         }
 
         struct KeyTerm {
@@ -96,6 +104,8 @@ struct ActiveLessonView: View {
     @State private var submittedTransferIds: Set<String> = []
     @State private var skippedInteractionIds: Set<String> = []
     @State private var reflectionText: String = ""
+    @State private var reflectionDrafts: [String: String] = [:]
+    @State private var dictationTrigger = 0
     // Keyed by LessonStep.id — the learner's answer to a user_prompt
     // checkpoint (tapped option or typed/spoken open response), separate
     // from quizSelections so a step id can never collide with a quiz
@@ -282,6 +292,7 @@ struct ActiveLessonView: View {
                             quizSelections: quizSelections,
                             promptResponses: promptResponses,
                             reflectionText: $reflectionText,
+                            dictationTrigger: dictationTrigger,
                             isTappedToComplete: $isBoardTappedToComplete,
                             interactionCompleted: isInteractionCompleted,
                             onOptionSelected: { component, option in
@@ -303,6 +314,7 @@ struct ActiveLessonView: View {
                                 return true
                             },
                             onActivityUpdate: onActivityUpdate,
+                            onLearnerInputStart: onLearnerInputStart,
                             onPromptSubmit: { response in
                                 let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !trimmed.isEmpty else { return }
@@ -383,7 +395,11 @@ struct ActiveLessonView: View {
                             resetChromeTimer()
                         },
                         onMicTap: {
-                            onMic()
+                            if currentStep?.isAnswerableByVoice == true && !isInteractionCompleted {
+                                dictationTrigger += 1
+                            } else {
+                                onMic()
+                            }
                             resetChromeTimer()
                         }
                     )
@@ -397,6 +413,10 @@ struct ActiveLessonView: View {
         .persistentSystemOverlays(.hidden)
         .onAppear { resetChromeTimer() }
         .onChange(of: currentIndex) { _, _ in resetChromeTimer() }
+        .onChange(of: currentStep?.id) { previousId, nextId in
+            if let previousId { reflectionDrafts[previousId] = reflectionText }
+            reflectionText = nextId.flatMap { reflectionDrafts[$0] } ?? ""
+        }
         .onChange(of: quizSelections) { _, _ in resetChromeTimer() }
         .onChange(of: promptResponses) { _, _ in resetChromeTimer() }
         .gesture(
@@ -639,6 +659,7 @@ struct LyoBoardView: View {
     let quizSelections: [String: String]
     let promptResponses: [String: String]
     @Binding var reflectionText: String
+    let dictationTrigger: Int
     @Binding var isTappedToComplete: Bool
     let interactionCompleted: Bool
     var onOptionSelected: (SDUIComponent, SDUIQuizOption) -> Bool
@@ -646,7 +667,14 @@ struct LyoBoardView: View {
     var onHint: (SDUIComponent) -> Bool
     var onSkip: (SDUIComponent) -> Bool
     var onActivityUpdate: (String, [String: Any]) -> Bool = { _, _ in false }
+    var onLearnerInputStart: () -> Void = {}
     var onPromptSubmit: (String) -> Void = { _ in }
+    @StateObject private var voiceInput = VoiceInputService.shared
+    @State private var dictating = false
+    @State private var recordingStepId: String?
+    @State private var dictationBase = ""
+    @State private var dictationError: String?
+    @State private var dictationTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -695,6 +723,11 @@ struct LyoBoardView: View {
                     }
                 }
             }
+            if let dictationError, step.isAnswerableByVoice {
+                Text(dictationError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -703,10 +736,90 @@ struct LyoBoardView: View {
                 .fill(Color(hex: "0D0E23").opacity(0.92))
                 .shadow(color: ClassroomTokens.accentGlow.opacity(0.12), radius: 15)
         )
+        .onChange(of: dictationTrigger) { _, _ in
+            if step.isAnswerableByVoice && !interactionCompleted { toggleDictation() }
+        }
+        .onChange(of: voiceInput.transcript) { _, text in
+            if dictating && recordingStepId == step.id {
+                reflectionText = String((dictationBase + text).prefix(2000))
+            }
+        }
+        .onChange(of: voiceInput.isRecording) { _, recording in
+            if dictating && !recording {
+                dictating = false
+                recordingStepId = nil
+                if let error = voiceInput.error { dictationError = error.localizedDescription }
+            }
+        }
+        .onChange(of: step.id) { _, _ in
+            stopDictation()
+            dictationError = nil
+        }
+        .onChange(of: reflectionText) { _, text in
+            if !text.isEmpty && step.isAnswerableByVoice { onLearnerInputStart() }
+        }
+        .onDisappear { stopDictation() }
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(ClassroomTokens.glassBorder, lineWidth: 1)
         )
+    }
+
+    private func toggleDictation() {
+        if dictating {
+            stopDictation()
+            return
+        }
+        // Stop narration on the tap, before permission prompts or microphone
+        // setup. Speech belongs in the answer field for this exact checkpoint.
+        onLearnerInputStart()
+        if voiceInput.isRecording { voiceInput.stopRecording() }
+        dictationBase = reflectionText.isEmpty ? "" : reflectionText.trimmingCharacters(in: .whitespaces) + " "
+        dictationError = nil
+        dictating = true
+        recordingStepId = step.id
+        voiceInput.transcript = ""
+        let language: String
+        if case .some(.classroomInput(let component)) = step.supporting {
+            language = component.languageCode ?? step.languageCode ?? "auto"
+        } else {
+            language = step.languageCode ?? "auto"
+        }
+        let targetStepId = step.id
+        dictationTask = Task {
+            do {
+                try await voiceInput.startRecording(language: language)
+                if recordingStepId == targetStepId && !dictating { voiceInput.stopRecording() }
+            } catch {
+                if recordingStepId == targetStepId {
+                    dictationError = error.localizedDescription
+                    dictating = false
+                    recordingStepId = nil
+                }
+            }
+        }
+    }
+
+    private func stopDictation() {
+        guard dictating else { return }
+        dictating = false
+        recordingStepId = nil
+        dictationTask?.cancel()
+        dictationTask = nil
+        voiceInput.stopRecording()
+    }
+
+    private var checkpointMicButton: some View {
+        Button {
+            toggleDictation()
+        } label: {
+            Image(systemName: dictating ? "mic.fill" : "mic")
+                .foregroundStyle(dictating ? Color.red : ClassroomTokens.accent)
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(.bordered)
+        .disabled(interactionCompleted)
+        .accessibilityLabel(dictating ? "Stop dictation" : "Dictate answer")
     }
 
     private func defaultExplanationContent() -> some View {
@@ -781,9 +894,12 @@ struct LyoBoardView: View {
                         .padding(12)
                         .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                        .onTapGesture(perform: onLearnerInputStart)
 
                     HStack(spacing: 10) {
+                        checkpointMicButton
                         Button {
+                            stopDictation()
                             onPromptSubmit("I'm not sure")
                         } label: {
                             Text("I'm not sure")
@@ -797,6 +913,7 @@ struct LyoBoardView: View {
                         Spacer()
 
                         Button {
+                            stopDictation()
                             onPromptSubmit(reflectionText)
                         } label: {
                             Text("Send")
@@ -883,6 +1000,7 @@ struct LyoBoardView: View {
                         .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
                 .disabled(interactionCompleted)
+                .onTapGesture(perform: onLearnerInputStart)
 
             HStack {
                 Text(
@@ -893,7 +1011,9 @@ struct LyoBoardView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(ClassroomTokens.textTertiary)
                 Spacer()
+                checkpointMicButton
                 Button(isSpanish ? "Enviar" : "Submit") {
+                    stopDictation()
                     let response = reflectionText.trimmingCharacters(
                         in: .whitespacesAndNewlines
                     )

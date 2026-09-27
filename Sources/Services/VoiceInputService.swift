@@ -25,7 +25,7 @@ class VoiceInputService: ObservableObject {
     @Published var permissionStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
     
     // MARK: - Private Properties
-    private let speechRecognizer: SFSpeechRecognizer?
+    private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
@@ -36,7 +36,7 @@ class VoiceInputService: ObservableObject {
     private let maxRecordingDuration: TimeInterval = 60 // 1 minute max
     
     private init() {
-        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        speechRecognizer = SFSpeechRecognizer(locale: .current)
         checkPermissions()
     }
     
@@ -97,7 +97,7 @@ class VoiceInputService: ObservableObject {
     
     // MARK: - Recording Control
     
-    func startRecording() async throws {
+    func startRecording(language: String = "auto") async throws {
         guard !isRecording else { return }
         
         // Check permissions
@@ -105,7 +105,13 @@ class VoiceInputService: ObservableObject {
             let granted = await requestPermissions()
             guard granted else { throw VoiceInputError.permissionDenied }
         }
+        // A learner can leave the step while the permission sheet is open.
+        // Do not activate a microphone for a checkpoint that no longer exists.
+        try Task.checkCancellation()
         
+        let locale = language.isEmpty || language.lowercased() == "auto"
+            ? Locale.current : Locale(identifier: language)
+        speechRecognizer = SFSpeechRecognizer(locale: locale)
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
             throw VoiceInputError.recognizerUnavailable
         }
@@ -158,6 +164,7 @@ class VoiceInputService: ObservableObject {
                 
                 if let error = error {
                     Log.audio.error("Speech recognition error: \(error)")
+                    self?.error = .recordingFailed(error.localizedDescription)
                     self?.stopRecording()
                 }
             }
