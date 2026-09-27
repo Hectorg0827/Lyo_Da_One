@@ -167,13 +167,15 @@ export default function ClassroomCaptionSync() {
   };
 
   // A new caption or a switch to silent reading starts at the first line.
+  // The store creates a fresh caption object for each turn, including when
+  // two consecutive turns happen to have the same speaker and text.
   useEffect(() => {
     userScrollingRef.current = false;
     followingRef.current = true;
     if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption?.text, caption?.speaker, paced, target]);
+  }, [caption, paced, target]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -201,7 +203,7 @@ export default function ClassroomCaptionSync() {
     observer.observe(scroller);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption?.text, paced, target]);
+  }, [caption, paced, target]);
 
 
   const cancelFrames = () => {
@@ -230,7 +232,7 @@ export default function ClassroomCaptionSync() {
     }
     setRevealedCount(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption?.speaker, caption?.text, voiceOn]);
+  }, [caption, voiceOn]);
 
   // Find the explicit transcript mount. It exists independently of caption
   // content, avoiding the race that previously mounted two visual tickers.
