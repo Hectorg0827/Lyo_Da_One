@@ -104,6 +104,7 @@ struct ActiveLessonView: View {
     @State private var submittedTransferIds: Set<String> = []
     @State private var skippedInteractionIds: Set<String> = []
     @State private var reflectionText: String = ""
+    @State private var reflectionDrafts: [String: String] = [:]
     @State private var dictationTrigger = 0
     // Keyed by LessonStep.id — the learner's answer to a user_prompt
     // checkpoint (tapped option or typed/spoken open response), separate
@@ -412,6 +413,10 @@ struct ActiveLessonView: View {
         .persistentSystemOverlays(.hidden)
         .onAppear { resetChromeTimer() }
         .onChange(of: currentIndex) { _, _ in resetChromeTimer() }
+        .onChange(of: currentStep?.id) { previousId, nextId in
+            if let previousId { reflectionDrafts[previousId] = reflectionText }
+            reflectionText = nextId.flatMap { reflectionDrafts[$0] } ?? ""
+        }
         .onChange(of: quizSelections) { _, _ in resetChromeTimer() }
         .onChange(of: promptResponses) { _, _ in resetChromeTimer() }
         .gesture(

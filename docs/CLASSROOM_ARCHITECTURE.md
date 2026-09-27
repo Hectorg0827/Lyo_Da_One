@@ -1048,6 +1048,7 @@ opening the recognizer. Typing also stops teacher speech. The recognizer now
 uses the checkpoint's language, including a director prompt's teacher message
 (or the device locale for `auto`), instead of an unconditional English locale.
 Dictation stops on submit, lesson-map navigation and scene change;
+unsent answer drafts are restored only for their own checkpoint;
 failed permission or unavailable recognition leaves the typed answer available.
 Web and Android already route their application microphones to their answers.
 
