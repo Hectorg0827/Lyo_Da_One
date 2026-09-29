@@ -649,10 +649,7 @@ function ClassroomStage() {
             onClick={continueLesson}
             className="min-h-12 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {primaryContinue} →
-            {canContinue && continueLabel.trim() && continueLabel.toLowerCase() !== primaryContinue.toLowerCase() && (
-              <span className="block text-[11px] font-medium text-white/75">{continueLabel}</span>
-            )}
+            {canContinue && continueLabel.trim() ? continueLabel : primaryContinue} →
           </button>
         )}
         <div className="grid grid-cols-3 items-stretch gap-2">
