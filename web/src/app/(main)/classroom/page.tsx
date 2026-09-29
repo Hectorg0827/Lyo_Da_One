@@ -102,10 +102,10 @@ function ClassroomStage() {
   const {
     status, board, boardHistory, recordConcepts, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate,
+    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
     askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
-    setSpeechRate, viewBoard,
+    setSpeechRate, viewBoard, interruptPrompt,
   } = useClassroomStore();
   const lessonConcepts = useMemo(
     () => conceptsShownInClass(board, boardHistory),
@@ -120,9 +120,12 @@ function ClassroomStage() {
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
-  const [listening, setListening] = useState(false);
+  const [listeningTarget, setListeningTarget] = useState<'question' | 'prompt' | null>(null);
+  const [promptResponse, setPromptResponse] = useState('');
+  const [engagedPromptId, setEngagedPromptId] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
-  const boardEndRef = useRef<HTMLDivElement>(null);
+  const [visualHeight, setVisualHeight] = useState<number | null>(null);
+  const boardScrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
 
@@ -137,6 +140,21 @@ function ClassroomStage() {
     return () => recognitionRef.current?.stop();
   }, []);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateHeight = () => {
+      const height = viewport?.height ?? window.innerHeight;
+      if (height > 0) setVisualHeight(Math.round(height));
+    };
+    updateHeight();
+    viewport?.addEventListener('resize', updateHeight);
+    window.addEventListener('resize', updateHeight);
+    return () => {
+      viewport?.removeEventListener('resize', updateHeight);
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
+
   // Save this course into the learner's device- and platform-agnostic
   // Stacks list the moment the classroom opens (both the chat-proposal
   // "Start Learning" path and the catalog "/courses/[id]" path land here),
@@ -147,23 +165,46 @@ function ClassroomStage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, topic]);
 
-  useEffect(() => {
-    if (viewingBoard === -1) {
-      boardEndRef.current?.scrollIntoView({
-        behavior: animationsOff ? 'auto' : 'smooth',
-        block: 'end',
-      });
-    }
-  }, [board.length, viewingBoard, animationsOff]);
-
   const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
   const totalBoards = boardHistory.length;
+  const activeCheckpoint = viewingBoard === -1
+    ? [...board].reverse().find((el) =>
+      (el.kind === 'quiz' && !el.answered && !el.skipped)
+      || (el.kind === 'transfer' && !el.submitted && !el.skipped))
+    : undefined;
+  const latestBoardId = shownBoard[shownBoard.length - 1]?.id;
+  const focusElementId = activeCheckpoint?.id ?? latestBoardId;
 
-  // Playback rail: Back/Next always render (rather than only once history
-  // exists) so the controls are discoverable from the first scene on. Back
-  // steps through erased boards; Next either steps forward through that
-  // same history, or — once you're caught back up to live — skips the
-  // teacher's currently-playing narration turn instead of waiting it out.
+  // Bring the *start* of the new question into view. Scrolling to the bottom
+  // clipped the question and left only its last sentence on short phones.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const scroller = boardScrollRef.current;
+      if (!scroller || !focusElementId) return;
+      const element = Array.from(scroller.querySelectorAll<HTMLElement>('[data-board-element-id]'))
+        .find((node) => node.dataset.boardElementId === focusElementId);
+      if (!element) return;
+      const top = element.getBoundingClientRect().top
+        - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
+      scroller.scrollTo({ top, behavior: animationsOff ? 'auto' : 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Answering updates the same card. It must not reposition the board while
+    // the learner is reading the feedback; a new board element does reposition it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestBoardId, viewingBoard, animationsOff]);
+
+  const pendingCheckpoint = board.some((el) =>
+    (el.kind === 'quiz' && !el.answered && !el.skipped)
+    || (el.kind === 'transfer' && !el.submitted && !el.skipped));
+  // Some scenes omit CTAButton. The server accepts `continue` once the
+  // teacher finishes a scene with no unanswered checkpoint.
+  const readyToContinue = status === 'live' && viewingBoard === -1
+    && !waitingForScene && !isNarrating && !prompt && !pendingCheckpoint
+    && (canContinue || board.length > 0);
+  const primaryContinue = languageCode.toLowerCase().startsWith('es') ? 'Continuar' : 'Continue';
+
+  // History and narration transport are shown only when actionable.
   const canGoBack = viewingBoard === -1 ? totalBoards > 0 : viewingBoard > 0;
   const canGoNext = viewingBoard !== -1 || isNarrating;
   const goBack = () => {
@@ -171,15 +212,16 @@ function ClassroomStage() {
     else viewBoard(viewingBoard - 1);
   };
   const goNext = () => {
-    if (viewingBoard === -1) { if (isNarrating) skipTurn(); return; }
+    if (viewingBoard === -1) {
+      if (isNarrating) skipTurn();
+      return;
+    }
     viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1);
   };
   const nextLabel = viewingBoard === -1 ? 'Skip' : 'Next';
   const nextTitle = viewingBoard !== -1
     ? 'Step forward through earlier boards'
-    : isNarrating
-      ? 'Skip ahead — cuts the current line short'
-      : 'Nothing to skip right now';
+    : 'Skip ahead — cuts the current line short';
   // Lyo owns the teacher position beside the transcript. There is no
   // participant rail: the backend has no real peers to put in one, so the
   // only honest number of classmates to draw is none. CAST survives below
@@ -215,16 +257,28 @@ function ClassroomStage() {
     setHandRaised(false);
   };
 
-  const toggleQuestionDictation = () => {
-    if (listening) {
+  const submitPromptResponse = (response: string) => {
+    if (!response.trim()) return;
+    if (answerPrompt(response.trim())) {
+      setPromptResponse('');
+      recognitionRef.current?.stop();
+    }
+  };
+
+  const toggleDictation = (target: 'question' | 'prompt') => {
+    if (listeningTarget) {
       recognitionRef.current?.stop();
       return;
     }
     const recognition = createBrowserSpeechRecognition();
     if (!recognition) return;
-    takeFloor();
+    if (target === 'prompt' && prompt) {
+      setEngagedPromptId(prompt.id);
+      interruptPrompt();
+    } else takeFloor();
     recognitionRef.current = recognition;
-    dictationBaseRef.current = question ? question.replace(/\s*$/, ' ') : '';
+    const currentValue = target === 'prompt' ? promptResponse : question;
+    dictationBaseRef.current = currentValue ? currentValue.replace(/\s*$/, ' ') : '';
     recognition.lang = language === 'auto' ? navigator.language || 'en-US' : language;
     recognition.interimResults = true;
     recognition.continuous = true;
@@ -233,20 +287,25 @@ function ClassroomStage() {
       for (let index = 0; index < event.results.length; index += 1) {
         transcript += event.results[index][0].transcript;
       }
-      setQuestion((dictationBaseRef.current + transcript).slice(0, 1000));
+      const text = (dictationBaseRef.current + transcript).slice(0, 1000);
+      if (target === 'prompt') setPromptResponse(text);
+      else setQuestion(text);
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListeningTarget(null);
+    recognition.onerror = () => setListeningTarget(null);
     try {
       recognition.start();
-      setListening(true);
+      setListeningTarget(target);
     } catch {
-      setListening(false);
+      setListeningTarget(null);
     }
   };
 
   return (
-    <div className="relative mx-auto flex h-[calc(100dvh-8rem)] min-h-[560px] max-w-5xl flex-col overflow-hidden pb-[max(0.25rem,env(safe-area-inset-bottom))] md:h-[calc(100dvh-4rem)]">
+    <div
+      className="relative mx-auto flex h-full min-h-0 max-w-5xl flex-col overflow-hidden pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+      style={visualHeight ? { height: visualHeight } : undefined}
+    >
 
       {/* ── Top bar ── */}
       <div className="flex items-start gap-3 px-3 py-2.5 sm:px-4">
@@ -289,6 +348,7 @@ function ClassroomStage() {
             onClick={toggleSound}
             title={soundOn ? 'Mute classroom sounds' : 'Classroom sounds on'}
             className={cn('p-2 rounded-lg transition-colors',
+              'hidden sm:inline-flex',
               soundOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
           >
             {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -296,7 +356,7 @@ function ClassroomStage() {
           <button
             onClick={() => setNotebookOpen(true)}
             title="Your notebook (transcript)"
-            className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+            className="hidden rounded-lg p-2 text-white/40 transition-colors hover:bg-white/5 hover:text-white sm:inline-flex"
           >
             <NotebookPen className="w-4 h-4" />
           </button>
@@ -320,6 +380,16 @@ function ClassroomStage() {
           aria-label="Classroom settings"
           className="mx-4 mb-2 grid gap-3 rounded-xl border border-white/10 bg-[#111a38] p-3 text-xs text-white/75 sm:grid-cols-3"
         >
+          <div className="flex gap-2 sm:hidden">
+            <button type="button" onClick={toggleSound}
+              className="min-h-11 flex-1 rounded-lg border border-white/15 bg-white/5 px-3 text-white">
+              {soundOn ? 'Mute classroom sounds' : 'Turn on classroom sounds'}
+            </button>
+            <button type="button" onClick={() => { setNotebookOpen(true); setSettingsOpen(false); }}
+              className="min-h-11 flex-1 rounded-lg border border-white/15 bg-white/5 px-3 text-white">
+              Your notebook
+            </button>
+          </div>
           <label className="space-y-1">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Gauge className="h-3.5 w-3.5" /> Learning mode
@@ -377,44 +447,40 @@ function ClassroomStage() {
         </div>
       )}
 
-      {/* ── THE BOARD — the main attraction ──
-          Zone discipline: the frame is a column of non-overlapping bands —
-          an optional history rail, then the lesson content. Nothing floats
-          over the content, so the learner never reads through an element. */}
-      <div className="mx-3 min-h-0 flex-1 sm:mx-4">
+      {/* The board grows with the lesson. Only this area scrolls when a scene
+          is longer than the available phone height; the teacher stays visible. */}
+      {(shownBoard.length > 0 || !prompt || error) && (
+      <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 sm:mx-4">
         <div className={cn(
-          'h-full flex flex-col rounded-[22px] border border-white/10 overflow-hidden',
+          'flex min-h-[180px] flex-col rounded-[22px] border border-white/10 overflow-hidden',
           'bg-[radial-gradient(ellipse_at_top,#1b2850_0%,#101936_48%,#090f24_100%)]',
           'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_70px_rgba(2,6,23,0.45),0_18px_50px_rgba(2,6,23,0.42)]',
         )}>
-          {/* playback rail — its own band, never on top of the lesson.
-              Always rendered (not gated on history existing) so Back/Next
-              are discoverable from the very first scene. */}
-          <div className="flex items-center justify-between gap-1 shrink-0 border-b border-white/5 bg-black/25 px-2 py-1">
-            <button
-              disabled={!canGoBack}
-              onClick={goBack}
-              title={canGoBack ? 'Previous board' : 'No earlier boards yet'}
-              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10.5px] font-semibold text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Back
-            </button>
-            <span className="text-[10px] text-white/50 font-mono">
-              {viewingBoard === -1 ? 'live' : `${viewingBoard + 1}/${totalBoards}`}
-            </span>
-            <button
-              disabled={!canGoNext}
-              onClick={goNext}
-              title={nextTitle}
-              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10.5px] font-semibold text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
-            >
-              {nextLabel} <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {(canGoBack || canGoNext || viewingBoard !== -1) && (
+            <div className="flex min-h-11 shrink-0 items-center justify-between gap-1 border-b border-white/5 bg-black/25 px-2 py-1">
+              <div className="min-w-20">
+                {canGoBack && (
+                  <button onClick={goBack} title="Previous board"
+                    className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-white/75 hover:bg-white/5 hover:text-white">
+                    <ChevronLeft className="h-4 w-4" /> Back
+                  </button>
+                )}
+              </div>
+              <span className="text-[10px] font-mono text-white/60">
+                {viewingBoard === -1 ? 'CURRENT BOARD' : `${viewingBoard + 1}/${totalBoards}`}
+              </span>
+              <div className="flex min-w-20 justify-end">
+                {canGoNext && (
+                  <button onClick={goNext} title={nextTitle}
+                    className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-white/80 hover:bg-white/5 hover:text-white">
+                    {nextLabel} <ChevronRight className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4 sm:px-7 sm:py-6 sm:space-y-5">
-            {/* Pinned to the top: on an empty board the placeholder below fills
-                the scroll area, which would push a recovery action out of sight. */}
+          <div className="space-y-4 px-4 py-4 sm:space-y-5 sm:px-7 sm:py-6">
             {(status === 'error' || status === 'ended' || error) && (
               <div
                 role="alert"
@@ -426,26 +492,15 @@ function ClassroomStage() {
                 <button className="underline" onClick={() => connect(connection)}>Retry</button>
               </div>
             )}
-            {shownBoard.length === 0 && !waitingForScene && (
-              /* The first thing a learner ever sees in the Classroom. It used
-                 to be the words "a clean board…" in grey italics, which reads
-                 as a screen that failed to load rather than a class about to
-                 start. It says what is being prepared and for whom, so the
-                 wait is legible. */
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 py-14 text-center">
-                <motion.img
-                  src={LYO_STATE_IMG.thinking}
-                  alt=""
-                  aria-hidden
-                  className="h-20 w-20 object-contain drop-shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
-                  animate={animationsOff ? undefined : { y: [0, -7, 0] }}
-                  transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-                />
+            {shownBoard.length === 0 && !prompt && status !== 'error' && status !== 'ended' && (
+              <div className="flex min-h-[150px] flex-col items-center justify-center gap-3 text-center">
+                <Sparkles className="h-6 w-6 text-teal-300" aria-hidden="true" />
                 <div className="space-y-1.5">
                   <p className="text-sm font-semibold text-white/80">
-                    {status === 'connecting' ? 'Setting up your class' : 'Opening the board'}
+                    {status === 'connecting' ? 'Setting up your class'
+                      : transcript.length > 0 ? 'Preparing the next step' : 'Preparing your first question'}
                   </p>
-                  <p className="mx-auto max-w-xs text-xs leading-relaxed text-white/45">
+                  <p className="mx-auto max-w-xs text-xs leading-relaxed text-white/70">
                     {topic} · {difficulty ? `${difficulty} level · ` : ''}
                     {durationMinutes} minute session
                   </p>
@@ -466,6 +521,7 @@ function ClassroomStage() {
               <BoardElementView
                 key={el.id}
                 el={el}
+                awaitingFeedback={waitingForScene}
                 onQuizAnswer={answerQuiz}
                 onTransferSubmit={answerTransfer}
                 onLearnerInputStart={takeFloor}
@@ -475,46 +531,24 @@ function ClassroomStage() {
                 reducedMotion={animationsOff}
               />
             ))}
-            {waitingForScene && viewingBoard === -1 && (
-              /* Between beats. A shimmering line stands in for the sentence
-                 being written, so the board looks like it is being worked on
-                 rather than stalled. */
-              <div className="flex items-center gap-2.5 py-3 text-sm text-white/45">
-                <motion.span
-                  animate={animationsOff ? { opacity: 1 } : { opacity: [0.35, 1, 0.35], rotate: [0, 12, 0] }}
-                  transition={animationsOff ? { duration: 0 } : { duration: 1.6, repeat: Infinity }}
-                  className="text-teal-300"
-                >
-                  <Sparkles className="w-4 h-4" />
-                </motion.span>
-                <span className="font-medium">Lyo is writing</span>
-                <span
-                  aria-hidden
-                  className={cn(
-                    'h-1.5 flex-1 max-w-[120px] rounded-full bg-white/10',
-                    animationsOff ? '' : 'animate-pulse',
-                  )}
-                />
-              </div>
-            )}
-            <div ref={boardEndRef} />
           </div>
 
           <div className="mx-8 h-px shrink-0 bg-gradient-to-r from-transparent via-teal-300/30 to-transparent" />
         </div>
       </div>
+      )}
 
       {/* One teacher, one synchronized transcript. ClassroomCaptionSync owns
           the visual text; this component owns the semantic live region. */}
       <div className={cn(
-        'mx-3 mt-2 flex shrink-0 items-center gap-3 rounded-2xl border bg-[#111936]/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl transition-[min-height,border-color] sm:mx-4 sm:px-4',
-        voiceOn ? 'min-h-16 border-white/10 sm:min-h-[72px]' : 'min-h-24 border-teal-300/20 sm:min-h-28',
+        'mx-3 mt-auto flex min-h-[72px] shrink-0 items-center gap-3 rounded-2xl border bg-[#111936]/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl sm:mx-4 sm:px-4',
+        voiceOn ? 'border-white/10' : 'border-teal-300/20',
       )}>
         <motion.img
           key={lyoState}
           src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt={`Lyo is ${lyoState}`}
-          className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.55)] sm:h-14 sm:w-14"
+          className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.55)]"
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={animationsOff
             ? { scale: 1, rotate: 0, y: 0 }
@@ -527,28 +561,64 @@ function ClassroomStage() {
           <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
             {caption ? `${caption.speaker}: ${caption.text}` : ''}
           </span>
+          {!caption && (
+            <p className="flex h-full items-center text-sm font-medium text-white/75">
+              {waitingForScene || status === 'connecting'
+                ? board.some((el) => (el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted))
+                  ? 'Lyo is checking your answer…' : 'Lyo is preparing the next step…'
+                : pendingCheckpoint || prompt ? 'Your turn — respond to Lyo' : 'Lyo is ready'}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* ── Cold-call answer strip ── */}
+      {/* A director prompt can have choices or ask for an open response. */}
       <AnimatePresence>
         {prompt && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="px-6 py-1.5 flex flex-wrap items-center justify-center gap-2"
+            className="mx-3 mt-2 space-y-2 rounded-xl border border-lyo-400/30 bg-lyo-500/10 p-3 sm:mx-4"
           >
-            <Hand className="w-4 h-4 text-lyo-300 animate-bounce" />
-            {(prompt.options ?? []).map((opt) => (
-              <button
-                key={opt}
-                onClick={() => answerPrompt(opt)}
-                className="px-4 py-2 rounded-full text-sm font-semibold bg-accent-gold/15 border border-accent-gold/40 text-white hover:bg-accent-gold/30 transition-colors"
-              >
-                {opt}
-              </button>
-            ))}
+            <p className="text-xs font-bold uppercase tracking-wide text-lyo-200">Your turn</p>
+            {(engagedPromptId === prompt.id || !voiceOn) && (
+              <p className="text-sm font-medium leading-relaxed text-white">{prompt.text}</p>
+            )}
+            {prompt.options?.length ? (
+              <div className="flex flex-wrap gap-2">
+                {prompt.options.map((opt) => (
+                  <button key={opt} onClick={() => submitPromptResponse(opt)}
+                    className="min-h-11 rounded-xl border border-lyo-400/40 bg-lyo-500/15 px-4 py-2 text-sm font-semibold text-white hover:bg-lyo-500/30">
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input value={promptResponse} onFocus={() => {
+                  setEngagedPromptId(prompt.id);
+                  interruptPrompt();
+                }}
+                  onChange={(event) => setPromptResponse(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') submitPromptResponse(promptResponse); }}
+                  aria-label="Answer Lyo" placeholder="Answer Lyo…"
+                  className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/20 bg-white/5 px-3 text-sm text-white placeholder:text-white/55 focus:outline-none focus:border-lyo-400" />
+                {speechSupported && (
+                  <button type="button" onClick={() => toggleDictation('prompt')}
+                    aria-label={listeningTarget === 'prompt' ? 'Stop dictation' : 'Answer aloud'}
+                    className={cn('min-h-11 min-w-11 rounded-xl border p-2',
+                      listeningTarget === 'prompt' ? 'border-red-400/50 bg-red-500/15 text-red-200' : 'border-white/20 bg-white/5 text-white')}>
+                    <Mic className="mx-auto h-5 w-5" />
+                  </button>
+                )}
+                <button type="button" onClick={() => submitPromptResponse(promptResponse)}
+                  disabled={!promptResponse.trim()} aria-label="Send answer"
+                  className="min-h-11 min-w-11 rounded-xl bg-lyo-600 p-2 text-white disabled:opacity-40">
+                  <Send className="mx-auto h-5 w-5" />
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -574,14 +644,15 @@ function ClassroomStage() {
             {deskDisabledReason}
           </p>
         )}
-        {canContinue && (
+        {readyToContinue && (
           <button
             onClick={continueLesson}
-            disabled={!live}
-            title={live ? undefined : deskDisabledReason}
             className="min-h-12 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {continueLabel} →
+            {primaryContinue} →
+            {canContinue && continueLabel.trim() && continueLabel.toLowerCase() !== primaryContinue.toLowerCase() && (
+              <span className="block text-[11px] font-medium text-white/75">{continueLabel}</span>
+            )}
           </button>
         )}
         <div className="grid grid-cols-3 items-stretch gap-2">
@@ -659,11 +730,11 @@ function ClassroomStage() {
               {speechSupported && (
                 <button
                   type="button"
-                  onClick={toggleQuestionDictation}
-                  aria-label={listening ? 'Stop dictation' : 'Dictate your question'}
+                  onClick={() => toggleDictation('question')}
+                  aria-label={listeningTarget === 'question' ? 'Stop dictation' : 'Dictate your question'}
                   className={cn(
                     'px-3 rounded-full border transition-colors',
-                    listening
+                    listeningTarget === 'question'
                       ? 'border-red-400/50 bg-red-500/15 text-red-200'
                       : 'border-white/10 bg-white/5 text-white/60 hover:text-white',
                   )}

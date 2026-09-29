@@ -3,11 +3,10 @@ import { TopBar } from '@/components/layout/TopBar';
 import { MobileNav } from '@/components/layout/MobileNav';
 import MainContent from '@/components/layout/MainContent';
 import ClassroomCaptionSync from '@/components/classroom/ClassroomCaptionSync';
-import ClassroomFlowControls from '@/components/classroom/ClassroomFlowControls';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen h-[100dvh]">
       {/* Desktop sidebar — hidden on mobile */}
       <Sidebar />
 
@@ -21,10 +20,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* Mobile bottom nav — hidden on desktop */}
       <MobileNav />
 
-      {/* Classroom-only compatibility layers: captions follow the real audio
-          clock and transport/continue controls follow the real lesson state. */}
+      {/* Classroom captions follow the real audio clock. */}
       <ClassroomCaptionSync />
-      <ClassroomFlowControls />
     </div>
   );
 }
