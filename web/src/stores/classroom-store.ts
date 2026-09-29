@@ -200,13 +200,14 @@ interface ClassroomStore {
 
   connect: (connection: ClassroomConnection) => void;
   disconnect: () => void;
-  answerPrompt: (option: string) => void;
+  answerPrompt: (option: string) => boolean;
   answerQuiz: (elementId: string, option: QuizOption) => void;
   answerTransfer: (elementId: string, response: string) => void;
   skipQuestion: (elementId: string) => void;
   unskipQuestion: (elementId: string) => void;
   askQuestion: (text: string) => void;
   takeFloor: () => void;
+  interruptPrompt: () => void;
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
@@ -964,7 +965,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     isNarrating: false,
     canContinue: false,
     progressCurrent: 0,
-    progressTotal: 1,
+    progressTotal: 0,
     continueLabel: 'Check understanding',
     nextActionIntent: 'continue',
     nextActionComponentId: 'web_continue',
@@ -1000,7 +1001,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         board: [], boardHistory: [], recordConcepts: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
-        progressCurrent: 0, progressTotal: 1,
+        progressCurrent: 0, progressTotal: 0,
         continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue', error: null,
       });
 
@@ -1030,16 +1031,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
     answerPrompt: (option: string) => {
       const prompt = get().prompt;
-      if (!prompt) return;
+      if (!prompt) return false;
       // Keep the prompt on screen if it could not be delivered, rather than
       // dismissing a question the classroom never received.
       if (!sendAction('user_message', prompt.id, { message: option })) {
         reportOffline();
-        return;
+        return false;
       }
       learnerTakesFloor();
       pushTranscript('You', option);
-      set({ prompt: null, lyoState: 'listening' });
+      set({ prompt: null, lyoState: 'listening', waitingForScene: true });
+      return true;
     },
 
     answerQuiz: (elementId, option) => {
@@ -1166,6 +1168,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     },
 
     takeFloor: () => learnerTakesFloor(),
+
+    interruptPrompt: () => {
+      // The learner can start speaking or typing before the question finishes.
+      // Stop its audio, while keeping the prompt available for submission.
+      if (!get().prompt) return;
+      stopSpeech();
+      set({ caption: null, activeSpeaker: null, revealedCount: 0 });
+    },
 
     signal: (kind) => {
       learnerTakesFloor();

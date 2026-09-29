@@ -283,23 +283,24 @@ function ChalkView({ text, reducedMotion }: { text: string; reducedMotion: boole
 }
 
 function QuizView({
-  el, onAnswer, onSkip, onUnskip, onAskHelp,
+  el, onAnswer, onSkip, onUnskip, onAskHelp, awaitingFeedback,
 }: {
   el: Extract<BoardElement, { kind: 'quiz' }>;
   onAnswer: (elementId: string, option: QuizOption) => void;
   onSkip: (elementId: string) => void;
   onUnskip: (elementId: string) => void;
   onAskHelp: () => void;
+  awaitingFeedback: boolean;
 }) {
   const quiz = el.quiz;
   const isSpanish = quiz.language_code?.toLowerCase().startsWith('es') === true;
   const locked = !!el.answered || !!el.skipped;
   return (
     <div className="space-y-3">
-      <p className="text-[11px] font-black tracking-widest text-accent-gold uppercase">
-        {isSpanish ? '📝 En el tablero — comprobación' : '📝 On the board — checkpoint'}
+      <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
+        {isSpanish ? 'Tu turno — comprobación' : 'Your turn — checkpoint'}
       </p>
-      <p className="text-white text-base font-medium">{quiz.question}</p>
+      <p className="whitespace-pre-line text-base font-medium leading-relaxed text-white">{quiz.question}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {(quiz.options ?? []).map((opt) => {
           const chosen = el.answered === opt.label;
@@ -309,15 +310,20 @@ function QuizView({
               disabled={locked}
               onClick={() => onAnswer(el.id, opt)}
               className={cn(
-                'flex items-center justify-between px-4 py-3 rounded-xl text-sm text-left border transition-all',
+                'flex min-h-12 items-center justify-between px-4 py-3 rounded-xl text-sm text-left border transition-all',
                 chosen && el.wasCorrect === true && 'bg-green-500/15 border-green-500/40 text-white',
                 chosen && el.wasCorrect === false && 'bg-red-500/15 border-red-500/40 text-white',
-                chosen && el.wasCorrect === undefined && 'bg-lyo-500/15 border-lyo-400/40 text-white',
+                chosen && el.wasCorrect === undefined && 'bg-lyo-500/30 border-lyo-300 text-white ring-1 ring-lyo-300/40',
                 !locked && 'bg-white/5 border-white/15 text-white/85 hover:bg-lyo-500/15 hover:border-lyo-500/40',
-                !chosen && locked && 'bg-white/[0.03] border-white/5 text-white/30',
+                !chosen && locked && 'bg-white/[0.03] border-white/10 text-white/65',
               )}
             >
               <span>{opt.label}</span>
+              {chosen && el.wasCorrect === undefined && (
+                <span className="shrink-0 text-[11px] font-bold text-lyo-100">
+                  {isSpanish ? 'Elegida' : 'Selected'}
+                </span>
+              )}
               {chosen && el.wasCorrect === true && (
                 <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
               )}
@@ -333,15 +339,15 @@ function QuizView({
           <button
             type="button"
             onClick={() => onSkip(el.id)}
-            className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
+            className="min-h-11 rounded-lg px-2 text-xs font-semibold text-white/75 hover:bg-white/5 hover:text-white transition-colors"
           >
-            {isSpanish ? 'No lo sé — omitir' : <>I don&apos;t know — skip</>}
+            {isSpanish ? 'Todavía no lo sé' : <>I&apos;m not sure yet</>}
           </button>
           <span className="text-white/20">·</span>
           <button
             type="button"
             onClick={onAskHelp}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-lyo-300 hover:text-lyo-200 transition-colors"
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-lyo-200 hover:bg-white/5 hover:text-white transition-colors"
           >
             <HelpCircle className="w-3.5 h-3.5" /> {isSpanish ? 'Pedir ayuda' : 'Ask for help'}
           </button>
@@ -358,6 +364,13 @@ function QuizView({
             {isSpanish ? 'Intentarla ahora' : 'Try this now'}
           </button>
         </div>
+      )}
+      {el.answered && !el.feedback && (
+        <p role="status" className="rounded-lg border border-lyo-400/25 bg-lyo-500/10 px-3 py-2 text-sm text-lyo-100">
+          {awaitingFeedback
+            ? (isSpanish ? 'Respuesta enviada. Lyo la está revisando…' : 'Answer sent. Lyo is checking it…')
+            : (isSpanish ? `Tu respuesta: ${el.answered}` : `Your answer: ${el.answered}`)}
+        </p>
       )}
       {el.feedback && (
         <p
@@ -539,7 +552,7 @@ function TransferView({
 
 export function BoardElementView({
   el, onQuizAnswer, onTransferSubmit, onLearnerInputStart,
-  onSkipQuestion, onUnskipQuestion, onAskHelp, reducedMotion = false,
+  onSkipQuestion, onUnskipQuestion, onAskHelp, awaitingFeedback = false, reducedMotion = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
@@ -548,6 +561,7 @@ export function BoardElementView({
   onSkipQuestion: (elementId: string) => void;
   onUnskipQuestion: (elementId: string) => void;
   onAskHelp: () => void;
+  awaitingFeedback?: boolean;
   reducedMotion?: boolean;
 }) {
   return (
@@ -556,6 +570,7 @@ export function BoardElementView({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: reducedMotion ? 0 : 0.45, ease: 'easeOut' }}
       className="board-element"
+      data-board-element-id={el.id}
     >
       {el.kind === 'teaching_visual' && <TeachingVisualView key={el.id} id={el.id} visual={el.visual} />}
       {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
@@ -646,6 +661,7 @@ export function BoardElementView({
           onSkip={onSkipQuestion}
           onUnskip={onUnskipQuestion}
           onAskHelp={onAskHelp}
+          awaitingFeedback={awaitingFeedback}
         />
       )}
 
