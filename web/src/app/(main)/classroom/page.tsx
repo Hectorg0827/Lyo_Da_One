@@ -203,6 +203,14 @@ function ClassroomStage() {
     && !waitingForScene && !isNarrating && !prompt && !pendingCheckpoint
     && (canContinue || board.length > 0);
   const primaryContinue = languageCode.toLowerCase().startsWith('es') ? 'Continuar' : 'Continue';
+  const normalizedContinueLabel = continueLabel.trim();
+  // The store uses the literal English "Continue" when a CTA omits its label.
+  // Treat that value as a sentinel so the UI can keep the language-aware fallback.
+  const displayedContinueLabel = canContinue
+    && normalizedContinueLabel
+    && normalizedContinueLabel.toLowerCase() !== 'continue'
+    ? normalizedContinueLabel
+    : primaryContinue;
 
   // History and narration transport are shown only when actionable.
   const canGoBack = viewingBoard === -1 ? totalBoards > 0 : viewingBoard > 0;
@@ -649,7 +657,7 @@ function ClassroomStage() {
             onClick={continueLesson}
             className="min-h-12 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {canContinue && continueLabel.trim() ? continueLabel : primaryContinue} →
+            {displayedContinueLabel} →
           </button>
         )}
         <div className="grid grid-cols-3 items-stretch gap-2">
