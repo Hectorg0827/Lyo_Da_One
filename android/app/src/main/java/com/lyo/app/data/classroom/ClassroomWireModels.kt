@@ -32,6 +32,7 @@ data class ClassroomBlock(
     val items: List<String>? = null,
     val source_attributions: List<String>? = null,
     val retrieval_scheduled: Boolean? = null,
+    val visual_id: String? = null,
     val kind: String? = null,
     val caption: String? = null,
     val description: String? = null,
@@ -46,9 +47,19 @@ data class ClassroomBlock(
     val x_max: Double? = null,
     val y_min: Double? = null,
     val y_max: Double? = null,
+    val image_query: String? = null,
+    val image_url: String? = null,
+    val source_url: String? = null,
+    val attribution: String? = null,
 )
 
-data class TeachingVisualItem(val label: String? = null, val detail: String? = null)
+data class TeachingVisualItem(
+    val label: String? = null,
+    val detail: String? = null,
+    val position: Double? = null,
+    val x: Double? = null,
+    val y: Double? = null,
+)
 
 /**
  * The `component_render` payload. `type` is the discriminator dispatched on
@@ -161,11 +172,35 @@ data class UserActionEnvelope(
 )
 
 /** Prevent a malformed supplemental tool from taking down the actual lesson. */
-fun ClassroomBlock.isTeachingVisualValid(): Boolean = when (kind) {
-    "fraction_bar" -> parts != null && parts in 2..20 && value != null && value in 0..parts && whole != null && whole.isFinite() && whole > 0
-    "comparison", "sequence" -> entries != null && entries.size in 2..6 && value != null && value in entries.indices && entries.all { !it.label.isNullOrBlank() && !it.detail.isNullOrBlank() }
-    "graph" -> !expression.isNullOrBlank() && params != null && params.size in 1..3 && params.map { it.name }.distinct().size == params.size && x_min != null && x_max != null && x_min.isFinite() && x_max.isFinite() && x_min < x_max && y_min != null && y_max != null && y_min.isFinite() && y_max.isFinite() && y_min < y_max && params.all {
-        !it.name.isNullOrBlank() && it.min != null && it.max != null && it.initial != null && it.min.isFinite() && it.max.isFinite() && it.initial.isFinite() && (it.step ?: 1.0).isFinite() && (it.step ?: 1.0) > 0 && it.min < it.max && it.initial in it.min..it.max
+fun ClassroomBlock.isTeachingVisualValid(): Boolean {
+    fun entriesOk(min: Int = 2, max: Int = 8): Boolean =
+        entries != null && entries.size in min..max && value != null && value in entries.indices &&
+            entries.all { !it.label.isNullOrBlank() && !it.detail.isNullOrBlank() }
+
+    return when (kind) {
+        "fraction_bar" -> parts != null && parts in 2..20 && value != null && value in 0..parts &&
+            whole != null && whole.isFinite() && whole > 0
+        "comparison", "sequence", "process_flow", "timeline" -> entriesOk()
+        "number_line" -> entriesOk() && x_min != null && x_max != null && x_min.isFinite() &&
+            x_max.isFinite() && x_min < x_max && entries!!.all {
+                it.position != null && it.position.isFinite() && it.position in x_min..x_max
+            }
+        "annotated_image" -> !image_query.isNullOrBlank() && (entries?.all {
+                !it.label.isNullOrBlank() && !it.detail.isNullOrBlank() &&
+                    ((it.x == null && it.y == null) || (it.x != null && it.y != null &&
+                        it.x.isFinite() && it.y.isFinite() && it.x in 0.0..1.0 && it.y in 0.0..1.0))
+            } != false) &&
+            (image_url == null || image_url.startsWith("https://upload.wikimedia.org/")) &&
+            (source_url == null || source_url.startsWith("https://commons.wikimedia.org/"))
+        "graph" -> !expression.isNullOrBlank() && params != null && params.size in 1..3 &&
+            params.map { it.name }.distinct().size == params.size && x_min != null && x_max != null &&
+            x_min.isFinite() && x_max.isFinite() && x_min < x_max && y_min != null && y_max != null &&
+            y_min.isFinite() && y_max.isFinite() && y_min < y_max && params.all {
+                !it.name.isNullOrBlank() && it.min != null && it.max != null && it.initial != null &&
+                    it.min.isFinite() && it.max.isFinite() && it.initial.isFinite() &&
+                    (it.step ?: 1.0).isFinite() && (it.step ?: 1.0) > 0 && it.min < it.max &&
+                    it.initial in it.min..it.max
+            }
+        else -> false
     }
-    else -> false
 }
