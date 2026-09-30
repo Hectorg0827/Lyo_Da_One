@@ -165,7 +165,7 @@ export default function ClassroomCaptionSync() {
     if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption?.text, caption?.speaker]);
+  }, [caption?.text, caption?.speaker, paced, voiceOn]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -179,6 +179,29 @@ export default function ClassroomCaptionSync() {
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealedCount, paced, voiceOn]);
+
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || typeof ResizeObserver === 'undefined') return;
+
+    // Re-wrapping can change scrollHeight without any new caption words:
+    // rotation, breakpoint changes, late font layout, or any parent resize.
+    // Keep paced captions pinned only while the learner is still following;
+    // unpaced captions stay where the learner left them and just refresh the
+    // overflow affordance.
+    const observer = new ResizeObserver(() => {
+      if (paced && followingRef.current) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
+      const distanceFromBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      setHasMoreBelow(distanceFromBottom > 4);
+    });
+
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [caption?.speaker, caption?.text, paced, target, voiceOn]);
 
 
   const cancelFrames = () => {
