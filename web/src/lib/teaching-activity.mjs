@@ -3,7 +3,7 @@ export function parseTeachingVisual(raw) {
   const kinds = ['fraction_bar', 'comparison', 'sequence', 'graph', 'process_flow', 'timeline', 'number_line', 'annotated_image'];
   if (!raw || typeof raw !== 'object' || !kinds.includes(raw.kind)) return null;
   if (typeof raw.title !== 'string' || typeof raw.caption !== 'string' || typeof raw.description !== 'string') return null;
-  if (typeof raw.visual_id !== 'string' || raw.visual_id.length < 8) return null;
+  if (raw.visual_id != null && (typeof raw.visual_id !== 'string' || raw.visual_id.length < 8)) return null;
 
   const entriesValid = Array.isArray(raw.entries)
     && raw.entries.every(i => i && typeof i.label === 'string' && typeof i.detail === 'string');
