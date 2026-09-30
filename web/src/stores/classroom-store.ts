@@ -236,6 +236,11 @@ let activeAudio: HTMLAudioElement | null = null;
 let activeAudioUrl: string | null = null;
 let speechGeneration = 0;
 let authToken: string | null = null;
+// Speech requests are started as soon as teacher turns arrive, not when the
+// previous line finishes. The cache is deliberately tiny and session-local:
+// it exists only to overlap network/TTS latency with time the learner is
+// already listening to the current turn.
+const prefetchedSpeech = new Map<string, Promise<Blob | null>>();
 let idCounter = 0;
 let pendingErase = false; // erase lazily when the NEW scene's content arrives
 const nextId = () => `cf_${++idCounter}`;
@@ -406,6 +411,54 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   const sfx = (sound: AmbientSound) => { if (get().soundOn) playSound(sound); };
 
+  function speechCacheKey(text: string, language: string, rate: number) {
+    return `${language}|${rate.toFixed(2)}|${text}`;
+  }
+
+  async function requestSpeechBlob(
+    text: string,
+    language: string,
+    rate: number,
+    signal?: AbortSignal,
+  ): Promise<Blob | null> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    if (API_KEY) headers['X-API-Key'] = API_KEY;
+    const response = await fetch(
+      `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
+      {
+        method: 'POST',
+        headers,
+        signal,
+        body: JSON.stringify({
+          text,
+          voice: 'nova',
+          format: 'mp3',
+          speed: rate,
+          content_type: 'explanation',
+          language,
+        }),
+      },
+    );
+    if (!response.ok) return null;
+    return response.blob();
+  }
+
+  function prefetchSpeechLine(text: string) {
+    if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
+    const language = get().languageCode || 'auto';
+    const rate = get().speechRate;
+    const key = speechCacheKey(text, language, rate);
+    if (prefetchedSpeech.has(key)) return;
+    const pending = requestSpeechBlob(text, language, rate).catch(() => null);
+    prefetchedSpeech.set(key, pending);
+    while (prefetchedSpeech.size > 6) {
+      const oldest = prefetchedSpeech.keys().next().value as string | undefined;
+      if (!oldest) break;
+      prefetchedSpeech.delete(oldest);
+    }
+  }
+
   function speakWithLocalizedDeviceVoice(
     text: string,
     language: string,
@@ -456,29 +509,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
     void (async () => {
       try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        if (authToken) headers.Authorization = `Bearer ${authToken}`;
-        if (API_KEY) headers['X-API-Key'] = API_KEY;
-        const response = await fetch(
-          `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
-          {
-            method: 'POST',
-            headers,
-            signal: controller.signal,
-            body: JSON.stringify({
-              text,
-              voice: 'nova',
-              format: 'mp3',
-              speed: get().speechRate,
-              content_type: 'explanation',
-              language,
-            }),
-          },
-        );
-        if (!response.ok) throw new Error(`Shared voice returned ${response.status}`);
-        const audioBlob = await response.blob();
+        const rate = get().speechRate;
+        const key = speechCacheKey(text, language, rate);
+        const prefetched = prefetchedSpeech.get(key);
+        const audioBlob = prefetched
+          ? await prefetched
+          : await requestSpeechBlob(text, language, rate, controller.signal);
+        prefetchedSpeech.delete(key);
+        if (!audioBlob) throw new Error('Shared voice unavailable');
         if (generation !== speechGeneration) return;
 
         activeAudioUrl = URL.createObjectURL(audioBlob);
@@ -739,6 +777,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         set({
           lyoState: turn.lyo_state || 'celebrating',
           canContinue: true,
+          // session_end has no CTAButton of its own. Reset the continuation
+          // metadata so a prior action such as "Check understanding" cannot
+          // become the label or intent for the dismissal button.
+          continueLabel: 'Continue',
+          nextActionIntent: 'continue',
+          nextActionComponentId: 'web_continue',
           caption: null,
           activeSpeaker: null,
         });
@@ -759,6 +803,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function enqueueTurns(turns: DirectorTurn[]) {
     maybeEraseForNewScene();
+    // Start the next few voice requests immediately. While line one is
+    // playing, lines two and three can finish synthesizing instead of making
+    // the learner sit through a fresh network/provider round-trip at every
+    // transition.
+    turns
+      .filter((turn) => turn.type === 'speech' && (turn.text ?? '').trim())
+      .slice(0, 3)
+      .forEach((turn) => prefetchSpeechLine((turn.text ?? '').trim()));
     turnQueue.push(...turns);
     set({ waitingForScene: false });
     resumePlayer();
