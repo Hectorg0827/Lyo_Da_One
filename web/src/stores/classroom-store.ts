@@ -739,6 +739,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         set({
           lyoState: turn.lyo_state || 'celebrating',
           canContinue: true,
+          // session_end has no CTAButton of its own. Reset the continuation
+          // metadata so a prior action such as "Check understanding" cannot
+          // become the label or intent for the dismissal button.
+          continueLabel: 'Continue',
+          nextActionIntent: 'continue',
+          nextActionComponentId: 'web_continue',
           caption: null,
           activeSpeaker: null,
         });
