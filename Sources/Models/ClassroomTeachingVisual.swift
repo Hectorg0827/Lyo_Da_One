@@ -34,7 +34,7 @@ struct ClassroomTeachingVisual: Codable, Equatable {
     let xMax: Double
     let yMin: Double
     let yMax: Double
-    let imageQuery: String
+    let imageQuery: String?
     let imageUrl: String?
     let sourceUrl: String?
     let attribution: String?
@@ -70,7 +70,7 @@ struct ClassroomTeachingVisual: Codable, Equatable {
                     return position.isFinite && position >= xMin && position <= xMax
                 }
         case "annotated_image":
-            return !imageQuery.isEmpty
+            return !(imageQuery ?? "").isEmpty
                 && isTrustedImage(imageUrl)
                 && isTrustedImage(sourceUrl)
                 && entries.allSatisfy { item in
