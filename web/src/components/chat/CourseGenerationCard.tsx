@@ -267,6 +267,8 @@ export default function CourseGenerationCard({
   generationState,
 }: CourseGenerationCardProps) {
   const router = useRouter();
+  const courseRevisionUndo = useChatStore((state) => state.courseRevisionUndo);
+  const undoCourseRevision = useChatStore((state) => state.undoCourseRevision);
   const [adjustOpen, setAdjustOpen] = useState(false);
 
   const title = useMemo(() => safeCourseTitle(course), [course]);
@@ -460,6 +462,19 @@ export default function CourseGenerationCard({
               >
                 <Play className="w-4 h-4" />
                 Start course
+              </button>
+            </div>
+          )}
+
+          {isGenerating && courseRevisionUndo && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-lyo-500/15 bg-lyo-500/5 px-3 py-2">
+              <span className="text-xs text-white/45">Course settings updated</span>
+              <button
+                type="button"
+                onClick={() => void undoCourseRevision()}
+                className="text-xs font-semibold text-lyo-300 hover:text-white transition-colors"
+              >
+                Undo
               </button>
             </div>
           )}
