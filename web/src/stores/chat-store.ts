@@ -74,6 +74,18 @@ function extractActionLabels(chunk: Record<string, unknown>): string[] {
   return labels;
 }
 
+function normalizeCourseDuration(course?: Record<string, unknown>): number | undefined {
+  const raw = course?.estimatedDuration ?? course?.estimated_duration ?? course?.duration;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw !== 'string') return undefined;
+
+  const match = raw.match(/\\d+(?:\\.\\d+)?/);
+  if (!match) return undefined;
+  const value = Number(match[0]);
+  if (!Number.isFinite(value)) return undefined;
+  return /\\bhours?\\b/i.test(raw) ? Math.round(value * 60) : Math.round(value);
+}
+
 // Module-scoped, not store state: this must survive ChatInterface
 // remounting (tabbing away and back within the same app session) but reset
 // to false whenever the app is actually reopened — a fresh page load/PWA
@@ -89,6 +101,10 @@ let hydrationInFlight: Promise<void> | null = null;
 // adjustments abort the in-flight build before starting the revised one, so
 // two generators never race to update the same conversation.
 let activeStreamController: AbortController | null = null;
+// Every stream gets a monotonically increasing identity. Aborting a course
+// build invalidates its identity before the replacement starts, so callbacks
+// already queued by the old SSE reader cannot mutate the new generation.
+let activeStreamToken = 0;
 
 // Module-scoped for the same reason as hasHydratedThisSession above:
 // fetchDueReviews() replaces `dueReviews` wholesale from the server on
@@ -492,11 +508,58 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       patchAiMessage({ suggestedActions: labels });
     };
 
+    // Course-generation milestones can arrive before OPEN_CLASSROOM. Ensure
+    // those milestones have a real proposal message to render into instead of
+    // leaving the only progress surface absent during intent/planning.
+    const ensureCourseProposal = (coursePatch: Record<string, unknown> = {}) => {
+      set((s) => ({
+        conversations: s.conversations.map((c) => {
+          if (c.id !== convoId) return c;
+          const existing = c.messages.find((m) => m.id === aiMessageId);
+          const existingCourse = existing?.metadata?.course as Record<string, unknown> | undefined;
+          const course = { ...coursePatch, ...(existingCourse || {}) };
+          if (existing) {
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === aiMessageId
+                  ? {
+                      ...m,
+                      type: 'course_proposal' as const,
+                      metadata: { ...m.metadata, course },
+                    }
+                  : m
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return {
+            ...c,
+            messages: [
+              ...c.messages,
+              {
+                id: aiMessageId,
+                role: 'assistant' as const,
+                content: accumulated,
+                type: 'course_proposal' as const,
+                metadata: { course },
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      }));
+    };
+
+    const streamToken = ++activeStreamToken;
+
     try {
       activeStreamController = api.chat.stream(
         trimmedContent,
         history,
         (chunk) => {
+          if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
           if (chunk.type === 'course_generation') {
@@ -529,6 +592,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   }))
               : undefined;
 
+            ensureCourseProposal({
+              topic: options.courseContext?.topic || trimmedContent || undefined,
+              difficulty: options.courseContext?.difficulty,
+            });
+
             set((state) => ({
               generationActivity: 'course',
               generationProgress: Math.max(state.generationProgress, eventProgress),
@@ -560,18 +628,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               if (courseData.difficulty) {
                 courseData.difficulty = courseData.difficulty.toLowerCase();
               }
-              // Normalize duration string/number
-              const rawDuration = courseData.estimated_duration || courseData.duration;
-              if (typeof rawDuration === 'number') {
-                courseData.estimatedDuration = rawDuration;
-              } else if (typeof rawDuration === 'string') {
-                const numMatch = rawDuration.match(/\d+/);
-                if (numMatch) {
-                  const num = parseInt(numMatch[0]);
-                  courseData.estimatedDuration = rawDuration.toLowerCase().includes('hour')
-                    ? num * 60
-                    : num;
-                }
+              // Normalize every supported duration alias to minutes.
+              const normalizedDuration = normalizeCourseDuration(courseData);
+              if (normalizedDuration != null) {
+                courseData.estimatedDuration = normalizedDuration;
               }
 
               // Normalize lessons to modules
@@ -663,6 +723,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         },
         () => {
+          if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
           if (!receivedContent) {
             recoverCanonicalConversation(convoId!);
@@ -687,6 +748,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         },
         () => {
+          if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
           recoverCanonicalConversation(convoId!);
         },
@@ -705,7 +767,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : undefined
       );
     } catch {
-      recoverCanonicalConversation(convoId!);
+      if (streamToken === activeStreamToken) {
+        recoverCanonicalConversation(convoId!);
+      }
     }
 
     async function recoverCanonicalConversation(cId: string) {
@@ -754,12 +818,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       || (typeof course?.level === 'string' && course.level)
       || '';
     const previousDifficulty = previousDifficultyRaw.toLowerCase();
-    const previousDuration =
-      typeof course?.estimatedDuration === 'number'
-        ? course.estimatedDuration
-        : typeof course?.duration === 'number'
-        ? course.duration
-        : undefined;
+    const previousDuration = normalizeCourseDuration(course);
     const undoTarget: CourseRevisionInput = {
       topic: safeTopic || undefined,
       difficulty: ['beginner', 'intermediate', 'advanced'].includes(previousDifficulty)
@@ -780,6 +839,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         undoTarget.topic || undoTarget.difficulty || undoTarget.length ? undoTarget : null,
     });
 
+    // Invalidate first: AbortController.abort() can race with callbacks that
+    // were already queued by the old stream.
+    activeStreamToken += 1;
     if (activeStreamController) {
       activeStreamController.abort();
       activeStreamController = null;
