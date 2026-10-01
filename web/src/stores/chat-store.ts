@@ -116,6 +116,7 @@ interface ChatStore {
   generationProgress: number;
   generationActivity: GenerationActivity;
   courseGenerationState: CourseGenerationState | null;
+  courseRevisionUndo: CourseRevisionInput | null;
   isHydrating: boolean;
   // Session-close recap of the conversation just left behind, and the
   // spaced-repetition items due for another look. Both null/empty until
@@ -133,6 +134,7 @@ interface ChatStore {
     options?: SendMessageOptions
   ) => Promise<void>;
   reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
+  undoCourseRevision: () => Promise<void>;
   answerCheck: (
     messageId: string,
     blockId: string,
@@ -155,6 +157,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   generationProgress: 0,
   generationActivity: 'thinking',
   courseGenerationState: null,
+  courseRevisionUndo: null,
   isHydrating: false,
   sessionSummary: null,
   dueReviews: [],
@@ -383,6 +386,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             message: 'Understanding your changes',
           }
         : null,
+      courseRevisionUndo:
+        options.forcedIntent === 'COURSE' ? s.courseRevisionUndo : null,
     }));
 
     // The server is the source of truth for history. Sending only the current
@@ -726,6 +731,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const safeTopic = /(proactive\s+(context|system|nudge)|system\s+nudges?)/i.test(rawTopic)
       ? latestUserMessage?.content || ''
       : rawTopic;
+    const previousDifficultyRaw =
+      (typeof course?.difficulty === 'string' && course.difficulty)
+      || (typeof course?.level === 'string' && course.level)
+      || '';
+    const previousDifficulty = previousDifficultyRaw.toLowerCase();
+    const previousDuration =
+      typeof course?.estimatedDuration === 'number'
+        ? course.estimatedDuration
+        : typeof course?.duration === 'number'
+        ? course.duration
+        : undefined;
+    const undoTarget: CourseRevisionInput = {
+      topic: safeTopic || undefined,
+      difficulty: ['beginner', 'intermediate', 'advanced'].includes(previousDifficulty)
+        ? previousDifficulty as CourseRevisionInput['difficulty']
+        : undefined,
+      length:
+        previousDuration == null
+          ? undefined
+          : previousDuration <= 20
+          ? 'short'
+          : previousDuration >= 45
+          ? 'deep'
+          : 'standard',
+    };
+
+    set({
+      courseRevisionUndo:
+        undoTarget.topic || undoTarget.difficulty || undoTarget.length ? undoTarget : null,
+    });
 
     if (activeStreamController) {
       activeStreamController.abort();
@@ -785,6 +820,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     await get().sendMessage(message, [], { forcedIntent: 'COURSE' });
+  },
+
+  undoCourseRevision: async () => {
+    const previous = get().courseRevisionUndo;
+    if (!previous) return;
+    // Clear first so the restored build does not present an endless undo loop.
+    set({ courseRevisionUndo: null });
+    await get().reviseActiveCourse(previous);
+    set({ courseRevisionUndo: null });
   },
 
   answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0, hintUsed = false) => {
