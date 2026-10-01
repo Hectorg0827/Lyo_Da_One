@@ -531,6 +531,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
             receivedContent = true;
+            const isPreview = chunk.preview === true;
             const classroomBlock = chunk.block as { content?: Record<string, any> } | undefined;
             const courseData = (classroomBlock?.content?.course || classroomBlock?.content) as
               Record<string, any> | undefined;
@@ -541,21 +542,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
               // Normalize duration string/number
               const rawDuration = courseData.estimated_duration || courseData.duration;
-              let sanitizedDuration = 60; // fallback to 60 mins
               if (typeof rawDuration === 'number') {
-                sanitizedDuration = rawDuration;
+                courseData.estimatedDuration = rawDuration;
               } else if (typeof rawDuration === 'string') {
                 const numMatch = rawDuration.match(/\d+/);
                 if (numMatch) {
                   const num = parseInt(numMatch[0]);
-                  if (rawDuration.toLowerCase().includes('hour')) {
-                    sanitizedDuration = num * 60;
-                  } else {
-                    sanitizedDuration = num;
-                  }
+                  courseData.estimatedDuration = rawDuration.toLowerCase().includes('hour')
+                    ? num * 60
+                    : num;
                 }
               }
-              courseData.estimatedDuration = sanitizedDuration;
 
               // Normalize lessons to modules
               if (!courseData.modules && courseData.lessons) {
@@ -570,16 +567,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
               set((s) => ({
                 generationActivity: 'course',
-                generationProgress: Math.max(s.generationProgress, 80),
-                courseGenerationState: {
-                  ...(s.courseGenerationState || {}),
-                  phase: 'lessons',
-                  progress: Math.max(s.courseGenerationState?.progress ?? 0, s.generationProgress, 80),
-                  message: 'Creating the course outline',
-                  totalLessons: Array.isArray(courseData.modules)
-                    ? courseData.modules.length
-                    : s.courseGenerationState?.totalLessons,
-                },
+                generationProgress: isPreview
+                  ? s.generationProgress
+                  : Math.max(s.generationProgress, 80),
+                courseGenerationState: isPreview
+                  ? (
+                      s.courseGenerationState || {
+                        phase: 'intent',
+                        progress: s.generationProgress,
+                        message: 'Understanding your request',
+                      }
+                    )
+                  : {
+                      ...(s.courseGenerationState || {}),
+                      phase: 'lessons',
+                      progress: Math.max(
+                        s.courseGenerationState?.progress ?? 0,
+                        s.generationProgress,
+                        80
+                      ),
+                      message: 'Creating the course outline',
+                      totalLessons: Array.isArray(courseData.modules)
+                        ? courseData.modules.length
+                        : s.courseGenerationState?.totalLessons,
+                    },
                 conversations: s.conversations.map((c) => {
                   if (c.id !== convoId) return c;
                   const existing = c.messages.find((m) => m.id === aiMessageId);
