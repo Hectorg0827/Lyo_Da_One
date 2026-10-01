@@ -52,6 +52,8 @@ test('server course progress events drive the card instead of synthetic incremen
   assert.match(store, /chunk\.type === 'course_generation'/);
   assert.match(store, /chunk\.completed_lessons/);
   assert.match(store, /chunk\.total_lessons/);
+  assert.match(store, /chunk\.outline/);
+  assert.match(card, /generationState\?\.outline/);
   assert.match(store, /generationActivity: 'course'/);
   assert.match(store, /s\.generationActivity === 'course'[\s\S]*?s\.generationProgress/);
 });
