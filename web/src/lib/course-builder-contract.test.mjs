@@ -45,7 +45,9 @@ test('course revisions cancel the old stream and force course routing', () => {
   assert.match(store, /activeStreamController\.abort\(\)/);
   assert.match(store, /forcedIntent: 'COURSE'/);
   assert.match(store, /undoCourseRevision/);
+  assert.match(store, /courseContext: undoTarget/);
   assert.match(api, /forced_intent: forcedIntent/);
+  assert.match(api, /state_summary: stateSummary/);
 });
 
 test('server course progress events drive the card instead of synthetic increments', () => {
