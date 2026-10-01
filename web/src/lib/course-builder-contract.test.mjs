@@ -50,4 +50,11 @@ test('server course progress events drive the card instead of synthetic incremen
   assert.match(store, /chunk\.completed_lessons/);
   assert.match(store, /chunk\.total_lessons/);
   assert.match(store, /generationActivity: 'course'/);
+  assert.match(store, /s\.generationActivity === 'course'[\s\S]*?s\.generationProgress/);
+});
+
+test('the provisional course card does not masquerade as completed work', () => {
+  assert.match(store, /const isPreview = chunk\.preview === true/);
+  assert.match(store, /generationProgress: isPreview/);
+  assert.match(store, /courseGenerationState: isPreview/);
 });
