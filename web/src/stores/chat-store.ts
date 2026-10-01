@@ -12,6 +12,12 @@ import type {
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { parseCanonicalChatContent } from '@/lib/chat-attachments';
+import {
+  emptyTeachingRuntimeState,
+  reduceTeachingPolicy,
+  teachingStateSummary,
+  type TeachingRuntimeState,
+} from '@/lib/teaching-runtime.mjs';
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
 
@@ -105,6 +111,14 @@ let activeStreamController: AbortController | null = null;
 // build invalidates its identity before the replacement starts, so callbacks
 // already queued by the old SSE reader cannot mutate the new generation.
 let activeStreamToken = 0;
+
+// Teaching state is scoped to the canonical conversation. A global counter
+// would leak one chat's recent quiz/explanation cadence into another chat.
+const teachingRuntimeByConversation = new Map<string, TeachingRuntimeState>();
+
+function teachingRuntimeFor(conversationId: string): TeachingRuntimeState {
+  return teachingRuntimeByConversation.get(conversationId) ?? emptyTeachingRuntimeState();
+}
 
 // Module-scoped for the same reason as hasHydratedThisSession above:
 // fetchDueReviews() replaces `dueReviews` wholesale from the server on
@@ -562,7 +576,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
-          if (chunk.type === 'course_generation') {
+          if (chunk.type === 'teaching_policy') {
+            teachingRuntimeByConversation.set(
+              convoId!,
+              reduceTeachingPolicy(teachingRuntimeFor(convoId!), chunk)
+            );
+          } else if (chunk.type === 'course_generation') {
             const eventProgress =
               typeof chunk.progress === 'number'
                 ? Math.max(0, Math.min(100, chunk.progress))
@@ -762,9 +781,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        options.courseContext
-          ? { active_course: options.courseContext }
-          : undefined
+        teachingStateSummary(
+          teachingRuntimeFor(convoId),
+          options.courseContext
+        )
       );
     } catch {
       if (streamToken === activeStreamToken) {
