@@ -14,6 +14,18 @@ package com.lyo.app.data.classroom
  * strict schema would break the moment the backend evolves a new field.
  */
 
+/**
+ * Shared Learning OS metadata attached to every classroom scene. These fields
+ * describe the backend state-machine decision; they never grant the client
+ * permission to advance or grade a lesson locally.
+ */
+data class ClassroomSceneMetadata(
+    val teaching_action: String? = null,
+    val target_evidence_type: String? = null,
+    val teaching_policy_version: String? = null,
+    val target_concepts: List<String>? = null,
+)
+
 /** One selectable answer inside a `QuizCard` component's `options`. */
 data class QuizOption(
     val id: String? = null,
