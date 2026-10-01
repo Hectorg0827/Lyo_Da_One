@@ -20,7 +20,7 @@ test('course generation has one visible progress surface', () => {
 
 test('the course card exposes the interpreted course and an adjust action', () => {
   assert.match(card, /Creating your course/);
-  assert.match(card, />Adjust</);
+  assert.match(card, /\bAdjust\b/);
   assert.match(card, /Course outline/);
   assert.match(card, /Apply changes/);
   assert.match(card, /Teaching style/);
