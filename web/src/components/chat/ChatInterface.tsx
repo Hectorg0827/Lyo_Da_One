@@ -262,7 +262,7 @@ export default function ChatInterface() {
 
             {/* Thinking indicator */}
             <AnimatePresence>
-              {isGenerating && (
+              {isGenerating && generationActivity !== 'course' && (
                 <motion.div
                   key="thinking"
                   initial={{ opacity: 0, y: 8 }}
@@ -282,7 +282,7 @@ export default function ChatInterface() {
 
       {/* Progress bar */}
       <AnimatePresence>
-        {isGenerating && generationProgress > 0 && (
+        {isGenerating && generationActivity !== 'course' && generationProgress > 0 && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
