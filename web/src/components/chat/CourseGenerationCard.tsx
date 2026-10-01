@@ -267,7 +267,6 @@ export default function CourseGenerationCard({
   generationState,
 }: CourseGenerationCardProps) {
   const router = useRouter();
-  const reviseActiveCourse = useChatStore((state) => state.reviseActiveCourse);
   const [adjustOpen, setAdjustOpen] = useState(false);
 
   const title = useMemo(() => safeCourseTitle(course), [course]);
@@ -366,7 +365,7 @@ export default function CourseGenerationCard({
           )}
 
           {isGenerating && (
-            <div className="rounded-2xl border border-white/8 bg-black/15 p-4 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-black/15 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-lyo-300 shrink-0" />
                 <div className="min-w-0">
@@ -419,7 +418,7 @@ export default function CourseGenerationCard({
                       className={cn(
                         'flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors',
                         active
-                          ? 'border-lyo-500/25 bg-lyo-500/8'
+                          ? 'border-lyo-500/25 bg-lyo-500/10'
                           : 'border-white/5 bg-white/[0.025]'
                       )}
                     >
@@ -462,20 +461,6 @@ export default function CourseGenerationCard({
                 <Play className="w-4 h-4" />
                 Start course
               </button>
-              <button
-                onClick={() => {
-                  const topic = safeCourseTopic(course);
-                  void reviseActiveCourse({
-                    topic: topic || undefined,
-                    difficulty: (difficulty || 'beginner') as CourseRevisionInput['difficulty'],
-                    length: 'standard',
-                    teachingStyle: 'guided',
-                  });
-                }}
-                className="hidden"
-                aria-hidden="true"
-                tabIndex={-1}
-              />
             </div>
           )}
 
