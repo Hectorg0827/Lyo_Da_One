@@ -443,7 +443,8 @@ export const api = {
         name: string;
         size_bytes: number;
       }>,
-      forcedIntent?: 'COURSE'
+      forcedIntent?: 'COURSE',
+      stateSummary?: Record<string, unknown>
     ): AbortController {
       const controller = new AbortController();
 
@@ -463,6 +464,7 @@ export const api = {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             media,
             forced_intent: forcedIntent,
+            state_summary: stateSummary,
           }),
           signal: controller.signal,
         });
