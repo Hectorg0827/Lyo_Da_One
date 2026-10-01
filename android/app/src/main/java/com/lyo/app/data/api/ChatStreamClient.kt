@@ -13,6 +13,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /** One streamed chunk from the AI, or a terminal signal. */
 sealed class ChatStreamEvent {
@@ -43,6 +44,44 @@ data class ChatMediaRef(
  */
 object ChatStreamClient {
 
+    private data class TeachingRuntimeState(
+        val lastAction: String? = null,
+        val consecutiveChecks: Int = 0,
+        val consecutiveExplanations: Int = 0,
+    )
+
+    private val teachingRuntimeByConversation = ConcurrentHashMap<String, TeachingRuntimeState>()
+    private val checkActions = setOf(
+        "diagnose", "guide", "check_recall", "check_application", "check_transfer", "review",
+    )
+    private val explanationActions = setOf("explain", "demonstrate", "remediate")
+    private val validActions = setOf(
+        "answer", "diagnose", "explain", "demonstrate", "guide", "check_recall",
+        "check_application", "check_transfer", "remediate", "review", "advance", "pause",
+    )
+
+    private fun applyTeachingPolicy(conversationId: String, action: String) {
+        if (action !in validActions) return
+        val old = teachingRuntimeByConversation[conversationId] ?: TeachingRuntimeState()
+        teachingRuntimeByConversation[conversationId] = when {
+            action in checkActions -> old.copy(
+                lastAction = action,
+                consecutiveChecks = (old.consecutiveChecks + 1).coerceAtMost(8),
+                consecutiveExplanations = 0,
+            )
+            action in explanationActions -> old.copy(
+                lastAction = action,
+                consecutiveChecks = 0,
+                consecutiveExplanations = (old.consecutiveExplanations + 1).coerceAtMost(8),
+            )
+            else -> old.copy(
+                lastAction = action,
+                consecutiveChecks = 0,
+                consecutiveExplanations = 0,
+            )
+        }
+    }
+
     fun stream(
         text: String,
         conversationId: String,
@@ -56,6 +95,17 @@ object ChatStreamClient {
             "client_message_id" to clientMessageId,
             "timezone" to java.time.ZoneId.systemDefault().id,
         )
+        teachingRuntimeByConversation[conversationId]?.let { runtime ->
+            runtime.lastAction?.let {
+                requestFields["state_summary"] = mapOf(
+                    "teaching_runtime" to mapOf(
+                        "last_action" to runtime.lastAction,
+                        "consecutive_checks" to runtime.consecutiveChecks,
+                        "consecutive_explanations" to runtime.consecutiveExplanations,
+                    ),
+                )
+            }
+        }
         if (media.isNotEmpty()) {
             requestFields["media"] = media.map { item ->
                 mapOf(
@@ -107,7 +157,7 @@ object ChatStreamClient {
                                 close()
                                 return
                             }
-                            val parsed = parseChunk(data)
+                            val parsed = parseChunk(data, conversationId)
                             if (parsed != null) trySend(parsed)
                         }
                         trySend(ChatStreamEvent.Done)
@@ -123,9 +173,15 @@ object ChatStreamClient {
     }
 
     /** Extract text from the varied chunk shapes the backend emits. */
-    private fun parseChunk(data: String): ChatStreamEvent? = try {
+    private fun parseChunk(data: String, conversationId: String): ChatStreamEvent? = try {
         val obj: JsonObject = JsonParser.parseString(data).asJsonObject
         when {
+            obj.get("type")?.asString == "teaching_policy" -> {
+                obj.get("action")?.takeIf { it.isJsonPrimitive }?.asString?.let {
+                    applyTeachingPolicy(conversationId, it)
+                }
+                null
+            }
             obj.get("type")?.asString == "error" ->
                 ChatStreamEvent.Error(
                     obj.get("message")?.asString ?: "The response could not be generated.",
