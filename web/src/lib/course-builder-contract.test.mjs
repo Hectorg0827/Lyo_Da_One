@@ -24,6 +24,8 @@ test('the course card exposes the interpreted course and an adjust action', () =
   assert.match(card, /Course outline/);
   assert.match(card, /Apply changes/);
   assert.match(card, /Teaching style/);
+  assert.match(card, /Course settings updated/);
+  assert.match(card, /\bUndo\b/);
 });
 
 test('internal proactive context is never used as a visible course title', () => {
@@ -42,6 +44,7 @@ test('learners can revise a live course from the composer', () => {
 test('course revisions cancel the old stream and force course routing', () => {
   assert.match(store, /activeStreamController\.abort\(\)/);
   assert.match(store, /forcedIntent: 'COURSE'/);
+  assert.match(store, /undoCourseRevision/);
   assert.match(api, /forced_intent: forcedIntent/);
 });
 
