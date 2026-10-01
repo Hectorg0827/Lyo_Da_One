@@ -65,3 +65,24 @@ test('the provisional course card does not masquerade as completed work', () => 
   assert.match(store, /generationProgress: isPreview/);
   assert.match(store, /courseGenerationState: isPreview/);
 });
+
+
+test('course milestones create a provisional proposal before open_classroom', () => {
+  assert.match(store, /const ensureCourseProposal/);
+  assert.match(store, /chunk\.type === 'course_generation'[\s\S]*?ensureCourseProposal\(/);
+  assert.match(store, /type: 'course_proposal' as const/);
+});
+
+test('aborted course streams cannot update a replacement generation', () => {
+  assert.match(store, /let activeStreamToken = 0/);
+  assert.match(store, /const streamToken = \+\+activeStreamToken/);
+  assert.match(store, /streamToken !== activeStreamToken/);
+  assert.match(store, /activeStreamToken \+= 1;[\s\S]*?activeStreamController\.abort\(\)/);
+});
+
+test('duration aliases render and revise consistently', () => {
+  assert.match(card, /course\?\.estimatedDuration \?\? course\?\.estimated_duration \?\? course\?\.duration/);
+  assert.match(card, /formatDuration\(durationMinutes\)/);
+  assert.match(store, /course\?\.estimatedDuration \?\? course\?\.estimated_duration \?\? course\?\.duration/);
+  assert.match(store, /const previousDuration = normalizeCourseDuration\(course\)/);
+});
