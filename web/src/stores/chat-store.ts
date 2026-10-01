@@ -34,6 +34,7 @@ export interface CourseRevisionInput {
 
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
+  courseContext?: CourseRevisionInput;
 }
 
 /**
@@ -698,7 +699,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           name: attachment.name,
           size_bytes: attachment.size,
         })),
-        options.forcedIntent
+        options.forcedIntent,
+        options.courseContext
+          ? { active_course: options.courseContext }
+          : undefined
       );
     } catch {
       recoverCanonicalConversation(convoId!);
@@ -833,7 +837,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }
 
-    await get().sendMessage(message, [], { forcedIntent: 'COURSE' });
+    await get().sendMessage(message, [], {
+      forcedIntent: 'COURSE',
+      courseContext: undoTarget,
+    });
   },
 
   undoCourseRevision: async () => {
