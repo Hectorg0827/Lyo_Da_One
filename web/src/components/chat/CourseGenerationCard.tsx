@@ -95,6 +95,18 @@ function normalizedDifficulty(course?: DisplayCourse) {
   return ['beginner', 'intermediate', 'advanced'].includes(value) ? value : '';
 }
 
+function normalizedDuration(course?: DisplayCourse): number | undefined {
+  const raw = course?.estimatedDuration ?? course?.estimated_duration ?? course?.duration;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw !== 'string') return undefined;
+
+  const match = raw.match(/\\d+(?:\\.\\d+)?/);
+  if (!match) return undefined;
+  const value = Number(match[0]);
+  if (!Number.isFinite(value)) return undefined;
+  return /\\bhours?\\b/i.test(raw) ? Math.round(value * 60) : Math.round(value);
+}
+
 function AdjustmentSheet({
   course,
   onClose,
@@ -273,6 +285,7 @@ export default function CourseGenerationCard({
 
   const title = useMemo(() => safeCourseTitle(course), [course]);
   const difficulty = normalizedDifficulty(course);
+  const durationMinutes = normalizedDuration(course);
   const modules = course?.modules ?? [];
   const outlineItems = modules.length > 0
     ? modules.map((module, index) => ({
@@ -355,7 +368,7 @@ export default function CourseGenerationCard({
             </button>
           </div>
 
-          {(difficulty || course?.estimatedDuration || outlineItems.length > 0) && (
+          {(difficulty || durationMinutes != null || outlineItems.length > 0) && (
             <div className="flex items-center gap-2 flex-wrap">
               {difficulty && (
                 <span
@@ -367,10 +380,10 @@ export default function CourseGenerationCard({
                   {difficulty}
                 </span>
               )}
-              {course?.estimatedDuration ? (
+              {durationMinutes != null ? (
                 <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-white/55">
                   <Clock className="w-3 h-3" />
-                  {formatDuration(course.estimatedDuration)}
+                  {formatDuration(durationMinutes)}
                 </span>
               ) : null}
               {outlineItems.length > 0 && (
