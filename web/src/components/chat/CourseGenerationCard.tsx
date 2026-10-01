@@ -100,11 +100,11 @@ function normalizedDuration(course?: DisplayCourse): number | undefined {
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
   if (typeof raw !== 'string') return undefined;
 
-  const match = raw.match(/\\d+(?:\\.\\d+)?/);
+  const match = raw.match(/\d+(?:\.\d+)?/);
   if (!match) return undefined;
   const value = Number(match[0]);
   if (!Number.isFinite(value)) return undefined;
-  return /\\bhours?\\b/i.test(raw) ? Math.round(value * 60) : Math.round(value);
+  return /\bhours?\b/i.test(raw) ? Math.round(value * 60) : Math.round(value);
 }
 
 function AdjustmentSheet({
