@@ -500,6 +500,12 @@ final class UnifiedChatService: ObservableObject {
         Log.ai.info("📲 UnifiedChat: received event: \(String(describing: event).prefix(120))")
 
         switch event {
+        case .teachingPolicy(let policy):
+            // Lyo2ChatService already persists this per conversation and folds
+            // it into the next request's state_summary. Keep the UI layer
+            // observational so it cannot mutate pedagogical control state.
+            Log.ai.debug("Teaching policy: \(policy.action)")
+
         case .conversation(let id):
             if id != currentConversationId {
                 Log.ai.info("🔄 Adopted canonical server conversation id: \(id)")
