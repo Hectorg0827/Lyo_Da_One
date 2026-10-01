@@ -330,7 +330,11 @@ export default function CourseGenerationCard({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] uppercase tracking-[0.14em] text-white/35 font-semibold">
-                {isGenerating ? 'Creating your course' : 'Course ready'}
+                {isGenerating
+                  ? courseRevisionUndo
+                    ? 'Updating your course'
+                    : 'Creating your course'
+                  : 'Course ready'}
               </p>
               <h3 className="font-semibold text-white text-lg leading-snug mt-1 break-words">
                 {title}
