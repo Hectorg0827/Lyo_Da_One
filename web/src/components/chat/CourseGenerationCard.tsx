@@ -274,6 +274,17 @@ export default function CourseGenerationCard({
   const title = useMemo(() => safeCourseTitle(course), [course]);
   const difficulty = normalizedDifficulty(course);
   const modules = course?.modules ?? [];
+  const outlineItems = modules.length > 0
+    ? modules.map((module, index) => ({
+        id: module.id || `module-${index}`,
+        title: module.title,
+        description: module.description,
+      }))
+    : (generationState?.outline ?? []).map((item, index) => ({
+        id: `streamed-${index}`,
+        title: item.title,
+        description: item.description || '',
+      }));
   const progress = Math.max(
     0,
     Math.min(100, generationState?.progress ?? generationProgress ?? 0)
@@ -283,8 +294,8 @@ export default function CourseGenerationCard({
     generationState?.message || PHASE_LABELS[phase] || 'Building your course';
   const completedLessons =
     generationState?.completedLessons
-    ?? (phase === 'finalizing' || phase === 'ready' ? modules.length : 0);
-  const totalLessons = generationState?.totalLessons ?? modules.length;
+    ?? (phase === 'finalizing' || phase === 'ready' ? outlineItems.length : 0);
+  const totalLessons = generationState?.totalLessons ?? outlineItems.length;
 
   const handleStart = () => {
     const topic = safeCourseTopic(course) || title || 'General Learning';
@@ -340,7 +351,7 @@ export default function CourseGenerationCard({
             </button>
           </div>
 
-          {(difficulty || course?.estimatedDuration || modules.length > 0) && (
+          {(difficulty || course?.estimatedDuration || outlineItems.length > 0) && (
             <div className="flex items-center gap-2 flex-wrap">
               {difficulty && (
                 <span
@@ -358,9 +369,9 @@ export default function CourseGenerationCard({
                   {formatDuration(course.estimatedDuration)}
                 </span>
               ) : null}
-              {modules.length > 0 && (
+              {outlineItems.length > 0 && (
                 <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-white/55">
-                  {modules.length} lessons
+                  {outlineItems.length} lessons
                 </span>
               )}
             </div>
@@ -398,7 +409,7 @@ export default function CourseGenerationCard({
             </div>
           )}
 
-          {modules.length > 0 ? (
+          {outlineItems.length > 0 ? (
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-[0.12em] font-semibold text-white/35">
@@ -406,12 +417,12 @@ export default function CourseGenerationCard({
                 </span>
                 {isGenerating && (
                   <span className="text-xs text-white/30">
-                    {completedLessons}/{totalLessons || modules.length} ready
+                    {completedLessons}/{totalLessons || outlineItems.length} ready
                   </span>
                 )}
               </div>
               <div className="space-y-1.5">
-                {modules.map((mod, index) => {
+                {outlineItems.map((mod, index) => {
                   const done = !isGenerating || index < completedLessons;
                   const active = isGenerating && index === completedLessons && phase === 'lessons';
                   return (
