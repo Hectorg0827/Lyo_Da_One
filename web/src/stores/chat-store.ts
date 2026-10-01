@@ -16,7 +16,6 @@ import {
   emptyTeachingRuntimeState,
   reduceTeachingPolicy,
   teachingStateSummary,
-  type TeachingRuntimeState,
 } from '@/lib/teaching-runtime.mjs';
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
@@ -114,6 +113,7 @@ let activeStreamToken = 0;
 
 // Teaching state is scoped to the canonical conversation. A global counter
 // would leak one chat's recent quiz/explanation cadence into another chat.
+type TeachingRuntimeState = ReturnType<typeof emptyTeachingRuntimeState>;
 const teachingRuntimeByConversation = new Map<string, TeachingRuntimeState>();
 
 function teachingRuntimeFor(conversationId: string): TeachingRuntimeState {
@@ -784,7 +784,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         teachingStateSummary(
           teachingRuntimeFor(convoId),
           options.courseContext
-        )
+        ) as Record<string, unknown> | undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {
