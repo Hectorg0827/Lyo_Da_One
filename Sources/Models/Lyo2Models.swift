@@ -165,6 +165,73 @@ struct Lyo2UIBlock: Codable {
     }
 }
 
+// MARK: - Shared Teaching Runtime
+
+struct TeachingPolicyEvent: Codable {
+    let action: String
+    let reasonCode: String?
+    let interactionRequired: Bool?
+    let maxExpositionWords: Int?
+    let preferredInstrument: String?
+    let targetEvidenceType: String?
+    let modelTier: String?
+    let policyVersion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case action
+        case reasonCode = "reason_code"
+        case interactionRequired = "interaction_required"
+        case maxExpositionWords = "max_exposition_words"
+        case preferredInstrument = "preferred_instrument"
+        case targetEvidenceType = "target_evidence_type"
+        case modelTier = "model_tier"
+        case policyVersion = "policy_version"
+    }
+}
+
+struct TeachingRuntimeClientState {
+    var lastAction: String?
+    var consecutiveChecks: Int = 0
+    var consecutiveExplanations: Int = 0
+
+    private static let checkActions: Set<String> = [
+        "diagnose", "guide", "check_recall", "check_application",
+        "check_transfer", "review",
+    ]
+    private static let explanationActions: Set<String> = [
+        "explain", "demonstrate", "remediate",
+    ]
+
+    mutating func apply(_ policy: TeachingPolicyEvent) {
+        guard [
+            "answer", "diagnose", "explain", "demonstrate", "guide",
+            "check_recall", "check_application", "check_transfer",
+            "remediate", "review", "advance", "pause",
+        ].contains(policy.action) else { return }
+
+        if Self.checkActions.contains(policy.action) {
+            consecutiveChecks = min(8, consecutiveChecks + 1)
+            consecutiveExplanations = 0
+        } else if Self.explanationActions.contains(policy.action) {
+            consecutiveExplanations = min(8, consecutiveExplanations + 1)
+            consecutiveChecks = 0
+        } else {
+            consecutiveChecks = 0
+            consecutiveExplanations = 0
+        }
+        lastAction = policy.action
+    }
+
+    var dictionary: [String: Any] {
+        var value: [String: Any] = [
+            "consecutive_checks": consecutiveChecks,
+            "consecutive_explanations": consecutiveExplanations,
+        ]
+        if let lastAction { value["last_action"] = lastAction }
+        return value
+    }
+}
+
 // MARK: - Streaming Response Events
 
 enum Lyo2StreamEvent {
@@ -176,6 +243,7 @@ enum Lyo2StreamEvent {
     case error(message: String)
     case done
     case conversation(id: String)
+    case teachingPolicy(policy: TeachingPolicyEvent)
     
     /// v1 backward-compat events (still emitted by deployed backend)
     case actions(blocks: [Lyo2UIBlock])
