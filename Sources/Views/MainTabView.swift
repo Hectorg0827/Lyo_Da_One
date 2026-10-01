@@ -291,6 +291,7 @@ struct MainTabView: View {
     private let openClassroomPublisher = NotificationCenter.default.publisher(for: .openClassroom)
     private let openLivingClassroomPublisher = NotificationCenter.default.publisher(for: .openLivingClassroom)
     private let dismissOverlayPublisher = NotificationCenter.default.publisher(for: .dismissLyoOverlay)
+    private let presentOverlayPublisher = NotificationCenter.default.publisher(for: .presentLyoOverlay)
 }
 
 extension MainTabView {
@@ -463,6 +464,22 @@ extension MainTabView {
                     case "focus": selectedTab = .focus
                     default: break
                     }
+                }
+            }
+            .onReceive(presentOverlayPublisher) { notification in
+                // Focus's create composer routes Speak / Photo / File here:
+                // the overlay is the surface that renders attachments picked
+                // into MediaPickerService.shared and runs the voice session.
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                    isLyoOverlayPresented = true
+                }
+                guard notification.userInfo?["mode"] as? String == "voice" else { return }
+                // Deferred until the overlay has mounted: it starts its voice
+                // sheet from an .onChange of the view model, which cannot fire
+                // for a value that changed before the view existed.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    if !aiViewModel.isVoiceActive { aiViewModel.toggleVoiceMode() }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TriggerCourseCreation"))) { notification in
