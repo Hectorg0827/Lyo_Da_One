@@ -568,11 +568,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               set((s) => ({
                 generationActivity: 'course',
                 generationProgress: Math.max(s.generationProgress, 80),
-                courseGenerationState: s.courseGenerationState ?? {
+                courseGenerationState: {
+                  ...(s.courseGenerationState || {}),
                   phase: 'lessons',
-                  progress: Math.max(s.generationProgress, 80),
+                  progress: Math.max(s.courseGenerationState?.progress ?? 0, s.generationProgress, 80),
                   message: 'Creating the course outline',
-                  totalLessons: Array.isArray(courseData.modules) ? courseData.modules.length : undefined,
+                  totalLessons: Array.isArray(courseData.modules)
+                    ? courseData.modules.length
+                    : s.courseGenerationState?.totalLessons,
                 },
                 conversations: s.conversations.map((c) => {
                   if (c.id !== convoId) return c;
