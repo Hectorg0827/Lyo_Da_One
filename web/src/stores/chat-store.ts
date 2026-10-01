@@ -428,7 +428,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             updatedAt: new Date().toISOString(),
           };
         }),
-        generationProgress: Math.min(90, get().generationProgress + 5),
+        generationProgress:
+          s.generationActivity === 'course'
+            ? s.generationProgress
+            : Math.min(90, s.generationProgress + 5),
         generationActivity: s.generationActivity === 'course' ? 'course' : 'response',
       }));
     };
