@@ -14,6 +14,11 @@ class Lyo2ChatService: ObservableObject {
     /// Safety timeout — if no .done/.error arrives within this interval, force-clear loading state.
     private var safetyTimeoutTask: Task<Void, Never>?
     private static let streamTimeoutSeconds: TimeInterval = 90
+
+    // One teaching cadence per canonical conversation. Keeping this here
+    // makes every Lyo2 caller (ChatRouter and UnifiedChatService) share the
+    // same policy state without duplicating client orchestration.
+    private var teachingRuntimeByConversation: [String: TeachingRuntimeClientState] = [:]
     
     // MARK: - API
     
@@ -38,6 +43,13 @@ class Lyo2ChatService: ObservableObject {
             ? "ios_guest"
             : AuthService.shared.currentUserEmail
         
+        var mergedStateSummary = stateSummary
+        if let conversationId,
+           let runtime = teachingRuntimeByConversation[conversationId],
+           runtime.lastAction != nil {
+            mergedStateSummary["teaching_runtime"] = AnyCodable(runtime.dictionary)
+        }
+
         let routerRequest = Lyo2RouterRequest(
             userId: userId,
             text: text,
@@ -45,7 +57,7 @@ class Lyo2ChatService: ObservableObject {
             attachmentIds: attachmentIds,
             activeArtifact: activeArtifact,
             forcedIntent: forcedIntent,
-            stateSummary: stateSummary,
+            stateSummary: mergedStateSummary,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -69,6 +81,12 @@ class Lyo2ChatService: ObservableObject {
         
         // Start stream — this pre-fetches auth headers, then opens the connection
         streamManager.startStream(url: url, body: body) { [weak self] event in
+            if case .teachingPolicy(let policy) = event, let conversationId {
+                var runtime = self?.teachingRuntimeByConversation[conversationId]
+                    ?? TeachingRuntimeClientState()
+                runtime.apply(policy)
+                self?.teachingRuntimeByConversation[conversationId] = runtime
+            }
             onEvent(event)
             // Release the manager once the stream is finished
             switch event {
@@ -342,6 +360,15 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
             case "conversation":
                 if let id = json["conversation_id"] as? String {
                     callback?(.conversation(id: id))
+                }
+
+            case "teaching_policy":
+                do {
+                    let decoder = JSONDecoder()
+                    let policy = try decoder.decode(TeachingPolicyEvent.self, from: jsonData)
+                    callback?(.teachingPolicy(policy: policy))
+                } catch {
+                    Log.ai.error("Lyo2 Decoding Error (teaching_policy): \(error)")
                 }
                 
             case "clarification":
