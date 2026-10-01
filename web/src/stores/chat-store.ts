@@ -21,6 +21,7 @@ export interface CourseGenerationState {
   message?: string;
   completedLessons?: number;
   totalLessons?: number;
+  outline?: Array<{ title: string; description?: string }>;
 }
 
 export interface CourseRevisionInput {
@@ -514,6 +515,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               typeof chunk.total_lessons === 'number'
                 ? chunk.total_lessons
                 : undefined;
+            const outline = Array.isArray(chunk.outline)
+              ? chunk.outline
+                  .filter(
+                    (item): item is Record<string, unknown> =>
+                      Boolean(item) && typeof item === 'object'
+                  )
+                  .map((item) => ({
+                    title: typeof item.title === 'string' ? item.title : 'Lesson',
+                    description:
+                      typeof item.description === 'string' ? item.description : undefined,
+                  }))
+              : undefined;
 
             set((state) => ({
               generationActivity: 'course',
@@ -524,6 +537,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 message,
                 completedLessons,
                 totalLessons,
+                outline: outline ?? state.courseGenerationState?.outline,
               },
             }));
           } else if (chunk.type === 'answer' || chunk.type === 'text') {
