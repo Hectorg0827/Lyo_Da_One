@@ -61,7 +61,9 @@ fun ClassroomScreen(
     courseBacked: Boolean = true,
 ) {
     val context = LocalContext.current
-    val voicePlayer = remember(context) { ClassroomVoicePlayer(context) }
+    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked) {
+        ClassroomVoicePlayer(context)
+    }
     val engine = remember(topic, courseId, teachingMode, courseBacked) {
         ClassroomEngine(
             topic = topic,
