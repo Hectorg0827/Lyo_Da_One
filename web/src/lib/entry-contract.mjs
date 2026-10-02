@@ -120,7 +120,7 @@ export function normalizeSessionMinutes(minutes) {
  * the URL it always did and the Classroom's own defaults still apply.
  */
 export function classroomEntryHref({
-  topic, mode, objective, courseId, lessonId, level, minutes, language, recordScope,
+  topic, mode, objective, courseId, lessonId, reviewConceptId, level, minutes, language, recordScope,
 } = {}) {
   const cleanTopic = (topic ?? '').trim();
   if (!cleanTopic) return null;
@@ -135,6 +135,7 @@ export function classroomEntryHref({
   if (mode !== undefined) params.set('mode', normalizeClassroomMode(mode));
   if (courseId) params.set('courseId', courseId);
   if (lessonId) params.set('lessonId', lessonId);
+  if (reviewConceptId) params.set('reviewConceptId', reviewConceptId);
   if (recordScope === 'unit') params.set('recordScope', 'unit');
 
   const cleanLevel = normalizeLevel(level);
@@ -157,10 +158,11 @@ export function classroomEntryHref({
  * replaying the exact question the learner already saw tests recall of that
  * question rather than of the concept.
  */
-export function reviewEntryHref(conceptLabel) {
+export function reviewEntryHref(conceptLabel, conceptId) {
   return classroomEntryHref({
     topic: conceptLabel,
     mode: 'review',
+    reviewConceptId: (conceptId ?? '').toString().trim() || undefined,
     objective: `Retrieve and re-apply ${(conceptLabel ?? '').trim()}`,
   });
 }
