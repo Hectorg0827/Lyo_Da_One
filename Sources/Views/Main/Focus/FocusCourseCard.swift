@@ -14,16 +14,13 @@ import SwiftUI
 
 struct FocusCourseCard: View {
     let item: UIStackItem
-    /// The course's own description, when one has been loaded. `nil` is the
-    /// ordinary case for a course Lio has just generated.
-    let description: String?
     let onAction: () -> Void
 
     @State private var isFlipped = false
 
     private var action: FocusCourseAction { FocusPresentation.action(for: item) }
     private var isFinished: Bool { FocusPresentation.isFinished(item) }
-    private var blurb: FocusCourseBlurb { FocusPresentation.blurb(description: description, for: item) }
+    private var blurb: FocusCourseBlurb { FocusPresentation.blurb(for: item) }
 
     private let height: CGFloat = 206
     private let corner: CGFloat = 21

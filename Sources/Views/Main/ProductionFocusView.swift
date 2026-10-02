@@ -261,12 +261,6 @@ struct FocusView: View {
             ForEach(visibleCourses) { item in
                 FocusCourseCard(
                     item: item,
-                    // No description is loaded here on purpose: `UIStackItem`
-                    // has no field for one, and fetching every course record
-                    // to fill the back of a card the learner may never turn
-                    // would be a request per saved course on every appearance.
-                    // The card falls back to the lesson they stopped on.
-                    description: nil,
                     onAction: { openCourse(item) }
                 )
             }

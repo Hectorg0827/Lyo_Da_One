@@ -13,6 +13,7 @@ import XCTest
 private func course(
     title: String = "A course",
     subtitle: String? = nil,
+    courseDescription: String? = nil,
     progress: Double? = nil,
     lessonCount: Int? = nil,
     completedLessons: Int? = nil,
@@ -22,6 +23,7 @@ private func course(
         type: .course,
         title: title,
         subtitle: subtitle,
+        courseDescription: courseDescription,
         updatedAt: updatedAt,
         progress: progress,
         courseId: "course-1",
@@ -153,31 +155,42 @@ final class FocusFilterTests: XCTestCase {
 
 final class FocusBlurbTests: XCTestCase {
 
-    func testADescriptionIsUsedWhenThereIsOne() {
-        let item = course(subtitle: "Lesson 11")
+    func testTheDescriptionWinsWhenTheCourseHasOne() {
+        let item = course(
+            subtitle: "Lesson 11",
+            courseDescription: "Electron pushing, then synthesis."
+        )
         XCTAssertEqual(
-            FocusPresentation.blurb(description: "Electron pushing, then synthesis.", for: item),
+            FocusPresentation.blurb(for: item),
             .description("Electron pushing, then synthesis.")
         )
     }
 
-    /// `UIStackItem` has no description field, so this is the ordinary case.
-    /// The fallback is something the stack really carries.
+    /// Still the ordinary case for a course generated in chat: those carry
+    /// objectives, not prose, so nothing populates the description.
     func testTheSubtitleStandsInWhenNoDescriptionExists() {
         let item = course(subtitle: "Lesson 11 · E1 vs E2")
         XCTAssertEqual(
-            FocusPresentation.blurb(description: nil, for: item),
+            FocusPresentation.blurb(for: item),
             .subtitle("Lesson 11 · E1 vs E2")
         )
     }
 
     func testWhitespaceCountsAsAbsent() {
-        let item = course(subtitle: "   ")
-        XCTAssertEqual(FocusPresentation.blurb(description: "\n ", for: item), .none)
+        let item = course(subtitle: "   ", courseDescription: "\n ")
+        XCTAssertEqual(FocusPresentation.blurb(for: item), .none)
     }
 
     func testNeitherSaysSoRatherThanFillingTheSpace() {
-        XCTAssertEqual(FocusPresentation.blurb(description: nil, for: course()), .none)
+        XCTAssertEqual(FocusPresentation.blurb(for: course()), .none)
+    }
+
+    func testADescriptionIsTrimmedBeforeItIsShown() {
+        let item = course(courseDescription: "  Vector spaces before matrices.\n")
+        XCTAssertEqual(
+            FocusPresentation.blurb(for: item),
+            .description("Vector spaces before matrices.")
+        )
     }
 }
 
@@ -267,5 +280,62 @@ final class FocusArtworkTests: XCTestCase {
 
     func testAnEmptyTitleStillGetsArt() {
         XCTAssertTrue(FocusArtMotif.allCases.contains(FocusPresentation.motif(forTitle: "")))
+    }
+}
+
+
+// MARK: - Persisting the new field
+//
+// `UIStackStore` keeps this list as JSON in UserDefaults, and its loader
+// discards the entire stack if decoding throws. A required field added to
+// `UIStackItem` would therefore erase every saved course on the first launch
+// after an update — so these two tests exist to keep `courseDescription`
+// optional in practice as well as in the declaration.
+
+final class UIStackItemDescriptionCodingTests: XCTestCase {
+
+    func testACardSavedBeforeThisFieldExistedStillDecodes() throws {
+        // Exactly what an older build wrote: no `courseDescription` key.
+        let legacy = """
+        {"id":"abc","type":"course","title":"Organic Chemistry","subtitle":"Lesson 11",
+         "updatedAt":765432100,"progress":0.62,"courseId":"course-1","lessonCount":18}
+        """.data(using: .utf8)!
+
+        let item = try JSONDecoder().decode(UIStackItem.self, from: legacy)
+
+        XCTAssertEqual(item.title, "Organic Chemistry")
+        XCTAssertEqual(item.lessonCount, 18)
+        XCTAssertNil(item.courseDescription)
+        // And it degrades to the documented fallback rather than to nothing.
+        XCTAssertEqual(FocusPresentation.blurb(for: item), .subtitle("Lesson 11"))
+    }
+
+    func testTheFieldSurvivesARoundTrip() throws {
+        let original = UIStackItem(
+            type: .course,
+            title: "Linear Algebra Done Right",
+            courseDescription: "Vector spaces before matrices.",
+            courseId: "course-9"
+        )
+        let data = try JSONEncoder().encode([original])
+        let restored = try JSONDecoder().decode([UIStackItem].self, from: data)
+
+        XCTAssertEqual(restored.first?.courseDescription, "Vector spaces before matrices.")
+    }
+}
+
+final class UIStackStoreDescriptionCleaningTests: XCTestCase {
+
+    /// The server sends null for a course nobody described and "" for one whose
+    /// description was cleared. Both mean "no description", and neither should
+    /// reach a card as an empty paragraph.
+    func testBlankServerDescriptionsAreTreatedAsAbsent() {
+        XCTAssertNil(UIStackStore.cleaned(nil))
+        XCTAssertNil(UIStackStore.cleaned(""))
+        XCTAssertNil(UIStackStore.cleaned("   \n  "))
+    }
+
+    func testARealDescriptionIsKeptAndTrimmed() {
+        XCTAssertEqual(UIStackStore.cleaned("  Convergence tests.  "), "Convergence tests.")
     }
 }
