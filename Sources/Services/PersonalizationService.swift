@@ -51,6 +51,15 @@ public class PersonalizationService {
         return try await NetworkClient.shared.request(endpoint)
     }
 
+    public func getLearnerRecord(limit: Int = 100) async throws -> LearnerEvidenceRecord {
+        let bounded = max(1, min(limit, 100))
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/personalization/concepts/record?limit=\(bounded)",
+            method: .get
+        )
+        return try await NetworkClient.shared.request(endpoint)
+    }
+
     public func getMasteryProfile() async throws -> MasteryProfile {
         let endpoint = DynamicEndpoint(
             urlString: "/api/v1/personalization/mastery",
