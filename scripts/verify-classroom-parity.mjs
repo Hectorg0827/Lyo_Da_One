@@ -124,6 +124,11 @@ requireText(iosClassroom, 'URLQueryItem(name: "client_contract_version", value: 
 // transcript length, local answer counts, or time spent.
 requireText(webPage, 'EvidenceRecord', 'Web committed learner record');
 requireText(iosPersonalization, '/api/v1/personalization/concepts/record', 'iOS learner-record endpoint');
+requireText(iosPersonalization, '/api/v1/lyo2/chat/reviews/due', 'iOS canonical due-review endpoint');
+requireText(iosClassroom, 'URLQueryItem(name: "review_concept_id"', 'iOS review socket carries canonical concept ID');
+requireText(iosClassroomView, 'reviewConceptId: reviewConceptId', 'iOS view forwards canonical review concept');
+requireText(read('Sources/Services/UIStackStore.swift'), 'getDueReviews()', 'iOS Focus reads canonical due schedule');
+rejectText(read('Sources/Services/UIStackStore.swift'), 'next.spacedRepetitionDue', 'iOS review cards inferred from generic next action');
 requireText(iosPersonalizationModels, 'struct LearnerEvidenceRecord', 'iOS learner-record contract');
 requireText(iosClassroomView, 'What you\'ve shown', 'iOS learner-record UI');
 requireText(iosModels, 'targetConcepts = "target_concepts"', 'iOS scene concept identity');
