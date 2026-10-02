@@ -41,6 +41,9 @@ struct UIStackItem: Identifiable, Codable, Equatable {
     /// classroom planner creates several practice steps. Optional so saved
     /// cards from earlier app versions decode as ordinary free-topic classes.
     var focusedConcept: Bool?
+    /// Exact canonical concept whose spaced-repetition schedule is due.
+    /// Nil for ordinary courses and generic practice sessions.
+    var reviewConceptId: String?
     var lessonId: String?
     var collabRoomId: String?
     var chatKey: String?
@@ -60,6 +63,7 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         progress: Double? = nil,
         courseId: String? = nil,
         focusedConcept: Bool? = nil,
+        reviewConceptId: String? = nil,
         lessonId: String? = nil,
         collabRoomId: String? = nil,
         chatKey: String? = nil,
@@ -76,6 +80,7 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         self.progress = progress
         self.courseId = courseId
         self.focusedConcept = focusedConcept
+        self.reviewConceptId = reviewConceptId
         self.lessonId = lessonId
         self.collabRoomId = collabRoomId
         self.chatKey = chatKey
