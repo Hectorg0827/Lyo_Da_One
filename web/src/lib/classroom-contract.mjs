@@ -42,6 +42,7 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   if (connection.courseId) params.set('course_id', connection.courseId);
   if (connection.recordScope === 'unit') params.set('record_scope', 'unit');
   if (connection.lessonId) params.set('lesson_id', connection.lessonId);
+  if (connection.reviewConceptId) params.set('review_concept_id', connection.reviewConceptId);
   if (connection.objective) params.set('objective', connection.objective);
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
   if (token) params.set('token', token);
