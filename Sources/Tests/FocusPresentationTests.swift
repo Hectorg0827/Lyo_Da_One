@@ -339,3 +339,104 @@ final class UIStackStoreDescriptionCleaningTests: XCTestCase {
         XCTAssertEqual(UIStackStore.cleaned("  Convergence tests.  "), "Convergence tests.")
     }
 }
+
+// MARK: - Keeping a description once we have one
+//
+// A description only ever arrives from `mergeCourseStacksFromBackend`. Every
+// other write to a course card goes through `upsertCourse` — opening the
+// course, a progress refresh, a title change — and none of those callers knows
+// the description. If they overwrote the field instead of preserving it, the
+// first time a learner opened a synced course its description would vanish,
+// which is the kind of regression that looks like a simplification in review:
+// `courseDescription ?? existing?.courseDescription` reads like a redundant
+// coalesce until you know where the value comes from.
+
+@MainActor
+final class UIStackStoreDescriptionPreservationTests: XCTestCase {
+
+    /// `GENERATE:` ids keep this offline: `syncCourseUpsertToBackend` skips
+    /// them, so the store never reaches for the network. The preservation rule
+    /// itself does not care about the id.
+    private let courseId = "GENERATE:vector-spaces"
+
+    private func makeStore() throws -> (UIStackStore, () -> Void) {
+        let suiteName = "UIStackStoreDescriptionPreservationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        return (
+            UIStackStore(defaults: defaults),
+            { defaults.removePersistentDomain(forName: suiteName) }
+        )
+    }
+
+    func testAnUpsertThatDoesNotKnowTheDescriptionKeepsIt() throws {
+        let (store, cleanUp) = try makeStore()
+        defer { cleanUp() }
+
+        store.upsertCourse(
+            courseId: courseId,
+            title: "Linear Algebra Done Right",
+            courseDescription: "Vector spaces before matrices."
+        )
+
+        // What opening the course looks like: the same card, with progress to
+        // record and no description to hand over.
+        store.upsertCourse(
+            courseId: courseId,
+            title: "Linear Algebra Done Right",
+            progress: 0.4
+        )
+
+        let card = try XCTUnwrap(store.items.first { $0.courseId == courseId })
+        XCTAssertEqual(card.courseDescription, "Vector spaces before matrices.")
+        XCTAssertEqual(card.progress, 0.4)
+        // The card still shows prose rather than falling back.
+        XCTAssertEqual(
+            FocusPresentation.blurb(for: card),
+            .description("Vector spaces before matrices.")
+        )
+    }
+
+    /// Preserving must not mean freezing: a caller that does know a newer
+    /// description — the backend merge, after the course was re-described —
+    /// still replaces it.
+    func testAnUpsertThatKnowsADescriptionReplacesTheStoredOne() throws {
+        let (store, cleanUp) = try makeStore()
+        defer { cleanUp() }
+
+        store.upsertCourse(
+            courseId: courseId,
+            title: "Linear Algebra Done Right",
+            courseDescription: "An older description."
+        )
+        store.upsertCourse(
+            courseId: courseId,
+            title: "Linear Algebra Done Right",
+            courseDescription: "Vector spaces before matrices."
+        )
+
+        let card = try XCTUnwrap(store.items.first { $0.courseId == courseId })
+        XCTAssertEqual(card.courseDescription, "Vector spaces before matrices.")
+    }
+
+    /// The store writes to UserDefaults on every change, so the preserved
+    /// value has to survive the encode/decode too — not just live in memory.
+    func testAPreservedDescriptionSurvivesTheReload() throws {
+        let suiteName = "UIStackStoreDescriptionPreservationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = UIStackStore(defaults: defaults)
+        store.upsertCourse(
+            courseId: courseId,
+            title: "Linear Algebra Done Right",
+            courseDescription: "Vector spaces before matrices."
+        )
+        store.upsertCourse(courseId: courseId, title: "Linear Algebra Done Right", progress: 0.4)
+
+        let restored = UIStackStore(defaults: defaults)
+        XCTAssertEqual(
+            restored.items.first { $0.courseId == courseId }?.courseDescription,
+            "Vector spaces before matrices."
+        )
+    }
+}
