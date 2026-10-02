@@ -28,6 +28,7 @@ fun ClassroomScreen(
     courseId: String,
     topicOverride: String? = null,
     teachingMode: String = "solo",
+    reviewConceptId: String? = null,
 ) {
     var topic by remember(courseId, topicOverride) { mutableStateOf(topicOverride) }
     var resolved by remember(courseId, topicOverride) {
@@ -56,5 +57,6 @@ fun ClassroomScreen(
         courseId = courseId,
         teachingMode = teachingMode,
         courseBacked = topicOverride == null,
+        reviewConceptId = reviewConceptId,
     )
 }
