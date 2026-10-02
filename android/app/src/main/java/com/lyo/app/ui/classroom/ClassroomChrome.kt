@@ -38,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lyo.app.data.api.LearnerConceptRecordDto
+import com.lyo.app.data.api.LearnerEvidenceRecordDto
 import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoGold
 import com.lyo.app.ui.theme.Surface
@@ -183,7 +185,14 @@ fun SettingsPanel(
  * copy) match web exactly, only the presentation chrome is simplified.
  */
 @Composable
-fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifier) {
+fun NotebookPanel(
+    transcript: List<TranscriptLine>,
+    learnerRecord: LearnerEvidenceRecordDto?,
+    learnerRecordLoading: Boolean,
+    learnerRecordFailed: Boolean,
+    currentConceptIds: List<String>,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -195,21 +204,71 @@ fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifie
             Icon(Icons.Filled.MenuBook, contentDescription = null, tint = LyoGold, modifier = Modifier.size(16.dp))
             Text("Your notebook", color = TextPrimary, style = MaterialTheme.typography.labelLarge)
         }
-        if (transcript.isEmpty()) {
-            Text(
-                "Notes will appear as the class goes on.",
-                color = TextSecondary,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 220.dp)
-                    .padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            item {
+                Text(
+                    "What you've shown",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    "Read from committed evidence. Being taught something does not count as proof.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                )
+            }
+
+            when {
+                learnerRecordLoading && learnerRecord == null -> item {
+                    Text("Reading your record…", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+                learnerRecordFailed || learnerRecord?.unavailable == true -> item {
+                    Text(
+                        "Your record could not be loaded just now. This is not a reading of your work — nothing you have done has been lost.",
+                        color = LyoGold,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                learnerRecord?.concepts.isNullOrEmpty() -> item {
+                    Text(
+                        "Nothing recorded yet. Answering a checkpoint is what puts something here.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                else -> {
+                    val current = currentConceptIds.toSet()
+                    val ordered = learnerRecord!!.concepts.sortedByDescending { it.conceptId in current }
+                    items(ordered, key = { it.conceptId }) { concept ->
+                        LearnerConceptRecordCard(concept, concept.conceptId in current)
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    "Class notes",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 7.dp),
+                )
+            }
+            if (transcript.isEmpty()) {
+                item {
+                    Text(
+                        "Notes will appear as the class goes on.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            } else {
                 items(transcript, key = { it.id }) { line ->
                     Row {
                         Text(
@@ -224,6 +283,77 @@ fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifie
         }
     }
 }
+
+@Composable
+private fun LearnerConceptRecordCard(concept: LearnerConceptRecordDto, current: Boolean) {
+    val reached = concept.rungs.map { it.kind }.toSet()
+    val ladder = listOf("recognition", "explanation", "application", "transfer", "retention")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Background, RoundedCornerShape(9.dp))
+            .padding(9.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = concept.displayName ?: humanizeConceptId(concept.conceptId),
+                color = TextPrimary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (current) {
+                Text("This class", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        Text(
+            humanizeEvidenceState(concept.state),
+            color = ClassroomTokens.AccentPurple,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        ladder.forEach { rung ->
+            val shown = rung in reached
+            Text(
+                text = "${if (shown) "✓" else "🔒"} ${evidenceLabel(rung)} — ${if (shown) "shown" else "not shown yet"}",
+                color = if (shown) TextPrimary else TextSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        concept.misconception?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                "Worth a second look: $it",
+                color = LyoGold,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        concept.nextRung?.let {
+            Text(
+                "Next: ${evidenceLabel(it)}",
+                color = ClassroomTokens.AccentPurple,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+    }
+}
+
+private fun evidenceLabel(value: String): String = when (value) {
+    "recognition" -> "Recognized"
+    "explanation" -> "Explained"
+    "application" -> "Applied"
+    "transfer" -> "Transferred"
+    "retention" -> "Remembered"
+    else -> value.replace("_", " ").replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun humanizeEvidenceState(value: String): String =
+    value.replace("_", " ").lowercase().replaceFirstChar { it.titlecase() }
+
+private fun humanizeConceptId(value: String): String =
+    value.replace("_", " ").replace("-", " ")
+        .split(" ").filter { it.isNotBlank() }
+        .joinToString(" ") { token -> token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
 
 /**
  * The "your desk" row — Continue / Help / Challenge / Raise hand.
