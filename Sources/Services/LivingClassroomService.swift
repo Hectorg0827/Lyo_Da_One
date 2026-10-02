@@ -34,6 +34,10 @@ class LivingClassroomService: ObservableObject {
     private var courseId: String = ""
     private var lessonId: String?
     private var requestedLanguage: String = "auto"
+    private var requestedMode: String = "solo"
+    private var requestedReviewConceptId: String?
+    private var requestedDurationMinutes: Int?
+    private var requestedRecordScope: String = "topic"
     private var connectedSessionId: String = ""
     private let logger = Logger(subsystem: "com.lyo.app", category: "LivingClassroomService")
 
@@ -98,7 +102,9 @@ class LivingClassroomService: ObservableObject {
         topic: String? = nil,
         language: String = "auto",
         durationMinutes: Int? = nil,
-        recordScope: String = "topic"
+        recordScope: String = "topic",
+        mode: String = "solo",
+        reviewConceptId: String? = nil
     ) {
         self.topic = (topic?.isEmpty == false ? topic! : sessionId)
 
@@ -113,6 +119,10 @@ class LivingClassroomService: ObservableObject {
         self.courseId = courseId ?? sessionId
         self.lessonId = lessonId
         self.requestedLanguage = language
+        self.requestedMode = ["solo", "classroom", "challenge", "review"].contains(mode) ? mode : "solo"
+        self.requestedReviewConceptId = reviewConceptId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.requestedDurationMinutes = durationMinutes
+        self.requestedRecordScope = recordScope == "unit" ? "unit" : "topic"
         self.isGenerating = true
         self.statusText = "Connecting to your live classroom…"
 
@@ -163,8 +173,8 @@ class LivingClassroomService: ObservableObject {
                     URLQueryItem(name: "token", value: token),
                     URLQueryItem(name: "topic", value: resolvedTopic),
                     URLQueryItem(name: "language", value: language),
-                    URLQueryItem(name: "mode", value: "solo"),
-                    URLQueryItem(name: "record_scope", value: recordScope == "unit" ? "unit" : "topic"),
+                    URLQueryItem(name: "mode", value: self.requestedMode),
+                    URLQueryItem(name: "record_scope", value: self.requestedRecordScope),
                     // The Director plans a lesson to fit this. A scheduled
                     // study session carries its own length, and sending 10 for
                     // a 45-minute slot has the server plan a quarter of the
@@ -178,6 +188,12 @@ class LivingClassroomService: ObservableObject {
                 if let lessonId = self.lessonId, !lessonId.isEmpty {
                     urlComponents.queryItems?.append(
                         URLQueryItem(name: "lesson_id", value: lessonId)
+                    )
+                }
+                if let reviewConceptId = self.requestedReviewConceptId,
+                   !reviewConceptId.isEmpty {
+                    urlComponents.queryItems?.append(
+                        URLQueryItem(name: "review_concept_id", value: reviewConceptId)
                     )
                 }
                 guard let url = urlComponents.url else {
@@ -247,7 +263,11 @@ class LivingClassroomService: ObservableObject {
             courseId: courseId,
             lessonId: lessonId,
             topic: topic,
-            language: requestedLanguage
+            language: requestedLanguage,
+            durationMinutes: requestedDurationMinutes,
+            recordScope: requestedRecordScope,
+            mode: requestedMode,
+            reviewConceptId: requestedReviewConceptId
         )
     }
 
