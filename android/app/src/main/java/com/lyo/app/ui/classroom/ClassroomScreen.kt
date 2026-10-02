@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
+import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
 import com.lyo.app.ui.classroom.a2ui.RenderNode
@@ -51,11 +52,32 @@ import com.lyo.app.ui.theme.TextSecondary
  * own scope.
  */
 @Composable
-fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = topic) {
-    val engine = remember(topic, courseId) { ClassroomEngine(topic = topic, sessionIdParam = courseId) }
+fun ClassroomScreen(
+    nav: NavHostController,
+    topic: String,
+    courseId: String = topic,
+    teachingMode: String = "solo",
+    courseBacked: Boolean = true,
+) {
+    val context = LocalContext.current
+    val voicePlayer = remember(context) { ClassroomVoicePlayer(context) }
+    val engine = remember(topic, courseId, teachingMode, courseBacked) {
+        ClassroomEngine(
+            topic = topic,
+            sessionIdParam = courseId,
+            mode = teachingMode,
+            courseBacked = courseBacked,
+            voicePlayer = voicePlayer,
+        )
+    }
     DisposableEffect(engine) {
         engine.start()
         onDispose { engine.dispose() }
+    }
+    LaunchedEffect(courseId, topic, courseBacked) {
+        if (courseBacked) {
+            StackRepository.upsertCourseOnStart(courseId, title = topic)
+        }
     }
 
     // Legacy Android classroom policy: landscape full-screen + immersive
@@ -65,7 +87,6 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
     // ORIGINAL orientation before mutating so onDispose restores it
     // exactly rather than hardcoding a default (some other screen may
     // already have set a non-UNSPECIFIED orientation elsewhere in the app).
-    val context = LocalContext.current
     val activity = context as? Activity
     DisposableEffect(Unit) {
         val originalOrientation = activity?.requestedOrientation
@@ -124,8 +145,10 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
                 ClassroomTopBar(
                     topic = topic,
                     isPaused = engine.isPaused,
+                    isVoiceEnabled = engine.isVoiceEnabled,
                     onBack = { nav.popBackStack() },
                     onTogglePause = { engine.togglePause(); chrome.poke() },
+                    onToggleVoice = { engine.toggleVoice(); chrome.poke() },
                     onToggleNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
                     onToggleSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
                 )
