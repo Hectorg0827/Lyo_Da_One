@@ -82,6 +82,12 @@ interface LyoApiService {
     @DELETE("follow/{userId}")
     suspend fun unfollow(@Path("userId") userId: String): JsonObject
 
+    // ── Personalization / learner evidence ──
+    @GET("api/v1/personalization/concepts/record")
+    suspend fun learnerEvidenceRecord(
+        @Query("limit") limit: Int = 100,
+    ): LearnerEvidenceRecordDto
+
     // ── Courses ──
     @GET("api/v1/learning/courses")
     suspend fun courses(
