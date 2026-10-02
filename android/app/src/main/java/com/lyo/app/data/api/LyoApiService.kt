@@ -83,6 +83,9 @@ interface LyoApiService {
     suspend fun unfollow(@Path("userId") userId: String): JsonObject
 
     // ── Personalization / learner evidence ──
+    @GET("api/v1/lyo2/chat/reviews/due")
+    suspend fun dueReviews(): DueReviewsResponseDto
+
     @GET("api/v1/personalization/concepts/record")
     suspend fun learnerEvidenceRecord(
         @Query("limit") limit: Int = 100,
