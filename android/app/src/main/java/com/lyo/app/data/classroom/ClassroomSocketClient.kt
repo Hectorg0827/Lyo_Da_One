@@ -127,9 +127,11 @@ object ClassroomSocketClient {
 
         val urlBuilder = "$wsBase/api/v1/classroom/ws/connect".toHttpUrl().newBuilder()
             .addQueryParameter("session_id", params.sessionId)
+            .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", params.topic)
             .addQueryParameter("mode", params.mode)
             .addQueryParameter("duration_minutes", params.durationMinutes.toString())
+            .addQueryParameter("language", "auto")
             .addQueryParameter("reduced_motion", params.reducedMotion.toString())
             .addQueryParameter("token", token)
         params.courseId?.let { urlBuilder.addQueryParameter("course_id", it) }
