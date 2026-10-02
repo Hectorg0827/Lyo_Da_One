@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lyo.app.data.StackRepository
+import com.lyo.app.data.api.ApiClient
+import com.lyo.app.data.api.LearnerEvidenceRecordDto
 import com.lyo.app.data.a2ui.A2uiAction
 import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiSurfaceState
@@ -98,6 +100,12 @@ class ClassroomEngine(
     /** The notebook drawer's content — see TranscriptLine's doc comment. */
     val transcript = mutableStateListOf<TranscriptLine>()
 
+    /** Server-owned evidence only. Never derived from transcript or local UI state. */
+    var learnerRecord by mutableStateOf<LearnerEvidenceRecordDto?>(null); private set
+    var learnerRecordLoading by mutableStateOf(false); private set
+    var learnerRecordFailed by mutableStateOf(false); private set
+    var recordConcepts by mutableStateOf<List<String>>(emptyList()); private set
+
     private fun pushTranscript(speaker: String, text: String) {
         if (text.isBlank()) return
         transcript += TranscriptLine(UUID.randomUUID().toString(), speaker, text)
@@ -137,6 +145,22 @@ class ClassroomEngine(
         scope.cancel()
     }
 
+    fun refreshLearnerRecord() {
+        if (learnerRecordLoading) return
+        learnerRecordLoading = true
+        scope.launch {
+            try {
+                learnerRecord = ApiClient.api.learnerEvidenceRecord()
+                learnerRecordFailed = false
+            } catch (_: Exception) {
+                // A failed read is not an empty learner record.
+                learnerRecordFailed = true
+            } finally {
+                learnerRecordLoading = false
+            }
+        }
+    }
+
     // ── Incoming ──────────────────────────────────────────────────────────
 
     /** Backend component_ids already processed — de-dupes the real
@@ -158,6 +182,7 @@ class ClassroomEngine(
 
             is ClassroomServerEvent.SceneStartEvent -> {
                 status = "live"
+                recordConcepts = event.metadata?.target_concepts.orEmpty()
                 // Lazy erase: don't clear the board the instant scene_start
                 // arrives on its own — wait until real content actually
                 // lands, so the board never flashes empty during ordinary
