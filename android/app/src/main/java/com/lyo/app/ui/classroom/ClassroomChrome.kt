@@ -291,7 +291,7 @@ private fun LearnerConceptRecordCard(concept: LearnerConceptRecordDto, current: 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Background, RoundedCornerShape(9.dp))
+            .background(Surface, RoundedCornerShape(9.dp))
             .padding(9.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
