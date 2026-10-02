@@ -60,6 +60,7 @@ function ClassroomStage() {
   const topic = params.get('topic') || 'General Learning';
   const courseId = params.get('courseId') || topic;
   const lessonId = params.get('lessonId') || undefined;
+  const reviewConceptId = params.get('reviewConceptId') || undefined;
   const objective = params.get('objective') || `Understand and apply ${topic}`;
   const recordScope = params.get('recordScope') === 'unit' ? 'unit' : 'topic';
   const language = params.get('language') || 'auto';
@@ -90,6 +91,7 @@ function ClassroomStage() {
     sessionId: courseId,
     courseId,
     lessonId,
+    reviewConceptId,
     objective,
     recordScope,
     difficulty,
@@ -133,7 +135,7 @@ function ClassroomStage() {
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, lessonId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language]);
+  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language]);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
