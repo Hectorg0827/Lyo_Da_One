@@ -33,6 +33,7 @@ import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
 import com.lyo.app.ui.classroom.a2ui.RenderNode
+import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextSecondary
