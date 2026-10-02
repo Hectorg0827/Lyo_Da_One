@@ -61,6 +61,7 @@ class ClassroomEngine(
     private val objective: String? = null,
     private val difficulty: String? = null,
     private val courseBacked: Boolean = true,
+    private val reviewConceptId: String? = null,
     private val voicePlayer: ClassroomVoicePlayer? = null,
 ) {
     val sessionId: String = sessionIdParam?.takeIf { it.isNotBlank() } ?: topic
@@ -142,6 +143,7 @@ class ClassroomEngine(
             objective = objective,
             difficulty = difficulty,
             courseId = sessionId.takeIf { courseBacked },
+            reviewConceptId = reviewConceptId,
         )
     }
 
