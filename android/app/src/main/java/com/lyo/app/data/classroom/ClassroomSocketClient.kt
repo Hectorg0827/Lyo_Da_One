@@ -68,6 +68,7 @@ object ClassroomSocketClient {
         val objective: String?,
         val difficulty: String?,
         val courseId: String?,
+        val reviewConceptId: String?,
     )
 
     /**
@@ -84,6 +85,7 @@ object ClassroomSocketClient {
         objective: String? = null,
         difficulty: String? = null,
         courseId: String? = null,
+        reviewConceptId: String? = null,
     ) {
         pendingConnection = ConnectionParams(
             sessionId = sessionId.ifBlank { topic },
@@ -94,6 +96,7 @@ object ClassroomSocketClient {
             objective = objective,
             difficulty = difficulty?.takeIf { it in VALID_DIFFICULTIES },
             courseId = courseId?.takeIf { it.isNotBlank() },
+            reviewConceptId = reviewConceptId?.takeIf { it.isNotBlank() },
         )
         shouldRun = true
         reconnectAttempt = 0
@@ -135,6 +138,7 @@ object ClassroomSocketClient {
             .addQueryParameter("reduced_motion", params.reducedMotion.toString())
             .addQueryParameter("token", token)
         params.courseId?.let { urlBuilder.addQueryParameter("course_id", it) }
+        params.reviewConceptId?.let { urlBuilder.addQueryParameter("review_concept_id", it) }
         params.objective?.let { urlBuilder.addQueryParameter("objective", it) }
         params.difficulty?.let { urlBuilder.addQueryParameter("difficulty", it) }
 
