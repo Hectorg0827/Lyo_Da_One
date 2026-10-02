@@ -28,6 +28,19 @@ struct UIStackItem: Identifiable, Codable, Equatable {
     
     var title: String
     var subtitle: String?
+
+    /// The course's own description, when the app has one.
+    ///
+    /// Optional, and it must stay optional: `UIStackStore` persists this list
+    /// as JSON in UserDefaults and its loader drops the whole stack if decoding
+    /// fails, so a required field added here would erase every saved course on
+    /// first launch after the update.
+    ///
+    /// Only the backend stack item carries a real description today. Courses
+    /// generated in chat carry `objectives`, not prose, so their cards fall
+    /// back to the lesson the learner stopped on rather than being given a
+    /// description nothing wrote.
+    var courseDescription: String?
     
     /// Last updated timestamp for sorting by recency
     var updatedAt: Date
@@ -56,6 +69,7 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         type: UIStackItemType,
         title: String,
         subtitle: String? = nil,
+        courseDescription: String? = nil,
         updatedAt: Date = Date(),
         progress: Double? = nil,
         courseId: String? = nil,
@@ -72,6 +86,7 @@ struct UIStackItem: Identifiable, Codable, Equatable {
         self.type = type
         self.title = title
         self.subtitle = subtitle
+        self.courseDescription = courseDescription
         self.updatedAt = updatedAt
         self.progress = progress
         self.courseId = courseId

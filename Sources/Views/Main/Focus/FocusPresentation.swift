@@ -183,15 +183,17 @@ enum FocusPresentation {
 
     /// What the back of a course card says about the course.
     ///
-    /// `UIStackItem` has no description field, so one is not always available.
-    /// The fallback is the subtitle the stack does carry — usually the lesson
-    /// the learner stopped on — and when there is neither, the card says so.
+    /// `UIStackItem.courseDescription` is populated from the backend stack
+    /// item, which is the only real description the app receives: a course
+    /// generated in chat carries `objectives`, not prose. So the fallback
+    /// stands — the subtitle the stack does carry, usually the lesson the
+    /// learner stopped on — and when there is neither, the card says so.
     /// Nothing here writes prose on the course's behalf.
-    static func blurb(description: String?, for item: UIStackItem) -> FocusCourseBlurb {
-        if let text = description?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+    static func blurb(for item: UIStackItem) -> FocusCourseBlurb {
+        if let text = trimmed(item.courseDescription) {
             return .description(text)
         }
-        if let subtitle = item.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines), !subtitle.isEmpty {
+        if let subtitle = trimmed(item.subtitle) {
             return .subtitle(subtitle)
         }
         return .none
@@ -274,6 +276,14 @@ enum FocusPresentation {
     }
 
     // MARK: -
+
+    private static func trimmed(_ text: String?) -> String? {
+        guard let value = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
 
     private static func clamp(_ value: Double) -> Double { min(max(value, 0), 1) }
 

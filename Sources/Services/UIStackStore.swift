@@ -109,6 +109,7 @@ final class UIStackStore: ObservableObject {
         courseId: String,
         title: String,
         subtitle: String? = nil,
+        courseDescription: String? = nil,
         focusedConcept: Bool? = nil,
         progress: Double? = nil,
         lessonCount: Int? = nil,
@@ -122,6 +123,10 @@ final class UIStackStore: ObservableObject {
             type: .course,
             title: title,
             subtitle: subtitle,
+            // Preserved rather than overwritten, like progress and the lesson
+            // counts below: a caller that does not happen to know the
+            // description must not erase one the backend already gave us.
+            courseDescription: courseDescription ?? existing?.courseDescription,
             updatedAt: Date(),
             progress: progress ?? existing?.progress,
             courseId: courseId,
@@ -310,6 +315,13 @@ final class UIStackStore: ObservableObject {
                     if let updatedAt = remote.updatedAt, updatedAt > item.updatedAt {
                         item.updatedAt = updatedAt
                     }
+                    // `BackendStackItem.description` has been decoded and
+                    // thrown away since this sync was written; it is the only
+                    // real course description the app receives. A blank one
+                    // does not overwrite a description we already hold.
+                    if let remoteDescription = Self.cleaned(remote.description) {
+                        item.courseDescription = remoteDescription
+                    }
                     items[index] = item
                 } else {
                     // A course started on another device/platform, never
@@ -317,6 +329,7 @@ final class UIStackStore: ObservableObject {
                     items.append(UIStackItem(
                         type: .course,
                         title: remote.title,
+                        courseDescription: Self.cleaned(remote.description),
                         updatedAt: remote.updatedAt ?? Date(),
                         progress: remote.progress,
                         courseId: contentId
@@ -371,6 +384,21 @@ final class UIStackStore: ObservableObject {
     }
 
     // MARK: - Private Helpers
+
+    /// A description worth storing, or nil.
+    ///
+    /// The server sends `null` for a course nobody described and "" for one
+    /// whose description was cleared; both mean the same thing here, and
+    /// neither should land on a card as an empty paragraph.
+    ///
+    /// Internal rather than private so a test can drive the rule directly.
+    static func cleaned(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
 
     private func sortByRecency() {
         items.sort { $0.updatedAt > $1.updatedAt }
