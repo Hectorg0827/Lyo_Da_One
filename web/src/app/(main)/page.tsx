@@ -28,6 +28,8 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { listCourseStacks, postCourseToCommunity, courseShareUrl } from '@/lib/stack';
 import NextForYou from '@/components/home/NextForYou';
+import CourseStack from '@/components/home/CourseStack';
+import HomeTestPrepCard from '@/components/home/HomeTestPrepCard';
 import FrontDoor from '@/components/home/FrontDoor';
 import { shouldShowLearnerDashboard } from '@/lib/entry-contract.mjs';
 import { hasConceptEvidence, shouldLeadWithConcepts } from '@/lib/learner-model.mjs';
@@ -279,11 +281,20 @@ export default function HomePage() {
   const { data: gamification } = useApi(() => api.gamification.overview(), []);
   const { data: conceptSummary } = useApi(() => api.personalization.conceptSummary(), []);
   const { data: courses } = useApi(() => api.courses.list(0, 4), []);
-  const { data: feedData } = useApi(() => api.feed.publicFeed(1, 3), []);
+  // People this learner actually follows — not the public feed.
+  //
+  // This section called itself "Today in your world" while reading
+  // /feed/public, which told the learner these were people they had chosen
+  // to follow when they were not. `verify-android-focus-honesty.mjs` bans
+  // exactly that substitution on Android's Focus screen for the same reason.
+  // `sort_by=following` is the scope iOS's rail already requests from this
+  // same route. An empty result says so rather than falling back to
+  // strangers to fill the space.
+  const { data: feedData } = useApi(() => api.community.posts(1, 5, 'following'), []);
   // Device- and platform-agnostic Stacks: courses this learner has actually
   // started, synced via the real backend (not a single-slot local pointer) —
-  // this is what the hero card and "Your Stacks" section below are sourced
-  // from now, mirroring Android's HomeScreen "Your Stacks" LazyRow.
+  // this is what the "Your courses" stack below is sourced from, the same
+  // list Android's HomeScreen and iOS's Focus tab read.
   const { data: stackItems } = useApi(() => listCourseStacks(), []);
 
   useEffect(() => {
@@ -408,16 +419,6 @@ export default function HomePage() {
     completed: 'Completed',
     paused: 'Paused',
   };
-  const stackCourses = (stackItems || []).map((item, i) => ({
-    id: item.content_id || String(item.id),
-    title: item.title,
-    category: STATUS_LABEL[item.status] || 'Course',
-    progress: Math.round((item.progress || 0) * 100),
-    color: courseColors[i % courseColors.length],
-    emoji: courseEmojis[i % courseEmojis.length],
-    timeLeft: '',
-  }));
-
   /**
    * Is there anything real to report about this learner yet?
    *
@@ -432,7 +433,7 @@ export default function HomePage() {
    */
   const hasRealActivity =
     hasConceptEvidence(conceptSummary) ||
-    stackCourses.length > 0 ||
+    (stackItems || []).length > 0 ||
     ((xpSummary?.total as number) || user?.xp || 0) > 0 ||
     ((achievementsData?.completed as number) || user?.coursesCompleted || 0) > 0 ||
     currentStreak > 0;
@@ -457,29 +458,30 @@ export default function HomePage() {
     isAI: (c.is_ai_generated as boolean) || false,
   }));
 
-  // Map feed posts to community activity format
-  const feedPosts = (feedData?.posts || []) as Record<string, unknown>[];
+  // Map community posts (the /community/posts wire shape: `items`, with
+  // snake_case author and count fields) to what the row below renders.
+  const feedPosts = (feedData?.items || []) as Record<string, unknown>[];
   const communityActivity = feedPosts.map((post: Record<string, unknown>, i: number) => {
-    const author = post.author as Record<string, unknown> | undefined;
-    const authorName = (author?.display_name as string) || (author?.username as string) || 'User';
+    const authorName = (post.author_name as string) || 'User';
     const initials = authorName
       .split(' ')
       .map((w: string) => w[0])
+      .filter(Boolean)
       .join('')
       .slice(0, 2)
       .toUpperCase();
     return {
       id: String(post.id ?? i),
       author: authorName,
-      username: (author?.username as string) || '',
-      initials,
+      username: '',
+      initials: initials || '?',
       color: activityColors[i % activityColors.length],
       action: 'posted',
       content: (post.content as string) || '',
-      likes: (post.likes_count as number) || (post.likes as number) || 0,
-      comments: (post.comments_count as number) || (post.comments as number) || 0,
+      likes: (post.like_count as number) || 0,
+      comments: (post.comment_count as number) || 0,
       timeAgo: post.created_at ? formatTimeAgoShort(post.created_at as string) : '',
-      type: (post.type as string) || 'post',
+      type: (post.post_type as string) || 'post',
     };
   });
 
@@ -509,103 +511,15 @@ export default function HomePage() {
         </p>
       </motion.div>
 
-      {/* ── Hero course card (matches iOS FocusCourseCardView) ── */}
+      {/* ── The test you have coming up ────────────────────────────
+          Answered in place: readiness, days remaining and the next session,
+          instead of a CTA that said nothing about this learner's own plan.
+          Collapses to one line when there is no plan. Every figure comes
+          from lib/test-prep.mjs, so "nothing assessed yet" stays distinct
+          from "0% ready". ── */}
       <motion.div variants={itemVariants}>
-        {(() => {
-          const hero = stackCourses[0];
-          const heroHref = hero ? `/courses/${hero.id}` : '/discover';
-          const heroShare = async () => {
-            const url = courseShareUrl(hero.id);
-            try {
-              if (navigator.share) {
-                await navigator.share({ title: `${hero.title} — LYO`, text: `Check out "${hero.title}" on Lyo`, url });
-              } else {
-                await navigator.clipboard.writeText(url);
-              }
-            } catch (error) {
-              if ((error as DOMException).name !== 'AbortError') console.error('Unable to share course', error);
-            }
-          };
-          return (
-            <div className="relative overflow-hidden rounded-[32px] ios-card-gradient p-6 sm:p-8 flex flex-col min-h-[380px] sm:min-h-[420px] shadow-[0_8px_20px_rgba(0,0,0,0.3)] border border-white/20">
-              {/* Glass glare */}
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.15) 0%, transparent 45%)' }}
-              />
-              {/* Blurred orb accent */}
-              <div className="absolute -right-8 -top-8 w-44 h-44 rounded-full bg-white/15 blur-[40px] pointer-events-none" />
-
-              {/* Top buttons */}
-              <div className="relative flex items-center justify-between mb-5">
-                {hero ? (
-                  <button
-                    onClick={heroShare}
-                    className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white transition-colors hover:bg-white/25"
-                    aria-label="Share course"
-                  >
-                    <Share size={16} />
-                  </button>
-                ) : <span />}
-                {hero ? (
-                  <ShareOrPostMenu
-                    courseId={hero.id}
-                    title={hero.title}
-                    progressPercent={hero.progress}
-                    showShareItem={false}
-                  />
-                ) : (
-                  <span />
-                )}
-              </div>
-
-              <p className="relative text-xs font-bold tracking-[0.2em] text-white/60 uppercase">
-                {hero ? hero.category : 'Start New'}
-              </p>
-              <h2 className="relative font-rounded text-[32px] font-extrabold text-white leading-tight mt-2 max-w-[260px]">
-                {hero ? hero.title : 'Begin your learning journey'}
-              </h2>
-
-              <div className="flex-1" />
-
-              {/* Progress */}
-              {hero && (
-                <div className="relative space-y-2 mb-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[15px] text-white/80">Progress</span>
-                    <span className="text-[15px] font-bold text-white">{hero.progress}%</span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-white/20 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-white transition-all duration-700"
-                      style={{ width: `${Math.min(100, Math.max(0, hero.progress))}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Action pills */}
-              <div className="relative flex gap-3">
-                <Link
-                  href={heroHref}
-                  className="ios-pill-filled flex-1 flex items-center justify-center gap-2 py-4 font-rounded text-base font-bold transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Play size={16} className="fill-current" />
-                  {hero ? 'Resume' : 'Explore'}
-                </Link>
-                <Link
-                  href={heroHref}
-                  className="ios-pill-ghost flex-1 flex items-center justify-center gap-2 py-4 font-rounded text-base font-bold transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <List size={16} />
-                  Details
-                </Link>
-              </div>
-            </div>
-          );
-        })()}
+        <HomeTestPrepCard enabled={isAuthenticated && !authLoading} />
       </motion.div>
-
         </>
       )}
 
@@ -648,60 +562,28 @@ export default function HomePage() {
         </div>
       </motion.div>
 
-      {/* ── Your Stacks — every course this learner has started, synced via
-          the real backend so it shows up the same way on any device or
-          platform they're signed into (see lib/stack.ts). Replaces the old
-          single-slot "Continue Learning" list, which re-rendered the
-          generic course catalog rather than what the learner actually
-          started. ── */}
+      {/* ── Your courses — every course this learner has started, synced
+          via the real backend so it shows up the same way on any device or
+          platform they're signed into (see lib/stack.ts).
+
+          One list, once. This section and the hero card above it were the
+          same array: the newest course rendered large, then all of them
+          rendered small, which made one collection look like two features.
+          The hero is gone and this is the whole stack, newest first, with
+          chips to narrow it and a card that turns over for the description
+          the backend already sends and this page used to drop. ── */}
       <motion.div variants={itemVariants}>
-        <SectionHeader title="Your Stacks" href="/courses" icon={Layers} />
-        {stackCourses.length === 0 ? (
-          <Link
-            href="/discover"
-            className="glass-card p-6 flex flex-col items-center gap-2 text-center transition-all duration-200 hover:bg-white/[0.07]"
-          >
-            <Layers size={28} className="text-secondary" />
-            <p className="text-sm font-semibold text-primary">No courses in your Stacks yet</p>
-            <p className="text-xs text-secondary">
-              Start a course from Explore and it&apos;ll show up here — and on any other device you sign into.
-            </p>
-          </Link>
-        ) : (
-          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 sm:overflow-visible">
-            {stackCourses.map((course) => (
-              <Link
-                key={course.id}
-                href={`/courses/${course.id}`}
-                className="relative glass-card p-4 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.02] hover:bg-white/[0.07] shrink-0 w-52 sm:w-auto"
-              >
-                <div className="absolute right-2 top-2 z-10">
-                  <ShareOrPostMenu courseId={course.id} title={course.title} progressPercent={course.progress} />
-                </div>
-                <div className="flex items-start gap-3 pr-7">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
-                    style={{ backgroundColor: `${course.color}20`, border: `1px solid ${course.color}30` }}
-                  >
-                    {course.emoji}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-primary leading-tight line-clamp-2">
-                      {course.title}
-                    </p>
-                    <p className="text-[11px] text-secondary mt-0.5">{course.category}</p>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] text-secondary">{course.progress}% complete</span>
-                  </div>
-                  <ProgressBar value={course.progress} color={course.color} height={4} />
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+        <SectionHeader title="Your courses" href="/courses" icon={Layers} />
+        <CourseStack
+          items={stackItems || []}
+          renderMenu={(item) => (
+            <ShareOrPostMenu
+              courseId={item.content_id || String(item.id)}
+              title={item.title}
+              progressPercent={Math.round((item.progress || 0) * 100)}
+            />
+          )}
+        />
       </motion.div>
 
       {/* ── Learning Stats — only once there is something to count ─ */}
@@ -825,7 +707,7 @@ export default function HomePage() {
 
       {/* ── Recent Community Activity ─────────────────────────── */}
       <motion.div variants={itemVariants}>
-        <SectionHeader title="Today in your world" href="/community" icon={Users} />
+        <SectionHeader title="From people you follow" href="/community" icon={Users} />
 
         {/* Discover strip (iOS FocusView.DiscoverStrip) */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -848,7 +730,7 @@ export default function HomePage() {
         {communityActivity.length === 0 ? (
           <div className="glass-card p-6 flex flex-col items-center gap-2 text-center">
             <Users size={28} className="text-secondary" />
-            <p className="text-sm text-secondary">No community activity yet</p>
+            <p className="text-sm text-secondary">No posts yet from people you follow</p>
           </div>
         ) : (
           <div className="space-y-3">

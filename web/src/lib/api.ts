@@ -1293,7 +1293,13 @@ export const api = {
 
     // ── Community posts — the same store iOS renders (community/posts),
     //    NOT the separate /feed store; one account, one feed everywhere. ──
-    async posts(page = 1, limit = 20, sortBy: 'recent' | 'popular' | 'trending' = 'recent') {
+    async posts(
+      page = 1,
+      limit = 20,
+      // `following` scopes the feed to accounts this learner follows. Already
+      // accepted by this route — it is the scope iOS's Focus rail requests.
+      sortBy: 'recent' | 'popular' | 'trending' | 'following' = 'recent',
+    ) {
       return request<{
         items: Record<string, unknown>[];
         page: number;
