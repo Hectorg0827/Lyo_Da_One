@@ -21,6 +21,8 @@ const iosTts = read('Sources/Core/Networking/Endpoint.swift');
 const iosModels = read('Sources/Models/SDUIModels.swift');
 const iosView = read('Sources/Views/Classroom/ActiveLessonView.swift');
 const iosClassroomView = read('Sources/Views/Main/Classroom/LivingClassroomView.swift');
+const iosPersonalization = read('Sources/Services/PersonalizationService.swift');
+const iosPersonalizationModels = read('Sources/Models/PersonalizationModels.swift');
 const iosLegacyModel = read('Sources/Models/Classroom.swift');
 const iosLegacyViewModel = read('Sources/ViewModels/ClassroomViewModel.swift');
 const iosLegacyOverlay = read('Sources/Components/Classroom/QuickCheckOverlay.swift');
@@ -38,6 +40,12 @@ const androidChrome = read(
 );
 const androidLivingClassroom = read(
   'android/app/src/main/java/com/lyo/app/ui/classroom/ClassroomScreen.kt',
+);
+const androidLivingEngine = read(
+  'android/app/src/main/java/com/lyo/app/ui/classroom/ClassroomEngine.kt',
+);
+const androidApi = read(
+  'android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt',
 );
 
 for (const [source, label] of [
@@ -91,6 +99,27 @@ requireText(androidClassroom, '.addQueryParameter("course_id", courseId)', 'Andr
 requireText(androidClassroom, '.addQueryParameter("client_contract_version", "2")', 'Android contract version');
 requireText(iosClassroom, 'URLQueryItem(name: "course_id"', 'iOS course identity');
 requireText(iosClassroom, 'URLQueryItem(name: "client_contract_version", value: "2")', 'iOS contract version');
+
+// ── Learner evidence / "What you've shown" parity ───────────────────────────
+// All three classrooms must read committed server evidence. A native client
+// may display it differently, but it may not infer the learner's rung from
+// transcript length, local answer counts, or time spent.
+requireText(webPage, 'EvidenceRecord', 'Web committed learner record');
+requireText(iosPersonalization, '/api/v1/personalization/concepts/record', 'iOS learner-record endpoint');
+requireText(iosPersonalizationModels, 'struct LearnerEvidenceRecord', 'iOS learner-record contract');
+requireText(iosClassroomView, 'What you\'ve shown', 'iOS learner-record UI');
+requireText(iosModels, 'targetConcepts = "target_concepts"', 'iOS scene concept identity');
+requireText(androidApi, 'api/v1/personalization/concepts/record', 'Android learner-record endpoint');
+requireText(androidLivingEngine, 'learnerRecord = ApiClient.api.learnerEvidenceRecord()', 'Android learner-record fetch');
+requireText(androidChrome, 'What you\'ve shown', 'Android learner-record UI');
+requireText(androidLivingEngine, 'event.metadata?.target_concepts', 'Android scene concept identity');
+for (const [source, label] of [
+  [iosClassroomView, 'iOS learner record'],
+  [androidChrome, 'Android learner record'],
+]) {
+  requireText(source, 'not shown yet', `${label} unreached-rung honesty`);
+  rejectText(source, 'time spent means', `${label} fabricated mastery`);
+}
 
 // ── Classroom presentation contract ─────────────────────────────────────────
 // These literals intentionally make accidental visual regressions fail CI.
