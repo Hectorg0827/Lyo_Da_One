@@ -107,9 +107,8 @@ object ClassroomSocketClient {
         teardown()
     }
 
-    fun send(envelope: UserActionEnvelope) {
-        socket?.send(ApiClient.gson.toJson(envelope))
-    }
+    fun send(envelope: UserActionEnvelope): Boolean =
+        socket?.send(ApiClient.gson.toJson(envelope)) == true
 
     @Synchronized
     private fun open() {
