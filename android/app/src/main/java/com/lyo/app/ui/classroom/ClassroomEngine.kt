@@ -18,6 +18,7 @@ import com.lyo.app.data.classroom.DirectorTurn
 import com.lyo.app.ui.classroom.a2ui.BasicCatalog
 import com.lyo.app.ui.classroom.a2ui.A2uiCatalog
 import com.lyo.app.ui.classroom.catalog.ClassroomCatalog
+import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,6 +60,8 @@ class ClassroomEngine(
     private val durationMinutes: Int = 10,
     private val objective: String? = null,
     private val difficulty: String? = null,
+    private val courseBacked: Boolean = true,
+    private val voicePlayer: ClassroomVoicePlayer? = null,
 ) {
     val sessionId: String = sessionIdParam?.takeIf { it.isNotBlank() } ?: topic
 
@@ -80,6 +83,8 @@ class ClassroomEngine(
     var status by mutableStateOf("connecting"); private set
     var errorMessage by mutableStateOf<String?>(null); private set
     var isPaused by mutableStateOf(false); private set
+    var isVoiceEnabled by mutableStateOf(true); private set
+    private var voiceLanguage: String = "auto"
 
     /**
      * True while a user_prompt is unanswered — the ONE checkpoint type
@@ -136,11 +141,13 @@ class ClassroomEngine(
             reducedMotion = ClassroomPreferences.reducedMotion,
             objective = objective,
             difficulty = difficulty,
+            courseId = sessionId.takeIf { courseBacked },
         )
     }
 
     fun dispose() {
         flushActivities()
+        voicePlayer?.close()
         ClassroomSocketClient.disconnect()
         scope.cancel()
     }
@@ -206,6 +213,7 @@ class ClassroomEngine(
     }
 
     private fun processComponent(component: ClassroomComponent) {
+        component.language_code?.takeIf { it.isNotBlank() }?.let { voiceLanguage = it }
         val id = component.component_id
         if (id != null) {
             if (id in processedComponentIds) return
@@ -235,6 +243,7 @@ class ClassroomEngine(
      *  forget: StackRepository is itself resilient (never throws), and a
      *  failed sync must never interrupt turn playback. */
     private fun syncStackProgress(component: ClassroomComponent) {
+        if (!courseBacked) return
         val total = (component.total ?: 1).coerceAtLeast(1)
         val current = (component.current ?: 0).coerceIn(0, total)
         scope.launch {
@@ -286,7 +295,13 @@ class ClassroomEngine(
         applyMutation(mutation)
 
         when (turn.type) {
-            "speech", "user_prompt" -> pushTranscript(turn.speaker ?: "Teacher", turn.text.orEmpty())
+            "speech", "user_prompt" -> {
+                val spoken = turn.text.orEmpty()
+                pushTranscript(turn.speaker ?: "Teacher", spoken)
+                if (isVoiceEnabled && spoken.isNotBlank()) {
+                    voicePlayer?.play(spoken, voiceLanguage)
+                }
+            }
             "session_end" -> pushTranscript(
                 "Teacher",
                 "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
@@ -349,18 +364,19 @@ class ClassroomEngine(
         return base + 80L
     }
 
-    /** No TTS integration in this v1 (see the implementation plan) — a
-     *  character-count-based reading-pace stand-in, clamped to a sane
-     *  range, so speech turns still feel roughly paced to their length
-     *  rather than flashing by instantly or stalling on a long line. */
+    /** Keep the paced director queue from cutting off shared teacher audio.
+     *  160–175 wpm is a normal explanatory speaking rate; the player may use
+     *  a provider voice or the device fallback, so use a conservative bounded
+     *  estimate instead of provider-specific duration metadata. */
     private fun readingDurationMs(text: String?): Long {
-        val length = text?.length ?: 0
-        return (length * 45L).coerceIn(1200L, 4200L)
+        val words = text?.trim()?.split(Regex("\\s+"))?.count { it.isNotBlank() } ?: 0
+        return (words * 360L).coerceIn(1200L, 24_000L)
     }
 
     // ── Outgoing: board-content actions (from the A2UI renderer) ────────
 
     fun onAction(action: A2uiAction) {
+        if (action.name != "update_activity") voicePlayer?.stop()
         if (action.name == "update_activity") {
             activityUpdates[action.sourceComponentId] = action
             activitySaveJob?.cancel()
@@ -391,6 +407,11 @@ class ClassroomEngine(
 
     // ── Outgoing: chrome-originated actions ──────────────────────────────
 
+    fun toggleVoice() {
+        isVoiceEnabled = !isVoiceEnabled
+        voicePlayer?.setEnabled(isVoiceEnabled)
+    }
+
     fun togglePause() {
         if (isPaused) {
             isPaused = false
@@ -406,12 +427,14 @@ class ClassroomEngine(
             if (!hasActiveCheckpoint) startPlayer()
         } else {
             isPaused = true
+            voicePlayer?.stop()
             playerJob?.cancel()
             promptTimeoutJob?.cancel()
         }
     }
 
     fun continueLesson() {
+        voicePlayer?.stop()
         flushActivities()
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
         ClassroomSocketClient.send(ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId))
@@ -426,6 +449,7 @@ class ClassroomEngine(
     }
 
     fun askQuestion(text: String) {
+        voicePlayer?.stop()
         flushActivities()
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
@@ -434,18 +458,21 @@ class ClassroomEngine(
     }
 
     fun requestHint(level: String) {
+        voicePlayer?.stop()
         flushActivities()
         pushTranscript("You", "Requested a hint")
         ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))
     }
 
     fun signalConfused() {
+        voicePlayer?.stop()
         flushActivities()
         pushTranscript("You", "Requested a small nudge")
         ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))
     }
 
     fun signalTooEasy() {
+        voicePlayer?.stop()
         flushActivities()
         pushTranscript("You", "Requested a harder case")
         ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))
