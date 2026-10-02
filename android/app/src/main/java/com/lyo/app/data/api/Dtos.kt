@@ -234,6 +234,18 @@ data class LearnerEvidenceRecordDto(
     val unavailable: Boolean = false,
 )
 
+data class DueReviewItemDto(
+    @SerializedName("skill_id") val skillId: String,
+    @SerializedName("skill_name") val skillName: String? = null,
+    @SerializedName("days_overdue") val daysOverdue: Int = 0,
+    @SerializedName("mastery_level") val masteryLevel: Double? = null,
+    @SerializedName("last_misconception") val lastMisconception: String? = null,
+)
+
+data class DueReviewsResponseDto(
+    val items: List<DueReviewItemDto> = emptyList(),
+)
+
 // ── Courses ──────────────────────────────────────────────────────────────────
 
 data class CourseDto(
