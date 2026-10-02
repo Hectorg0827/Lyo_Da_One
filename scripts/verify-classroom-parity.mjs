@@ -136,7 +136,10 @@ requireText(androidLivingEngine, 'event.metadata?.target_concepts', 'Android sce
 requireText(androidApi, 'api/v1/lyo2/chat/reviews/due', 'Android canonical due-review endpoint');
 requireText(androidHome, 'ApiClient.api.dueReviews()', 'Android Focus reads due reviews');
 requireText(androidHome, 'Routes.reviewClassroom(', 'Android due review enters shared classroom');
-requireText(androidNavigation, 'mode=review', 'Android review route preserves retrieval mode');
+requireText(androidNavigation, 'const val REVIEW_CLASSROOM', 'Android has a dedicated review classroom route');
+requireText(androidNavigation, 'teachingMode = "review"', 'Android review destination preserves retrieval mode');
+requireText(androidNavigation, 'reviewConceptId = entry.arguments?.getString("reviewConceptId")', 'Android review route carries canonical concept identity');
+requireText(androidSocket, 'addQueryParameter("review_concept_id"', 'Android review socket sends canonical concept identity');
 for (const [source, label] of [
   [iosClassroomView, 'iOS learner record'],
   [androidChrome, 'Android learner record'],
