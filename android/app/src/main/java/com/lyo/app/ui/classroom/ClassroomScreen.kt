@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +87,11 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
     // the Switch needs its own observable copy to actually recompose on
     // toggle; this mirrors it into ClassroomPreferences on every change.
     var reducedMotionUi by remember { mutableStateOf(ClassroomPreferences.reducedMotion) }
+
+    LaunchedEffect(notebookOpen) {
+        if (notebookOpen) engine.refreshLearnerRecord()
+    }
+
     val chrome = rememberChromeVisibility(
         blockAutoHide = engine.hasActiveCheckpoint || settingsOpen || notebookOpen,
     )
@@ -141,7 +147,13 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
                 )
             }
             if (notebookOpen) {
-                NotebookPanel(transcript = engine.transcript)
+                NotebookPanel(
+                    transcript = engine.transcript,
+                    learnerRecord = engine.learnerRecord,
+                    learnerRecordLoading = engine.learnerRecordLoading,
+                    learnerRecordFailed = engine.learnerRecordFailed,
+                    currentConceptIds = engine.recordConcepts,
+                )
             }
 
             // The board — permanent, fills remaining space. Lyo's mascot
