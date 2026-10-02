@@ -51,6 +51,14 @@ public class PersonalizationService {
         return try await NetworkClient.shared.request(endpoint)
     }
 
+    public func getDueReviews() async throws -> DueReviewsResponse {
+        let endpoint = DynamicEndpoint(
+            urlString: "/api/v1/lyo2/chat/reviews/due",
+            method: .get
+        )
+        return try await NetworkClient.shared.request(endpoint)
+    }
+
     public func getLearnerRecord(limit: Int = 100) async throws -> LearnerEvidenceRecord {
         let bounded = max(1, min(limit, 100))
         let endpoint = DynamicEndpoint(
