@@ -384,23 +384,19 @@ class ClassroomEngine(
             return
         }
         flushActivities()
+        val sent = ClassroomSocketClient.send(
+            ClassroomBridge.actionToUserAction(action, sessionId),
+        )
+        if (!sent) return
         if (action.name == "submitPrompt") {
             promptTimeoutJob?.cancel()
             hasActiveCheckpoint = false
             val answer = action.context["selectedLabel"]?.takeIf { it.isJsonPrimitive }?.asString
                 ?: action.context["value"]?.takeIf { it.isJsonPrimitive }?.asString
             answer?.let { pushTranscript("You", it) }
-            // Close the open-response Send/"I'm not sure" buttons the
-            // instant this fires, before the network round-trip — prevents
-            // a double-tap from sending a duplicate answer (the chip/
-            // ChoicePicker path already self-disables via its own
-            // selectedId check and doesn't need this).
             action.context["promptId"]?.takeIf { it.isJsonPrimitive }?.asString?.let { promptId ->
                 applyMessage(ClassroomBridge.closePromptPanel(promptId))
             }
-        }
-        ClassroomSocketClient.send(ClassroomBridge.actionToUserAction(action, sessionId))
-        if (action.name == "submitPrompt") {
             scope.launch { playNext() }
         }
     }
@@ -437,7 +433,9 @@ class ClassroomEngine(
         voicePlayer?.stop()
         flushActivities()
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
-        ClassroomSocketClient.send(ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId))
+        ClassroomSocketClient.send(
+            ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
+        )
     }
 
     private fun flushActivities() {
@@ -453,28 +451,32 @@ class ClassroomEngine(
         flushActivities()
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        pushTranscript("You", "✋ $trimmed")
-        ClassroomSocketClient.send(ClassroomBridge.askQuestionAction(sessionId, trimmed))
+        if (ClassroomSocketClient.send(ClassroomBridge.askQuestionAction(sessionId, trimmed))) {
+            pushTranscript("You", "✋ $trimmed")
+        }
     }
 
     fun requestHint(level: String) {
         voicePlayer?.stop()
         flushActivities()
-        pushTranscript("You", "Requested a hint")
-        ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))
+        if (ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))) {
+            pushTranscript("You", "Requested a hint")
+        }
     }
 
     fun signalConfused() {
         voicePlayer?.stop()
         flushActivities()
-        pushTranscript("You", "Requested a small nudge")
-        ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))
+        if (ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))) {
+            pushTranscript("You", "Requested a small nudge")
+        }
     }
 
     fun signalTooEasy() {
         voicePlayer?.stop()
         flushActivities()
-        pushTranscript("You", "Requested a harder case")
-        ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))
+        if (ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))) {
+            pushTranscript("You", "Requested a harder case")
+        }
     }
 }
