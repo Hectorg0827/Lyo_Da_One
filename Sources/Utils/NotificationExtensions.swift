@@ -13,4 +13,10 @@ extension Notification.Name {
     static let triggerLioChat = Notification.Name("TriggerLioChat")
     static let resetInactivityTimer = Notification.Name("ResetInactivityTimer")
     static let dismissLyoOverlay = Notification.Name("DismissLyoOverlay")
+
+    /// Open the Lio overlay — the surface whose input bar renders attachments
+    /// and runs the voice session. Focus's create composer posts this for its
+    /// Speak / Photo / File modes, because the chat sheet's own attach button
+    /// is still a stub. `userInfo["mode"]` is "voice" or "attachment".
+    static let presentLyoOverlay = Notification.Name("PresentLyoOverlay")
 }
