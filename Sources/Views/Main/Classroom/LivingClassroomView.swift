@@ -187,6 +187,9 @@ struct LivingClassroomView: View {
     /// A scheduled study session needs evidence on the plan's topic key.
     /// Other GENERATE: sessions may show one record card per planned skill.
     var focusedConcept: Bool = false
+    /// A schedule-validated spaced review reuses this exact learner concept.
+    var reviewConceptId: String? = nil
+    var teachingMode: String = "solo"
 
     @StateObject private var service = LivingClassroomService()
     @StateObject private var sessionTimer = ClassroomTimer(duration: 300)
@@ -340,7 +343,9 @@ struct LivingClassroomView: View {
                 courseId: courseId,
                 topic: courseTitle,
                 durationMinutes: durationMinutes,
-                recordScope: courseId.hasPrefix("GENERATE:") && !focusedConcept ? "unit" : "topic"
+                recordScope: courseId.hasPrefix("GENERATE:") && !focusedConcept ? "unit" : "topic",
+                mode: teachingMode,
+                reviewConceptId: reviewConceptId
             )
             await loadLearnerRecord()
             if let durationMinutes {
@@ -366,7 +371,9 @@ struct LivingClassroomView: View {
             uiStackStore.upsertCourse(
                 courseId: courseId,
                 title: courseTitle,
-                subtitle: "AI Classroom"
+                subtitle: reviewConceptId == nil ? "AI Classroom" : "Fresh retrieval",
+                focusedConcept: focusedConcept,
+                reviewConceptId: reviewConceptId
             )
 
             // Legacy iOS classroom orientation policy. This is intentionally
