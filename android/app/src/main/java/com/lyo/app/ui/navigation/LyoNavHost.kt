@@ -109,6 +109,10 @@ object Routes {
     fun communityInvite(token: String) = "community/invite/$token"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun classroom(courseId: String) = "classroom/$courseId"
+    fun reviewClassroom(skillId: String, topic: String): String {
+        val session = android.net.Uri.encode("review-$skillId")
+        return "test-prep/classroom/$session?topic=${android.net.Uri.encode(topic)}&mode=review"
+    }
     fun userProfile(userId: String) = "profile/$userId"
 }
 
