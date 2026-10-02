@@ -10,6 +10,28 @@ public enum ActionType: String, Codable {
     case `break` = "break"
 }
 
+public struct DueReviewItem: Codable, Equatable, Identifiable {
+    public let skillId: String
+    public let skillName: String?
+    public let daysOverdue: Int
+    public let masteryLevel: Double?
+    public let lastMisconception: String?
+
+    public var id: String { skillId }
+
+    enum CodingKeys: String, CodingKey {
+        case skillId = "skill_id"
+        case skillName = "skill_name"
+        case daysOverdue = "days_overdue"
+        case masteryLevel = "mastery_level"
+        case lastMisconception = "last_misconception"
+    }
+}
+
+public struct DueReviewsResponse: Codable, Equatable {
+    public let items: [DueReviewItem]
+}
+
 public struct NextActionResponse: Codable {
     public let action: ActionType
     public let difficulty: String
