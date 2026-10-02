@@ -205,6 +205,40 @@ public struct KnowledgeTraceResult: Codable {
     }
 }
 
+public struct EvidenceRungRecord: Codable, Equatable {
+    public let kind: String
+    public let confidence: Double
+    public let unaided: Bool
+}
+
+public struct LearnerConceptRecord: Codable, Equatable, Identifiable {
+    public let conceptId: String
+    public let displayName: String?
+    public let state: String
+    public let rungs: [EvidenceRungRecord]
+    public let bestRung: String?
+    public let misconception: String?
+    public let nextRung: String?
+    public let lastSeen: String?
+
+    public var id: String { conceptId }
+
+    enum CodingKeys: String, CodingKey {
+        case conceptId = "concept_id"
+        case displayName = "display_name"
+        case state, rungs
+        case bestRung = "best_rung"
+        case misconception
+        case nextRung = "next_rung"
+        case lastSeen = "last_seen"
+    }
+}
+
+public struct LearnerEvidenceRecord: Codable, Equatable {
+    public let concepts: [LearnerConceptRecord]
+    public let unavailable: Bool
+}
+
 public struct MasteryProfile: Codable {
     public let learnerId: String
     public let skills: [String: Double]
