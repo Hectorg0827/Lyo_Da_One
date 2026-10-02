@@ -8,6 +8,8 @@ export interface ClassroomEntry {
   objective?: string;
   courseId?: string;
   lessonId?: string;
+  /** Canonical concept identity for a schedule-validated due review. */
+  reviewConceptId?: string;
   /** Free-topic pathways may file demonstrations under each saved unit. */
   recordScope?: 'unit' | 'topic';
   /** The learner's optional answers. Each is dropped when unrecognised. */
@@ -39,7 +41,7 @@ export const TEST_PREP_OPENING_TURN: string;
 export function defaultObjective(topic: string): string;
 /** Returns null when the topic is empty. */
 export function classroomEntryHref(entry: ClassroomEntry): string | null;
-export function reviewEntryHref(conceptLabel: string): string | null;
+export function reviewEntryHref(conceptLabel: string, conceptId?: string): string | null;
 export function testPrepEntryHref(): string;
 
 export function shouldShowLearnerDashboard(state: {
