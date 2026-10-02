@@ -44,6 +44,18 @@ const androidLivingClassroom = read(
 const androidLivingEngine = read(
   'android/app/src/main/java/com/lyo/app/ui/classroom/ClassroomEngine.kt',
 );
+const androidSocket = read(
+  'android/app/src/main/java/com/lyo/app/data/classroom/ClassroomSocketClient.kt',
+);
+const androidBridge = read(
+  'android/app/src/main/java/com/lyo/app/ui/classroom/ClassroomBridge.kt',
+);
+const androidWire = read(
+  'android/app/src/main/java/com/lyo/app/data/classroom/ClassroomWireModels.kt',
+);
+const androidHome = read(
+  'android/app/src/main/java/com/lyo/app/ui/screens/home/HomeScreen.kt',
+);
 const androidApi = read(
   'android/app/src/main/java/com/lyo/app/data/api/LyoApiService.kt',
 );
@@ -61,24 +73,28 @@ requireText(webContract, "client_contract_version: '2'", 'Web contract version')
 requireText(webContract, "params.set('course_id'", 'Web course identity');
 requireText(web, 'comp.language_code', 'Web component locale');
 requireText(iosClassroom, 'component.languageCode ?? "auto"', 'iOS component locale');
-requireText(androidClassroom, '"language_code"', 'Android component locale');
+requireText(androidWire, 'val language_code: String?', 'Android component locale');
+requireText(androidLivingEngine, 'component.language_code', 'Android locale reaches teacher voice');
 
 requireText(web, 'learnerTakesFloor()', 'Web interruption contract');
 requireText(iosClassroom, 'bargeIn()', 'iOS interruption contract');
-requireText(androidClassroom, 'beginLearnerInput()', 'Android interruption contract');
+requireText(androidLivingEngine, 'voicePlayer?.stop()', 'Android learner barge-in stops teacher voice');
+requireText(androidLivingEngine, 'ClassroomBridge.askQuestionAction', 'Android interruption contract');
 requireText(web, "if (!sendAction('skip_question'", 'Web offline-safe skip');
 requireText(iosClassroom, 'guard isConnected, let task = webSocketTask', 'iOS offline-safe action');
 requireText(iosView, 'guard onSkip(component) else { return false }', 'iOS offline-safe skip');
-requireText(androidClassroom, 'if (sendAction(', 'Android offline-safe action');
+requireText(androidSocket, 'fun send(envelope: UserActionEnvelope): Boolean', 'Android socket reports failed sends');
+requireText(androidLivingEngine, 'if (!sent) return', 'Android failed answer cannot advance locally');
 
 for (const [source, label] of [
   [web, 'Web classroom'],
   [iosClassroomView, 'iOS classroom'],
-  [androidClassroom, 'Android classroom'],
 ]) {
   requireText(source, 'skip_question', `${label} neutral skip`);
   requireText(source, 'request_hint', `${label} learner help`);
 }
+requireText(androidBridge, 'JsonPrimitive("I\'m not sure")', 'Android neutral unsure path');
+requireText(androidBridge, 'action_intent = "request_hint"', 'Android learner help');
 
 rejectText(web, 'resumePlayer(); // a classmate jumps in', 'Web unattended continuation');
 rejectText(iosClassroom, 'startHesitationWatch(for: component)', 'iOS timed learner interruption');
@@ -92,11 +108,13 @@ rejectText(
 
 requireText(iosModels, 'case inputField = "InputField"', 'iOS application evidence UI');
 requireText(webSpeech, 'SpeechRecognition', 'Web learner voice input');
-requireText(androidClassroom, '"InputField"', 'Android application evidence UI');
-requireText(androidClassroom, 'RecognizerIntent.ACTION_RECOGNIZE_SPEECH', 'Android learner voice input');
+requireText(androidBridge, '"InputField"', 'Android application evidence UI');
+requireText(androidChrome, 'RecognizerIntent.ACTION_RECOGNIZE_SPEECH', 'Android learner voice input');
 requireText(androidNavigation, 'ClassroomScreen(', 'Android live classroom route');
-requireText(androidClassroom, '.addQueryParameter("course_id", courseId)', 'Android course identity');
-requireText(androidClassroom, '.addQueryParameter("client_contract_version", "2")', 'Android contract version');
+requireText(androidClassroom, 'A2UIClassroomScreen(', 'Android route delegates to canonical A2UI classroom');
+rejectText(androidClassroom, 'AndroidClassroomController', 'Android duplicate classroom runtime');
+requireText(androidSocket, 'addQueryParameter("course_id"', 'Android course identity');
+requireText(androidSocket, 'addQueryParameter("client_contract_version", "2")', 'Android contract version');
 requireText(iosClassroom, 'URLQueryItem(name: "course_id"', 'iOS course identity');
 requireText(iosClassroom, 'URLQueryItem(name: "client_contract_version", value: "2")', 'iOS contract version');
 
@@ -113,6 +131,12 @@ requireText(androidApi, 'api/v1/personalization/concepts/record', 'Android learn
 requireText(androidLivingEngine, 'learnerRecord = ApiClient.api.learnerEvidenceRecord()', 'Android learner-record fetch');
 requireText(androidChrome, 'What you\'ve shown', 'Android learner-record UI');
 requireText(androidLivingEngine, 'event.metadata?.target_concepts', 'Android scene concept identity');
+
+// Android longitudinal return loop uses the same server schedule as web/iOS.
+requireText(androidApi, 'api/v1/lyo2/chat/reviews/due', 'Android canonical due-review endpoint');
+requireText(androidHome, 'ApiClient.api.dueReviews()', 'Android Focus reads due reviews');
+requireText(androidHome, 'Routes.reviewClassroom(', 'Android due review enters shared classroom');
+requireText(androidNavigation, 'mode=review', 'Android review route preserves retrieval mode');
 for (const [source, label] of [
   [iosClassroomView, 'iOS learner record'],
   [androidChrome, 'Android learner record'],
