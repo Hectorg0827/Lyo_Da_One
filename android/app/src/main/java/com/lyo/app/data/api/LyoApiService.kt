@@ -88,6 +88,9 @@ interface LyoApiService {
         @Query("limit") limit: Int = 100,
     ): LearnerEvidenceRecordDto
 
+    @GET("api/v1/lyo2/chat/reviews/due")
+    suspend fun dueReviews(): DueReviewsResponseDto
+
     // ── Courses ──
     @GET("api/v1/learning/courses")
     suspend fun courses(
