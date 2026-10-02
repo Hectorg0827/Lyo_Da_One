@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -83,8 +85,10 @@ fun rememberChromeVisibility(blockAutoHide: Boolean): ChromeVisibilityState {
 fun ClassroomTopBar(
     topic: String,
     isPaused: Boolean,
+    isVoiceEnabled: Boolean,
     onBack: () -> Unit,
     onTogglePause: () -> Unit,
+    onToggleVoice: () -> Unit,
     onToggleNotebook: () -> Unit,
     onToggleSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -112,6 +116,13 @@ fun ClassroomTopBar(
         IconButton(onClick = onToggleSettings) {
             Icon(Icons.Filled.Settings, contentDescription = "Classroom settings", tint = TextPrimary)
         }
+        IconButton(onClick = onToggleVoice) {
+            Icon(
+                imageVector = if (isVoiceEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                contentDescription = if (isVoiceEnabled) "Mute teacher voice" else "Enable teacher voice",
+                tint = if (isVoiceEnabled) TextPrimary else TextSecondary,
+            )
+        }
         IconButton(onClick = onTogglePause) {
             Icon(
                 imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
@@ -128,14 +139,9 @@ fun ClassroomTopBar(
  * motion is the only setting that previously existed as a wire-contract
  * param (ClassroomSocketClient.connect's reducedMotion) with no user
  * control at all — ClassroomEngine.start() hardcoded `false`. Mode/
- * duration/voice-speed are NOT ported here: all three are connect-time
- * params on the real backend (same as reducedMotion), but changing them
- * live would require tearing down and reopening the WebSocket mid-session
- * — real surgery this v1 deliberately doesn't take on unverified (no
- * device/build available in this environment, see the implementation
- * plan's Verification section) — and voice-speed has nothing to control
- * yet: Android's classroom has no TTS integration in v1 (ClassroomBridge's
- * "ambient" turn handling is stubbed for the same reason).
+ * duration/voice-speed are not exposed here because they would require a
+ * reconnect or a voice-player speed contract. Teacher voice itself is live
+ * and can be muted from the top bar without changing instructional state.
  */
 @Composable
 fun SettingsPanel(
