@@ -92,6 +92,7 @@ data class TeachingVisualItem(
 data class ClassroomComponent(
     val component_id: String? = null,
     val type: String? = null,
+    val language_code: String? = null,
     val text: String? = null,
     val label: String? = null,
     val student_name: String? = null,
