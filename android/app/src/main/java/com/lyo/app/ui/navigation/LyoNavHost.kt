@@ -112,7 +112,8 @@ object Routes {
     fun classroom(courseId: String) = "classroom/$courseId"
     fun reviewClassroom(skillId: String, topic: String): String {
         val session = android.net.Uri.encode("review-$skillId")
-        return "test-prep/classroom/$session?topic=${android.net.Uri.encode(topic)}&mode=review"
+        return "review/classroom/$session?topic=${android.net.Uri.encode(topic)}" +
+            "&reviewConceptId=${android.net.Uri.encode(skillId)}"
     }
     fun userProfile(userId: String) = "profile/$userId"
 }
