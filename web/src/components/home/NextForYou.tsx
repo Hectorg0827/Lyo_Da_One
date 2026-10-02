@@ -105,7 +105,7 @@ export default function NextForYou() {
             // something they never learned, and log any success as retention.
             href={
               (isDue
-                ? reviewEntryHref(formatSkillLabel(item.concept_id))
+                ? reviewEntryHref(formatSkillLabel(item.concept_id), item.concept_id)
                 : practiceEntryHref(formatSkillLabel(item.concept_id))) ?? '/classroom'
             }
             className="glass-card p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.01]"
