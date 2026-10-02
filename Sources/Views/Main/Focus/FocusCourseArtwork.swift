@@ -135,10 +135,14 @@ struct FocusCourseArtwork: View {
         for centre in centres {
             var path = Path()
             for corner in 0..<6 {
+                // Trig runs in Double and is converted back explicitly: the
+                // geometry here is CGFloat, and `radius * cos(angle)` with a
+                // Double angle has no unambiguous overload even where CGFloat
+                // and Double happen to be the same width.
                 let angle = Double(corner) * .pi / 3 - .pi / 6
                 let point = CGPoint(
-                    x: centre.x + radius * cos(angle),
-                    y: centre.y + radius * sin(angle)
+                    x: centre.x + radius * CGFloat(cos(angle)),
+                    y: centre.y + radius * CGFloat(sin(angle))
                 )
                 corner == 0 ? path.move(to: point) : path.addLine(to: point)
             }
@@ -322,8 +326,8 @@ struct FocusCourseArtwork: View {
             )
             let angle = Double(index) * 1.9
             let body = CGPoint(
-                x: centre.x + radius * 1.35 * cos(angle),
-                y: centre.y + radius * sin(angle)
+                x: centre.x + radius * 1.35 * CGFloat(cos(angle)),
+                y: centre.y + radius * CGFloat(sin(angle))
             )
             context.fill(
                 Path(ellipseIn: CGRect(x: body.x - 3.4, y: body.y - 3.4, width: 6.8, height: 6.8)),
