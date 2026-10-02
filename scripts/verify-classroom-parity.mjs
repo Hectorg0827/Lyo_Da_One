@@ -16,6 +16,7 @@ const webContract = read('web/src/lib/classroom-contract.mjs');
 const webSpeech = read('web/src/lib/browser-speech.ts');
 const webPage = read('web/src/app/(main)/classroom/page.tsx');
 const webCaption = read('web/src/components/classroom/ClassroomCaptionSync.tsx');
+const webDueReviews = read('web/src/components/chat/DueReviewsNudge.tsx');
 const iosClassroom = read('Sources/Services/LivingClassroomService.swift');
 const iosTts = read('Sources/Core/Networking/Endpoint.swift');
 const iosModels = read('Sources/Models/SDUIModels.swift');
@@ -145,6 +146,9 @@ requireText(androidNavigation, 'const val REVIEW_CLASSROOM', 'Android has a dedi
 requireText(androidNavigation, 'teachingMode = "review"', 'Android review destination preserves retrieval mode');
 requireText(androidNavigation, 'reviewConceptId = entry.arguments?.getString("reviewConceptId")', 'Android review route carries canonical concept identity');
 requireText(androidSocket, 'addQueryParameter("review_concept_id"', 'Android review socket sends canonical concept identity');
+requireText(webContract, "params.set('review_concept_id'", 'Web review socket sends canonical concept identity');
+requireText(webDueReviews, 'reviewEntryHref(label, item.skill_id)', 'Chat due review preserves canonical concept identity');
+rejectText(webDueReviews, 'sendMessage(', 'Chat due review must not create a second unscoped review implementation');
 for (const [source, label] of [
   [iosClassroomView, 'iOS learner record'],
   [androidChrome, 'Android learner record'],
