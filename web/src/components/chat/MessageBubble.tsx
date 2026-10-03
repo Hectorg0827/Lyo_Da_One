@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import { Copy, Check, FileText } from 'lucide-react';
+import { Copy, Check, FileText, Globe2, BookOpen, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
@@ -52,6 +52,22 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [hovered, setHovered] = useState(false);
   const attachments = message.attachments ?? [];
+  const sources = message.sources ?? [];
+  const contract = message.interactionContract;
+  const workspaceLabel =
+    contract?.representation === 'table'
+      ? 'Comparison'
+      : contract?.representation === 'document'
+        ? 'Document analysis'
+        : contract?.representation === 'worked_example'
+          ? 'Worked example'
+          : contract?.representation === 'diagram'
+            ? 'Visual explanation'
+            : contract?.representation === 'timeline'
+              ? 'Timeline'
+              : contract?.depth === 'deep'
+                ? 'Deep explanation'
+                : null;
   
   const {
     isGenerating,
@@ -219,6 +235,17 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
+        {/* The contract chooses the best workspace representation before
+            prose is generated. Keep this label quiet: it explains why a turn
+            looks like a document analysis/table/deep dive without adding a
+            second navigation bar. */}
+        {!isUser && workspaceLabel && (
+          <div className="flex items-center gap-1.5 text-[11px] text-white/40 px-1">
+            <Sparkles className="w-3 h-3" aria-hidden="true" />
+            <span>{workspaceLabel}</span>
+          </div>
+        )}
+
         {/* Regular text bubble */}
         {!hasBlocks && (displayType === 'text' || !displayType) && (displayContent || (isUser && attachments.length > 0)) && (
           <div
@@ -272,6 +299,58 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                 </ReactMarkdown>
               </div>
             )}
+          </div>
+        )}
+
+        {!isUser && sources.length > 0 && (
+          <div className="w-full rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-white/35 mb-2">
+              Sources
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {sources.map((source, index) => {
+                const content = (
+                  <>
+                    {source.kind === 'web' ? (
+                      <Globe2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <BookOpen className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="truncate max-w-[240px]">
+                      {source.kind === 'web' && source.index ? `[${source.index}] ` : ''}
+                      {source.name}
+                    </span>
+                    {source.page_count ? (
+                      <span className="text-white/35">
+                        {source.page_count} {source.page_count === 1 ? 'page' : 'pages'}
+                      </span>
+                    ) : null}
+                  </>
+                );
+                const classes =
+                  'inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] text-white/60 hover:text-white/85 hover:bg-white/10 transition-colors min-w-0';
+                return source.url ? (
+                  <a
+                    key={`${source.url}-${index}`}
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={classes}
+                    title={source.name}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <span
+                    key={`${source.name}-${index}`}
+                    className={classes}
+                    title={source.name}
+                  >
+                    {content}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         )}
 
