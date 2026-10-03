@@ -353,6 +353,9 @@ export const api = {
           // Structured lesson blocks, when the turn carried them. Restored on
           // reload so a lesson does not collapse into plain text.
           blocks?: ChatBlock[] | null;
+          // Persisted Chat experience metadata (grounding sources, interaction
+          // contract, and suggested continuations).
+          ctas?: Array<Record<string, unknown>> | null;
         }>;
       }>(`/api/v1/chat/conversations/${id}`);
     },

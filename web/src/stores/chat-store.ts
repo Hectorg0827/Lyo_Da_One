@@ -5,6 +5,8 @@ import type {
   ChatConversation,
   ChatAttachment,
   ChatBlock,
+  ChatSource,
+  ChatInteractionContract,
   CheckAnswerResult,
   SessionSummary,
   DueReviewItem,
@@ -319,6 +321,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Graded verdicts ride on the block metadata, so an already-answered
       // check stays answered instead of being offered again after a reload.
       const checkResults = blocks ? extractCheckResults(blocks) : undefined;
+      const experienceMeta = Array.isArray(message.ctas)
+        ? message.ctas.find(
+            (item) =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              (item as Record<string, unknown>).type === 'chat_experience'
+          ) as Record<string, unknown> | undefined
+        : undefined;
+      const persistedSources = Array.isArray(experienceMeta?.sources)
+        ? (experienceMeta.sources as ChatSource[])
+        : undefined;
+      const persistedContract =
+        experienceMeta?.interaction_contract &&
+        typeof experienceMeta.interaction_contract === 'object'
+          ? (experienceMeta.interaction_contract as ChatInteractionContract)
+          : undefined;
+      const persistedActions = Array.isArray(experienceMeta?.suggested_actions)
+        ? (experienceMeta.suggested_actions as unknown[])
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        : undefined;
       return {
         id: message.id,
         role: message.role,
@@ -327,6 +349,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         blocks,
         checkResults,
         attachments: parsed.attachments,
+        sources: persistedSources,
+        interactionContract: persistedContract,
+        suggestedActions: persistedActions,
         createdAt: message.created_at,
       };
     });
@@ -521,6 +546,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       receivedContent = true;
       patchAiMessage({ suggestedActions: labels });
     };
+    const attachSourcesToAiMessage = (sources: ChatSource[]) => {
+      patchAiMessage({ sources });
+    };
+    const attachContractToAiMessage = (contract: ChatInteractionContract) => {
+      patchAiMessage({ interactionContract: contract });
+    };
 
     // Course-generation milestones can arrive before OPEN_CLASSROOM. Ensure
     // those milestones have a real proposal message to render into instead of
@@ -581,6 +612,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               convoId!,
               reduceTeachingPolicy(teachingRuntimeFor(convoId!), chunk)
             );
+          } else if (chunk.type === 'interaction_contract') {
+            const mode = typeof chunk.mode === 'string' ? chunk.mode : null;
+            const depth = typeof chunk.depth === 'string' ? chunk.depth : null;
+            const representation =
+              typeof chunk.representation === 'string' ? chunk.representation : null;
+            if (mode && depth && representation) {
+              attachContractToAiMessage(chunk as unknown as ChatInteractionContract);
+            }
+          } else if (chunk.type === 'sources') {
+            const sources = Array.isArray(chunk.sources)
+              ? (chunk.sources as ChatSource[]).filter(
+                  (source) => Boolean(source) && typeof source.name === 'string'
+                )
+              : [];
+            if (sources.length) attachSourcesToAiMessage(sources);
           } else if (chunk.type === 'course_generation') {
             const eventProgress =
               typeof chunk.progress === 'number'
@@ -784,7 +830,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         teachingStateSummary(
           teachingRuntimeFor(convoId),
           options.courseContext
-        ) as Record<string, unknown> | undefined
+        ) as unknown as Record<string, unknown> | undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {

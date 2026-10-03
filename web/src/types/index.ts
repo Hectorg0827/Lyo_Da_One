@@ -39,6 +39,42 @@ export interface ChatAttachment {
   kind: 'image' | 'document';
 }
 
+export interface ChatSource {
+  kind: 'document' | 'image' | 'web' | 'reference';
+  name: string;
+  url?: string | null;
+  index?: number;
+  page_count?: number;
+  pages?: number[];
+}
+
+export interface ChatInteractionContract {
+  mode:
+    | 'answer'
+    | 'analyze'
+    | 'explain'
+    | 'teach'
+    | 'quiz'
+    | 'create'
+    | 'compare'
+    | 'search'
+    | 'continue'
+    | 'clarify';
+  depth: 'concise' | 'standard' | 'deep';
+  representation:
+    | 'prose'
+    | 'bullets'
+    | 'table'
+    | 'timeline'
+    | 'diagram'
+    | 'worked_example'
+    | 'document';
+  fast_lane?: boolean;
+  requires_search?: boolean;
+  suggested_actions?: string[];
+  reason_code?: string;
+}
+
 /**
  * Structured content blocks streamed with an assistant turn.
  *
@@ -224,6 +260,10 @@ export interface ChatMessage {
   suggestedActions?: string[];
   metadata?: Record<string, unknown>;
   attachments?: ChatAttachment[];
+  /** Grounding used for this answer. */
+  sources?: ChatSource[];
+  /** Server-authoritative interaction shape chosen before pedagogy/planning. */
+  interactionContract?: ChatInteractionContract;
   createdAt: string;
 }
 
