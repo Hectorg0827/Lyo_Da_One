@@ -831,7 +831,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           ...(teachingStateSummary(
             teachingRuntimeFor(convoId),
             options.courseContext
-          ) as Record<string, unknown>),
+          ) ?? {}),
           chat_preferences: {
             response_depth: responseDepth,
           },
