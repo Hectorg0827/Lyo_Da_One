@@ -5,6 +5,8 @@ import type {
   ChatConversation,
   ChatAttachment,
   ChatBlock,
+  ChatSource,
+  ChatInteractionContract,
   CheckAnswerResult,
   SessionSummary,
   DueReviewItem,
@@ -115,6 +117,22 @@ let activeStreamToken = 0;
 // would leak one chat's recent quiz/explanation cadence into another chat.
 type TeachingRuntimeState = ReturnType<typeof emptyTeachingRuntimeState>;
 const teachingRuntimeByConversation = new Map<string, TeachingRuntimeState>();
+
+type ChatResponseDepth = 'concise' | 'standard' | 'deep';
+const responseDepthByConversation = new Map<string, ChatResponseDepth>();
+
+function inferDepthControl(text: string): ChatResponseDepth | null {
+  if (/\b(go deeper|deep dive|more detail|detailed|in depth|profundiza|más detalle|a fondo)\b/i.test(text)) {
+    return 'deep';
+  }
+  if (/\b(keep it concise|keep it short|brief|concise|short answer|tl;?dr|breve|conciso|corto)\b/i.test(text)) {
+    return 'concise';
+  }
+  if (/\b(normal detail|standard detail|normal length)\b/i.test(text)) {
+    return 'standard';
+  }
+  return null;
+}
 
 function teachingRuntimeFor(conversationId: string): TeachingRuntimeState {
   return teachingRuntimeByConversation.get(conversationId) ?? emptyTeachingRuntimeState();
@@ -388,6 +406,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }
 
+    const depthControl = inferDepthControl(trimmedContent);
+    if (depthControl) {
+      responseDepthByConversation.set(convoId, depthControl);
+    }
+    const responseDepth = responseDepthByConversation.get(convoId) ?? 'standard';
+
     const userMessage: ChatMessage = {
       id: generateId(),
       role: 'user',
@@ -521,6 +545,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       receivedContent = true;
       patchAiMessage({ suggestedActions: labels });
     };
+    const attachSourcesToAiMessage = (sources: ChatSource[]) => {
+      receivedContent = true;
+      patchAiMessage({ sources });
+    };
+    const attachContractToAiMessage = (contract: ChatInteractionContract) => {
+      patchAiMessage({ interactionContract: contract });
+    };
 
     // Course-generation milestones can arrive before OPEN_CLASSROOM. Ensure
     // those milestones have a real proposal message to render into instead of
@@ -581,6 +612,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               convoId!,
               reduceTeachingPolicy(teachingRuntimeFor(convoId!), chunk)
             );
+          } else if (chunk.type === 'interaction_contract') {
+            const mode = typeof chunk.mode === 'string' ? chunk.mode : null;
+            const depth = typeof chunk.depth === 'string' ? chunk.depth : null;
+            const representation =
+              typeof chunk.representation === 'string' ? chunk.representation : null;
+            if (mode && depth && representation) {
+              attachContractToAiMessage(chunk as unknown as ChatInteractionContract);
+            }
+          } else if (chunk.type === 'sources') {
+            const sources = Array.isArray(chunk.sources)
+              ? (chunk.sources as ChatSource[]).filter(
+                  (source) => Boolean(source) && typeof source.name === 'string'
+                )
+              : [];
+            if (sources.length) attachSourcesToAiMessage(sources);
           } else if (chunk.type === 'course_generation') {
             const eventProgress =
               typeof chunk.progress === 'number'
@@ -781,10 +827,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        teachingStateSummary(
-          teachingRuntimeFor(convoId),
-          options.courseContext
-        ) as Record<string, unknown> | undefined
+        {
+          ...(teachingStateSummary(
+            teachingRuntimeFor(convoId),
+            options.courseContext
+          ) as Record<string, unknown>),
+          chat_preferences: {
+            response_depth: responseDepth,
+          },
+        }
       );
     } catch {
       if (streamToken === activeStreamToken) {
