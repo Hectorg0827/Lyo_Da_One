@@ -7,6 +7,7 @@ export interface ClassroomContractConnection {
   courseId?: string;
   recordScope?: 'unit' | 'topic';
   lessonId?: string;
+  reviewConceptId?: string;
   objective?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
   mode?: ClassroomMode;

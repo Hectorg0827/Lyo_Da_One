@@ -210,6 +210,44 @@ data class StoriesResponse(
     @SerializedName("my_story") val myStory: StoryDto? = null,
 )
 
+// ── Spaced review ────────────────────────────────────────────────────────────
+
+data class DueReviewItemDto(
+    @SerializedName("skill_id") val skillId: String,
+    @SerializedName("skill_name") val skillName: String? = null,
+    @SerializedName("days_overdue") val daysOverdue: Int = 0,
+    @SerializedName("mastery_level") val masteryLevel: Double? = null,
+    @SerializedName("last_misconception") val lastMisconception: String? = null,
+)
+
+data class DueReviewsResponseDto(
+    val items: List<DueReviewItemDto> = emptyList(),
+)
+
+// ── Learner evidence ─────────────────────────────────────────────────────────
+
+data class EvidenceRungDto(
+    val kind: String,
+    val confidence: Double = 0.0,
+    val unaided: Boolean = false,
+)
+
+data class LearnerConceptRecordDto(
+    @SerializedName("concept_id") val conceptId: String,
+    @SerializedName("display_name") val displayName: String? = null,
+    val state: String = "NOT_SEEN",
+    val rungs: List<EvidenceRungDto> = emptyList(),
+    @SerializedName("best_rung") val bestRung: String? = null,
+    val misconception: String? = null,
+    @SerializedName("next_rung") val nextRung: String? = null,
+    @SerializedName("last_seen") val lastSeen: String? = null,
+)
+
+data class LearnerEvidenceRecordDto(
+    val concepts: List<LearnerConceptRecordDto> = emptyList(),
+    val unavailable: Boolean = false,
+)
+
 // ── Courses ──────────────────────────────────────────────────────────────────
 
 data class CourseDto(

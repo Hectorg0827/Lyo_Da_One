@@ -43,7 +43,10 @@ sealed class ClassroomServerEvent {
      *  class doc) and for the real welcome scene's embedded array — empty
      *  for a plain scene_start that carries no inline content, which is
      *  still a valid, common shape (mid-lesson scene transitions). */
-    data class SceneStartEvent(val components: List<ClassroomComponent> = emptyList()) : ClassroomServerEvent()
+    data class SceneStartEvent(
+        val components: List<ClassroomComponent> = emptyList(),
+        val metadata: ClassroomSceneMetadata? = null,
+    ) : ClassroomServerEvent()
 
     data object SceneCompleteEvent : ClassroomServerEvent()
 
@@ -103,7 +106,12 @@ fun parseServerEvent(raw: String): ClassroomServerEvent? {
             val components = componentsArray
                 ?.mapNotNull { element -> if (element.isJsonObject) parseComponent(element.asJsonObject) else null }
                 ?: emptyList()
-            ClassroomServerEvent.SceneStartEvent(components)
+            val metadata = sceneObj?.getAsJsonObject("metadata")?.let { metadataJson ->
+                runCatching {
+                    ApiClient.gson.fromJson(metadataJson, ClassroomSceneMetadata::class.java)
+                }.getOrNull()
+            }
+            ClassroomServerEvent.SceneStartEvent(components, metadata)
         }
 
         in SCENE_COMPLETE_TYPES -> ClassroomServerEvent.SceneCompleteEvent

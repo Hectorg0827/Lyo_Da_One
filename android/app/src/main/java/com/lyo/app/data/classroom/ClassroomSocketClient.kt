@@ -67,6 +67,8 @@ object ClassroomSocketClient {
         val reducedMotion: Boolean,
         val objective: String?,
         val difficulty: String?,
+        val courseId: String?,
+        val reviewConceptId: String?,
     )
 
     /**
@@ -82,6 +84,8 @@ object ClassroomSocketClient {
         reducedMotion: Boolean = false,
         objective: String? = null,
         difficulty: String? = null,
+        courseId: String? = null,
+        reviewConceptId: String? = null,
     ) {
         pendingConnection = ConnectionParams(
             sessionId = sessionId.ifBlank { topic },
@@ -91,6 +95,8 @@ object ClassroomSocketClient {
             reducedMotion = reducedMotion,
             objective = objective,
             difficulty = difficulty?.takeIf { it in VALID_DIFFICULTIES },
+            courseId = courseId?.takeIf { it.isNotBlank() },
+            reviewConceptId = reviewConceptId?.takeIf { it.isNotBlank() },
         )
         shouldRun = true
         reconnectAttempt = 0
@@ -104,9 +110,8 @@ object ClassroomSocketClient {
         teardown()
     }
 
-    fun send(envelope: UserActionEnvelope) {
-        socket?.send(ApiClient.gson.toJson(envelope))
-    }
+    fun send(envelope: UserActionEnvelope): Boolean =
+        socket?.send(ApiClient.gson.toJson(envelope)) == true
 
     @Synchronized
     private fun open() {
@@ -125,11 +130,15 @@ object ClassroomSocketClient {
 
         val urlBuilder = "$wsBase/api/v1/classroom/ws/connect".toHttpUrl().newBuilder()
             .addQueryParameter("session_id", params.sessionId)
+            .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", params.topic)
             .addQueryParameter("mode", params.mode)
             .addQueryParameter("duration_minutes", params.durationMinutes.toString())
+            .addQueryParameter("language", "auto")
             .addQueryParameter("reduced_motion", params.reducedMotion.toString())
             .addQueryParameter("token", token)
+        params.courseId?.let { urlBuilder.addQueryParameter("course_id", it) }
+        params.reviewConceptId?.let { urlBuilder.addQueryParameter("review_concept_id", it) }
         params.objective?.let { urlBuilder.addQueryParameter("objective", it) }
         params.difficulty?.let { urlBuilder.addQueryParameter("difficulty", it) }
 

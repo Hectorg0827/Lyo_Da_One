@@ -27,7 +27,7 @@ import java.util.Locale
  * Plays the same backend-rendered teacher audio as Web and iOS.
  * Android TextToSpeech is a locale-aware emergency fallback only.
  */
-internal class ClassroomVoicePlayer(context: Context) {
+class ClassroomVoicePlayer(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var playbackJob: Job? = null

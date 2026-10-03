@@ -129,6 +129,7 @@ export interface SessionSummary {
 /** A skill whose spaced-repetition schedule says it's due for another look. */
 export interface DueReviewItem {
   skill_id: string;
+  skill_name?: string | null;
   days_overdue: number;
   mastery_level?: number | null;
   last_misconception?: string | null;

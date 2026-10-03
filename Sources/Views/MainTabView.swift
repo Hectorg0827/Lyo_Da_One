@@ -224,12 +224,15 @@ struct MainTabView: View {
         }
         .fullScreenCover(isPresented: $isLiveClassroomPresented) {
             if let data = liveClassroomData {
+                let stackItem = uiStackStore.items.first(where: {
+                    $0.type == .course && $0.courseId == data.courseId
+                })
                 LivingClassroomView(
                     courseId: data.courseId,
                     courseTitle: data.courseTitle,
-                    focusedConcept: uiStackStore.items.first(where: {
-                        $0.type == .course && $0.courseId == data.courseId
-                    })?.focusedConcept == true
+                    focusedConcept: stackItem?.focusedConcept == true,
+                    reviewConceptId: stackItem?.reviewConceptId,
+                    teachingMode: stackItem?.reviewConceptId == nil ? "solo" : "review"
                 )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)
@@ -237,12 +240,15 @@ struct MainTabView: View {
         }
         .fullScreenCover(isPresented: $isLivingClassroomPresented) {
             if let data = livingClassroomData {
+                let stackItem = uiStackStore.items.first(where: {
+                    $0.type == .course && $0.courseId == data.courseId
+                })
                 LivingClassroomView(
                     courseId: data.courseId,
                     courseTitle: data.courseTitle,
-                    focusedConcept: uiStackStore.items.first(where: {
-                        $0.type == .course && $0.courseId == data.courseId
-                    })?.focusedConcept == true
+                    focusedConcept: stackItem?.focusedConcept == true,
+                    reviewConceptId: stackItem?.reviewConceptId,
+                    teachingMode: stackItem?.reviewConceptId == nil ? "solo" : "review"
                 )
                 .environmentObject(uiStackStore)
                 .environmentObject(uiState)

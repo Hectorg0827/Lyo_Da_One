@@ -10,7 +10,7 @@ on:
     # listing them here too ran every job twice per push.
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, chat-course-builder-ux-20261001]
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -73,6 +73,7 @@ object Routes {
     const val CHAT = "chat"
     const val TEST_PREP = "test-prep"
     const val PREP_CLASSROOM = "test-prep/classroom/{sessionId}?topic={topic}&mode={mode}"
+    const val REVIEW_CLASSROOM = "review/classroom/{sessionId}?topic={topic}&reviewConceptId={reviewConceptId}"
     const val COMMUNITY = "community"
     const val POST_DETAIL = "community/{postId}"
     const val GROUPS = "groups"
@@ -109,6 +110,11 @@ object Routes {
     fun communityInvite(token: String) = "community/invite/$token"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun classroom(courseId: String) = "classroom/$courseId"
+    fun reviewClassroom(skillId: String, topic: String): String {
+        val session = android.net.Uri.encode("review-$skillId")
+        return "review/classroom/$session?topic=${android.net.Uri.encode(topic)}" +
+            "&reviewConceptId=${android.net.Uri.encode(skillId)}"
+    }
     fun userProfile(userId: String) = "profile/$userId"
 }
 
@@ -214,6 +220,15 @@ private fun LyoNavHost() {
                 ClassroomScreen(nav, entry.arguments?.getString("sessionId") ?: "",
                     topicOverride = entry.arguments?.getString("topic"),
                     teachingMode = entry.arguments?.getString("mode") ?: "solo")
+            }
+            composable(Routes.REVIEW_CLASSROOM) { entry ->
+                ClassroomScreen(
+                    nav = nav,
+                    courseId = entry.arguments?.getString("sessionId") ?: "",
+                    topicOverride = entry.arguments?.getString("topic"),
+                    teachingMode = "review",
+                    reviewConceptId = entry.arguments?.getString("reviewConceptId"),
+                )
             }
             composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }
             composable(Routes.COMMUNITY_NODE) { entry ->

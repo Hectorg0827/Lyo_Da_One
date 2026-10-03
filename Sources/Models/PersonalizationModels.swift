@@ -10,6 +10,28 @@ public enum ActionType: String, Codable {
     case `break` = "break"
 }
 
+public struct DueReviewItem: Codable, Equatable, Identifiable {
+    public let skillId: String
+    public let skillName: String?
+    public let daysOverdue: Int
+    public let masteryLevel: Double?
+    public let lastMisconception: String?
+
+    public var id: String { skillId }
+
+    enum CodingKeys: String, CodingKey {
+        case skillId = "skill_id"
+        case skillName = "skill_name"
+        case daysOverdue = "days_overdue"
+        case masteryLevel = "mastery_level"
+        case lastMisconception = "last_misconception"
+    }
+}
+
+public struct DueReviewsResponse: Codable, Equatable {
+    public let items: [DueReviewItem]
+}
+
 public struct NextActionResponse: Codable {
     public let action: ActionType
     public let difficulty: String
@@ -203,6 +225,40 @@ public struct KnowledgeTraceResult: Codable {
         case newMastery = "new_mastery"
         case oldMastery = "old_mastery"
     }
+}
+
+public struct EvidenceRungRecord: Codable, Equatable {
+    public let kind: String
+    public let confidence: Double
+    public let unaided: Bool
+}
+
+public struct LearnerConceptRecord: Codable, Equatable, Identifiable {
+    public let conceptId: String
+    public let displayName: String?
+    public let state: String
+    public let rungs: [EvidenceRungRecord]
+    public let bestRung: String?
+    public let misconception: String?
+    public let nextRung: String?
+    public let lastSeen: String?
+
+    public var id: String { conceptId }
+
+    enum CodingKeys: String, CodingKey {
+        case conceptId = "concept_id"
+        case displayName = "display_name"
+        case state, rungs
+        case bestRung = "best_rung"
+        case misconception
+        case nextRung = "next_rung"
+        case lastSeen = "last_seen"
+    }
+}
+
+public struct LearnerEvidenceRecord: Codable, Equatable {
+    public let concepts: [LearnerConceptRecord]
+    public let unavailable: Bool
 }
 
 public struct MasteryProfile: Codable {

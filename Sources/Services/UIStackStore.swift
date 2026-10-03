@@ -57,48 +57,60 @@ final class UIStackStore: ObservableObject {
 
     // MARK: - Spaced-Repetition Reviews
 
-    /// Refreshes canonical server progress first, then asks the personalization
-    /// engine whether spaced-repetition reviews are due.
+    /// Refreshes canonical server progress plus the actual spaced-repetition
+    /// rows that are due. Weaknesses and due reviews are intentionally separate:
+    /// a weak concept may need teaching, while a due concept is eligible for
+    /// delayed retrieval evidence.
     func refreshDueReviews() async {
-        // Pull first: surfaces courses started on another device/platform
-        // that this device has never seen locally. refreshCourseProgressFromBackend
-        // below only refreshes items already known locally, so without this
-        // a course started elsewhere would never appear here.
         await mergeCourseStacksFromBackend()
         await refreshCourseProgressFromBackend()
 
-        // Fetch the profile first — it also powers the weekly weakness quest,
-        // which should refresh whether or not reviews are due.
-        guard let profile = try? await PersonalizationService.shared.getMasteryProfile()
-        else { return }
-
-        await MainActor.run {
-            GamificationService.shared.refreshWeeklyQuest(
-                weaknesses: profile.recommendedFocus.isEmpty
-                    ? profile.weaknesses : profile.recommendedFocus
-            )
-        }
-
-        guard let next = try? await PersonalizationService.shared.getNextAction(),
-              next.spacedRepetitionDue == true || next.action == .review
-        else { return }
-
-        let focus = profile.recommendedFocus.isEmpty ? profile.weaknesses : profile.recommendedFocus
-        let skills = focus
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .prefix(2)
-        guard !skills.isEmpty else { return }
-
-        await MainActor.run {
-            for skill in skills {
-                upsertCourse(
-                    courseId: "GENERATE:\(skill)",
-                    title: "Review: \(skill.capitalized)",
-                    subtitle: "Due for a quick refresher",
-                    focusedConcept: true
+        // Weaknesses still power the weekly quest; they do not decide which
+        // review cards appear.
+        if let profile = try? await PersonalizationService.shared.getMasteryProfile() {
+            await MainActor.run {
+                GamificationService.shared.refreshWeeklyQuest(
+                    weaknesses: profile.recommendedFocus.isEmpty
+                        ? profile.weaknesses : profile.recommendedFocus
                 )
             }
+        }
+
+        // On a transient read failure, keep the last known cards rather than
+        // falsely declaring the learner's review queue empty.
+        guard let due = try? await PersonalizationService.shared.getDueReviews()
+        else { return }
+
+        let dueIds = Set(due.items.map(\.skillId))
+        await MainActor.run {
+            // A completed review is rescheduled server-side. Remove any local
+            // card whose concept is no longer in the canonical due set.
+            items.removeAll { item in
+                guard let conceptId = item.reviewConceptId else { return false }
+                return !dueIds.contains(conceptId)
+            }
+
+            for review in due.items {
+                let label = review.skillName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let title = (label?.isEmpty == false ? label! :
+                    review.skillId
+                        .replacingOccurrences(of: "_", with: " ")
+                        .replacingOccurrences(of: "-", with: " ")
+                        .capitalized)
+                let timing = review.daysOverdue > 0
+                    ? "\(review.daysOverdue) day\(review.daysOverdue == 1 ? "" : "s") overdue"
+                    : "Due now"
+
+                upsertCourse(
+                    courseId: "GENERATE:review:\(review.skillId)",
+                    title: title,
+                    subtitle: "\(timing) · fresh retrieval",
+                    focusedConcept: true,
+                    reviewConceptId: review.skillId
+                )
+            }
+            sortByRecency()
+            saveToDisk()
         }
     }
 
@@ -111,6 +123,7 @@ final class UIStackStore: ObservableObject {
         subtitle: String? = nil,
         courseDescription: String? = nil,
         focusedConcept: Bool? = nil,
+        reviewConceptId: String? = nil,
         progress: Double? = nil,
         lessonCount: Int? = nil,
         completedLessons: Int? = nil
@@ -131,6 +144,7 @@ final class UIStackStore: ObservableObject {
             progress: progress ?? existing?.progress,
             courseId: courseId,
             focusedConcept: focusedConcept ?? existing?.focusedConcept,
+            reviewConceptId: reviewConceptId ?? existing?.reviewConceptId,
             lessonCount: lessonCount ?? existing?.lessonCount,
             completedLessons: completedLessons ?? existing?.completedLessons
         )

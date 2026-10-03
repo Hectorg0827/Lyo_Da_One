@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lyo.app.data.StackRepository
+import com.lyo.app.data.api.ApiClient
+import com.lyo.app.data.api.LearnerEvidenceRecordDto
 import com.lyo.app.data.a2ui.A2uiAction
 import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiSurfaceState
@@ -16,6 +18,7 @@ import com.lyo.app.data.classroom.DirectorTurn
 import com.lyo.app.ui.classroom.a2ui.BasicCatalog
 import com.lyo.app.ui.classroom.a2ui.A2uiCatalog
 import com.lyo.app.ui.classroom.catalog.ClassroomCatalog
+import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,6 +60,9 @@ class ClassroomEngine(
     private val durationMinutes: Int = 10,
     private val objective: String? = null,
     private val difficulty: String? = null,
+    private val courseBacked: Boolean = true,
+    private val reviewConceptId: String? = null,
+    private val voicePlayer: ClassroomVoicePlayer? = null,
 ) {
     val sessionId: String = sessionIdParam?.takeIf { it.isNotBlank() } ?: topic
 
@@ -78,6 +84,8 @@ class ClassroomEngine(
     var status by mutableStateOf("connecting"); private set
     var errorMessage by mutableStateOf<String?>(null); private set
     var isPaused by mutableStateOf(false); private set
+    var isVoiceEnabled by mutableStateOf(true); private set
+    private var voiceLanguage: String = "auto"
 
     /**
      * True while a user_prompt is unanswered — the ONE checkpoint type
@@ -97,6 +105,12 @@ class ClassroomEngine(
 
     /** The notebook drawer's content — see TranscriptLine's doc comment. */
     val transcript = mutableStateListOf<TranscriptLine>()
+
+    /** Server-owned evidence only. Never derived from transcript or local UI state. */
+    var learnerRecord by mutableStateOf<LearnerEvidenceRecordDto?>(null); private set
+    var learnerRecordLoading by mutableStateOf(false); private set
+    var learnerRecordFailed by mutableStateOf(false); private set
+    var recordConcepts by mutableStateOf<List<String>>(emptyList()); private set
 
     private fun pushTranscript(speaker: String, text: String) {
         if (text.isBlank()) return
@@ -128,13 +142,32 @@ class ClassroomEngine(
             reducedMotion = ClassroomPreferences.reducedMotion,
             objective = objective,
             difficulty = difficulty,
+            courseId = sessionId.takeIf { courseBacked },
+            reviewConceptId = reviewConceptId,
         )
     }
 
     fun dispose() {
         flushActivities()
+        voicePlayer?.close()
         ClassroomSocketClient.disconnect()
         scope.cancel()
+    }
+
+    fun refreshLearnerRecord() {
+        if (learnerRecordLoading) return
+        learnerRecordLoading = true
+        scope.launch {
+            try {
+                learnerRecord = ApiClient.api.learnerEvidenceRecord()
+                learnerRecordFailed = false
+            } catch (_: Exception) {
+                // A failed read is not an empty learner record.
+                learnerRecordFailed = true
+            } finally {
+                learnerRecordLoading = false
+            }
+        }
     }
 
     // ── Incoming ──────────────────────────────────────────────────────────
@@ -158,6 +191,7 @@ class ClassroomEngine(
 
             is ClassroomServerEvent.SceneStartEvent -> {
                 status = "live"
+                recordConcepts = event.metadata?.target_concepts.orEmpty()
                 // Lazy erase: don't clear the board the instant scene_start
                 // arrives on its own — wait until real content actually
                 // lands, so the board never flashes empty during ordinary
@@ -181,6 +215,7 @@ class ClassroomEngine(
     }
 
     private fun processComponent(component: ClassroomComponent) {
+        component.language_code?.takeIf { it.isNotBlank() }?.let { voiceLanguage = it }
         val id = component.component_id
         if (id != null) {
             if (id in processedComponentIds) return
@@ -210,6 +245,7 @@ class ClassroomEngine(
      *  forget: StackRepository is itself resilient (never throws), and a
      *  failed sync must never interrupt turn playback. */
     private fun syncStackProgress(component: ClassroomComponent) {
+        if (!courseBacked) return
         val total = (component.total ?: 1).coerceAtLeast(1)
         val current = (component.current ?: 0).coerceIn(0, total)
         scope.launch {
@@ -261,7 +297,13 @@ class ClassroomEngine(
         applyMutation(mutation)
 
         when (turn.type) {
-            "speech", "user_prompt" -> pushTranscript(turn.speaker ?: "Teacher", turn.text.orEmpty())
+            "speech", "user_prompt" -> {
+                val spoken = turn.text.orEmpty()
+                pushTranscript(turn.speaker ?: "Teacher", spoken)
+                if (isVoiceEnabled && spoken.isNotBlank()) {
+                    voicePlayer?.play(spoken, voiceLanguage)
+                }
+            }
             "session_end" -> pushTranscript(
                 "Teacher",
                 "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
@@ -324,18 +366,19 @@ class ClassroomEngine(
         return base + 80L
     }
 
-    /** No TTS integration in this v1 (see the implementation plan) — a
-     *  character-count-based reading-pace stand-in, clamped to a sane
-     *  range, so speech turns still feel roughly paced to their length
-     *  rather than flashing by instantly or stalling on a long line. */
+    /** Keep the paced director queue from cutting off shared teacher audio.
+     *  160–175 wpm is a normal explanatory speaking rate; the player may use
+     *  a provider voice or the device fallback, so use a conservative bounded
+     *  estimate instead of provider-specific duration metadata. */
     private fun readingDurationMs(text: String?): Long {
-        val length = text?.length ?: 0
-        return (length * 45L).coerceIn(1200L, 4200L)
+        val words = text?.trim()?.split(Regex("\\s+"))?.count { it.isNotBlank() } ?: 0
+        return (words * 360L).coerceIn(1200L, 24_000L)
     }
 
     // ── Outgoing: board-content actions (from the A2UI renderer) ────────
 
     fun onAction(action: A2uiAction) {
+        if (action.name != "update_activity") voicePlayer?.stop()
         if (action.name == "update_activity") {
             activityUpdates[action.sourceComponentId] = action
             activitySaveJob?.cancel()
@@ -343,28 +386,29 @@ class ClassroomEngine(
             return
         }
         flushActivities()
+        val sent = ClassroomSocketClient.send(
+            ClassroomBridge.actionToUserAction(action, sessionId),
+        )
+        if (!sent) return
         if (action.name == "submitPrompt") {
             promptTimeoutJob?.cancel()
             hasActiveCheckpoint = false
             val answer = action.context["selectedLabel"]?.takeIf { it.isJsonPrimitive }?.asString
                 ?: action.context["value"]?.takeIf { it.isJsonPrimitive }?.asString
             answer?.let { pushTranscript("You", it) }
-            // Close the open-response Send/"I'm not sure" buttons the
-            // instant this fires, before the network round-trip — prevents
-            // a double-tap from sending a duplicate answer (the chip/
-            // ChoicePicker path already self-disables via its own
-            // selectedId check and doesn't need this).
             action.context["promptId"]?.takeIf { it.isJsonPrimitive }?.asString?.let { promptId ->
                 applyMessage(ClassroomBridge.closePromptPanel(promptId))
             }
-        }
-        ClassroomSocketClient.send(ClassroomBridge.actionToUserAction(action, sessionId))
-        if (action.name == "submitPrompt") {
             scope.launch { playNext() }
         }
     }
 
     // ── Outgoing: chrome-originated actions ──────────────────────────────
+
+    fun toggleVoice() {
+        isVoiceEnabled = !isVoiceEnabled
+        voicePlayer?.setEnabled(isVoiceEnabled)
+    }
 
     fun togglePause() {
         if (isPaused) {
@@ -381,15 +425,19 @@ class ClassroomEngine(
             if (!hasActiveCheckpoint) startPlayer()
         } else {
             isPaused = true
+            voicePlayer?.stop()
             playerJob?.cancel()
             promptTimeoutJob?.cancel()
         }
     }
 
     fun continueLesson() {
+        voicePlayer?.stop()
         flushActivities()
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
-        ClassroomSocketClient.send(ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId))
+        ClassroomSocketClient.send(
+            ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
+        )
     }
 
     private fun flushActivities() {
@@ -401,28 +449,36 @@ class ClassroomEngine(
     }
 
     fun askQuestion(text: String) {
+        voicePlayer?.stop()
         flushActivities()
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        pushTranscript("You", "✋ $trimmed")
-        ClassroomSocketClient.send(ClassroomBridge.askQuestionAction(sessionId, trimmed))
+        if (ClassroomSocketClient.send(ClassroomBridge.askQuestionAction(sessionId, trimmed))) {
+            pushTranscript("You", "✋ $trimmed")
+        }
     }
 
     fun requestHint(level: String) {
+        voicePlayer?.stop()
         flushActivities()
-        pushTranscript("You", "Requested a hint")
-        ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))
+        if (ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))) {
+            pushTranscript("You", "Requested a hint")
+        }
     }
 
     fun signalConfused() {
+        voicePlayer?.stop()
         flushActivities()
-        pushTranscript("You", "Requested a small nudge")
-        ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))
+        if (ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))) {
+            pushTranscript("You", "Requested a small nudge")
+        }
     }
 
     fun signalTooEasy() {
+        voicePlayer?.stop()
         flushActivities()
-        pushTranscript("You", "Requested a harder case")
-        ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))
+        if (ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))) {
+            pushTranscript("You", "Requested a harder case")
+        }
     }
 }

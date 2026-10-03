@@ -71,11 +71,12 @@ test('course and lesson identity is carried through when present', () => {
 });
 
 test('a due review enters review mode, carrying no stored question', () => {
-  const href = reviewEntryHref('Quadratic Functions');
+  const href = reviewEntryHref('Quadratic Functions', 'concept-123');
   const params = query(href);
   assert.equal(params.get('mode'), 'review');
   assert.equal(params.get('topic'), 'Quadratic Functions');
   assert.equal(params.get('objective'), 'Retrieve and re-apply Quadratic Functions');
+  assert.equal(params.get('reviewConceptId'), 'concept-123');
   // Retrieval is generated fresh: replaying the exact question the learner
   // already saw tests recall of that question, not of the concept.
   assert.equal(params.get('question'), null);

@@ -67,6 +67,7 @@ import com.lyo.app.data.Session
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.CourseDto
+import com.lyo.app.data.api.DueReviewItemDto
 import com.lyo.app.data.api.StackItemDto
 import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
@@ -88,6 +89,8 @@ fun HomeScreen(nav: NavHostController) {
     var overview by remember { mutableStateOf<JsonObject?>(null) }
     var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
     var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
+    var dueReviews by remember { mutableStateOf<List<DueReviewItemDto>>(emptyList()) }
+    var reviewError by remember { mutableStateOf<String?>(null) }
     var catalogError by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var stackFilter by remember { mutableStateOf(FocusPresentation.Filter.All) }
@@ -111,6 +114,15 @@ fun HomeScreen(nav: NavHostController) {
         // internally resilient; an empty list here just means "none yet"
         // or "sync failed," handled identically by EmptyLearningCard below).
         courseStacks = StackRepository.listCourseStacks()
+
+        runCatching { ApiClient.api.dueReviews() }
+            .onSuccess {
+                dueReviews = it.items
+                reviewError = null
+            }
+            .onFailure {
+                reviewError = "Your review schedule could not be loaded right now."
+            }
 
         loaded = true
     }
@@ -203,6 +215,79 @@ fun HomeScreen(nav: NavHostController) {
                     accent = LyoGreen,
                     modifier = Modifier.weight(1f),
                 )
+            }
+        }
+
+        if (dueReviews.isNotEmpty() || reviewError != null) {
+            item {
+                SectionHeader("Ready to review")
+                when {
+                    dueReviews.isNotEmpty() -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            dueReviews.take(3).forEach { review ->
+                                val title = review.skillName?.takeIf { it.isNotBlank() }
+                                    ?: humanizeSkillId(review.skillId)
+                                GlassCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            nav.navigate(
+                                                Routes.reviewClassroom(
+                                                    skillId = review.skillId,
+                                                    topic = title,
+                                                ),
+                                            )
+                                        },
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(14.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.MenuBook,
+                                            contentDescription = null,
+                                            tint = LyoPurple,
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(start = 10.dp),
+                                        ) {
+                                            Text(
+                                                text = title,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = TextPrimary,
+                                            )
+                                            Text(
+                                                text = when {
+                                                    review.daysOverdue <= 0 ->
+                                                        "Due now · fresh retrieval"
+                                                    review.daysOverdue == 1 ->
+                                                        "1 day overdue · fresh retrieval"
+                                                    else ->
+                                                        "${review.daysOverdue} days overdue · fresh retrieval"
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary,
+                                                modifier = Modifier.padding(top = 2.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else -> GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = reviewError
+                                ?: "Your review schedule could not be loaded right now.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(14.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -363,6 +448,15 @@ fun HomeScreen(nav: NavHostController) {
         item { Spacer(Modifier.height(8.dp)) }
     }
 }
+
+private fun humanizeSkillId(value: String): String =
+    value.replace("_", " ")
+        .replace("-", " ")
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { token ->
+            token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
 
 @Composable
 private fun StatCard(

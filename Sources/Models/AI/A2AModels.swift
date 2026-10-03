@@ -775,6 +775,18 @@ struct ClassroomScenePayload: Codable {
     let components: [SceneComponent]
     let metadata: [String: AnyCodable]?
 
+    var teachingAction: String? {
+        metadata?["teaching_action"]?.value as? String
+    }
+
+    var targetEvidenceType: String? {
+        metadata?["target_evidence_type"]?.value as? String
+    }
+
+    var teachingPolicyVersion: String? {
+        metadata?["teaching_policy_version"]?.value as? String
+    }
+
     enum CodingKeys: String, CodingKey {
         case sceneId = "scene_id"
         case sceneType = "scene_type"

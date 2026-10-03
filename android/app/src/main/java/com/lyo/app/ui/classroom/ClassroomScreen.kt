@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,9 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
+import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
 import com.lyo.app.ui.classroom.a2ui.RenderNode
+import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextSecondary
@@ -50,11 +53,36 @@ import com.lyo.app.ui.theme.TextSecondary
  * own scope.
  */
 @Composable
-fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = topic) {
-    val engine = remember(topic, courseId) { ClassroomEngine(topic = topic, sessionIdParam = courseId) }
+fun ClassroomScreen(
+    nav: NavHostController,
+    topic: String,
+    courseId: String = topic,
+    teachingMode: String = "solo",
+    courseBacked: Boolean = true,
+    reviewConceptId: String? = null,
+) {
+    val context = LocalContext.current
+    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked) {
+        ClassroomVoicePlayer(context)
+    }
+    val engine = remember(topic, courseId, teachingMode, courseBacked, reviewConceptId) {
+        ClassroomEngine(
+            topic = topic,
+            sessionIdParam = courseId,
+            mode = teachingMode,
+            courseBacked = courseBacked,
+            reviewConceptId = reviewConceptId,
+            voicePlayer = voicePlayer,
+        )
+    }
     DisposableEffect(engine) {
         engine.start()
         onDispose { engine.dispose() }
+    }
+    LaunchedEffect(courseId, topic, courseBacked) {
+        if (courseBacked) {
+            StackRepository.upsertCourseOnStart(courseId, title = topic)
+        }
     }
 
     // Legacy Android classroom policy: landscape full-screen + immersive
@@ -64,7 +92,6 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
     // ORIGINAL orientation before mutating so onDispose restores it
     // exactly rather than hardcoding a default (some other screen may
     // already have set a non-UNSPECIFIED orientation elsewhere in the app).
-    val context = LocalContext.current
     val activity = context as? Activity
     DisposableEffect(Unit) {
         val originalOrientation = activity?.requestedOrientation
@@ -86,6 +113,11 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
     // the Switch needs its own observable copy to actually recompose on
     // toggle; this mirrors it into ClassroomPreferences on every change.
     var reducedMotionUi by remember { mutableStateOf(ClassroomPreferences.reducedMotion) }
+
+    LaunchedEffect(notebookOpen) {
+        if (notebookOpen) engine.refreshLearnerRecord()
+    }
+
     val chrome = rememberChromeVisibility(
         blockAutoHide = engine.hasActiveCheckpoint || settingsOpen || notebookOpen,
     )
@@ -118,8 +150,10 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
                 ClassroomTopBar(
                     topic = topic,
                     isPaused = engine.isPaused,
+                    isVoiceEnabled = engine.isVoiceEnabled,
                     onBack = { nav.popBackStack() },
                     onTogglePause = { engine.togglePause(); chrome.poke() },
+                    onToggleVoice = { engine.toggleVoice(); chrome.poke() },
                     onToggleNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
                     onToggleSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
                 )
@@ -141,7 +175,13 @@ fun ClassroomScreen(nav: NavHostController, topic: String, courseId: String = to
                 )
             }
             if (notebookOpen) {
-                NotebookPanel(transcript = engine.transcript)
+                NotebookPanel(
+                    transcript = engine.transcript,
+                    learnerRecord = engine.learnerRecord,
+                    learnerRecordLoading = engine.learnerRecordLoading,
+                    learnerRecordFailed = engine.learnerRecordFailed,
+                    currentConceptIds = engine.recordConcepts,
+                )
             }
 
             // The board — permanent, fills remaining space. Lyo's mascot

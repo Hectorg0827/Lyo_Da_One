@@ -31,6 +31,9 @@ requireText(home, 'SectionHeader("Your Stacks")', 'Android Focus learner section
 requireText(home, 'SectionHeader("Explore Courses")', 'Android Focus catalog section');
 requireText(home, 'StackRepository.listCourseStacks()', 'Android Focus real, backend-synced Stacks list');
 requireText(home, 'ApiClient.api.courses(0, 5)', 'Android Focus public catalog exploration');
+requireText(home, 'ApiClient.api.dueReviews()', 'Android Focus canonical review schedule');
+requireText(home, 'SectionHeader("Ready to review")', 'Android Focus review section');
+requireText(home, 'Routes.reviewClassroom(', 'Android Focus review entry');
 requireText(navigation, 'RecentCourseStore.save(context, courseId)', 'Android real course visit recording');
 requireText(recentStore, 'Device-local pointer', 'Android recent-course scope disclosure');
 

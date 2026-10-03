@@ -344,15 +344,36 @@ fileprivate struct LiveLessonBlockPayload: Decodable {
 
 // MARK: - Scene Models
 
+struct SDUISceneMetadata: Codable {
+    let teachingAction: String?
+    let targetEvidenceType: String?
+    let teachingPolicyVersion: String?
+    let targetConcepts: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case teachingAction = "teaching_action"
+        case targetEvidenceType = "target_evidence_type"
+        case teachingPolicyVersion = "teaching_policy_version"
+        case targetConcepts = "target_concepts"
+    }
+}
+
 struct SDUIScene: Identifiable, Codable {
     let id: String
     let sceneType: String
     var components: [SDUIComponent]
+    let metadata: SDUISceneMetadata?
 
-    init(id: String, sceneType: String, components: [SDUIComponent]) {
+    init(
+        id: String,
+        sceneType: String,
+        components: [SDUIComponent],
+        metadata: SDUISceneMetadata? = nil
+    ) {
         self.id = id
         self.sceneType = sceneType
         self.components = components
+        self.metadata = metadata
     }
 
     enum CodingKeys: String, CodingKey {
@@ -360,6 +381,7 @@ struct SDUIScene: Identifiable, Codable {
         case id
         case sceneType = "scene_type"
         case components
+        case metadata
     }
 
     init(from decoder: Decoder) throws {
@@ -372,6 +394,7 @@ struct SDUIScene: Identifiable, Codable {
         }
         self.sceneType = try container.decode(String.self, forKey: .sceneType)
         self.components = try container.decodeIfPresent([SDUIComponent].self, forKey: .components) ?? []
+        self.metadata = try container.decodeIfPresent(SDUISceneMetadata.self, forKey: .metadata)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -379,6 +402,7 @@ struct SDUIScene: Identifiable, Codable {
         try container.encode(id, forKey: .sceneId)
         try container.encode(sceneType, forKey: .sceneType)
         try container.encode(components, forKey: .components)
+        try container.encodeIfPresent(metadata, forKey: .metadata)
     }
 }
 

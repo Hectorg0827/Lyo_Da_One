@@ -47,6 +47,7 @@ enum ClassroomBottomTab: String, CaseIterable, Identifiable {
     case outline = "Outline"
     case materials = "Materials"
     case notes = "Notes"
+    case record = "What you've shown"
     case quiz = "Quiz"
     case discussion = "Discussion"
 
@@ -57,6 +58,7 @@ enum ClassroomBottomTab: String, CaseIterable, Identifiable {
         case .outline: return "list.number"
         case .materials: return "book.closed"
         case .notes: return "note.text"
+        case .record: return "chart.bar.doc.horizontal"
         case .quiz: return "checkmark.square"
         case .discussion: return "bubble.left.and.bubble.right"
         }
@@ -185,6 +187,9 @@ struct LivingClassroomView: View {
     /// A scheduled study session needs evidence on the plan's topic key.
     /// Other GENERATE: sessions may show one record card per planned skill.
     var focusedConcept: Bool = false
+    /// A schedule-validated spaced review reuses this exact learner concept.
+    var reviewConceptId: String? = nil
+    var teachingMode: String = "solo"
 
     @StateObject private var service = LivingClassroomService()
     @StateObject private var sessionTimer = ClassroomTimer(duration: 300)
@@ -209,6 +214,9 @@ struct LivingClassroomView: View {
     @State private var quickHelp: ClassroomQuickHelp? = nil
     @State private var localQuestions: [ClassroomLocalQuestion] = []
     @State private var localNotes: [ClassroomLocalNote] = []
+    @State private var learnerRecord: LearnerEvidenceRecord? = nil
+    @State private var learnerRecordLoading = false
+    @State private var learnerRecordFailed = false
     @State private var highlightedMomentIds: Set<String> = []
     @State private var savedMomentIds: Set<String> = []
     @FocusState private var inputFieldFocused: Bool
@@ -335,8 +343,11 @@ struct LivingClassroomView: View {
                 courseId: courseId,
                 topic: courseTitle,
                 durationMinutes: durationMinutes,
-                recordScope: courseId.hasPrefix("GENERATE:") && !focusedConcept ? "unit" : "topic"
+                recordScope: courseId.hasPrefix("GENERATE:") && !focusedConcept ? "unit" : "topic",
+                mode: teachingMode,
+                reviewConceptId: reviewConceptId
             )
+            await loadLearnerRecord()
             if let durationMinutes {
                 sessionTimer.duration = TimeInterval(durationMinutes * 60)
             }
@@ -360,7 +371,9 @@ struct LivingClassroomView: View {
             uiStackStore.upsertCourse(
                 courseId: courseId,
                 title: courseTitle,
-                subtitle: "AI Classroom"
+                subtitle: reviewConceptId == nil ? "AI Classroom" : "Fresh retrieval",
+                focusedConcept: focusedConcept,
+                reviewConceptId: reviewConceptId
             )
 
             // Legacy iOS classroom orientation policy. This is intentionally
@@ -390,6 +403,11 @@ struct LivingClassroomView: View {
                     "courseId": courseId,
                     "card_count": service.renderedComponents.count,
                 ])
+        }
+        .onChange(of: selectedBottomTab) { _, tab in
+            if tab == .record {
+                Task { await loadLearnerRecord() }
+            }
         }
         .onChange(of: showDrawer) { _, isOpen in
             // Sprint 9 — drawer-aware narration. The narration overlay sits in
@@ -1495,6 +1513,8 @@ struct LivingClassroomView: View {
             materialsContent
         case .notes:
             notesContent
+        case .record:
+            learnerRecordContent
         case .quiz:
             quizContent
         case .discussion:
@@ -1593,6 +1613,141 @@ struct LivingClassroomView: View {
             }
             .padding(12)
         }
+    }
+
+    private var learnerRecordContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                Text("Read from what you actually demonstrated. Being taught something does not count as proof.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if learnerRecordLoading && learnerRecord == nil {
+                    ProgressView("Reading your record…")
+                        .tint(accentBlue)
+                        .foregroundStyle(.white.opacity(0.6))
+                } else if learnerRecordFailed || learnerRecord?.unavailable == true {
+                    drawerInfoRow(
+                        icon: "exclamationmark.triangle",
+                        title: "Record unavailable",
+                        body: "Your record could not be loaded just now. This is not a reading of your work, and nothing you have done has been lost."
+                    )
+                } else if learnerRecord?.concepts.isEmpty != false {
+                    drawerInfoRow(
+                        icon: "lock.open",
+                        title: "Nothing recorded yet",
+                        body: "Answering a checkpoint is what puts something here. This fills in from what you show, not from time spent."
+                    )
+                } else {
+                    let ordered = orderedLearnerConcepts()
+                    ForEach(ordered) { concept in
+                        learnerConceptCard(concept)
+                    }
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    private func orderedLearnerConcepts() -> [LearnerConceptRecord] {
+        let concepts = learnerRecord?.concepts ?? []
+        let current = Set(service.currentScene?.metadata?.targetConcepts ?? [])
+        guard !current.isEmpty else { return concepts }
+        return concepts.sorted { lhs, rhs in
+            let lhsCurrent = current.contains(lhs.conceptId)
+            let rhsCurrent = current.contains(rhs.conceptId)
+            if lhsCurrent != rhsCurrent { return lhsCurrent }
+            return false
+        }
+    }
+
+    private func learnerConceptCard(_ concept: LearnerConceptRecord) -> some View {
+        let reached = Set(concept.rungs.map(\.kind))
+        let ladder = ["recognition", "explanation", "application", "transfer", "retention"]
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(concept.displayName ?? humanizeConceptId(concept.conceptId))
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text(humanizeEvidenceState(concept.state))
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(Color(hexString: "7EC8A0"))
+                        .textCase(.uppercase)
+                }
+                Spacer()
+                if Set(service.currentScene?.metadata?.targetConcepts ?? []).contains(concept.conceptId) {
+                    Text("This class")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(accentBlue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(accentBlue.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            ForEach(ladder, id: \.self) { rung in
+                HStack(spacing: 7) {
+                    Image(systemName: reached.contains(rung) ? "checkmark.circle.fill" : "lock.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(reached.contains(rung) ? Color(hexString: "7EC8A0") : .white.opacity(0.22))
+                    Text("\(evidenceLabel(rung)) — \(reached.contains(rung) ? "shown" : "not shown yet")")
+                        .font(.system(size: 10.5, weight: reached.contains(rung) ? .semibold : .regular))
+                        .foregroundStyle(reached.contains(rung) ? .white.opacity(0.78) : .white.opacity(0.32))
+                }
+            }
+
+            if let misconception = concept.misconception, !misconception.isEmpty {
+                Text("Worth a second look: \(misconception)")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Color(hexString: "F5C26B").opacity(0.9))
+            }
+            if let next = concept.nextRung {
+                Text("Next: \(evidenceLabel(next))")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(accentBlue)
+            }
+        }
+        .padding(10)
+        .background(bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(borderColor, lineWidth: 1))
+    }
+
+    private func loadLearnerRecord() async {
+        guard !learnerRecordLoading else { return }
+        learnerRecordLoading = true
+        defer { learnerRecordLoading = false }
+        do {
+            learnerRecord = try await PersonalizationService.shared.getLearnerRecord()
+            learnerRecordFailed = false
+        } catch {
+            learnerRecordFailed = true
+            Log.classroom.warning("Learner evidence record unavailable: \(error.localizedDescription)")
+        }
+    }
+
+    private func evidenceLabel(_ rung: String) -> String {
+        switch rung {
+        case "recognition": return "Recognized"
+        case "explanation": return "Explained"
+        case "application": return "Applied"
+        case "transfer": return "Transferred"
+        case "retention": return "Remembered"
+        default: return rung.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    private func humanizeEvidenceState(_ state: String) -> String {
+        state.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func humanizeConceptId(_ id: String) -> String {
+        id.replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .capitalized
     }
 
     private var quizContent: some View {

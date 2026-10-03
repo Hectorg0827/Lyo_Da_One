@@ -1,5 +1,11 @@
 package com.lyo.app.ui.classroom
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,10 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -36,14 +45,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.lyo.app.data.api.LearnerConceptRecordDto
+import com.lyo.app.data.api.LearnerEvidenceRecordDto
 import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoGold
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import java.util.Locale
 
 /**
  * Immersive chrome state shared by the native classroom surfaces: visible on load,
@@ -81,8 +94,10 @@ fun rememberChromeVisibility(blockAutoHide: Boolean): ChromeVisibilityState {
 fun ClassroomTopBar(
     topic: String,
     isPaused: Boolean,
+    isVoiceEnabled: Boolean,
     onBack: () -> Unit,
     onTogglePause: () -> Unit,
+    onToggleVoice: () -> Unit,
     onToggleNotebook: () -> Unit,
     onToggleSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -110,6 +125,13 @@ fun ClassroomTopBar(
         IconButton(onClick = onToggleSettings) {
             Icon(Icons.Filled.Settings, contentDescription = "Classroom settings", tint = TextPrimary)
         }
+        IconButton(onClick = onToggleVoice) {
+            Icon(
+                imageVector = if (isVoiceEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                contentDescription = if (isVoiceEnabled) "Mute teacher voice" else "Enable teacher voice",
+                tint = if (isVoiceEnabled) TextPrimary else TextSecondary,
+            )
+        }
         IconButton(onClick = onTogglePause) {
             Icon(
                 imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
@@ -126,14 +148,9 @@ fun ClassroomTopBar(
  * motion is the only setting that previously existed as a wire-contract
  * param (ClassroomSocketClient.connect's reducedMotion) with no user
  * control at all — ClassroomEngine.start() hardcoded `false`. Mode/
- * duration/voice-speed are NOT ported here: all three are connect-time
- * params on the real backend (same as reducedMotion), but changing them
- * live would require tearing down and reopening the WebSocket mid-session
- * — real surgery this v1 deliberately doesn't take on unverified (no
- * device/build available in this environment, see the implementation
- * plan's Verification section) — and voice-speed has nothing to control
- * yet: Android's classroom has no TTS integration in v1 (ClassroomBridge's
- * "ambient" turn handling is stubbed for the same reason).
+ * duration/voice-speed are not exposed here because they would require a
+ * reconnect or a voice-player speed contract. Teacher voice itself is live
+ * and can be muted from the top bar without changing instructional state.
  */
 @Composable
 fun SettingsPanel(
@@ -183,7 +200,14 @@ fun SettingsPanel(
  * copy) match web exactly, only the presentation chrome is simplified.
  */
 @Composable
-fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifier) {
+fun NotebookPanel(
+    transcript: List<TranscriptLine>,
+    learnerRecord: LearnerEvidenceRecordDto?,
+    learnerRecordLoading: Boolean,
+    learnerRecordFailed: Boolean,
+    currentConceptIds: List<String>,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -195,21 +219,71 @@ fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifie
             Icon(Icons.Filled.MenuBook, contentDescription = null, tint = LyoGold, modifier = Modifier.size(16.dp))
             Text("Your notebook", color = TextPrimary, style = MaterialTheme.typography.labelLarge)
         }
-        if (transcript.isEmpty()) {
-            Text(
-                "Notes will appear as the class goes on.",
-                color = TextSecondary,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 220.dp)
-                    .padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            item {
+                Text(
+                    "What you've shown",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    "Read from committed evidence. Being taught something does not count as proof.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                )
+            }
+
+            when {
+                learnerRecordLoading && learnerRecord == null -> item {
+                    Text("Reading your record…", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+                learnerRecordFailed || learnerRecord?.unavailable == true -> item {
+                    Text(
+                        "Your record could not be loaded just now. This is not a reading of your work — nothing you have done has been lost.",
+                        color = LyoGold,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                learnerRecord?.concepts.isNullOrEmpty() -> item {
+                    Text(
+                        "Nothing recorded yet. Answering a checkpoint is what puts something here.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                else -> {
+                    val current = currentConceptIds.toSet()
+                    val ordered = learnerRecord!!.concepts.sortedByDescending { it.conceptId in current }
+                    items(ordered, key = { it.conceptId }) { concept ->
+                        LearnerConceptRecordCard(concept, concept.conceptId in current)
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    "Class notes",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 7.dp),
+                )
+            }
+            if (transcript.isEmpty()) {
+                item {
+                    Text(
+                        "Notes will appear as the class goes on.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            } else {
                 items(transcript, key = { it.id }) { line ->
                     Row {
                         Text(
@@ -224,6 +298,77 @@ fun NotebookPanel(transcript: List<TranscriptLine>, modifier: Modifier = Modifie
         }
     }
 }
+
+@Composable
+private fun LearnerConceptRecordCard(concept: LearnerConceptRecordDto, current: Boolean) {
+    val reached = concept.rungs.map { it.kind }.toSet()
+    val ladder = listOf("recognition", "explanation", "application", "transfer", "retention")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Surface, RoundedCornerShape(9.dp))
+            .padding(9.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = concept.displayName ?: humanizeConceptId(concept.conceptId),
+                color = TextPrimary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (current) {
+                Text("This class", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        Text(
+            humanizeEvidenceState(concept.state),
+            color = ClassroomTokens.AccentPurple,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        ladder.forEach { rung ->
+            val shown = rung in reached
+            Text(
+                text = "${if (shown) "✓" else "🔒"} ${evidenceLabel(rung)} — ${if (shown) "shown" else "not shown yet"}",
+                color = if (shown) TextPrimary else TextSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        concept.misconception?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                "Worth a second look: $it",
+                color = LyoGold,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        concept.nextRung?.let {
+            Text(
+                "Next: ${evidenceLabel(it)}",
+                color = ClassroomTokens.AccentPurple,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+    }
+}
+
+private fun evidenceLabel(value: String): String = when (value) {
+    "recognition" -> "Recognized"
+    "explanation" -> "Explained"
+    "application" -> "Applied"
+    "transfer" -> "Transferred"
+    "retention" -> "Remembered"
+    else -> value.replace("_", " ").replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun humanizeEvidenceState(value: String): String =
+    value.replace("_", " ").lowercase().replaceFirstChar { it.titlecase() }
+
+private fun humanizeConceptId(value: String): String =
+    value.replace("_", " ").replace("-", " ")
+        .split(" ").filter { it.isNotBlank() }
+        .joinToString(" ") { token -> token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
 
 /**
  * The "your desk" row — Continue / Help / Challenge / Raise hand.
@@ -244,6 +389,39 @@ fun BottomActionDock(
 ) {
     var handRaised by remember { mutableStateOf(false) }
     var question by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val transcript = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (transcript.isNotEmpty()) {
+                question = listOf(question.trimEnd(), transcript)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ")
+            }
+        }
+    }
+
+    fun startDictation() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask the teacher")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            // Text input remains fully available when device dictation is absent.
+        }
+    }
 
     Column(
         modifier = modifier
@@ -271,6 +449,13 @@ fun BottomActionDock(
                     placeholder = { Text("Ask the teacher…", color = TextSecondary) },
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(onClick = { startDictation() }) {
+                    Icon(
+                        Icons.Filled.Mic,
+                        contentDescription = "Speak your question",
+                        tint = ClassroomTokens.AccentPurple,
+                    )
+                }
                 IconButton(onClick = {
                     onAskQuestion(question)
                     question = ""
