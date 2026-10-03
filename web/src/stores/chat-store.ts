@@ -118,22 +118,6 @@ let activeStreamToken = 0;
 type TeachingRuntimeState = ReturnType<typeof emptyTeachingRuntimeState>;
 const teachingRuntimeByConversation = new Map<string, TeachingRuntimeState>();
 
-type ChatResponseDepth = 'concise' | 'standard' | 'deep';
-const responseDepthByConversation = new Map<string, ChatResponseDepth>();
-
-function inferDepthControl(text: string): ChatResponseDepth | null {
-  if (/\b(go deeper|deep dive|more detail|detailed|in depth|profundiza|más detalle|a fondo)\b/i.test(text)) {
-    return 'deep';
-  }
-  if (/\b(keep it concise|keep it short|brief|concise|short answer|tl;?dr|breve|conciso|corto)\b/i.test(text)) {
-    return 'concise';
-  }
-  if (/\b(normal detail|standard detail|normal length)\b/i.test(text)) {
-    return 'standard';
-  }
-  return null;
-}
-
 function teachingRuntimeFor(conversationId: string): TeachingRuntimeState {
   return teachingRuntimeByConversation.get(conversationId) ?? emptyTeachingRuntimeState();
 }
@@ -337,6 +321,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Graded verdicts ride on the block metadata, so an already-answered
       // check stays answered instead of being offered again after a reload.
       const checkResults = blocks ? extractCheckResults(blocks) : undefined;
+      const experienceMeta = Array.isArray(message.ctas)
+        ? message.ctas.find(
+            (item) =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              (item as Record<string, unknown>).type === 'chat_experience'
+          ) as Record<string, unknown> | undefined
+        : undefined;
+      const persistedSources = Array.isArray(experienceMeta?.sources)
+        ? (experienceMeta.sources as ChatSource[])
+        : undefined;
+      const persistedContract =
+        experienceMeta?.interaction_contract &&
+        typeof experienceMeta.interaction_contract === 'object'
+          ? (experienceMeta.interaction_contract as ChatInteractionContract)
+          : undefined;
+      const persistedActions = Array.isArray(experienceMeta?.suggested_actions)
+        ? (experienceMeta.suggested_actions as unknown[])
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        : undefined;
       return {
         id: message.id,
         role: message.role,
@@ -345,6 +349,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         blocks,
         checkResults,
         attachments: parsed.attachments,
+        sources: persistedSources,
+        interactionContract: persistedContract,
+        suggestedActions: persistedActions,
         createdAt: message.created_at,
       };
     });
@@ -405,12 +412,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         convoId = localId;
       }
     }
-
-    const depthControl = inferDepthControl(trimmedContent);
-    if (depthControl) {
-      responseDepthByConversation.set(convoId, depthControl);
-    }
-    const responseDepth = responseDepthByConversation.get(convoId) ?? 'standard';
 
     const userMessage: ChatMessage = {
       id: generateId(),
@@ -546,7 +547,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       patchAiMessage({ suggestedActions: labels });
     };
     const attachSourcesToAiMessage = (sources: ChatSource[]) => {
-      receivedContent = true;
       patchAiMessage({ sources });
     };
     const attachContractToAiMessage = (contract: ChatInteractionContract) => {
@@ -827,15 +827,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        {
-          ...(teachingStateSummary(
-            teachingRuntimeFor(convoId),
-            options.courseContext
-          ) ?? {}),
-          chat_preferences: {
-            response_depth: responseDepth,
-          },
-        }
+        teachingStateSummary(
+          teachingRuntimeFor(convoId),
+          options.courseContext
+        ) as Record<string, unknown> | undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {
