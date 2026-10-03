@@ -830,7 +830,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         teachingStateSummary(
           teachingRuntimeFor(convoId),
           options.courseContext
-        ) as Record<string, unknown> | undefined
+        ) as unknown as Record<string, unknown> | undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {
