@@ -26,6 +26,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import java.util.ArrayDeque
 import java.util.UUID
 
@@ -190,6 +193,9 @@ class ClassroomEngine(
             }
 
             is ClassroomServerEvent.SceneStartEvent -> {
+                stopNarration()
+                processedComponentIds.clear()
+                hasActiveCheckpoint = false
                 status = "live"
                 recordConcepts = event.metadata?.target_concepts.orEmpty()
                 // Lazy erase: don't clear the board the instant scene_start
@@ -275,6 +281,14 @@ class ClassroomEngine(
 
     // ── Turn-queue playback ──────────────────────────────────────────────
 
+    private fun stopNarration() {
+        playerJob?.cancel()
+        playerJob = null
+        promptTimeoutJob?.cancel()
+        turnQueue.clear()
+        voicePlayer?.stop()
+    }
+
     private fun startPlayer() {
         playerJob = scope.launch { playNext() }
     }
@@ -282,9 +296,8 @@ class ClassroomEngine(
     /**
      * Pulls one turn off the queue, applies it, then waits the turn's
      * pacing delay before recursing — EXCEPT for `user_prompt`, which
-     * returns without recursing: playback stays paused until either
-     * `submitPromptAnswer`/an A2uiAction resolves it, or its own
-     * unanswered-timer fires (both call playNext() themselves to resume).
+     * returns without recursing: playback stays paused until an explicit
+     * learner answer or skip. Voiced speech waits for actual completion.
      * This mirrors classroom-store.ts's playNext() turn-by-turn, matching
      * its "pause on user_prompt, resume with the NEXT queued turn — never a
      * replay" rule exactly.
@@ -301,7 +314,20 @@ class ClassroomEngine(
                 val spoken = turn.text.orEmpty()
                 pushTranscript(turn.speaker ?: "Teacher", spoken)
                 if (isVoiceEnabled && spoken.isNotBlank()) {
-                    voicePlayer?.play(spoken, voiceLanguage)
+                    if (turn.type == "speech" && voicePlayer != null) {
+                        // Advance on actual audio completion, never on a reading
+                        // estimate that can cut a slow response off mid-sentence.
+                        withTimeoutOrNull(180_000L) {
+                            suspendCancellableCoroutine<Unit> { continuation ->
+                                voicePlayer.play(spoken, voiceLanguage) {
+                                    if (continuation.isActive) continuation.resume(Unit)
+                                }
+                                continuation.invokeOnCancellation { voicePlayer.stop() }
+                            }
+                        }
+                    } else {
+                        voicePlayer?.play(spoken, voiceLanguage)
+                    }
                 }
             }
             "session_end" -> pushTranscript(
@@ -312,18 +338,9 @@ class ClassroomEngine(
 
         if (turn.type == "user_prompt") {
             hasActiveCheckpoint = true
-            val beatSeconds = (turn.beat_seconds ?: 5.0) + 8.0
             promptTimeoutJob?.cancel()
-            promptTimeoutJob = scope.launch {
-                delay((beatSeconds * 1000).toLong())
-                // Unanswered — a classmate jumps in, per the director's
-                // script; release the checkpoint and resume, matching the
-                // web reference's timeout behavior exactly. The panel
-                // itself stays on the board unanswered (its ChoicePicker
-                // remains tappable) — only playback resumes.
-                hasActiveCheckpoint = false
-                playNext()
-            }
+            // The learner owns the floor until an explicit answer or skip.
+            // Silence is never permission to advance or invent a response.
             return
         }
 
@@ -331,7 +348,9 @@ class ClassroomEngine(
             scheduleHighlightClear()
         }
 
-        delay(pacingDelayMs(turn))
+        if (!(turn.type == "speech" && isVoiceEnabled && voicePlayer != null)) {
+            delay(pacingDelayMs(turn))
+        }
         playNext()
     }
 
@@ -353,14 +372,7 @@ class ClassroomEngine(
             "lyo_state" -> 0L
             "ambient" -> 0L
             "pause" -> (minOf(turn.seconds ?: 1.0, 5.0) * 1000).toLong()
-            "board" -> when (turn.action) {
-                "image" -> 1800L
-                "bullets" -> (turn.items?.size ?: 0).let { (it * 700 + 800).coerceAtMost(4200) }.toLong()
-                "chart" -> 2400L
-                "explorable" -> 2000L
-                "highlight" -> 1600L
-                else -> 2400L // write/draw
-            }
+            "board" -> 0L // The board stays visible while narration explains it.
             else -> 400L // session_end and the synthetic source-attribution turn: brief, non-blocking
         }
         return base + 80L
@@ -378,7 +390,7 @@ class ClassroomEngine(
     // ── Outgoing: board-content actions (from the A2UI renderer) ────────
 
     fun onAction(action: A2uiAction) {
-        if (action.name != "update_activity") voicePlayer?.stop()
+        if (action.name != "update_activity") stopNarration()
         if (action.name == "update_activity") {
             activityUpdates[action.sourceComponentId] = action
             activitySaveJob?.cancel()
@@ -399,7 +411,7 @@ class ClassroomEngine(
             action.context["promptId"]?.takeIf { it.isJsonPrimitive }?.asString?.let { promptId ->
                 applyMessage(ClassroomBridge.closePromptPanel(promptId))
             }
-            scope.launch { playNext() }
+            // Wait for the server response; old queued teaching is obsolete.
         }
     }
 
@@ -408,6 +420,11 @@ class ClassroomEngine(
     fun toggleVoice() {
         isVoiceEnabled = !isVoiceEnabled
         voicePlayer?.setEnabled(isVoiceEnabled)
+        if (!isVoiceEnabled) {
+            playerJob?.cancel()
+            playerJob = null
+            if (!hasActiveCheckpoint && !isPaused) startPlayer()
+        }
     }
 
     fun togglePause() {
@@ -432,7 +449,7 @@ class ClassroomEngine(
     }
 
     fun continueLesson() {
-        voicePlayer?.stop()
+        stopNarration()
         flushActivities()
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
         ClassroomSocketClient.send(
@@ -449,7 +466,7 @@ class ClassroomEngine(
     }
 
     fun askQuestion(text: String) {
-        voicePlayer?.stop()
+        stopNarration()
         flushActivities()
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
@@ -459,7 +476,7 @@ class ClassroomEngine(
     }
 
     fun requestHint(level: String) {
-        voicePlayer?.stop()
+        stopNarration()
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))) {
             pushTranscript("You", "Requested a hint")
@@ -467,7 +484,7 @@ class ClassroomEngine(
     }
 
     fun signalConfused() {
-        voicePlayer?.stop()
+        stopNarration()
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))) {
             pushTranscript("You", "Requested a small nudge")
@@ -475,7 +492,7 @@ class ClassroomEngine(
     }
 
     fun signalTooEasy() {
-        voicePlayer?.stop()
+        stopNarration()
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))) {
             pushTranscript("You", "Requested a harder case")
