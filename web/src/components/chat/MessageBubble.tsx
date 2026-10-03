@@ -53,7 +53,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const [hovered, setHovered] = useState(false);
   const attachments = message.attachments ?? [];
   
-  const { isGenerating, generationProgress, getActiveConversation, sendMessage } = useChatStore();
+  const {
+    isGenerating,
+    generationProgress,
+    courseGenerationState,
+    getActiveConversation,
+    sendMessage,
+  } = useChatStore();
 
   // A structured lesson renders as blocks; message.content still holds the
   // plain-text version of the same lesson. Only hide that fallback when the
@@ -195,6 +201,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             course={displayCourse as any}
             isGenerating={isCurrentlyGeneratingThis}
             generationProgress={generationProgress}
+            generationState={isCurrentlyGeneratingThis ? courseGenerationState : null}
           />
         )}
 

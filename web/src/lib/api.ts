@@ -442,7 +442,9 @@ export const api = {
         mime_type: string;
         name: string;
         size_bytes: number;
-      }>
+      }>,
+      forcedIntent?: 'COURSE',
+      stateSummary?: Record<string, unknown>
     ): AbortController {
       const controller = new AbortController();
 
@@ -461,6 +463,8 @@ export const api = {
             client_message_id: clientMessageId,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             media,
+            forced_intent: forcedIntent,
+            state_summary: stateSummary,
           }),
           signal: controller.signal,
         });

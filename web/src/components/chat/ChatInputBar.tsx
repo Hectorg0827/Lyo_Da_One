@@ -67,7 +67,8 @@ function attachmentMimeType(file: File): string {
 }
 
 export default function ChatInputBar() {
-  const { sendMessage, isGenerating } = useChatStore();
+  const { sendMessage, isGenerating, generationActivity, reviseActiveCourse } = useChatStore();
+  const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -197,7 +198,11 @@ export default function ChatInputBar() {
 
   const handleSubmit = async () => {
     const trimmed = value.trim();
-    if ((!trimmed && attachments.length === 0) || isGenerating || uploading) return;
+    if (
+      (!trimmed && attachments.length === 0)
+      || (isGenerating && !isCourseAdjustable)
+      || uploading
+    ) return;
     recognitionRef.current?.stop();
 
     setValue('');
@@ -206,7 +211,11 @@ export default function ChatInputBar() {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    await sendMessage(trimmed, sentAttachments);
+    if (isCourseAdjustable) {
+      await reviseActiveCourse(trimmed);
+    } else {
+      await sendMessage(trimmed, sentAttachments);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -218,7 +227,10 @@ export default function ChatInputBar() {
 
   const charCount = value.length;
   const showCount = charCount > MAX_CHARS * 0.75;
-  const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !uploading;
+  const canSend =
+    (value.trim().length > 0 || attachments.length > 0)
+    && (!isGenerating || isCourseAdjustable)
+    && !uploading;
 
   return (
     <div className="relative px-3 py-3 md:px-6 md:py-4">
@@ -268,14 +280,21 @@ export default function ChatInputBar() {
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder={
-            isGenerating ? 'Lyo is thinking…' : listening ? 'Listening…' : 'Message Lyo...'
+            isCourseAdjustable
+              ? 'Adjust the course while it builds…'
+              : isGenerating
+              ? 'Lyo is thinking…'
+              : listening
+              ? 'Listening…'
+              : 'Message Lyo...'
           }
-          disabled={isGenerating}
+          disabled={isGenerating && !isCourseAdjustable}
           rows={1}
           className={cn(
             'w-full resize-none bg-transparent text-base text-white placeholder-white/35',
             'focus:outline-none leading-6 py-0.5 max-h-36 scrollbar-thin scrollbar-thumb-white/10',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+            isCourseAdjustable && 'placeholder:text-lyo-300/45'
           )}
           style={{ lineHeight: `${LINE_HEIGHT}px` }}
         />

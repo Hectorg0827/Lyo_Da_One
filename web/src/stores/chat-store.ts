@@ -15,6 +15,28 @@ import { parseCanonicalChatContent } from '@/lib/chat-attachments';
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
 
+export interface CourseGenerationState {
+  phase: 'intent' | 'planning' | 'lessons' | 'practice' | 'finalizing' | 'ready' | string;
+  progress: number;
+  message?: string;
+  completedLessons?: number;
+  totalLessons?: number;
+  outline?: Array<{ title: string; description?: string }>;
+}
+
+export interface CourseRevisionInput {
+  topic?: string;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  length?: 'short' | 'standard' | 'deep';
+  teachingStyle?: 'guided' | 'conversational' | 'practice-heavy';
+  focus?: string;
+}
+
+interface SendMessageOptions {
+  forcedIntent?: 'COURSE';
+  courseContext?: CourseRevisionInput;
+}
+
 /**
  * Pull CTA labels out of an `actions` SSE event.
  *
@@ -52,6 +74,18 @@ function extractActionLabels(chunk: Record<string, unknown>): string[] {
   return labels;
 }
 
+function normalizeCourseDuration(course?: Record<string, unknown>): number | undefined {
+  const raw = course?.estimatedDuration ?? course?.estimated_duration ?? course?.duration;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw !== 'string') return undefined;
+
+  const match = raw.match(/\d+(?:\.\d+)?/);
+  if (!match) return undefined;
+  const value = Number(match[0]);
+  if (!Number.isFinite(value)) return undefined;
+  return /\bhours?\b/i.test(raw) ? Math.round(value * 60) : Math.round(value);
+}
+
 // Module-scoped, not store state: this must survive ChatInterface
 // remounting (tabbing away and back within the same app session) but reset
 // to false whenever the app is actually reopened — a fresh page load/PWA
@@ -62,6 +96,15 @@ let hasHydratedThisSession = false;
 
 /** The in-flight hydrate(), so concurrent callers await one round trip. */
 let hydrationInFlight: Promise<void> | null = null;
+
+// The browser stream is intentionally kept outside React state. Course
+// adjustments abort the in-flight build before starting the revised one, so
+// two generators never race to update the same conversation.
+let activeStreamController: AbortController | null = null;
+// Every stream gets a monotonically increasing identity. Aborting a course
+// build invalidates its identity before the replacement starts, so callbacks
+// already queued by the old SSE reader cannot mutate the new generation.
+let activeStreamToken = 0;
 
 // Module-scoped for the same reason as hasHydratedThisSession above:
 // fetchDueReviews() replaces `dueReviews` wholesale from the server on
@@ -90,6 +133,8 @@ interface ChatStore {
   isGenerating: boolean;
   generationProgress: number;
   generationActivity: GenerationActivity;
+  courseGenerationState: CourseGenerationState | null;
+  courseRevisionUndo: CourseRevisionInput | null;
   isHydrating: boolean;
   // Session-close recap of the conversation just left behind, and the
   // spaced-repetition items due for another look. Both null/empty until
@@ -101,7 +146,13 @@ interface ChatStore {
   setActiveConversation: (id: string | null) => void;
   hydrate: () => Promise<void>;
   loadConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>;
+  sendMessage: (
+    content: string,
+    attachments?: ChatAttachment[],
+    options?: SendMessageOptions
+  ) => Promise<void>;
+  reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
+  undoCourseRevision: () => Promise<void>;
   answerCheck: (
     messageId: string,
     blockId: string,
@@ -123,6 +174,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isGenerating: false,
   generationProgress: 0,
   generationActivity: 'thinking',
+  courseGenerationState: null,
+  courseRevisionUndo: null,
   isHydrating: false,
   sessionSummary: null,
   dueReviews: [],
@@ -279,7 +332,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
-  sendMessage: async (content: string, attachments: ChatAttachment[] = []) => {
+  sendMessage: async (
+    content: string,
+    attachments: ChatAttachment[] = [],
+    options: SendMessageOptions = {}
+  ) => {
     const state = get();
     let convoId = state.activeConversationId;
     const trimmedContent = content.trim();
@@ -339,7 +396,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
       isGenerating: true,
       generationProgress: 10,
-      generationActivity: 'thinking',
+      generationActivity: options.forcedIntent === 'COURSE' ? 'course' : 'thinking',
+      courseGenerationState: options.forcedIntent === 'COURSE'
+        ? {
+            phase: 'intent',
+            progress: 10,
+            message: 'Understanding your changes',
+          }
+        : null,
+      courseRevisionUndo:
+        options.forcedIntent === 'COURSE' ? s.courseRevisionUndo : null,
     }));
 
     // The server is the source of truth for history. Sending only the current
@@ -385,7 +451,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             updatedAt: new Date().toISOString(),
           };
         }),
-        generationProgress: Math.min(90, get().generationProgress + 5),
+        generationProgress:
+          s.generationActivity === 'course'
+            ? s.generationProgress
+            : Math.min(90, s.generationProgress + 5),
         generationActivity: s.generationActivity === 'course' ? 'course' : 'response',
       }));
     };
@@ -439,14 +508,108 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       patchAiMessage({ suggestedActions: labels });
     };
 
+    // Course-generation milestones can arrive before OPEN_CLASSROOM. Ensure
+    // those milestones have a real proposal message to render into instead of
+    // leaving the only progress surface absent during intent/planning.
+    const ensureCourseProposal = (coursePatch: Record<string, unknown> = {}) => {
+      set((s) => ({
+        conversations: s.conversations.map((c) => {
+          if (c.id !== convoId) return c;
+          const existing = c.messages.find((m) => m.id === aiMessageId);
+          const existingCourse = existing?.metadata?.course as Record<string, unknown> | undefined;
+          const course = { ...coursePatch, ...(existingCourse || {}) };
+          if (existing) {
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === aiMessageId
+                  ? {
+                      ...m,
+                      type: 'course_proposal' as const,
+                      metadata: { ...m.metadata, course },
+                    }
+                  : m
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return {
+            ...c,
+            messages: [
+              ...c.messages,
+              {
+                id: aiMessageId,
+                role: 'assistant' as const,
+                content: accumulated,
+                type: 'course_proposal' as const,
+                metadata: { course },
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      }));
+    };
+
+    const streamToken = ++activeStreamToken;
+
     try {
-      api.chat.stream(
+      activeStreamController = api.chat.stream(
         trimmedContent,
         history,
         (chunk) => {
+          if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
-          if (chunk.type === 'answer' || chunk.type === 'text') {
+          if (chunk.type === 'course_generation') {
+            const eventProgress =
+              typeof chunk.progress === 'number'
+                ? Math.max(0, Math.min(100, chunk.progress))
+                : get().generationProgress;
+            const phase =
+              typeof chunk.phase === 'string' ? chunk.phase : 'planning';
+            const message =
+              typeof chunk.message === 'string' ? chunk.message : undefined;
+            const completedLessons =
+              typeof chunk.completed_lessons === 'number'
+                ? chunk.completed_lessons
+                : undefined;
+            const totalLessons =
+              typeof chunk.total_lessons === 'number'
+                ? chunk.total_lessons
+                : undefined;
+            const outline = Array.isArray(chunk.outline)
+              ? chunk.outline
+                  .filter(
+                    (item): item is Record<string, unknown> =>
+                      Boolean(item) && typeof item === 'object'
+                  )
+                  .map((item) => ({
+                    title: typeof item.title === 'string' ? item.title : 'Lesson',
+                    description:
+                      typeof item.description === 'string' ? item.description : undefined,
+                  }))
+              : undefined;
+
+            ensureCourseProposal({
+              topic: options.courseContext?.topic || trimmedContent || undefined,
+              difficulty: options.courseContext?.difficulty,
+            });
+
+            set((state) => ({
+              generationActivity: 'course',
+              generationProgress: Math.max(state.generationProgress, eventProgress),
+              courseGenerationState: {
+                phase,
+                progress: Math.max(state.generationProgress, eventProgress),
+                message,
+                completedLessons,
+                totalLessons,
+                outline: outline ?? state.courseGenerationState?.outline,
+              },
+            }));
+          } else if (chunk.type === 'answer' || chunk.type === 'text') {
             const text = blockContent?.text as string
               || (chunk.payload as Record<string, unknown>)?.text as string
               || (chunk.content as string)
@@ -455,6 +618,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           } else if (chunk.type === 'clarification' && typeof chunk.text === 'string') {
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
+            receivedContent = true;
+            const isPreview = chunk.preview === true;
             const classroomBlock = chunk.block as { content?: Record<string, any> } | undefined;
             const courseData = (classroomBlock?.content?.course || classroomBlock?.content) as
               Record<string, any> | undefined;
@@ -463,23 +628,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               if (courseData.difficulty) {
                 courseData.difficulty = courseData.difficulty.toLowerCase();
               }
-              // Normalize duration string/number
-              const rawDuration = courseData.estimated_duration || courseData.duration;
-              let sanitizedDuration = 60; // fallback to 60 mins
-              if (typeof rawDuration === 'number') {
-                sanitizedDuration = rawDuration;
-              } else if (typeof rawDuration === 'string') {
-                const numMatch = rawDuration.match(/\d+/);
-                if (numMatch) {
-                  const num = parseInt(numMatch[0]);
-                  if (rawDuration.toLowerCase().includes('hour')) {
-                    sanitizedDuration = num * 60;
-                  } else {
-                    sanitizedDuration = num;
-                  }
-                }
+              // Normalize every supported duration alias to minutes.
+              const normalizedDuration = normalizeCourseDuration(courseData);
+              if (normalizedDuration != null) {
+                courseData.estimatedDuration = normalizedDuration;
               }
-              courseData.estimatedDuration = sanitizedDuration;
 
               // Normalize lessons to modules
               if (!courseData.modules && courseData.lessons) {
@@ -494,6 +647,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
               set((s) => ({
                 generationActivity: 'course',
+                generationProgress: isPreview
+                  ? s.generationProgress
+                  : Math.max(s.generationProgress, 80),
+                courseGenerationState: isPreview
+                  ? (
+                      s.courseGenerationState || {
+                        phase: 'intent',
+                        progress: s.generationProgress,
+                        message: 'Understanding your request',
+                      }
+                    )
+                  : {
+                      ...(s.courseGenerationState || {}),
+                      phase: 'lessons',
+                      progress: Math.max(
+                        s.courseGenerationState?.progress ?? 0,
+                        s.generationProgress,
+                        80
+                      ),
+                      message: 'Creating the course outline',
+                      totalLessons: Array.isArray(courseData.modules)
+                        ? courseData.modules.length
+                        : s.courseGenerationState?.totalLessons,
+                    },
                 conversations: s.conversations.map((c) => {
                   if (c.id !== convoId) return c;
                   const existing = c.messages.find((m) => m.id === aiMessageId);
@@ -546,17 +723,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         },
         () => {
+          if (streamToken !== activeStreamToken) return;
+          activeStreamController = null;
           if (!receivedContent) {
             recoverCanonicalConversation(convoId!);
           } else {
-            set({
+            set((state) => ({
               isGenerating: false,
               generationProgress: 0,
               generationActivity: 'thinking',
-            });
+              courseGenerationState:
+                state.generationActivity === 'course'
+                  ? {
+                      ...(state.courseGenerationState || {
+                        phase: 'ready',
+                        progress: 100,
+                      }),
+                      phase: 'ready',
+                      progress: 100,
+                      message: 'Course ready',
+                    }
+                  : null,
+            }));
           }
         },
         () => {
+          if (streamToken !== activeStreamToken) return;
+          activeStreamController = null;
           recoverCanonicalConversation(convoId!);
         },
         convoId,
@@ -567,17 +760,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           mime_type: attachment.mimeType,
           name: attachment.name,
           size_bytes: attachment.size,
-        }))
+        })),
+        options.forcedIntent,
+        options.courseContext
+          ? { active_course: options.courseContext }
+          : undefined
       );
     } catch {
-      recoverCanonicalConversation(convoId!);
+      if (streamToken === activeStreamToken) {
+        recoverCanonicalConversation(convoId!);
+      }
     }
 
     async function recoverCanonicalConversation(cId: string) {
+      activeStreamController = null;
       set({
         isGenerating: false,
         generationProgress: 0,
         generationActivity: 'thinking',
+        courseGenerationState: null,
       });
       try {
         // A broken SSE connection does not imply the server failed. Reload the
@@ -589,6 +790,128 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
     }
+  },
+
+  reviseActiveCourse: async (adjustment) => {
+    const state = get();
+    const conversation = state.getActiveConversation();
+    if (!conversation) return;
+
+    const latestCourseMessage = [...conversation.messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.type === 'course_proposal');
+    const latestUserMessage = [...conversation.messages]
+      .reverse()
+      .find((message) => message.role === 'user');
+
+    const course = latestCourseMessage?.metadata?.course as Record<string, unknown> | undefined;
+    const rawTopic =
+      (typeof course?.topic === 'string' && course.topic)
+      || (typeof course?.title === 'string' && course.title)
+      || latestUserMessage?.content
+      || '';
+    const safeTopic = /(proactive\s+(context|system|nudge)|system\s+nudges?)/i.test(rawTopic)
+      ? latestUserMessage?.content || ''
+      : rawTopic;
+    const previousDifficultyRaw =
+      (typeof course?.difficulty === 'string' && course.difficulty)
+      || (typeof course?.level === 'string' && course.level)
+      || '';
+    const previousDifficulty = previousDifficultyRaw.toLowerCase();
+    const previousDuration = normalizeCourseDuration(course);
+    const undoTarget: CourseRevisionInput = {
+      topic: safeTopic || undefined,
+      difficulty: ['beginner', 'intermediate', 'advanced'].includes(previousDifficulty)
+        ? previousDifficulty as CourseRevisionInput['difficulty']
+        : undefined,
+      length:
+        previousDuration == null
+          ? undefined
+          : previousDuration <= 20
+          ? 'short'
+          : previousDuration >= 45
+          ? 'deep'
+          : 'standard',
+    };
+
+    set({
+      courseRevisionUndo:
+        undoTarget.topic || undoTarget.difficulty || undoTarget.length ? undoTarget : null,
+    });
+
+    // Invalidate first: AbortController.abort() can race with callbacks that
+    // were already queued by the old stream.
+    activeStreamToken += 1;
+    if (activeStreamController) {
+      activeStreamController.abort();
+      activeStreamController = null;
+    }
+
+    // A preview from the abandoned build is device-local and incomplete. Drop
+    // only that live preview; completed historical course cards remain intact.
+    if (state.isGenerating && latestCourseMessage) {
+      set((current) => ({
+        conversations: current.conversations.map((item) =>
+          item.id === conversation.id
+            ? {
+                ...item,
+                messages: item.messages.filter((message) => message.id !== latestCourseMessage.id),
+              }
+            : item
+        ),
+        isGenerating: false,
+        generationProgress: 0,
+        generationActivity: 'thinking',
+        courseGenerationState: null,
+      }));
+    } else {
+      set({
+        isGenerating: false,
+        generationProgress: 0,
+        generationActivity: 'thinking',
+        courseGenerationState: null,
+      });
+    }
+
+    let message: string;
+    if (typeof adjustment === 'string') {
+      const trimmed = adjustment.trim();
+      if (!trimmed) return;
+      message = trimmed;
+    } else {
+      const topic = adjustment.topic?.trim() || safeTopic || 'the current topic';
+      const level = adjustment.difficulty || 'beginner';
+      const lengthLabels: Record<NonNullable<CourseRevisionInput['length']>, string> = {
+        short: 'short',
+        standard: 'standard length',
+        deep: 'a deep dive',
+      };
+      const styleLabels: Record<NonNullable<CourseRevisionInput['teachingStyle']>, string> = {
+        guided: 'guided',
+        conversational: 'conversational',
+        'practice-heavy': 'practice-heavy',
+      };
+      const length = lengthLabels[adjustment.length || 'standard'];
+      const style = styleLabels[adjustment.teachingStyle || 'guided'];
+      message = `Adjust this course to ${topic}. Make it ${level}, ${length}, and ${style}.`;
+      if (adjustment.focus?.trim()) {
+        message += ` Focus on: ${adjustment.focus.trim()}.`;
+      }
+    }
+
+    await get().sendMessage(message, [], {
+      forcedIntent: 'COURSE',
+      courseContext: undoTarget,
+    });
+  },
+
+  undoCourseRevision: async () => {
+    const previous = get().courseRevisionUndo;
+    if (!previous) return;
+    // Clear first so the restored build does not present an endless undo loop.
+    set({ courseRevisionUndo: null });
+    await get().reviseActiveCourse(previous);
+    set({ courseRevisionUndo: null });
   },
 
   answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0, hintUsed = false) => {
