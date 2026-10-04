@@ -498,8 +498,15 @@ fun ChatScreen(nav: NavHostController) {
                     }
                 }
             } else if (voiceConversation) {
-                // Barge-in cancellation or an interrupted transport should
-                // return control to the microphone, never speak the old turn.
+                // Barge-in, provider failure or an interrupted transport owns
+                // the floor immediately. Any queued partial answer is stale and
+                // must not keep speaking over the learner's next turn.
+                textToSpeech?.stop()
+                speakingMessageId = null
+                pendingVoiceUtterances = 0
+                streamedVoiceSegmentsForTurn = false
+                voiceResponseCompleted = false
+                lastSpokenVoiceText = ""
                 voiceListenNonce += 1
             }
         }
