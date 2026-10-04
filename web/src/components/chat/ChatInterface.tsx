@@ -98,6 +98,8 @@ export function getGenerationStatusLabel(
       return progress >= 75 ? 'Finalizing your course…' : 'Preparing your course…';
     case 'response':
       return progress >= 75 ? 'Finalizing response…' : 'Generating response…';
+    case 'searching':
+      return 'Checking current information…';
     case 'thinking':
     default:
       return 'Thinking…';
