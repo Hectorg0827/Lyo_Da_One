@@ -87,6 +87,7 @@ object ChatStreamClient {
         conversationId: String,
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
+        responseChannel: String = "text",
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -94,6 +95,7 @@ object ChatStreamClient {
             "device_id" to "android",
             "client_message_id" to clientMessageId,
             "timezone" to java.time.ZoneId.systemDefault().id,
+            "response_channel" to responseChannel,
         )
         teachingRuntimeByConversation[conversationId]?.let { runtime ->
             runtime.lastAction?.let {
