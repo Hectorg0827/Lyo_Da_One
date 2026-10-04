@@ -182,10 +182,20 @@ class LyoAIViewModel: ObservableObject {
         // spoken reply completes — including funnel questions on early-return paths.
         ttsService.onSpeechFinished = { [weak self] in
             guard let self = self else { return }
-            self.currentlyPlayingMessageId = nil  // Reset playing state
+            self.currentlyPlayingMessageId = nil
 
             if self.voiceLoopActive && !self.sttService.isRecording {
                 self.startListening()
+            }
+        }
+
+        // Natural endpointing turns a finished spoken utterance into the same
+        // canonical Chat turn used by typing. No second live/voice AI exists.
+        sttService.onUtteranceReady = { [weak self] utterance in
+            guard let self, self.voiceLoopActive else { return }
+            self.inputText = utterance
+            Task { @MainActor [weak self] in
+                await self?.sendMessage()
             }
         }
 
@@ -201,13 +211,11 @@ class LyoAIViewModel: ObservableObject {
             self.ttsService.setEmotion(emotion)
         }
 
-        // SYNC AI SPEAKING STATE
-        Publishers.Merge(
-            AudioStreamManager.shared.$isAISpeaking,
-            ttsService.$isSpeaking
-        )
-        .receive(on: RunLoop.main)
-        .assign(to: &$isAISpeaking)
+        // Canonical conversational voice speaks the same Chat response through
+        // TextToSpeechService. The legacy AudioStreamManager no longer owns Chat.
+        ttsService.$isSpeaking
+            .receive(on: RunLoop.main)
+            .assign(to: &$isAISpeaking)
 
         // Artifact tracking removed — classrooms use their own component state
 
@@ -219,30 +227,8 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .assign(to: &$suggestions)
 
-        // Live Mode Bindings
-        AudioStreamManager.shared.$isLive
-            .receive(on: RunLoop.main)
-            .assign(to: &$isLiveMode)
-
-        AudioStreamManager.shared.$userAudioLevel
-            .receive(on: RunLoop.main)
-            .assign(to: &$userLiveAudioLevel)
-
-        AudioStreamManager.shared.$aiAudioLevel
-            .receive(on: RunLoop.main)
-            .assign(to: &$aiLiveAudioLevel)
-
-        AudioStreamManager.shared.$isAIThinking
-            .receive(on: RunLoop.main)
-            .assign(to: &$isAIThinking)
-
-        AudioStreamManager.shared.$lastTranscript
-            .receive(on: RunLoop.main)
-            .assign(to: &$lastLiveTranscript)
-
-        AudioStreamManager.shared.$activeWidget
-            .receive(on: RunLoop.main)
-            .assign(to: &$activeLiveWidget)
+        // Legacy live-agent bindings intentionally removed. Chat voice now
+        // shares the canonical InteractionContract and TextToSpeechService.
 
         // Handle Course Navigation from Unified Chat
         // Note: triggerCourseNavigation() now calls executeOpenClassroom() directly,
