@@ -310,21 +310,24 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    fun send(raw: String) {
+    fun send(raw: String, responseChannel: String = "text") {
         val trimmed = raw.trim()
         val attachments = pendingAttachments.toList()
         if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
 
         val content = buildChatContent(trimmed, attachments)
         val clientMessageId = UUID.randomUUID().toString()
+        val assistantMessageId = UUID.randomUUID().toString()
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
-        messages.add(ChatMsg(role = "assistant", content = ""))
+        messages.add(ChatMsg(role = "assistant", content = "", id = assistantMessageId))
+        inFlightAssistantId = assistantMessageId
         input = ""
         pendingAttachments.clear()
         inputError = null
         isStreaming = true
 
-        scope.launch {
+        streamJob = scope.launch {
+            var responseFailed = false
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -332,15 +335,17 @@ fun ChatScreen(nav: NavHostController) {
                     ),
                 ).id
             }.getOrElse {
-                messages[messages.lastIndex] = messages.last().copy(
-                    content = "I couldn't save this conversation. Please check your connection and try again.",
-                )
+                val message = "I couldn't save this conversation. Please check your connection and try again."
+                val index = messages.indexOfFirst { item -> item.id == assistantMessageId }
+                if (index >= 0) messages[index] = messages[index].copy(content = message)
                 isStreaming = false
+                inFlightAssistantId = null
+                if (responseChannel == "voice") voiceController.responseReady(message)
                 return@launch
             }
             activeConversationId = conversationId
 
-            runCatching {
+            try {
                 ChatStreamClient.stream(
                     text = trimmed,
                     conversationId = conversationId,
@@ -354,36 +359,86 @@ fun ChatScreen(nav: NavHostController) {
                             sizeBytes = attachment.size,
                         )
                     },
+                    responseChannel = responseChannel,
                 ).collect { event ->
+                    val index = messages.indexOfFirst { item -> item.id == assistantMessageId }
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
-                            val last = messages.last()
-                            messages[messages.lastIndex] = last.copy(content = last.content + event.text)
+                            if (index >= 0) {
+                                messages[index] = messages[index].copy(
+                                    content = messages[index].content + event.text,
+                                )
+                            }
                         }
 
                         is ChatStreamEvent.SmartBlocks -> {
-                            // Structured lesson content — every beat, not just
-                            // plain prose. Previously unhandled, so lessons
-                            // rendered as whatever plain text also came through.
-                            val last = messages.last()
-                            messages[messages.lastIndex] = last.copy(blocks = event.blocks)
+                            if (index >= 0) {
+                                messages[index] = messages[index].copy(blocks = event.blocks)
+                            }
                         }
 
                         is ChatStreamEvent.Done -> Unit
                         is ChatStreamEvent.Conversation -> activeConversationId = event.id
                         is ChatStreamEvent.Error -> {
-                            messages[messages.lastIndex] = messages.last().copy(
-                                content = "The response was interrupted. Your conversation is saved—please try again.",
-                            )
+                            responseFailed = true
+                            if (index >= 0) {
+                                messages[index] = messages[index].copy(
+                                    content = "The response was interrupted. Your conversation is saved—please try again.",
+                                )
+                            }
                         }
                     }
                 }
-            }.onFailure {
-                messages[messages.lastIndex] = messages.last().copy(
-                    content = "The response was interrupted. Your conversation is saved—please try again.",
+            } catch (_: CancellationException) {
+                return@launch
+            } catch (_: Exception) {
+                responseFailed = true
+                val index = messages.indexOfFirst { item -> item.id == assistantMessageId }
+                if (index >= 0) {
+                    messages[index] = messages[index].copy(
+                        content = "The response was interrupted. Your conversation is saved—please try again.",
+                    )
+                }
+            } finally {
+                if (inFlightAssistantId == assistantMessageId) {
+                    inFlightAssistantId = null
+                    isStreaming = false
+                    streamJob = null
+                }
+            }
+
+            if (responseChannel == "voice") {
+                val assistant = messages.firstOrNull { item -> item.id == assistantMessageId }
+                val spoken = voiceTextForChatMessage(assistant)
+                voiceController.responseReady(
+                    if (responseFailed && spoken.isBlank()) {
+                        "The response was interrupted. Please try again."
+                    } else {
+                        spoken
+                    },
                 )
             }
-            isStreaming = false
+        }
+    }
+
+    // The voice controller never calls an AI endpoint. It only turns speech
+    // into a canonical Chat turn and speaks the canonical answer.
+    voiceController.onStateChanged = { next -> voiceState = next }
+    voiceController.onTranscript = { transcript ->
+        input = transcript.take(MAX_CHAT_CHARS)
+    }
+    voiceController.onFinalUtterance = { utterance ->
+        send(utterance, responseChannel = "voice")
+    }
+    voiceController.onBargeIn = {
+        streamJob?.cancel()
+        streamJob = null
+        val interruptedId = inFlightAssistantId
+        inFlightAssistantId = null
+        isStreaming = false
+        if (interruptedId != null) {
+            val index = messages.indexOfFirst { item -> item.id == interruptedId }
+            if (index >= 0) messages.removeAt(index)
         }
     }
 
