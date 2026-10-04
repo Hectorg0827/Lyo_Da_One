@@ -302,8 +302,16 @@ final class ChatRouter: ObservableObject {
         ) { event in
             onStreamEvent?(event)
 
-            // Record first-token latency
-            if case .answer = event {
+            // Record first-visible-token latency for both legacy full
+            // answers and the new incremental text stream.
+            let isFirstVisibleToken: Bool
+            switch event {
+            case .answer, .textDelta:
+                isFirstVisibleToken = true
+            default:
+                isFirstVisibleToken = false
+            }
+            if isFirstVisibleToken {
                 let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
                 self.recordLatency(latency, for: self.currentTier)
                 Log.ai.info("🧠 Deep path first token in \(String(format: "%.0f", latency))ms")
