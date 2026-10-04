@@ -206,6 +206,7 @@ fun ChatScreen(nav: NavHostController) {
     var voiceConversation by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
     var lastSpokenVoiceText by remember { mutableStateOf("") }
+    var canonicalVoiceAnswerReady by remember { mutableStateOf(false) }
     var voiceListenNonce by remember { mutableStateOf(0) }
     var continuousRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     var streamJob by remember { mutableStateOf<Job?>(null) }
@@ -331,6 +332,7 @@ fun ChatScreen(nav: NavHostController) {
         val attachments = pendingAttachments.toList()
         if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
 
+        canonicalVoiceAnswerReady = false
         val content = buildChatContent(trimmed, attachments)
         val clientMessageId = UUID.randomUUID().toString()
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
@@ -411,6 +413,7 @@ fun ChatScreen(nav: NavHostController) {
                                     null,
                                     assistantTurnId,
                                 )
+                                canonicalVoiceAnswerReady = true
                                 voiceReadySpoken = true
                             }
                         }
@@ -456,6 +459,29 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    fun submitLiveVoiceTranscript(transcript: String) {
+        scope.launch {
+            var waitedMs = 0L
+            if (isStreaming && canonicalVoiceAnswerReady) {
+                // The answer is already canonical and speaking. Let its stream
+                // finish UI metadata/persistence before sending the interruption
+                // as the next turn, rather than dropping SmartBlocks.
+                while (isStreaming && voiceConversation && waitedMs < 1_200L) {
+                    delay(40)
+                    waitedMs += 40
+                }
+            }
+            if (isStreaming) {
+                // Before voice_ready this is a true model-generation barge-in;
+                // after the bounded drain window it is a stalled transport.
+                streamJob?.cancel()
+                streamJob = null
+                isStreaming = false
+            }
+            if (voiceConversation) send(transcript)
+        }
+    }
+
     fun isLikelyVoiceEcho(heard: String): Boolean {
         val normalize: (String) -> String = { value ->
             value.lowercase()
@@ -481,6 +507,7 @@ fun ChatScreen(nav: NavHostController) {
         runCatching { continuousRecognizer?.cancel() }
         textToSpeech?.stop()
         speakingMessageId = null
+        canonicalVoiceAnswerReady = false
     }
 
     fun startVoiceRecognition() {
@@ -523,7 +550,11 @@ fun ChatScreen(nav: NavHostController) {
                     // During model generation there is no playback to echo, so
                     // actual speech can interrupt immediately. While Lyo is
                     // speaking we wait for partial text and reject likely echo.
-                    if (speakingMessageId == null && isStreaming) {
+                    if (
+                        speakingMessageId == null &&
+                        isStreaming &&
+                        !canonicalVoiceAnswerReady
+                    ) {
                         streamJob?.cancel()
                         streamJob = null
                         isStreaming = false
@@ -553,12 +584,7 @@ fun ChatScreen(nav: NavHostController) {
                     if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
                         textToSpeech?.stop()
                         speakingMessageId = null
-                        if (isStreaming) {
-                            streamJob?.cancel()
-                            streamJob = null
-                            isStreaming = false
-                        }
-                        send(transcript)
+                        submitLiveVoiceTranscript(transcript)
                     }
                     if (voiceConversation) voiceListenNonce += 1
                 }
@@ -580,7 +606,7 @@ fun ChatScreen(nav: NavHostController) {
                         // waiting for the final recognition result.
                         textToSpeech?.stop()
                         speakingMessageId = null
-                        if (isStreaming) {
+                        if (isStreaming && !canonicalVoiceAnswerReady) {
                             streamJob?.cancel()
                             streamJob = null
                             isStreaming = false
