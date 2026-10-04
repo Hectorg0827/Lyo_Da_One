@@ -242,11 +242,19 @@ export default function ChatInterface() {
     };
   }, [seededPrompt, sendMessage, hydrate]);
 
-  // Auto-scroll when messages change or while generating
+  // Auto-scroll when messages change and as the active streamed
+  // assistant message grows. message count alone does not change for later
+  // text_delta chunks.
+  const streamingContentLength =
+    isGenerating && messages.length > 0
+      ? messages[messages.length - 1]?.content?.length ?? 0
+      : 0;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, isGenerating]);
+    bottomRef.current?.scrollIntoView({
+      behavior: isGenerating ? 'auto' : 'smooth',
+    });
+  }, [messages.length, isGenerating, streamingContentLength]);
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-transparent">
