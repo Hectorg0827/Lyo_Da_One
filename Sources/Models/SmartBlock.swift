@@ -283,10 +283,12 @@ public struct InteractiveBlockPayload: Codable, Sendable {
 public struct InteractiveItem: Codable, Sendable {
     public let label: String
     public let detail: String
-    
-    public init(label: String, detail: String) {
+    public let url: String?
+
+    public init(label: String, detail: String, url: String? = nil) {
         self.label = label
         self.detail = detail
+        self.url = url
     }
 }
 

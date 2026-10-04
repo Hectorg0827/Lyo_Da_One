@@ -557,6 +557,51 @@ final class UnifiedChatService: ObservableObject {
                 messages.append(skeletonMsg)
             }
 
+        case .textDelta(let text):
+            // True streaming: append each provider delta to the existing
+            // assistant placeholder instead of replacing the whole message.
+            streamTimeoutTask?.cancel()
+            streamTimeoutTask = nil
+            guard !text.isEmpty else { break }
+
+            if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                var finalTypes = (messages[idx].contentTypes ?? []).filter {
+                    if case .processing = $0 { return false }
+                    return true
+                }
+                if !finalTypes.contains(.text) {
+                    finalTypes.append(.text)
+                }
+                let updatedMessage = LyoMessage(
+                    id: aiMessageId,
+                    sessionId: messages[idx].sessionId,
+                    content: messages[idx].content + text,
+                    isFromUser: false,
+                    timestamp: messages[idx].timestamp,
+                    attachments: messages[idx].attachments,
+                    actions: messages[idx].actions,
+                    status: messages[idx].status,
+                    contentTypes: finalTypes,
+                    responseMode: messages[idx].responseMode,
+                    quickExplainer: messages[idx].quickExplainer,
+                    courseProposal: messages[idx].courseProposal,
+                    shouldAnimate: false
+                )
+                messages[idx] = updatedMessage
+            } else {
+                messages.append(
+                    LyoMessage(
+                        id: aiMessageId,
+                        sessionId: currentConversationId,
+                        content: text,
+                        isFromUser: false,
+                        timestamp: Date(),
+                        contentTypes: [.text],
+                        shouldAnimate: false
+                    )
+                )
+            }
+
         case .answer(let block):
             // ✅ Real content arrived — cancel the safety timeout
             streamTimeoutTask?.cancel()
@@ -587,8 +632,9 @@ final class UnifiedChatService: ObservableObject {
             Log.ai.info("Answer text (\(answerText.count) chars): \(answerText.prefix(100))")
 
             if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                // Update the skeleton/placeholder message with the real answer
-                // 🎬 shouldAnimate = true → triggers typewriter in the message bubble
+                // If text deltas already rendered this answer, the final
+                // snapshot is reconciliation—not a second typewriter pass.
+                let hadStreamedText = !messages[idx].content.isEmpty
 
                 // Strip the loading skeleton marker — an answer has arrived.
                 // If .processing is left in, the .done handler mistakes this message
@@ -617,7 +663,7 @@ final class UnifiedChatService: ObservableObject {
                     responseMode: messages[idx].responseMode,
                     quickExplainer: messages[idx].quickExplainer,
                     courseProposal: messages[idx].courseProposal,
-                    shouldAnimate: true
+                    shouldAnimate: !hadStreamedText
                 )
                 messages[idx] = updatedMessage
                 Log.ai.info("Answer message updated at index \(idx) with types: \(finalTypes)")
