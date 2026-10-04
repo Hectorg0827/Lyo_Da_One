@@ -110,12 +110,14 @@ const voiceTextSegmentListeners = new Set<VoiceTextSegmentListener>();
 export function emitVoiceTextSegment(text: string, sequence = 0) {
   const clean = stripForSpeech(text);
   if (!clean) return;
-  for (const listener of voiceTextSegmentListeners) {
+  voiceTextSegmentListeners.forEach((listener) => {
     listener({ text: clean, sequence });
-  }
+  });
 }
 
 export function subscribeVoiceTextSegments(listener: VoiceTextSegmentListener) {
   voiceTextSegmentListeners.add(listener);
-  return () => voiceTextSegmentListeners.delete(listener);
+  return () => {
+    voiceTextSegmentListeners.delete(listener);
+  };
 }
