@@ -101,6 +101,7 @@ import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -341,6 +342,7 @@ fun ChatScreen(nav: NavHostController) {
 
         streamJob?.cancel()
         streamJob = scope.launch {
+            var responseCompleted = false
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -386,7 +388,7 @@ fun ChatScreen(nav: NavHostController) {
                             messages[messages.lastIndex] = last.copy(blocks = event.blocks)
                         }
 
-                        is ChatStreamEvent.Done -> Unit
+                        is ChatStreamEvent.Done -> responseCompleted = true
                         is ChatStreamEvent.Conversation -> activeConversationId = event.id
                         is ChatStreamEvent.Error -> {
                             messages[messages.lastIndex] = messages.last().copy(
@@ -395,15 +397,17 @@ fun ChatScreen(nav: NavHostController) {
                         }
                     }
                 }
-            }.onFailure {
-                messages[messages.lastIndex] = messages.last().copy(
-                    content = "The response was interrupted. Your conversation is saved—please try again.",
-                )
+            }.onFailure { error ->
+                if (error !is CancellationException || !voiceConversation) {
+                    messages[messages.lastIndex] = messages.last().copy(
+                        content = "The response was interrupted. Your conversation is saved—please try again.",
+                    )
+                }
             }
             isStreaming = false
             streamJob = null
 
-            if (voiceConversation) {
+            if (voiceConversation && responseCompleted) {
                 val assistant = messages.lastOrNull { it.role == "assistant" && it.content.isNotBlank() }
                 val spokenText = assistant?.let { parseChatContent(it.content).text }?.trim().orEmpty()
                 val engine = textToSpeech
@@ -415,6 +419,10 @@ fun ChatScreen(nav: NavHostController) {
                 } else {
                     voiceListenNonce += 1
                 }
+            } else if (voiceConversation) {
+                // Barge-in cancellation or an interrupted transport should
+                // return control to the microphone, never speak the old turn.
+                voiceListenNonce += 1
             }
         }
     }
