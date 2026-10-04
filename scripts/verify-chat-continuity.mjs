@@ -104,6 +104,9 @@ const contracts = [
       '"size_bytes"',
       'obj.has("content")',
       'ChatStreamEvent.Chunk',
+      'data class FinalAnswer',
+      '"stream_capabilities" to mapOf("text_delta" to true)',
+      'obj.get("type")?.asString == "text_delta"',
     ],
   },
   {
@@ -123,6 +126,8 @@ const contracts = [
       'parseChatContent',
       'ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f',
       'Modifier.fillMaxWidth(ASSISTANT_RESPONSE_WIDTH_FRACTION)',
+      'is ChatStreamEvent.FinalAnswer',
+      'content = event.text',
     ],
     forbidden: [
       'val bubbleModifier = Modifier\n            .widthIn(max = 320.dp)',
@@ -166,6 +171,7 @@ const contracts = [
     needles: [
       'case "text_delta":',
       'callback?(.textDelta(text: text))',
+      'mergedStateSummary["stream_capabilities"]',
     ],
   },
   {
@@ -222,26 +228,7 @@ const contracts = [
   },
 ];
 
-const failures = [,
-  {
-    name: 'Android incremental stream compatibility',
-    path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
-    needles: [
-      'data class FinalAnswer',
-      '"stream_capabilities" to mapOf("text_delta" to true)',
-      'obj.get("type")?.asString == "text_delta"',
-      'ChatStreamEvent.FinalAnswer',
-    ],
-  },
-  {
-    name: 'Android final stream snapshot reconciliation',
-    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
-    needles: [
-      'is ChatStreamEvent.FinalAnswer',
-      'content = event.text',
-    ],
-  }
-];
+const failures = [];
 for (const contract of contracts) {
   const source = fs.readFileSync(contract.path, 'utf8');
   for (const needle of contract.needles) {
