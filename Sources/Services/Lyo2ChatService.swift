@@ -54,6 +54,7 @@ class Lyo2ChatService: ObservableObject {
             : AuthService.shared.currentUserEmail
         
         var mergedStateSummary = stateSummary
+        mergedStateSummary["stream_capabilities"] = AnyCodable(["text_delta": true])
         if let conversationId,
            let runtime = teachingRuntimeByConversation[conversationId],
            runtime.lastAction != nil {
