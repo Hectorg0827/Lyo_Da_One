@@ -57,6 +57,12 @@ final class UnifiedChatService: ObservableObject {
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
+    /// Voice is a delivery layer over the canonical Chat response. The service
+    /// forwards server-segmented speech to the existing TTS renderer; it never
+    /// invokes a separate conversational model.
+    var onVoiceDelivery: ((VoiceDeliveryEvent) -> Void)?
+    var onVoiceTurn: ((VoiceTurnEvent) -> Void)?
+
     // MARK: - Private Properties
 
     /// Cancellable timeout task for the current stream.
@@ -407,10 +413,31 @@ final class UnifiedChatService: ObservableObject {
         forcedIntent: String? = nil,
         speakResponse: Bool = false
     ) async {
-        // Re-route through sendMessage which now uses ChatRouter for two-speed routing
+        if speakResponse {
+            // Conversational voice deliberately bypasses device-side/quick
+            // response shortcuts. The utterance enters the exact canonical
+            // Lyo2 stream that owns interaction contract, learner state,
+            // tools, attachments, Test Prep and Classroom handoffs.
+            await sendMessageLyo2(
+                text: text,
+                attachments: attachments,
+                forcedIntent: forcedIntent,
+                deliveryMode: "voice",
+                voiceTurnId: UUID().uuidString
+            )
+            return
+        }
+
         _ = await sendMessage(
             text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent
         )
+    }
+
+    func cancelActiveResponse() {
+        streamTimeoutTask?.cancel()
+        streamTimeoutTask = nil
+        lyo2ChatService.cancelActiveStream()
+        isLoading = false
     }
 
     // MARK: - Conversation Memory Window
@@ -430,7 +457,10 @@ final class UnifiedChatService: ObservableObject {
 
     func sendMessageLyo2(
         text: String,
-        attachments: [MessageAttachment] = []
+        attachments: [MessageAttachment] = [],
+        forcedIntent: String? = nil,
+        deliveryMode: String = "text",
+        voiceTurnId: String? = nil
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
@@ -466,9 +496,12 @@ final class UnifiedChatService: ObservableObject {
             text: trimmedText,
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
+            forcedIntent: forcedIntent,
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
-            clientMessageId: userMessage.id
+            clientMessageId: userMessage.id,
+            deliveryMode: deliveryMode,
+            voiceTurnId: voiceTurnId
         ) { [weak self] event in
             guard let self else { return }
             self.handleLyo2Event(event, aiMessageId: aiMessageId)
@@ -505,6 +538,12 @@ final class UnifiedChatService: ObservableObject {
             // it into the next request's state_summary. Keep the UI layer
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
+
+        case .voiceTurn(let event):
+            onVoiceTurn?(event)
+
+        case .voiceDelivery(let event):
+            onVoiceDelivery?(event)
 
         case .conversation(let id):
             if id != currentConversationId {

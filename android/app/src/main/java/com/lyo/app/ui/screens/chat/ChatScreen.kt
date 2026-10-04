@@ -1,8 +1,10 @@
 package com.lyo.app.ui.screens.chat
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Handler
@@ -73,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.data.api.AiConversationMessageDto
@@ -96,7 +99,9 @@ import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -190,13 +195,37 @@ fun ChatScreen(nav: NavHostController) {
     var activeConversationId by remember { mutableStateOf<String?>(null) }
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
-    var dictating by remember { mutableStateOf(false) }
+    var voiceActive by remember { mutableStateOf(false) }
+    var voicePhase by remember { mutableStateOf(ConversationalVoiceController.Phase.IDLE) }
+    var voicePartial by remember { mutableStateOf("") }
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val activeStreamJobRef = remember { arrayOfNulls<Job>(1) }
+    val voiceSendRef = remember { arrayOf<(String) -> Unit>({}) }
+
+    val voiceController = remember(context) {
+        ConversationalVoiceController(
+            context = context,
+            onUtterance = { text -> voiceSendRef[0](text) },
+            onBargeIn = {
+                activeStreamJobRef[0]?.cancel()
+                activeStreamJobRef[0] = null
+                isStreaming = false
+                if (messages.lastOrNull()?.role == "assistant" &&
+                    messages.lastOrNull()?.content.isNullOrBlank() &&
+                    messages.lastOrNull()?.blocks.isNullOrEmpty()
+                ) {
+                    messages.removeAt(messages.lastIndex)
+                }
+            },
+            onPhaseChanged = { phase -> voicePhase = phase },
+            onPartialTranscript = { text -> voicePartial = text },
+        )
+    }
 
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
@@ -236,23 +265,22 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        dictating = false
-        if (result.resultCode == Activity.RESULT_OK) {
-            val transcript = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                ?.trim()
-                .orEmpty()
-            if (transcript.isNotEmpty()) {
-                input = listOf(input.trimEnd(), transcript)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" ")
-                    .take(MAX_CHAT_CHARS)
-                inputError = null
-            }
+    DisposableEffect(voiceController) {
+        onDispose {
+            activeStreamJobRef[0]?.cancel()
+            activeStreamJobRef[0] = null
+            voiceController.destroy()
+        }
+    }
+
+    val voicePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            voiceActive = true
+            voiceController.start()
+        } else {
+            inputError = "Microphone permission is required for voice conversation."
         }
     }
 
@@ -293,10 +321,10 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    fun send(raw: String) {
+    fun send(raw: String, voice: Boolean = false, voiceTurnId: String? = null) {
         val trimmed = raw.trim()
         val attachments = pendingAttachments.toList()
-        if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
+        if ((trimmed.isEmpty() && attachments.isEmpty()) || (isStreaming && !voice) || uploadingAttachment) return
 
         val content = buildChatContent(trimmed, attachments)
         val clientMessageId = UUID.randomUUID().toString()
@@ -307,7 +335,7 @@ fun ChatScreen(nav: NavHostController) {
         inputError = null
         isStreaming = true
 
-        scope.launch {
+        val streamJob = scope.launch {
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -337,6 +365,8 @@ fun ChatScreen(nav: NavHostController) {
                             sizeBytes = attachment.size,
                         )
                     },
+                    deliveryMode = if (voice) "voice" else "text",
+                    voiceTurnId = voiceTurnId,
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -352,22 +382,47 @@ fun ChatScreen(nav: NavHostController) {
                             messages[messages.lastIndex] = last.copy(blocks = event.blocks)
                         }
 
+                        is ChatStreamEvent.VoiceTurn -> {
+                            if (voiceActive && event.id == voiceTurnId) {
+                                voiceController.markThinking()
+                            }
+                        }
+
+                        is ChatStreamEvent.VoiceDelivery -> {
+                            if (voiceActive && (event.id == null || event.id == voiceTurnId)) {
+                                voiceController.speak(event.segments, event.language)
+                            }
+                        }
+
                         is ChatStreamEvent.Done -> Unit
                         is ChatStreamEvent.Conversation -> activeConversationId = event.id
                         is ChatStreamEvent.Error -> {
                             messages[messages.lastIndex] = messages.last().copy(
                                 content = "The response was interrupted. Your conversation is saved—please try again.",
                             )
+                            if (voiceActive) voiceController.resumeListening()
                         }
                     }
                 }
-            }.onFailure {
-                messages[messages.lastIndex] = messages.last().copy(
-                    content = "The response was interrupted. Your conversation is saved—please try again.",
-                )
+            }.onFailure { error ->
+                if (error !is CancellationException && messages.isNotEmpty()) {
+                    messages[messages.lastIndex] = messages.last().copy(
+                        content = "The response was interrupted. Your conversation is saved—please try again.",
+                    )
+                    if (voiceActive) voiceController.resumeListening()
+                }
             }
             isStreaming = false
+            if (activeStreamJobRef[0] === kotlinx.coroutines.currentCoroutineContext()[Job]) {
+                activeStreamJobRef[0] = null
+            }
         }
+        activeStreamJobRef[0] = streamJob
+    }
+
+    voiceSendRef[0] = { utterance ->
+        val turnId = UUID.randomUUID().toString()
+        send(utterance, voice = true, voiceTurnId = turnId)
     }
 
     /**
@@ -400,24 +455,6 @@ fun ChatScreen(nav: NavHostController) {
             // No onFailure handler: best-effort, same as web/iOS. A failed
             // grade leaves the check pending rather than faking a verdict —
             // the option stays tappable so the learner can try again.
-        }
-    }
-
-    fun startDictation() {
-        if (isStreaming || uploadingAttachment || dictating) return
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your message to Lyo")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-        try {
-            dictating = true
-            inputError = null
-            speechLauncher.launch(intent)
-        } catch (_: ActivityNotFoundException) {
-            dictating = false
-            inputError = "Speech recognition is not available on this device."
         }
     }
 
@@ -478,6 +515,10 @@ fun ChatScreen(nav: NavHostController) {
                 onClick = {
                     textToSpeech?.stop()
                     speakingMessageId = null
+                    voiceController.stop()
+                    voiceActive = false
+                    activeStreamJobRef[0]?.cancel()
+                    activeStreamJobRef[0] = null
                     activeConversationId = null
                     pendingAttachments.clear()
                     inputError = null
@@ -604,23 +645,34 @@ fun ChatScreen(nav: NavHostController) {
             }
 
             IconButton(
-                onClick = ::startDictation,
-                enabled = !isStreaming && !uploadingAttachment && !dictating,
+                onClick = {
+                    if (voiceActive) {
+                        voiceController.stop()
+                        voiceActive = false
+                        activeStreamJobRef[0]?.cancel()
+                        activeStreamJobRef[0] = null
+                        isStreaming = false
+                    } else if (
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        voiceActive = true
+                        inputError = null
+                        voiceController.start()
+                    } else {
+                        voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                enabled = !uploadingAttachment,
                 modifier = Modifier.size(44.dp),
             ) {
-                if (dictating) {
-                    CircularProgressIndicator(
-                        color = LyoPurple,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Dictate message",
-                        tint = TextSecondary,
-                    )
-                }
+                Icon(
+                    imageVector = if (voiceActive) Icons.Default.Stop else Icons.Default.Mic,
+                    contentDescription = if (voiceActive) "End voice conversation" else "Start voice conversation",
+                    tint = if (voiceActive) LyoPurple else TextSecondary,
+                )
             }
 
             OutlinedTextField(
@@ -630,8 +682,13 @@ fun ChatScreen(nav: NavHostController) {
                 placeholder = {
                     Text(
                         when {
+                            voiceActive && voicePhase == ConversationalVoiceController.Phase.LISTENING ->
+                                voicePartial.ifBlank { "Listening…" }
+                            voiceActive && voicePhase == ConversationalVoiceController.Phase.THINKING ->
+                                "Lyo is thinking…"
+                            voiceActive && voicePhase == ConversationalVoiceController.Phase.SPEAKING ->
+                                "Lyo is speaking — talk to interrupt…"
                             isStreaming -> "Lyo is thinking…"
-                            dictating -> "Listening…"
                             else -> "Ask Lyo anything…"
                         },
                         color = TextSecondary,

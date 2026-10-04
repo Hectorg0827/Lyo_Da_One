@@ -1,14 +1,30 @@
+export type BrowserSpeechRecognitionAlternative = {
+  transcript: string;
+  confidence?: number;
+};
+
+export type BrowserSpeechRecognitionResult = ArrayLike<BrowserSpeechRecognitionAlternative> & {
+  isFinal?: boolean;
+};
+
+export type BrowserSpeechRecognitionEvent = {
+  resultIndex?: number;
+  results: ArrayLike<BrowserSpeechRecognitionResult>;
+};
+
 export type BrowserSpeechRecognition = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
   start: () => void;
   stop: () => void;
-  onresult: ((event: {
-    results: ArrayLike<ArrayLike<{ transcript: string }>>;
-  }) => void) | null;
+  abort?: () => void;
+  onstart?: (() => void) | null;
+  onspeechstart?: (() => void) | null;
+  onspeechend?: (() => void) | null;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event?: unknown) => void) | null;
 };
 
 export function createBrowserSpeechRecognition(): BrowserSpeechRecognition | null {
@@ -19,4 +35,3 @@ export function createBrowserSpeechRecognition(): BrowserSpeechRecognition | nul
     | undefined;
   return Recognition ? new Recognition() : null;
 }
-

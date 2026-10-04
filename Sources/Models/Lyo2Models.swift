@@ -21,6 +21,8 @@ struct Lyo2RouterRequest: Codable {
     let conversationId: String?
     let deviceId: String
     let clientMessageId: String?
+    let deliveryMode: String
+    let voiceTurnId: String?
     var timezone: String = TimeZone.current.identifier
     
     enum CodingKeys: String, CodingKey {
@@ -35,6 +37,8 @@ struct Lyo2RouterRequest: Codable {
         case conversationId = "conversation_id"
         case deviceId = "device_id"
         case clientMessageId = "client_message_id"
+        case deliveryMode = "delivery_mode"
+        case voiceTurnId = "voice_turn_id"
         case timezone
     }
     
@@ -49,7 +53,9 @@ struct Lyo2RouterRequest: Codable {
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         deviceId: String = "ios",
-        clientMessageId: String? = nil
+        clientMessageId: String? = nil,
+        deliveryMode: String = "text",
+        voiceTurnId: String? = nil
     ) {
         self.userId = userId
         self.text = text
@@ -62,6 +68,8 @@ struct Lyo2RouterRequest: Codable {
         self.conversationId = conversationId
         self.deviceId = deviceId
         self.clientMessageId = clientMessageId
+        self.deliveryMode = deliveryMode
+        self.voiceTurnId = voiceTurnId
     }
 }
 
@@ -189,6 +197,34 @@ struct TeachingPolicyEvent: Codable {
     }
 }
 
+struct VoiceTurnEvent: Codable {
+    let voiceTurnId: String
+    let phase: String
+    let interactionMode: String?
+
+    enum CodingKeys: String, CodingKey {
+        case voiceTurnId = "voice_turn_id"
+        case phase
+        case interactionMode = "interaction_mode"
+    }
+}
+
+struct VoiceDeliveryEvent: Codable {
+    let voiceTurnId: String?
+    let phase: String
+    let segments: [String]
+    let interruptible: Bool
+    let language: String
+
+    enum CodingKeys: String, CodingKey {
+        case voiceTurnId = "voice_turn_id"
+        case phase
+        case segments
+        case interruptible
+        case language
+    }
+}
+
 struct TeachingRuntimeClientState {
     var lastAction: String?
     var consecutiveChecks: Int = 0
@@ -244,6 +280,8 @@ enum Lyo2StreamEvent {
     case done
     case conversation(id: String)
     case teachingPolicy(policy: TeachingPolicyEvent)
+    case voiceTurn(event: VoiceTurnEvent)
+    case voiceDelivery(event: VoiceDeliveryEvent)
     
     /// v1 backward-compat events (still emitted by deployed backend)
     case actions(blocks: [Lyo2UIBlock])

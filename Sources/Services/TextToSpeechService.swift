@@ -74,11 +74,9 @@ class TextToSpeechService: NSObject, ObservableObject {
         deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
 
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-        } catch {
-            Log.audio.error("Failed to deactivate audio session: \(error)")
-        }
+        // Do not deactivate the shared duplex audio session here.
+        // During conversational voice, STT remains armed for barge-in while
+        // TTS stops. Deactivating the session would tear down recognition.
     }
 
     private func startPlaybackIfNeeded() {
@@ -271,7 +269,14 @@ class TextToSpeechService: NSObject, ObservableObject {
 
     private func configureAudioSession(active: Bool) throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .allowAirPlay])
+        // Use one duplex voice-chat session for both TTS and STT. This keeps
+        // the mic armed during playback and enables system echo cancellation,
+        // which is required for natural barge-in.
+        try session.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetooth, .duckOthers]
+        )
         if active {
             try session.setActive(true)
         }

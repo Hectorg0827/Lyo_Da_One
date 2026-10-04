@@ -40,6 +40,8 @@ export interface CourseRevisionInput {
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
+  deliveryMode?: 'text' | 'voice';
+  voiceTurnId?: string;
 }
 
 /**
@@ -165,6 +167,7 @@ interface ChatStore {
     attachments?: ChatAttachment[],
     options?: SendMessageOptions
   ) => Promise<void>;
+  interruptActiveResponse: () => void;
   reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
   undoCourseRevision: () => Promise<void>;
   answerCheck: (
@@ -595,6 +598,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 },
               },
             });
+          } else if (chunk.type === 'voice_turn') {
+            patchAiMessage({
+              metadata: {
+                voiceTurn: {
+                  id: chunk.voice_turn_id,
+                  phase: chunk.phase,
+                  interactionMode: chunk.interaction_mode,
+                },
+              },
+            });
+          } else if (chunk.type === 'voice_delivery') {
+            const segments = Array.isArray(chunk.segments)
+              ? chunk.segments.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+              : [];
+            if (segments.length) {
+              patchAiMessage({
+                metadata: {
+                  voiceTurn: {
+                    id: chunk.voice_turn_id,
+                    phase: chunk.phase,
+                  },
+                  voiceSegments: segments,
+                  voiceLanguage: typeof chunk.language === 'string' ? chunk.language : 'auto',
+                  voiceInterruptible: chunk.interruptible !== false,
+                },
+              });
+            }
           } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
@@ -808,7 +838,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         teachingStateSummary(
           teachingRuntimeFor(convoId),
           options.courseContext
-        ) as Record<string, unknown> | undefined
+        ) as Record<string, unknown> | undefined,
+        options.deliveryMode ?? 'text',
+        options.voiceTurnId
       );
     } catch {
       if (streamToken === activeStreamToken) {
@@ -834,6 +866,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
     }
+  },
+
+  interruptActiveResponse: () => {
+    // Barge-in is intentional cancellation, not a network failure. Invalidate
+    // queued callbacks before aborting so the abandoned turn cannot append a
+    // late chunk or trigger the recovery toast.
+    activeStreamToken += 1;
+    activeStreamController?.abort();
+    activeStreamController = null;
+    set({
+      isGenerating: false,
+      generationProgress: 0,
+      generationActivity: 'thinking',
+      courseGenerationState: null,
+    });
   },
 
   reviseActiveCourse: async (adjustment) => {

@@ -25,6 +25,18 @@ sealed class ChatStreamEvent {
      * iOS decode this same `smart_blocks` event; see chat-contract.mjs.
      */
     data class SmartBlocks(val blocks: List<SmartBlock>) : ChatStreamEvent()
+    data class VoiceTurn(
+        val id: String?,
+        val phase: String,
+        val interactionMode: String?,
+    ) : ChatStreamEvent()
+    data class VoiceDelivery(
+        val id: String?,
+        val phase: String,
+        val segments: List<String>,
+        val interruptible: Boolean,
+        val language: String,
+    ) : ChatStreamEvent()
     data object Done : ChatStreamEvent()
     data class Error(val message: String) : ChatStreamEvent()
 }
@@ -87,6 +99,8 @@ object ChatStreamClient {
         conversationId: String,
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
+        deliveryMode: String = "text",
+        voiceTurnId: String? = null,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -94,6 +108,8 @@ object ChatStreamClient {
             "device_id" to "android",
             "client_message_id" to clientMessageId,
             "timezone" to java.time.ZoneId.systemDefault().id,
+            "delivery_mode" to deliveryMode,
+            "voice_turn_id" to voiceTurnId,
         )
         teachingRuntimeByConversation[conversationId]?.let { runtime ->
             runtime.lastAction?.let {
@@ -181,6 +197,25 @@ object ChatStreamClient {
                     applyTeachingPolicy(conversationId, it)
                 }
                 null
+            }
+            obj.get("type")?.asString == "voice_turn" ->
+                ChatStreamEvent.VoiceTurn(
+                    id = obj.get("voice_turn_id")?.takeIf { !it.isJsonNull }?.asString,
+                    phase = obj.get("phase")?.asString ?: "thinking",
+                    interactionMode = obj.get("interaction_mode")?.takeIf { !it.isJsonNull }?.asString,
+                )
+            obj.get("type")?.asString == "voice_delivery" -> {
+                val segments = obj.getAsJsonArray("segments")
+                    ?.mapNotNull { item -> item.takeIf { it.isJsonPrimitive }?.asString }
+                    ?.filter { it.isNotBlank() }
+                    .orEmpty()
+                ChatStreamEvent.VoiceDelivery(
+                    id = obj.get("voice_turn_id")?.takeIf { !it.isJsonNull }?.asString,
+                    phase = obj.get("phase")?.asString ?: "response_ready",
+                    segments = segments,
+                    interruptible = obj.get("interruptible")?.asBoolean ?: true,
+                    language = obj.get("language")?.asString ?: "auto",
+                )
             }
             obj.get("type")?.asString == "error" ->
                 ChatStreamEvent.Error(

@@ -32,6 +32,8 @@ class Lyo2ChatService: ObservableObject {
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil,
+        deliveryMode: String = "text",
+        voiceTurnId: String? = nil,
         onEvent: @escaping (Lyo2StreamEvent) -> Void
     ) {
         // Cancel any in-flight stream before starting a new one
@@ -60,7 +62,9 @@ class Lyo2ChatService: ObservableObject {
             stateSummary: mergedStateSummary,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
-            clientMessageId: clientMessageId
+            clientMessageId: clientMessageId,
+            deliveryMode: deliveryMode,
+            voiceTurnId: voiceTurnId
         )
         
         let baseURL = AppConfig.baseURL
@@ -109,6 +113,16 @@ class Lyo2ChatService: ObservableObject {
                 self?.activeStreamManager = nil
             }
         }
+    }
+
+    /// Intentional interruption used by conversational voice barge-in.
+    /// This cancels transport only; the next spoken turn goes back through the
+    /// same canonical Chat endpoint and interaction contract.
+    func cancelActiveStream() {
+        safetyTimeoutTask?.cancel()
+        safetyTimeoutTask = nil
+        activeStreamManager?.cancel()
+        activeStreamManager = nil
     }
 
     /// Grade an in-chat check against the block the server itself emitted.
@@ -369,6 +383,23 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     callback?(.teachingPolicy(policy: policy))
                 } catch {
                     Log.ai.error("Lyo2 Decoding Error (teaching_policy): \(error)")
+                }
+
+            case "voice_turn":
+                do {
+                    let event = try JSONDecoder().decode(VoiceTurnEvent.self, from: jsonData)
+                    callback?(.voiceTurn(event: event))
+                } catch {
+                    Log.ai.error("Lyo2 Decoding Error (voice_turn): \(error)")
+                }
+
+            case "voice_delivery":
+                didReceiveContentEvent = true
+                do {
+                    let event = try JSONDecoder().decode(VoiceDeliveryEvent.self, from: jsonData)
+                    callback?(.voiceDelivery(event: event))
+                } catch {
+                    Log.ai.error("Lyo2 Decoding Error (voice_delivery): \(error)")
                 }
                 
             case "clarification":

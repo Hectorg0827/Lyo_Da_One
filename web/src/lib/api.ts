@@ -444,7 +444,9 @@ export const api = {
         size_bytes: number;
       }>,
       forcedIntent?: 'COURSE',
-      stateSummary?: Record<string, unknown>
+      stateSummary?: Record<string, unknown>,
+      deliveryMode: 'text' | 'voice' = 'text',
+      voiceTurnId?: string
     ): AbortController {
       const controller = new AbortController();
 
@@ -465,6 +467,8 @@ export const api = {
             media,
             forced_intent: forcedIntent,
             state_summary: stateSummary,
+            delivery_mode: deliveryMode,
+            voice_turn_id: voiceTurnId,
           }),
           signal: controller.signal,
         });
@@ -530,6 +534,62 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ message, provider: provider || 'gemini' }),
       });
+    },
+  },
+
+  // ── Conversational voice delivery ──
+  tts: {
+    /**
+     * Neural speech is presentation only. It consumes text already produced by
+     * canonical Chat and never calls a second conversational model.
+     */
+    async streamSpeech(
+      text: string,
+      options: {
+        language?: string;
+        speed?: number;
+        signal?: AbortSignal;
+      } = {}
+    ): Promise<Response> {
+      const token = getAccessToken();
+      let res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          text,
+          language: options.language ?? 'auto',
+          speed: options.speed ?? 0.98,
+          format: 'mp3',
+          content_type: 'explanation',
+        }),
+        signal: options.signal,
+      });
+      if (res.status === 401) {
+        const refreshed = await tryRefreshToken();
+        if (refreshed) {
+          const nextToken = getAccessToken();
+          res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(nextToken ? { Authorization: `Bearer ${nextToken}` } : {}),
+            },
+            body: JSON.stringify({
+              text,
+              language: options.language ?? 'auto',
+              speed: options.speed ?? 0.98,
+              format: 'mp3',
+              content_type: 'explanation',
+            }),
+            signal: options.signal,
+          });
+        }
+      }
+      if (!res.ok) throw new ApiError('Speech synthesis failed', res.status);
+      return res;
     },
   },
 
