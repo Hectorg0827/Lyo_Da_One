@@ -1,14 +1,12 @@
 package com.lyo.app.ui.screens.chat
 
-import android.app.Activity
-import android.content.ActivityNotFoundException
+import android.Manifest
 import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
-import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -73,6 +71,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.data.api.AiConversationMessageDto
@@ -96,7 +95,9 @@ import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -190,11 +191,15 @@ fun ChatScreen(nav: NavHostController) {
     var activeConversationId by remember { mutableStateOf<String?>(null) }
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
-    var dictating by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    var voiceState by remember { mutableStateOf(ChatVoiceState.OFF) }
+    var streamJob by remember { mutableStateOf<Job?>(null) }
+    var inFlightAssistantId by remember { mutableStateOf<String?>(null) }
+    val voiceController = remember(context) { ChatVoiceController(context) }
+    val voiceActive = voiceState != ChatVoiceState.OFF
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -236,23 +241,35 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        dictating = false
-        if (result.resultCode == Activity.RESULT_OK) {
-            val transcript = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                ?.trim()
-                .orEmpty()
-            if (transcript.isNotEmpty()) {
-                input = listOf(input.trimEnd(), transcript)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" ")
-                    .take(MAX_CHAT_CHARS)
-                inputError = null
-            }
+    DisposableEffect(voiceController) {
+        onDispose {
+            streamJob?.cancel()
+            voiceController.release()
+        }
+    }
+
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            inputError = null
+            voiceController.start()
+        } else {
+            inputError = "Microphone access is required for voice conversation."
+        }
+    }
+
+    fun startConversationalVoice() {
+        if (uploadingAttachment) return
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            inputError = null
+            voiceController.start()
+        } else {
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
