@@ -40,6 +40,8 @@ export interface CourseRevisionInput {
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
+  /** Presentation channel only. Both channels use the exact same Chat AI. */
+  responseChannel?: 'text' | 'voice';
 }
 
 /**
@@ -165,6 +167,8 @@ interface ChatStore {
     attachments?: ChatAttachment[],
     options?: SendMessageOptions
   ) => Promise<void>;
+  /** Intentional interruption (for voice barge-in or Stop), not a transport error. */
+  cancelActiveResponse: () => void;
   reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
   undoCourseRevision: () => Promise<void>;
   answerCheck: (
@@ -808,7 +812,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         teachingStateSummary(
           teachingRuntimeFor(convoId),
           options.courseContext
-        ) as Record<string, unknown> | undefined
+        ) as Record<string, unknown> | undefined,
+        options.responseChannel ?? 'text'
       );
     } catch {
       if (streamToken === activeStreamToken) {
@@ -834,6 +839,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
     }
+  },
+
+  cancelActiveResponse: () => {
+    // Invalidate callbacks before aborting. A queued SSE callback from the old
+    // turn must never append text after a learner has barged in.
+    activeStreamToken += 1;
+    activeStreamController?.abort();
+    activeStreamController = null;
+    set({
+      isGenerating: false,
+      generationProgress: 0,
+      generationActivity: 'thinking',
+      courseGenerationState: null,
+    });
   },
 
   reviseActiveCourse: async (adjustment) => {
