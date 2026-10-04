@@ -57,6 +57,11 @@ final class UnifiedChatService: ObservableObject {
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
+    /// Delivery-only speech segments for conversational voice. These never
+    /// mutate or persist message text; the canonical .answer event still owns
+    /// the visible conversation.
+    var onVoiceTextSegment: ((String, Int) -> Void)?
+
     // MARK: - Private Properties
 
     /// Cancellable timeout task for the current stream.
@@ -527,6 +532,9 @@ final class UnifiedChatService: ObservableObject {
             // it into the next request's state_summary. Keep the UI layer
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
+
+        case .voiceTextSegment(let text, let sequence):
+            onVoiceTextSegment?(text, sequence)
 
         case .conversation(let id):
             if id != currentConversationId {
