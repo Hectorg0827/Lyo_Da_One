@@ -232,7 +232,7 @@ function InfoOverlay({ reel }: { reel: Reel }) {
           style={{ backgroundColor: 'rgba(0, 122, 255, 0.8)' }}
         >
           <Users className="w-3 h-3" />
-          <span className="font-bold">Join {reel.relatedGroup} Study Group</span>
+          <span className="font-bold">Find {reel.relatedGroup} Study Group</span>
           <ArrowRight className="w-3 h-3" />
         </a>
       )}
