@@ -94,7 +94,14 @@ class TextToSpeechService: NSObject, ObservableObject {
 
     private func processQueue(generation: Int) async {
         defer {
-            if generation == playbackGeneration { playbackTask = nil }
+            if generation == playbackGeneration {
+                playbackTask = nil
+                // A live model segment can arrive in the tiny window between
+                // the queue-empty check and task teardown. Never strand it.
+                if !speechQueue.isEmpty {
+                    startPlaybackIfNeeded()
+                }
+            }
         }
 
         while !Task.isCancelled && generation == playbackGeneration {

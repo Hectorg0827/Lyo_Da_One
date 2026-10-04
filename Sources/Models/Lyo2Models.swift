@@ -244,6 +244,9 @@ enum Lyo2StreamEvent {
     case done
     case conversation(id: String)
     case teachingPolicy(policy: TeachingPolicyEvent)
+    /// Ephemeral spoken-delivery segment. The canonical final answer is still
+    /// delivered separately through .answer and is the only persisted text.
+    case voiceTextSegment(text: String, sequence: Int)
     
     /// v1 backward-compat events (still emitted by deployed backend)
     case actions(blocks: [Lyo2UIBlock])

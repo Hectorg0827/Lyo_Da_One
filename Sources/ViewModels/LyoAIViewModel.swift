@@ -53,6 +53,10 @@ class LyoAIViewModel: ObservableObject {
     @Published var isAudioOutputEnabled: Bool = false
     private var lastSentToTTSText: String = ""
     private var shouldAutoSpeakCurrentResponse: Bool = false
+    /// True when the backend delivered spoken segments before the canonical
+    /// final answer. Prevents the final message publisher from speaking the
+    /// same turn a second time.
+    private var receivedStreamedVoiceSegmentsForTurn: Bool = false
     /// True while a conversational voice loop is in progress. Used to re-arm the
     /// mic only AFTER the AI's spoken response finishes (not the instant the send
     /// call returns), so funnel questions and streamed answers aren't cut off.
@@ -243,7 +247,13 @@ class LyoAIViewModel: ObservableObject {
             guard let self = self else { return }
             self.currentlyPlayingMessageId = nil  // Reset playing state
 
-            if self.voiceLoopActive && !self.sttService.isRecording {
+            // A streamed answer can have a brief gap between spoken segments
+            // while the model is still generating. Do not reopen the mic in
+            // that gap or Lyo's own next phrase can be treated as a new turn.
+            if self.voiceLoopActive
+                && !self.isLoading
+                && !self.sttService.isRecording
+            {
                 self.startListening()
             }
         }
@@ -258,6 +268,25 @@ class LyoAIViewModel: ObservableObject {
             Log.ai.info("🎭 LyoAIViewModel: Updating emotion to \(emotion)")
             self.currentEmotion = emotion
             self.ttsService.setEmotion(emotion)
+        }
+
+        unifiedChat.onVoiceTextSegment = { [weak self] text, sequence in
+            guard let self,
+                  self.voiceLoopActive,
+                  self.shouldAutoSpeakCurrentResponse,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return }
+
+            self.receivedStreamedVoiceSegmentsForTurn = true
+            self.isAIThinking = false
+            self.lastSentToTTSText = [
+                self.lastSentToTTSText,
+                text.trimmingCharacters(in: .whitespacesAndNewlines),
+            ]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            Log.ai.debug("🔊 Live voice segment \(sequence) queued before final answer")
+            self.ttsService.enqueue(text)
         }
 
         // Conversational voice is a delivery layer over Unified Chat.
@@ -332,6 +361,15 @@ class LyoAIViewModel: ObservableObject {
             .filter { !$0 }
             .sink { [weak self] _ in
                 guard let self, self.shouldAutoSpeakCurrentResponse else { return }
+                if self.receivedStreamedVoiceSegmentsForTurn {
+                    if self.voiceLoopActive
+                        && !self.isAISpeaking
+                        && !self.sttService.isRecording
+                    {
+                        self.startListening()
+                    }
+                    return
+                }
                 guard let lastMsg = self.messages.last(where: { !$0.isFromUser }) else { return }
                 let remaining = String(lastMsg.content.dropFirst(self.lastSentToTTSText.count))
                 if !remaining.isEmpty {
@@ -750,8 +788,9 @@ class LyoAIViewModel: ObservableObject {
         let shouldResumeListening = voiceLoopActive || isLiveMode || isVoiceActive
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         
-        // Reset TTS buffer for the new response
+        // Reset TTS delivery state for the new response.
         lastSentToTTSText = ""
+        receivedStreamedVoiceSegmentsForTurn = false
         shouldAutoSpeakCurrentResponse = shouldSpeak
 
         // Mark the conversational voice loop active BEFORE clearing isVoiceActive,
@@ -867,6 +906,7 @@ class LyoAIViewModel: ObservableObject {
 
     private func handleTTSStreaming(messages: [LyoMessage]) {
         guard shouldAutoSpeakCurrentResponse else { return }
+        guard !receivedStreamedVoiceSegmentsForTurn else { return }
         
         // Find the most recent assistant message
         guard let lastMessage = messages.last else { return }

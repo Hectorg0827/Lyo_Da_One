@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap
 /** One streamed chunk from the AI, or a terminal signal. */
 sealed class ChatStreamEvent {
     data class Chunk(val text: String) : ChatStreamEvent()
+    /** Delivery-only spoken segment; the final Chunk remains canonical text. */
+    data class VoiceTextSegment(val text: String, val sequence: Int) : ChatStreamEvent()
     data class Conversation(val id: String) : ChatStreamEvent()
     /**
      * Structured lesson content — every beat of a composed lesson (hook,
@@ -197,6 +199,11 @@ object ChatStreamClient {
                 )
             obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
                 ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
+            obj.get("type")?.asString == "voice_text_segment" && obj.has("text") ->
+                ChatStreamEvent.VoiceTextSegment(
+                    text = obj.get("text").asString,
+                    sequence = obj.get("sequence")?.asInt ?: 0,
+                )
             obj.get("type")?.asString == "answer" && obj.has("block") -> {
                 val text = obj.getAsJsonObject("block")
                     ?.getAsJsonObject("content")
