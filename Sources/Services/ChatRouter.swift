@@ -79,6 +79,7 @@ final class ChatRouter: ObservableObject {
         attachmentIds: [String] = [],
         mode: String = "chat",
         forcedIntent: String? = nil,
+        voiceSession: Bool = false,
         conversationHistory: [ConversationMessage] = [],
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -98,6 +99,26 @@ final class ChatRouter: ObservableObject {
         Log.ai.info(
             "🎯 Intent: \(intent.category.rawValue) | Tier: \(intent.tier.label) | Confidence: \(String(format: "%.0f%%", intent.confidence * 100))"
         )
+
+        // Voice is transport over the canonical Lyo 2.0 interaction contract,
+        // never a separate quick/voice AI. Force voice turns through the same
+        // stream that owns multimodal, memory, pedagogy, handoffs and sources.
+        if voiceSession {
+            return await handleDeepPath(
+                message: message,
+                media: media,
+                attachmentIds: attachmentIds,
+                mode: mode,
+                intent: intent,
+                forcedIntent: forcedIntent,
+                voiceSession: true,
+                conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
+                onStreamEvent: onStreamEvent,
+                startTime: startTime
+            )
+        }
 
         // Attachments must use the Lyo 2.0 stream because the quick endpoint is
         // text-only. This prevents a selected image from silently becoming a URL.
@@ -252,6 +273,7 @@ final class ChatRouter: ObservableObject {
         mode: String,
         intent: ClassifiedIntent,
         forcedIntent: String? = nil,
+        voiceSession: Bool = false,
         conversationHistory: [ConversationMessage],
         conversationId: String?,
         clientMessageId: String?,
@@ -273,7 +295,7 @@ final class ChatRouter: ObservableObject {
             media: media,
             attachmentIds: attachmentIds,
             forcedIntent: forcedIntent,
-            stateSummary: buildStateSummary(mode: mode, intent: intent),
+            stateSummary: buildStateSummary(mode: mode, intent: intent, voiceSession: voiceSession),
             conversationHistory: memoryWindow,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -316,7 +338,11 @@ final class ChatRouter: ObservableObject {
         return try await NetworkClient.shared.request(endpoint)
     }
 
-    private func buildStateSummary(mode: String, intent: ClassifiedIntent) -> [String: AnyCodable] {
+    private func buildStateSummary(
+        mode: String,
+        intent: ClassifiedIntent,
+        voiceSession: Bool = false
+    ) -> [String: AnyCodable] {
         var summary: [String: AnyCodable] = [
             "requested_mode": AnyCodable(mode),
             "mode_hint": AnyCodable(backendAI.chatModeHint(for: mode)),
@@ -334,6 +360,13 @@ final class ChatRouter: ObservableObject {
 
         if let emotion = intent.emotionalContext {
             summary["emotional_context"] = AnyCodable(emotion.rawValue)
+        }
+
+        if voiceSession {
+            summary["voice_session"] = AnyCodable([
+                "active": true,
+                "transport": "client_stt_tts",
+            ])
         }
 
         return summary
