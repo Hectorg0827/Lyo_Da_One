@@ -247,7 +247,13 @@ class LyoAIViewModel: ObservableObject {
             guard let self = self else { return }
             self.currentlyPlayingMessageId = nil  // Reset playing state
 
-            if self.voiceLoopActive && !self.sttService.isRecording {
+            // A streamed answer can have a brief gap between spoken segments
+            // while the model is still generating. Do not reopen the mic in
+            // that gap or Lyo's own next phrase can be treated as a new turn.
+            if self.voiceLoopActive
+                && !self.isLoading
+                && !self.sttService.isRecording
+            {
                 self.startListening()
             }
         }
@@ -355,7 +361,15 @@ class LyoAIViewModel: ObservableObject {
             .filter { !$0 }
             .sink { [weak self] _ in
                 guard let self, self.shouldAutoSpeakCurrentResponse else { return }
-                guard !self.receivedStreamedVoiceSegmentsForTurn else { return }
+                if self.receivedStreamedVoiceSegmentsForTurn {
+                    if self.voiceLoopActive
+                        && !self.isAISpeaking
+                        && !self.sttService.isRecording
+                    {
+                        self.startListening()
+                    }
+                    return
+                }
                 guard let lastMsg = self.messages.last(where: { !$0.isFromUser }) else { return }
                 let remaining = String(lastMsg.content.dropFirst(self.lastSentToTTSText.count))
                 if !remaining.isEmpty {
