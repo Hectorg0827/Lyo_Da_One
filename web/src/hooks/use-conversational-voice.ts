@@ -164,6 +164,7 @@ export function useConversationalVoice() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechAbortRef = useRef<AbortController | null>(null);
   const shouldListenAfterSpeechRef = useRef(false);
+  const spokenSegmentRef = useRef('');
   const phaseRef = useRef<ConversationalVoicePhase>('idle');
   const activeRef = useRef(false);
 
@@ -201,7 +202,7 @@ export function useConversationalVoice() {
     }
   }, [clearSilenceTimer]);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((bargeInMode = false) => {
     if (!activeRef.current) return;
     stopRecognition(true);
 
@@ -225,11 +226,12 @@ export function useConversationalVoice() {
     recognition.continuous = false;
 
     recognition.onspeechstart = () => {
-      // Barge-in: speech has priority over output. Stop audio immediately and
-      // cancel the canonical chat stream only when it is still generating.
-      if (phaseRef.current === 'speaking') stopAudio();
-      if (useChatStore.getState().isGenerating) interruptActiveResponse();
-      setPhase('listening');
+      // Do not stop Lyo on the acoustic start event alone: the browser can hear
+      // its own speaker. We wait for a partial transcript and suppress obvious
+      // echo before declaring a real barge-in.
+      if (!bargeInMode && phaseRef.current !== 'speaking') {
+        setPhase('listening');
+      }
     };
 
     const scheduleCommit = () => {
@@ -261,6 +263,25 @@ export function useConversationalVoice() {
       if (finalText.trim()) finalTranscriptRef.current = finalText.trim();
       interimTranscriptRef.current = interimText.trim();
       const transcript = (finalText || interimText).trim();
+      if (phaseRef.current === 'speaking' && transcript) {
+        const normalize = (value: string) =>
+          value.toLocaleLowerCase()
+            .replace(/[^a-z0-9áéíóúüñ ]/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const heard = normalize(transcript);
+        const spoken = normalize(spokenSegmentRef.current);
+        const looksLikeEcho =
+          heard.length >= 4
+          && spoken.length >= 4
+          && (spoken.includes(heard) || heard.includes(spoken.slice(0, Math.min(32, spoken.length))));
+        if (looksLikeEcho) return;
+
+        // A non-echo partial while Lyo is talking is a real interruption.
+        stopAudio();
+        if (useChatStore.getState().isGenerating) interruptActiveResponse();
+        setPhase('listening');
+      }
       setPartialTranscript(transcript);
       if (transcript.length >= MIN_UTTERANCE_CHARS) scheduleCommit();
     };
@@ -275,19 +296,20 @@ export function useConversationalVoice() {
     };
     recognition.onend = () => {
       recognitionRef.current = null;
-      if (
-        activeRef.current
-        && phaseRef.current === 'listening'
-        && !silenceTimerRef.current
+      if (!activeRef.current || silenceTimerRef.current) return;
+      if (phaseRef.current === 'speaking') {
+        window.setTimeout(() => startListening(true), 120);
+      } else if (
+        phaseRef.current === 'listening'
         && !useChatStore.getState().isGenerating
       ) {
-        window.setTimeout(() => startListening(), 150);
+        window.setTimeout(() => startListening(false), 150);
       }
     };
 
     try {
       recognition.start();
-      setPhase('listening');
+      if (!bargeInMode) setPhase('listening');
     } catch {
       setActive(false);
       setPhase('idle');
@@ -303,6 +325,9 @@ export function useConversationalVoice() {
     stopRecognition(true);
     stopAudio();
     setPhase('speaking');
+    // Re-arm STT while playback is active. Partial transcripts are echo-
+    // filtered above; a real learner interruption stops playback immediately.
+    window.setTimeout(() => startListening(true), 80);
     shouldListenAfterSpeechRef.current = true;
 
     const audio = audioRef.current ?? new Audio();
@@ -313,6 +338,7 @@ export function useConversationalVoice() {
     try {
       for (const segment of segments) {
         if (abort.signal.aborted || !activeRef.current) break;
+        spokenSegmentRef.current = segment;
         const response = await api.tts.streamSpeech(segment, {
           language,
           signal: abort.signal,
@@ -324,6 +350,7 @@ export function useConversationalVoice() {
         // Voice is progressive enhancement; the canonical text answer remains.
       }
     } finally {
+      spokenSegmentRef.current = '';
       if (speechAbortRef.current === abort) speechAbortRef.current = null;
       if (
         activeRef.current
