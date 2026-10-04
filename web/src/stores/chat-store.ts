@@ -595,6 +595,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const streamToken = ++activeStreamToken;
     const streamStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     let firstVisibleChunkRecorded = false;
+    let receivedTextDelta = false;
 
     try {
       activeStreamController = api.chat.stream(
@@ -685,7 +686,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   metadata: { clientTtftMs: Math.round(now - streamStartedAt) },
                 });
               }
-              appendToAiMessage(text);
+              if (chunk.type === 'text_delta') {
+                receivedTextDelta = true;
+                appendToAiMessage(text);
+              } else if (!(chunk.type === 'answer' && receivedTextDelta)) {
+                // The backend emits a final answer snapshot for legacy clients.
+                // Once deltas have been consumed, appending that snapshot would
+                // duplicate the complete answer.
+                appendToAiMessage(text);
+              }
             }
           } else if (chunk.type === 'latency') {
             const metrics =
@@ -855,6 +864,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               options.courseContext
             ) as Record<string, unknown> | undefined
           ),
+          stream_capabilities: { text_delta: true },
           ...(options.voiceSession || get().voiceSessionActive
             ? { voice_session: { active: true, transport: 'client_stt_tts' } }
             : {}),
