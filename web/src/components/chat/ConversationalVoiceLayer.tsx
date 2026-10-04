@@ -18,7 +18,6 @@ const END_OF_TURN_SILENCE_MS = 650;
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
-const CANONICAL_STREAM_DRAIN_MS = 1200;
 
 function latestAssistantMessage() {
   const state = useChatStore.getState();
@@ -100,21 +99,15 @@ export default function ConversationalVoiceLayer() {
     stopRecognition();
     if (useChatStore.getState().isGenerating) {
       if (canonicalAnswerReadyRef.current) {
-        // The model answer already exists and is speaking; give the same Chat
-        // stream a short window to finish SmartBlocks/sources/persistence
-        // before starting the learner's interruption turn.
-        const deadline = performance.now() + CANONICAL_STREAM_DRAIN_MS;
-        while (
-          activeRef.current
-          && useChatStore.getState().isGenerating
-          && performance.now() < deadline
-        ) {
+        // The answer already exists and is speaking. Preserve the same Chat
+        // stream until its SmartBlocks/sources/persistence finish, while the
+        // learner's recognized interruption waits locally as the next turn.
+        while (activeRef.current && useChatStore.getState().isGenerating) {
           await new Promise((resolve) => window.setTimeout(resolve, 40));
         }
-      }
-      if (useChatStore.getState().isGenerating) {
-        // Pre-answer barge-in still cancels expensive model work. This is also
-        // the bounded fallback if final stream bookkeeping stalls.
+      } else if (useChatStore.getState().isGenerating) {
+        // Before voice_ready, interruption means the learner is replacing
+        // unfinished model work, so cancellation is correct.
         interruptGeneration();
       }
     }
