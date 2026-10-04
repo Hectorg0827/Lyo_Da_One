@@ -1,9 +1,11 @@
 package com.lyo.app.ui.screens.chat
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +76,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.data.api.AiConversationMessageDto
@@ -80,6 +84,7 @@ import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
 import com.lyo.app.data.api.ChatMediaRef
+import com.lyo.app.data.api.ChatVoiceSession
 import com.lyo.app.data.api.CheckAnswerRequest
 import com.lyo.app.data.api.CheckAnswerResult
 import com.lyo.app.data.api.CreateAiConversationRequest
@@ -97,6 +102,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -197,6 +203,22 @@ fun ChatScreen(nav: NavHostController) {
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    var conversationVoice by remember { mutableStateOf(false) }
+    var voiceState by remember { mutableStateOf(ChatVoiceController.State.OFF) }
+    var voicePendingTranscript by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    var activeStreamJob by remember { mutableStateOf<Job?>(null) }
+    val chatVoiceController = remember(context) {
+        ChatVoiceController(
+            context = context,
+            onTranscript = { text, interrupted ->
+                voicePendingTranscript = text to interrupted
+            },
+            onState = { state ->
+                voiceState = state
+                conversationVoice = state != ChatVoiceController.State.OFF
+            },
+        )
+    }
 
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
@@ -228,11 +250,27 @@ fun ChatScreen(nav: NavHostController) {
         textToSpeech = engine
 
         onDispose {
+            chatVoiceController.close()
+            activeStreamJob?.cancel()
             engine.stop()
             engine.shutdown()
             textToSpeech = null
             textToSpeechReady = false
             speakingMessageId = null
+        }
+    }
+
+    val voicePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            if (isStreaming) {
+                activeStreamJob?.cancel()
+                isStreaming = false
+            }
+            chatVoiceController.start()
+        } else {
+            inputError = "Microphone permission is required for Voice conversation."
         }
     }
 
@@ -293,7 +331,7 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    fun send(raw: String) {
+    fun send(raw: String, fromVoice: Boolean = false, interruptedPreviousTurn: Boolean = false) {
         val trimmed = raw.trim()
         val attachments = pendingAttachments.toList()
         if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
@@ -307,7 +345,8 @@ fun ChatScreen(nav: NavHostController) {
         inputError = null
         isStreaming = true
 
-        scope.launch {
+        activeStreamJob?.cancel()
+        activeStreamJob = scope.launch {
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -337,6 +376,14 @@ fun ChatScreen(nav: NavHostController) {
                             sizeBytes = attachment.size,
                         )
                     },
+                    voiceSession = if (fromVoice) {
+                        ChatVoiceSession(
+                            active = true,
+                            locale = Locale.getDefault().toLanguageTag(),
+                            interruptedPreviousTurn = interruptedPreviousTurn,
+                            handsFree = true,
+                        )
+                    } else null,
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -367,7 +414,30 @@ fun ChatScreen(nav: NavHostController) {
                 )
             }
             isStreaming = false
+            activeStreamJob = null
+            if (fromVoice && conversationVoice) {
+                val spoken = messages.lastOrNull { it.role == "assistant" }?.content.orEmpty()
+                if (spoken.isNotBlank()) {
+                    chatVoiceController.speak(
+                        parseChatContent(spoken).text,
+                        Locale.getDefault().toLanguageTag(),
+                    )
+                } else {
+                    chatVoiceController.startListening()
+                }
+            }
         }
+    }
+
+    LaunchedEffect(voicePendingTranscript) {
+        val pending = voicePendingTranscript ?: return@LaunchedEffect
+        voicePendingTranscript = null
+        chatVoiceController.markThinking()
+        send(
+            raw = pending.first,
+            fromVoice = true,
+            interruptedPreviousTurn = pending.second,
+        )
     }
 
     /**
@@ -401,6 +471,34 @@ fun ChatScreen(nav: NavHostController) {
             // grade leaves the check pending rather than faking a verdict —
             // the option stays tappable so the learner can try again.
         }
+    }
+
+    fun toggleConversationVoice() {
+        if (conversationVoice) {
+            chatVoiceController.stop()
+            conversationVoice = false
+            return
+        }
+        if (isStreaming) {
+            activeStreamJob?.cancel()
+            isStreaming = false
+        }
+        val permission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO,
+        )
+        if (permission == PackageManager.PERMISSION_GRANTED) {
+            chatVoiceController.start()
+        } else {
+            voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    fun interruptVoice() {
+        activeStreamJob?.cancel()
+        activeStreamJob = null
+        isStreaming = false
+        chatVoiceController.interrupt()
     }
 
     fun startDictation() {
@@ -476,6 +574,9 @@ fun ChatScreen(nav: NavHostController) {
             TextButton(
                 enabled = !isStreaming && !uploadingAttachment,
                 onClick = {
+                    chatVoiceController.stop()
+                    conversationVoice = false
+                    activeStreamJob?.cancel()
                     textToSpeech?.stop()
                     speakingMessageId = null
                     activeConversationId = null
@@ -604,8 +705,41 @@ fun ChatScreen(nav: NavHostController) {
             }
 
             IconButton(
+                onClick = {
+                    if (conversationVoice &&
+                        (voiceState == ChatVoiceController.State.SPEAKING ||
+                            voiceState == ChatVoiceController.State.THINKING)
+                    ) {
+                        interruptVoice()
+                    } else {
+                        toggleConversationVoice()
+                    }
+                },
+                enabled = !uploadingAttachment,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (conversationVoice) LyoPurple.copy(alpha = 0.18f)
+                        else Color.Transparent,
+                    ),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = when {
+                        conversationVoice &&
+                            (voiceState == ChatVoiceController.State.SPEAKING ||
+                                voiceState == ChatVoiceController.State.THINKING) -> "Interrupt Lyo"
+                        conversationVoice -> "End voice conversation"
+                        else -> "Start voice conversation"
+                    },
+                    tint = if (conversationVoice) LyoPurple else TextSecondary,
+                )
+            }
+
+            IconButton(
                 onClick = ::startDictation,
-                enabled = !isStreaming && !uploadingAttachment && !dictating,
+                enabled = !conversationVoice && !isStreaming && !uploadingAttachment && !dictating,
                 modifier = Modifier.size(44.dp),
             ) {
                 if (dictating) {
@@ -630,6 +764,8 @@ fun ChatScreen(nav: NavHostController) {
                 placeholder = {
                     Text(
                         when {
+                            conversationVoice && voiceState == ChatVoiceController.State.LISTENING -> "Listening…"
+                            conversationVoice && voiceState == ChatVoiceController.State.SPEAKING -> "Lyo is speaking…"
                             isStreaming -> "Lyo is thinking…"
                             dictating -> "Listening…"
                             else -> "Ask Lyo anything…"
