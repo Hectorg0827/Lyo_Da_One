@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { motion, useReducedMotion } from 'framer-motion'
 import {
   Bookmark,
   Check,
@@ -232,8 +233,16 @@ export default function NodePreview({
 }) {
   const hostName = node.organizer_name || node.host?.name
   const directions = directionsUrl(node)
+  const reduceMotion = useReducedMotion() === true
   return (
-    <article aria-labelledby={headingId} className={cn('space-y-3', className)}>
+    <motion.article
+      key={node.key}
+      aria-labelledby={headingId}
+      initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      className={cn('space-y-3', className)}
+    >
       <header className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -299,6 +308,6 @@ export default function NodePreview({
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
-    </article>
+    </motion.article>
   )
 }
