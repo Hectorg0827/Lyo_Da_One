@@ -92,6 +92,13 @@ export function TopBar() {
     router.push('/auth/login');
   }
 
+  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchValue.trim();
+    if (!query) return;
+    router.push(`/discover?q=${encodeURIComponent(query)}`);
+  }
+
   // Focused classroom layout: no global search/notifications/messages
   // competing with an active lesson. All hooks above still run every
   // render — this only skips the header markup.
@@ -115,8 +122,8 @@ export function TopBar() {
         <span className="text-sm font-medium text-[var(--text-secondary)]" aria-hidden="true" />
       </div>
 
-      {/* Center: Search */}
-      <div className="flex-1 max-w-xl mx-auto">
+      {/* Center: Search — a real navigation action, not a decorative field. */}
+      <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto" role="search">
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)] pointer-events-none"
@@ -126,7 +133,7 @@ export function TopBar() {
             type="search"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search courses, clips, topics..."
+            placeholder="Search discoveries..."
             className={cn(
               'w-full pl-9 pr-4 py-2 text-sm rounded-xl',
               'bg-[var(--surface-2)] border border-[var(--border)]',
@@ -134,10 +141,10 @@ export function TopBar() {
               'focus:outline-none focus:ring-2 focus:ring-[#6366f1]/60 focus:border-[#6366f1]',
               'transition-all duration-200',
             )}
-            aria-label="Search courses, clips, and topics"
+            aria-label="Search discoveries"
           />
         </div>
-      </div>
+      </form>
 
       {/* Right: account actions. Signed out, there is nothing personal to show. */}
       {isLoading ? (
