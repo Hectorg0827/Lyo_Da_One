@@ -632,8 +632,9 @@ final class UnifiedChatService: ObservableObject {
             Log.ai.info("Answer text (\(answerText.count) chars): \(answerText.prefix(100))")
 
             if let idx = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                // Update the skeleton/placeholder message with the real answer
-                // 🎬 shouldAnimate = true → triggers typewriter in the message bubble
+                // If text deltas already rendered this answer, the final
+                // snapshot is reconciliation—not a second typewriter pass.
+                let hadStreamedText = !messages[idx].content.isEmpty
 
                 // Strip the loading skeleton marker — an answer has arrived.
                 // If .processing is left in, the .done handler mistakes this message
@@ -662,7 +663,7 @@ final class UnifiedChatService: ObservableObject {
                     responseMode: messages[idx].responseMode,
                     quickExplainer: messages[idx].quickExplainer,
                     courseProposal: messages[idx].courseProposal,
-                    shouldAnimate: true
+                    shouldAnimate: !hadStreamedText
                 )
                 messages[idx] = updatedMessage
                 Log.ai.info("Answer message updated at index \(idx) with types: \(finalTypes)")
