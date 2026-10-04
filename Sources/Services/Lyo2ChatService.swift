@@ -386,6 +386,15 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     didReceiveContentEvent = true
                     callback?(.clarification(text: text))
                 }
+
+            case "voice_text_segment":
+                if let text = json["text"] as? String, !text.isEmpty {
+                    // Delivery-only: do not mark this as canonical message
+                    // content. The later answer event remains the single
+                    // persisted assistant response.
+                    let sequence = json["sequence"] as? Int ?? 0
+                    callback?(.voiceTextSegment(text: text, sequence: sequence))
+                }
                 
             case "answer":
                 Log.ai.info("Lyo2 SSE: processing answer event")
