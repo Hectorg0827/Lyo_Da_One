@@ -201,7 +201,26 @@ class LyoAIViewModel: ObservableObject {
 
         sttService.$isRecording
             .receive(on: RunLoop.main)
-            .assign(to: &$isVoiceActive)
+            .sink { [weak self] recording in
+                guard let self else { return }
+                self.isVoiceActive = recording
+
+                // SFSpeechRecognitionTask has a bounded recording window. Live
+                // conversation must recover from that transport cap without
+                // ending the Chat voice session or changing AI state.
+                if !recording && self.voiceLoopActive && self.isLiveMode {
+                    Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: 180_000_000)
+                        guard let self,
+                              self.voiceLoopActive,
+                              self.isLiveMode,
+                              !self.sttService.isRecording
+                        else { return }
+                        self.startListening()
+                    }
+                }
+            }
+            .store(in: &cancellables)
 
         // Continuous Conversation: Start listening when AI finishes speaking.
         // Drives the restart off voiceLoopActive (not isVoiceActive, which is cleared
