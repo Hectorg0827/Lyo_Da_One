@@ -59,7 +59,6 @@ class LyoAIViewModel: ObservableObject {
     private var voiceLoopActive: Bool = false
     private var voiceTurnDebounceTask: Task<Void, Never>?
     private let voiceEndOfTurnDelayNanoseconds: UInt64 = 650_000_000
-    private let voiceBargeInThreshold: Float = 0.18
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -170,15 +169,27 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] text in
                 guard let self, self.voiceLoopActive, !text.isEmpty else { return }
+
+                // The full-duplex microphone hears while Lyo speaks. Acoustic
+                // echo cancellation does most of the work; this semantic guard
+                // prevents residual speaker echo from becoming a new user turn.
+                if self.isAISpeaking && self.isLikelyVoiceEcho(text) {
+                    return
+                }
+
                 self.inputText = text
                 self.lastLiveTranscript = text
 
-                // In conversational mode the microphone stays armed while Lyo
-                // speaks. A real learner utterance interrupts playback and the
-                // in-flight Chat stream, but remains on the same conversation.
+                // A real learner utterance owns the floor. Interrupt either
+                // speech playback or model generation in place, then debounce
+                // the new utterance into the same Unified Chat conversation.
                 if self.isAISpeaking {
                     self.stopSpeaking()
+                }
+                if self.isLoading {
                     self.unifiedChat.interruptCurrentResponse()
+                }
+                if self.isAISpeaking || self.isLoading {
                     self.shouldAutoSpeakCurrentResponse = false
                 }
 
@@ -277,11 +288,6 @@ class LyoAIViewModel: ObservableObject {
             .sink { [weak self] level in
                 guard let self else { return }
                 self.userLiveAudioLevel = level
-                if self.voiceLoopActive && self.isAISpeaking && level >= self.voiceBargeInThreshold {
-                    self.stopSpeaking()
-                    self.unifiedChat.interruptCurrentResponse()
-                    self.shouldAutoSpeakCurrentResponse = false
-                }
             }
             .store(in: &cancellables)
 
@@ -829,6 +835,33 @@ class LyoAIViewModel: ObservableObject {
     }
 
     // MARK: - Incremental TTS Logic
+
+    private func isLikelyVoiceEcho(_ heard: String) -> Bool {
+        func normalize(_ value: String) -> String {
+            value.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        }
+
+        let heardNormalized = normalize(heard)
+        let spokenNormalized = normalize(lastSentToTTSText)
+        guard !heardNormalized.isEmpty, !spokenNormalized.isEmpty else { return false }
+
+        if heardNormalized.count >= 12 && spokenNormalized.contains(heardNormalized) {
+            return true
+        }
+        if spokenNormalized.count >= 12 && heardNormalized.contains(spokenNormalized) {
+            return true
+        }
+
+        let heardWords = Set(heardNormalized.split(separator: " ").map(String.init))
+        let spokenWords = Set(spokenNormalized.split(separator: " ").map(String.init))
+        guard !heardWords.isEmpty, !spokenWords.isEmpty else { return false }
+        let overlap = heardWords.intersection(spokenWords).count
+        let denominator = max(1, min(heardWords.count, spokenWords.count))
+        return Double(overlap) / Double(denominator) >= 0.82
+    }
 
     private func handleTTSStreaming(messages: [LyoMessage]) {
         guard shouldAutoSpeakCurrentResponse else { return }
