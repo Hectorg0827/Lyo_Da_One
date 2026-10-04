@@ -249,6 +249,7 @@ export function adaptUser(raw: Record<string, unknown>): User {
     followingCount: (raw.following_count as number) || 0,
     createdAt: (raw.created_at as string) || new Date().toISOString(),
     isPremium: (raw.is_premium as boolean) || false,
+    isFollowing: (raw.is_following as boolean) || false,
   };
 }
 
