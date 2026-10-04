@@ -380,6 +380,11 @@ fun ChatScreen(nav: NavHostController) {
                             messages[messages.lastIndex] = last.copy(content = last.content + event.text)
                         }
 
+                        is ChatStreamEvent.FinalAnswer -> {
+                            val last = messages.last()
+                            messages[messages.lastIndex] = last.copy(content = event.text)
+                        }
+
                         is ChatStreamEvent.SmartBlocks -> {
                             // Structured lesson content — every beat, not just
                             // plain prose. Previously unhandled, so lessons
