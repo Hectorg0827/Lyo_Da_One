@@ -386,6 +386,12 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     didReceiveContentEvent = true
                     callback?(.clarification(text: text))
                 }
+
+            case "text_delta":
+                if let text = json["content"] as? String, !text.isEmpty {
+                    didReceiveContentEvent = true
+                    callback?(.textDelta(text: text))
+                }
                 
             case "answer":
                 Log.ai.info("Lyo2 SSE: processing answer event")
