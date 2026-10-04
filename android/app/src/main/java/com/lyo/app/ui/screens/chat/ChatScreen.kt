@@ -461,19 +461,16 @@ fun ChatScreen(nav: NavHostController) {
 
     fun submitLiveVoiceTranscript(transcript: String) {
         scope.launch {
-            var waitedMs = 0L
             if (isStreaming && canonicalVoiceAnswerReady) {
-                // The answer is already canonical and speaking. Let its stream
-                // finish UI metadata/persistence before sending the interruption
-                // as the next turn, rather than dropping SmartBlocks.
-                while (isStreaming && voiceConversation && waitedMs < 1_200L) {
+                // The answer is already canonical and speaking. Preserve its
+                // stream until SmartBlocks/sources/persistence finish, while
+                // holding the recognized interruption locally as the next turn.
+                while (isStreaming && voiceConversation) {
                     delay(40)
-                    waitedMs += 40
                 }
-            }
-            if (isStreaming) {
-                // Before voice_ready this is a true model-generation barge-in;
-                // after the bounded drain window it is a stalled transport.
+            } else if (isStreaming) {
+                // Before voice_ready the learner is replacing unfinished model
+                // work, so cancellation is correct.
                 streamJob?.cancel()
                 streamJob = null
                 isStreaming = false
