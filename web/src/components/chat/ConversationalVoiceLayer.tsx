@@ -18,6 +18,7 @@ const END_OF_TURN_SILENCE_MS = 650;
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
+const CANONICAL_STREAM_DRAIN_MS = 1200;
 
 function latestAssistantMessage() {
   const state = useChatStore.getState();
@@ -47,6 +48,7 @@ export default function ConversationalVoiceLayer() {
   const finalTranscriptRef = useRef('');
   const lastSpokenTextRef = useRef('');
   const awaitingAssistantRef = useRef(false);
+  const canonicalAnswerReadyRef = useRef(false);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
@@ -96,7 +98,27 @@ export default function ConversationalVoiceLayer() {
     }
     stopSpeech();
     stopRecognition();
-    if (useChatStore.getState().isGenerating) interruptGeneration();
+    if (useChatStore.getState().isGenerating) {
+      if (canonicalAnswerReadyRef.current) {
+        // The model answer already exists and is speaking; give the same Chat
+        // stream a short window to finish SmartBlocks/sources/persistence
+        // before starting the learner's interruption turn.
+        const deadline = performance.now() + CANONICAL_STREAM_DRAIN_MS;
+        while (
+          activeRef.current
+          && useChatStore.getState().isGenerating
+          && performance.now() < deadline
+        ) {
+          await new Promise((resolve) => window.setTimeout(resolve, 40));
+        }
+      }
+      if (useChatStore.getState().isGenerating) {
+        // Pre-answer barge-in still cancels expensive model work. This is also
+        // the bounded fallback if final stream bookkeeping stalls.
+        interruptGeneration();
+      }
+    }
+    canonicalAnswerReadyRef.current = false;
     awaitingAssistantRef.current = true;
     changePhase('thinking');
     await sendMessage(transcript, [], { voiceSession: true });
@@ -257,10 +279,9 @@ export default function ConversationalVoiceLayer() {
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
     stopSpeech();
-    // voice_ready can arrive while the HTTP stream is still finishing
-    // SmartBlocks/persistence. Once the learner takes the floor, invalidate the
-    // old delivery stream so no late event can start stale speech.
-    if (useChatStore.getState().isGenerating) interruptGeneration();
+    // A sound spike may be a real interruption or a false-positive from the
+    // speaker. Stop audio immediately, but preserve the canonical Chat stream
+    // until speech recognition confirms a learner turn.
     awaitingAssistantRef.current = false;
     loudFramesRef.current = 0;
     finalTranscriptRef.current = '';
@@ -304,6 +325,7 @@ export default function ConversationalVoiceLayer() {
     activeRef.current = active;
     if (active) return;
     awaitingAssistantRef.current = false;
+    canonicalAnswerReadyRef.current = false;
     stopRecognition();
     stopSpeech();
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -358,6 +380,7 @@ export default function ConversationalVoiceLayer() {
     // canonical Chat turn. Do not wait for sources/actions/[DONE] after the
     // answer is already complete.
     awaitingAssistantRef.current = false;
+    canonicalAnswerReadyRef.current = true;
     consumeVoicePlaybackCue(voicePlaybackCue.messageId);
     void speakAssistant(voicePlaybackCue.messageId, voicePlaybackCue.text);
   }, [
