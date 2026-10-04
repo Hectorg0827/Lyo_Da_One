@@ -124,11 +124,15 @@ export default function ConversationalVoiceLayer() {
         else interimText = `${interimText} ${transcript}`.trim();
       }
       finalTranscriptRef.current = finalText;
-      setLiveTranscript(`${finalText} ${interimText}`.trim());
+      const combined = `${finalText} ${interimText}`.trim();
+      setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (finalText) {
+      if (combined) {
+        // Browser engines disagree about when an utterance becomes "final".
+        // Our own silence endpointing keeps turn-taking fast and works from
+        // stable interim text instead of waiting for the browser to decide.
         silenceTimerRef.current = setTimeout(() => {
-          void sendVoiceTurn(finalTranscriptRef.current);
+          void sendVoiceTurn(combined);
         }, END_OF_TURN_SILENCE_MS);
       }
     };
