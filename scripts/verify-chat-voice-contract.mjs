@@ -20,6 +20,8 @@ const contracts = [
       'api.tts.synthesizeStream',
       'createSpeechRecognition',
       'bargeIn',
+      'subscribeVoiceTextSegments',
+      'streamedSpeechRef',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -30,6 +32,8 @@ const contracts = [
       "voice_session: { active: true, transport: 'client_stt_tts' }",
       'interruptGeneration',
       'activeStreamController?.abort()',
+      "chunk.type === 'voice_text_segment'",
+      'emitVoiceTextSegment',
     ],
   },
   {
@@ -53,6 +57,8 @@ const contracts = [
       'startListening()',
       'voiceSession: shouldResumeListening',
       'unifiedChat.interruptCurrentResponse()',
+      'unifiedChat.onVoiceTextSegment',
+      'receivedStreamedVoiceSegmentsForTurn',
     ],
     forbidden: [
       'await AudioStreamManager.shared.startLiveMode',
@@ -73,6 +79,8 @@ const contracts = [
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
       'engine.speak',
+      'ChatStreamEvent.VoiceTextSegment',
+      'streamedVoiceSegmentsForTurn',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -84,6 +92,8 @@ const contracts = [
       '"voice_session"',
       '"client_stt_tts"',
       '"api/v1/lyo2/chat/stream"',
+      '"voice_text_segment"',
+      'VoiceTextSegment',
     ],
   },
 ];
@@ -110,6 +120,14 @@ if (fs.existsSync(backendContract)) {
   }
 }
 
+const backendStream = '../lyobackendjune/lyo_app/api/v1/stream_lyo2.py';
+if (fs.existsSync(backendStream)) {
+  const source = fs.readFileSync(backendStream, 'utf8');
+  for (const needle of ['voice_text_segment', 'VoiceSegmenter', 'text_delta_callback']) {
+    if (!source.includes(needle)) failures.push(`Backend streamed voice delivery missing ${needle}`);
+  }
+}
+
 if (failures.length) {
   console.error('Conversational voice contract failed:');
   failures.forEach((failure) => console.error(`- ${failure}`));
@@ -118,5 +136,5 @@ if (failures.length) {
 
 console.log(
   'Conversational voice contract: Web, iOS and Android use canonical Chat ' +
-  'with STT/TTS transport, voice_session delivery metadata and barge-in; no separate voice AI path.'
+  'with STT/TTS transport, streamed spoken segments, voice_session delivery metadata and barge-in; no separate voice AI path.'
 );
