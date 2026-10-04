@@ -123,7 +123,14 @@ class VoiceInputService: ObservableObject {
         // Configure audio session
         #if os(iOS)
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+        // Conversational voice keeps input available while Lyo is speaking.
+        // voiceChat enables platform echo cancellation so the microphone can
+        // detect a real barge-in without transcribing Lyo's own speaker output.
+        try audioSession.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetooth, .duckOthers]
+        )
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         #endif
         
@@ -222,7 +229,8 @@ class VoiceInputService: ObservableObject {
         
         // Deactivate audio session
         #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(false)
+        // The shared play-and-record session stays active for the voice loop;
+        // TextToSpeechService deactivates it when the spoken turn actually ends.
         
         // Haptic feedback
         HapticManager.shared.playRecordingStopped()
