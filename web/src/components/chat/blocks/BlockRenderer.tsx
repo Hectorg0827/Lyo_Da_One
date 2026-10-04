@@ -1,7 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, FileText, ShieldCheck } from 'lucide-react';
 import katex from 'katex';
 import { cn } from '@/lib/utils';
 import type { ChatBlock, ChatMessage } from '@/types';
@@ -140,6 +140,47 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
   );
 }
 
+function SourceNavigatorBlock({ block }: { block: ChatBlock }) {
+  const content = (block.content ?? {}) as Record<string, unknown>;
+  const items = Array.isArray(content.items) ? content.items : [];
+  if (!items.length) return null;
+
+  return (
+    <div className="rounded-2xl border border-lyo-500/20 bg-lyo-500/5 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <ShieldCheck className="w-4 h-4 text-lyo-300" aria-hidden="true" />
+        <div>
+          <div className="text-sm font-semibold text-white/85">
+            {typeof content.title === 'string' ? content.title : 'Sources used'}
+          </div>
+          <div className="text-[11px] text-white/40">
+            Lyo grounded this answer in the material below.
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-2">
+        {items.map((item, index) => {
+          const source = (item ?? {}) as Record<string, unknown>;
+          const label = String(source.label ?? source.title ?? 'Attachment');
+          const detail = String(source.detail ?? '');
+          return (
+            <div
+              key={`${label}-${index}`}
+              className="flex items-start gap-2 rounded-xl border border-white/8 bg-black/15 px-3 py-2.5"
+            >
+              <FileText className="w-4 h-4 mt-0.5 shrink-0 text-white/45" aria-hidden="true" />
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-white/80 truncate">{label}</div>
+                {detail ? <div className="text-[11px] text-white/40 mt-0.5">{detail}</div> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Best-effort rendering for a declared block type that has no bespoke
  * renderer yet (code, flashcard, media, progress, interactive, masteryMap).
@@ -267,13 +308,13 @@ export default function BlockRenderer({
           case 'quiz':
             return <CheckBlock key={block.id} block={block} message={message} />;
           case 'interactive':
-            // A subtype this client does not know still reaches GenericBlock,
-            // so an explorable is an upgrade rather than a gate.
-            return block.subtype === 'explorable' ? (
-              <ExplorableBlock key={block.id} block={block} />
-            ) : (
-              <GenericBlock key={block.id} block={block} />
-            );
+            if (block.subtype === 'explorable') {
+              return <ExplorableBlock key={block.id} block={block} />;
+            }
+            if (block.subtype === 'sourceNavigator') {
+              return <SourceNavigatorBlock key={block.id} block={block} />;
+            }
+            return <GenericBlock key={block.id} block={block} />;
           case 'unknown':
             // Forward compatibility: a type this client genuinely does not
             // know is skipped, never rendered as raw JSON and never thrown on.
