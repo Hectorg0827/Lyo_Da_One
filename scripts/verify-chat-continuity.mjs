@@ -75,6 +75,8 @@ const contracts = [
       "GenerationActivity = 'thinking' | 'searching' | 'response' | 'course'",
       "generationActivity: 'thinking'",
       "generationActivity: 'course'",
+      "chunk.type === 'answer' || chunk.type === 'text' || chunk.type === 'text_delta'",
+      "clientTtftMs",
     ],
   },
   {
@@ -98,6 +100,8 @@ const contracts = [
       '"media"',
       '"mime_type"',
       '"size_bytes"',
+      'obj.has("content")',
+      'ChatStreamEvent.Chunk',
     ],
   },
   {
@@ -150,7 +154,24 @@ const contracts = [
       'conversation_id',
       'client_message_id',
       'case conversation(id: String)',
+      'case textDelta(text: String)',
       'case sizeBytes = "size_bytes"',
+    ],
+  },
+  {
+    name: 'iOS incremental stream parser',
+    path: 'Sources/Services/Lyo2ChatService.swift',
+    needles: [
+      'case "text_delta":',
+      'callback?(.textDelta(text: text))',
+    ],
+  },
+  {
+    name: 'iOS incremental stream consumer',
+    path: 'Sources/Services/UnifiedChatService.swift',
+    needles: [
+      'case .textDelta(let text):',
+      'content: messages[idx].content + text',
     ],
   },
   {
