@@ -23,6 +23,10 @@ class VoiceInputService: ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var error: VoiceInputError?
     @Published var permissionStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
+
+    /// Called when natural end-of-utterance is detected. The owner decides
+    /// what to do with the text; Chat routes it through the canonical contract.
+    var onUtteranceReady: ((String) -> Void)?
     
     // MARK: - Private Properties
     private var speechRecognizer: SFSpeechRecognizer?
@@ -30,10 +34,13 @@ class VoiceInputService: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
     private var recordingTimer: Timer?
+    private var silenceTimer: Timer?
     private var startTime: Date?
+    private var deliveringUtterance = false
     
     // Configuration
     private let maxRecordingDuration: TimeInterval = 60 // 1 minute max
+    private let endOfUtteranceDelay: TimeInterval = 0.9
     
     private init() {
         speechRecognizer = SFSpeechRecognizer(locale: .current)
@@ -158,14 +165,18 @@ class VoiceInputService: ObservableObject {
         // Start recognition task
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             DispatchQueue.main.async {
-                if let result = result {
-                    self?.transcript = result.bestTranscription.formattedString
+                if let result = result, let self {
+                    self.transcript = result.bestTranscription.formattedString
+                    self.scheduleEndOfUtterance()
+                    if result.isFinal {
+                        self.deliverCurrentUtterance()
+                    }
                 }
                 
-                if let error = error {
+                if let error = error, let self, self.isRecording {
                     Log.audio.error("Speech recognition error: \(error)")
-                    self?.error = .recordingFailed(error.localizedDescription)
-                    self?.stopRecording()
+                    self.error = .recordingFailed(error.localizedDescription)
+                    self.stopRecording()
                 }
             }
         }
@@ -198,6 +209,31 @@ class VoiceInputService: ObservableObject {
         Log.audio.info("Voice recording started")
     }
     
+    private func scheduleEndOfUtterance() {
+        silenceTimer?.invalidate()
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isRecording, !text.isEmpty, !deliveringUtterance else { return }
+        silenceTimer = Timer.scheduledTimer(
+            withTimeInterval: endOfUtteranceDelay,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.deliverCurrentUtterance()
+            }
+        }
+    }
+
+    private func deliverCurrentUtterance() {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isRecording, !text.isEmpty, !deliveringUtterance else { return }
+        deliveringUtterance = true
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+        stopRecording()
+        onUtteranceReady?(text)
+        deliveringUtterance = false
+    }
+    
     func stopRecording() {
         guard isRecording else { return }
         
@@ -214,6 +250,8 @@ class VoiceInputService: ObservableObject {
         recognitionTask = nil
         recordingTimer?.invalidate()
         recordingTimer = nil
+        silenceTimer?.invalidate()
+        silenceTimer = nil
         
         // Update state
         isRecording = false
