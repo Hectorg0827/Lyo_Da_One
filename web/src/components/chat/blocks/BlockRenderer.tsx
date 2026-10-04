@@ -163,16 +163,32 @@ function SourceNavigatorBlock({ block }: { block: ChatBlock }) {
           const source = (item ?? {}) as Record<string, unknown>;
           const label = String(source.label ?? source.title ?? 'Attachment');
           const detail = String(source.detail ?? '');
-          return (
-            <div
-              key={`${label}-${index}`}
-              className="flex items-start gap-2 rounded-xl border border-white/8 bg-black/15 px-3 py-2.5"
-            >
+          const url = typeof source.url === 'string' && source.url ? source.url : null;
+          const body = (
+            <>
               <FileText className="w-4 h-4 mt-0.5 shrink-0 text-white/45" aria-hidden="true" />
               <div className="min-w-0">
                 <div className="text-xs font-medium text-white/80 truncate">{label}</div>
                 {detail ? <div className="text-[11px] text-white/40 mt-0.5">{detail}</div> : null}
               </div>
+            </>
+          );
+          return url ? (
+            <a
+              key={`${label}-${index}`}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-2 rounded-xl border border-white/8 bg-black/15 px-3 py-2.5 hover:bg-white/5 hover:border-white/15 transition-colors"
+            >
+              {body}
+            </a>
+          ) : (
+            <div
+              key={`${label}-${index}`}
+              className="flex items-start gap-2 rounded-xl border border-white/8 bg-black/15 px-3 py-2.5"
+            >
+              {body}
             </div>
           );
         })}
