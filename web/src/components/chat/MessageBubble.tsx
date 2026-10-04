@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import { Copy, Check, FileText } from 'lucide-react';
+import { Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 import CourseGenerationCard from './CourseGenerationCard';
@@ -22,6 +22,22 @@ interface MessageBubbleProps {
 }
 
 const ASSISTANT_RESPONSE_WIDTH_CLASS = 'w-[99%]';
+
+function safeWebUrl(url?: string): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function sourceLabel(source: NonNullable<ChatMessage['sources']>[number]): string {
+  if (source.title) return source.title;
+  if (source.name && source.label) return `${source.name} · ${source.label}`;
+  return source.name || source.label || 'Source';
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -272,6 +288,42 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                 </ReactMarkdown>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Grounding used for this answer. Document refs stay compact;
+            web refs are navigable and restricted to http(s). */}
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+              Sources
+            </span>
+            {message.sources.slice(0, 6).map((source, index) => {
+              const url = safeWebUrl(source.url);
+              const label = sourceLabel(source);
+              return url ? (
+                <a
+                  key={`${url}-${index}`}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/55 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white/80"
+                  title={label}
+                >
+                  <span className="truncate">{label}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                </a>
+              ) : (
+                <span
+                  key={`${label}-${index}`}
+                  className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/55"
+                  title={label}
+                >
+                  <FileText className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{label}</span>
+                </span>
+              );
+            })}
           </div>
         )}
 

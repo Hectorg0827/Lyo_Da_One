@@ -39,6 +39,15 @@ export interface ChatAttachment {
   kind: 'image' | 'document';
 }
 
+/** Grounding evidence for an assistant turn. Document refs identify the
+ * uploaded file/page; web refs carry a navigable URL. */
+export interface ChatSource {
+  name?: string;
+  label?: string;
+  title?: string;
+  url?: string;
+}
+
 /**
  * Structured content blocks streamed with an assistant turn.
  *
@@ -222,6 +231,8 @@ export interface ChatMessage {
   checkResults?: Record<string, CheckAnswerResult>;
   /** Server-suggested follow-up directions for this turn. */
   suggestedActions?: string[];
+  /** Sources used to ground this answer. */
+  sources?: ChatSource[];
   metadata?: Record<string, unknown>;
   attachments?: ChatAttachment[];
   createdAt: string;
