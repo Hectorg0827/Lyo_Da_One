@@ -87,6 +87,7 @@ object ChatStreamClient {
         conversationId: String,
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
+        voiceSession: Boolean = false,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -95,16 +96,24 @@ object ChatStreamClient {
             "client_message_id" to clientMessageId,
             "timezone" to java.time.ZoneId.systemDefault().id,
         )
+        val stateSummary = mutableMapOf<String, Any?>()
         teachingRuntimeByConversation[conversationId]?.let { runtime ->
             runtime.lastAction?.let {
-                requestFields["state_summary"] = mapOf(
-                    "teaching_runtime" to mapOf(
-                        "last_action" to runtime.lastAction,
-                        "consecutive_checks" to runtime.consecutiveChecks,
-                        "consecutive_explanations" to runtime.consecutiveExplanations,
-                    ),
+                stateSummary["teaching_runtime"] = mapOf(
+                    "last_action" to runtime.lastAction,
+                    "consecutive_checks" to runtime.consecutiveChecks,
+                    "consecutive_explanations" to runtime.consecutiveExplanations,
                 )
             }
+        }
+        if (voiceSession) {
+            stateSummary["voice_session"] = mapOf(
+                "active" to true,
+                "transport" to "client_stt_tts",
+            )
+        }
+        if (stateSummary.isNotEmpty()) {
+            requestFields["state_summary"] = stateSummary
         }
         if (media.isNotEmpty()) {
             requestFields["media"] = media.map { item ->
