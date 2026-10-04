@@ -335,6 +335,7 @@ fun ChatScreen(nav: NavHostController) {
         val clientMessageId = UUID.randomUUID().toString()
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
         messages.add(ChatMsg(role = "assistant", content = ""))
+        val assistantTurnId = messages.last().id
         input = ""
         pendingAttachments.clear()
         inputError = null
@@ -343,6 +344,7 @@ fun ChatScreen(nav: NavHostController) {
         streamJob?.cancel()
         streamJob = scope.launch {
             var responseCompleted = false
+            var voiceReadySpoken = false
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -388,6 +390,31 @@ fun ChatScreen(nav: NavHostController) {
                             messages[messages.lastIndex] = last.copy(blocks = event.blocks)
                         }
 
+                        is ChatStreamEvent.VoiceReady -> {
+                            // Same canonical Chat answer, delivered as soon as
+                            // it is ready instead of waiting for sources/actions
+                            // and the terminal [DONE] marker.
+                            val spokenText = event.text.trim()
+                            val engine = textToSpeech
+                            if (
+                                voiceConversation &&
+                                spokenText.isNotBlank() &&
+                                textToSpeechReady &&
+                                engine != null
+                            ) {
+                                engine.stop()
+                                lastSpokenVoiceText = spokenText
+                                speakingMessageId = assistantTurnId
+                                engine.speak(
+                                    spokenText,
+                                    TextToSpeech.QUEUE_FLUSH,
+                                    null,
+                                    assistantTurnId,
+                                )
+                                voiceReadySpoken = true
+                            }
+                        }
+
                         is ChatStreamEvent.Done -> responseCompleted = true
                         is ChatStreamEvent.Conversation -> activeConversationId = event.id
                         is ChatStreamEvent.Error -> {
@@ -407,7 +434,9 @@ fun ChatScreen(nav: NavHostController) {
             isStreaming = false
             streamJob = null
 
-            if (voiceConversation && responseCompleted) {
+            if (voiceConversation && responseCompleted && !voiceReadySpoken) {
+                // Compatibility fallback for an older backend or a response
+                // type that did not emit voice_ready.
                 val assistant = messages.lastOrNull { it.role == "assistant" && it.content.isNotBlank() }
                 val spokenText = assistant?.let { parseChatContent(it.content).text }?.trim().orEmpty()
                 val engine = textToSpeech
@@ -419,7 +448,7 @@ fun ChatScreen(nav: NavHostController) {
                 } else {
                     voiceListenNonce += 1
                 }
-            } else if (voiceConversation) {
+            } else if (voiceConversation && !responseCompleted) {
                 // Barge-in cancellation or an interrupted transport should
                 // return control to the microphone, never speak the old turn.
                 voiceListenNonce += 1
