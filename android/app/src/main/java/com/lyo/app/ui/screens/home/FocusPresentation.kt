@@ -134,6 +134,84 @@ object FocusPresentation {
     fun countFor(items: List<StackItemDto>, filter: Filter): Int =
         items.count { matches(it, filter) }
 
+    // MARK: - The deck
+
+    /**
+     * One of the cards stacked behind the top of a collapsed deck.
+     *
+     * The figures are a shared table rather than a formula because iOS, web
+     * and Android all draw this deck, and a table is the only version of
+     * "11dp down, 95% the size" that cannot quietly drift between three
+     * codebases. [FocusPresentationTest] pins them, as do the Swift and
+     * JavaScript suites.
+     */
+    data class DeckLayer(
+        /** 1 is the card directly behind the top one. */
+        val depth: Int,
+        /** Density-independent pixels below the top card's own top edge. */
+        val offset: Float,
+        val scale: Float,
+        val opacity: Float,
+    )
+
+    /** Peek cards drawn behind the top one, at most. */
+    const val DECK_PEEK_LIMIT = 2
+
+    private val DECK_OFFSETS = listOf(11f, 20f)
+    private val DECK_SCALES = listOf(0.95f, 0.9f)
+    private val DECK_OPACITIES = listOf(0.72f, 0.46f)
+    private const val DECK_STAGGER_STEP = 35
+    private const val DECK_STAGGER_LIMIT = 8
+
+    /**
+     * The peek cards behind the top card of a collapsed deck.
+     *
+     * Two at most, however many courses are saved: a third layer costs pixels
+     * and carries no information, and the real number is written on the
+     * control beneath the deck instead. A learner with one saved course gets
+     * no layers, so they never have to open anything to reach it.
+     */
+    fun deckLayers(cardCount: Int): List<DeckLayer> {
+        if (cardCount <= 1) return emptyList()
+        val peek = minOf(cardCount - 1, DECK_PEEK_LIMIT)
+        return (1..peek).map { depth ->
+            DeckLayer(
+                depth = depth,
+                offset = DECK_OFFSETS[depth - 1],
+                scale = DECK_SCALES[depth - 1],
+                opacity = DECK_OPACITIES[depth - 1],
+            )
+        }
+    }
+
+    /**
+     * What the control under a collapsed deck says.
+     *
+     * It counts the courses the deck is really holding back — the list's own
+     * length, less the card already on top — and not the peek cards drawn,
+     * which stop at two. A deck that drew two layers over twelve courses and
+     * said "2 more" would be understating the learner's own library. Null
+     * when nothing is hidden.
+     */
+    fun deckMoreLabel(cardCount: Int): String? {
+        if (cardCount <= 1) return null
+        val hidden = cardCount - 1
+        return if (hidden == 1) "1 more course" else "$hidden more courses"
+    }
+
+    /**
+     * How long the card at [index] waits before it slides into place, in ms.
+     *
+     * Whole milliseconds rather than fractional seconds, so three languages'
+     * floating point cannot disagree about the timing. Capped, so a learner
+     * with forty saved courses is not watching cards arrive for a second and
+     * a half.
+     */
+    fun deckStaggerMilliseconds(index: Int): Int {
+        if (index <= 0) return 0
+        return DECK_STAGGER_STEP * minOf(index, DECK_STAGGER_LIMIT)
+    }
+
     // MARK: - Artwork
 
     /**

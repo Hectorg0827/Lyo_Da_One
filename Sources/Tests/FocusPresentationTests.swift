@@ -440,3 +440,70 @@ final class UIStackStoreDescriptionPreservationTests: XCTestCase {
         )
     }
 }
+
+// MARK: - The deck
+
+/// The collapsed card deck's geometry and its count.
+///
+/// Three platforms draw this deck from the same table, so these values are a
+/// cross-platform contract, not an implementation detail: the matching Kotlin
+/// and JavaScript suites assert the same numbers. The count label matters for
+/// a second reason — it is a figure shown to a learner about their own
+/// library, so it has to be the real one.
+final class FocusDeckTests: XCTestCase {
+
+    func testASingleCourseHasNoDeckToOpen() {
+        XCTAssertTrue(FocusPresentation.deckLayers(cardCount: 1).isEmpty)
+        XCTAssertNil(FocusPresentation.deckMoreLabel(cardCount: 1))
+    }
+
+    func testAnEmptyListHasNoDeck() {
+        XCTAssertTrue(FocusPresentation.deckLayers(cardCount: 0).isEmpty)
+        XCTAssertNil(FocusPresentation.deckMoreLabel(cardCount: 0))
+    }
+
+    func testTwoCoursesDrawOnePeekCard() {
+        let layers = FocusPresentation.deckLayers(cardCount: 2)
+        XCTAssertEqual(layers.count, 1)
+        XCTAssertEqual(layers[0].depth, 1)
+        XCTAssertEqual(layers[0].offset, 11)
+        XCTAssertEqual(layers[0].scale, 0.95)
+        XCTAssertEqual(layers[0].opacity, 0.72)
+    }
+
+    func testThreeCoursesDrawTwoPeekCards() {
+        let layers = FocusPresentation.deckLayers(cardCount: 3)
+        XCTAssertEqual(layers.map(\.depth), [1, 2])
+        XCTAssertEqual(layers.map(\.offset), [11, 20])
+        XCTAssertEqual(layers.map(\.scale), [0.95, 0.9])
+        XCTAssertEqual(layers.map(\.opacity), [0.72, 0.46])
+    }
+
+    /// The drawn layers stop at two; the count below the deck does not.
+    func testTheDeckStopsAtTwoPeekCardsHoweverManyCoursesAreSaved() {
+        XCTAssertEqual(FocusPresentation.deckLayers(cardCount: 4).count, 2)
+        XCTAssertEqual(FocusPresentation.deckLayers(cardCount: 40).count, 2)
+        XCTAssertEqual(FocusPresentation.deckPeekLimit, 2)
+    }
+
+    /// The label counts the learner's courses, not the cards on screen. A deck
+    /// drawing two layers over twelve courses still says eleven are waiting.
+    func testTheLabelCountsEveryHiddenCourseNotJustTheOnesDrawn() {
+        XCTAssertEqual(FocusPresentation.deckMoreLabel(cardCount: 2), "1 more course")
+        XCTAssertEqual(FocusPresentation.deckMoreLabel(cardCount: 3), "2 more courses")
+        XCTAssertEqual(FocusPresentation.deckMoreLabel(cardCount: 12), "11 more courses")
+    }
+
+    func testTheFirstCardArrivesWithNoDelay() {
+        XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: 0), 0)
+        XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: -3), 0)
+    }
+
+    func testTheStaggerStepsAndThenStops() {
+        XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: 1), 35)
+        XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: 3), 105)
+        XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: 8), 280)
+        // Capped: forty saved courses must not mean a 1.4s wait for the list.
+        XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: 40), 280)
+    }
+}

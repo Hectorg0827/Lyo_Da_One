@@ -8,6 +8,7 @@ import {
   BLURB_DESCRIPTION,
   BLURB_NONE,
   BLURB_STATUS,
+  DECK_PEEK_LIMIT,
   FILTER_ALL,
   FILTER_FINISHED,
   FILTER_IN_PROGRESS,
@@ -18,6 +19,9 @@ import {
   actionLabel,
   blurbFor,
   countForFilter,
+  deckLayers,
+  deckMoreLabel,
+  deckStaggerMilliseconds,
   isFinished,
   matchesFilter,
   motifFor,
@@ -162,4 +166,49 @@ test('iOS and web choose the same motif for the same course', () => {
   for (const [title, motif] of Object.entries(shared)) {
     assert.equal(motifFor(title), motif, `motif drifted for ${JSON.stringify(title)}`);
   }
+});
+
+// ── The deck ──────────────────────────────────────────────────────────────
+//
+// Three platforms draw the collapsed deck from the same table, so these
+// values are a cross-platform contract: the matching Swift and Kotlin suites
+// assert the same numbers.
+
+test('a single course has no deck to open', () => {
+  assert.deepEqual(deckLayers(1), []);
+  assert.equal(deckMoreLabel(1), null);
+  assert.deepEqual(deckLayers(0), []);
+  assert.equal(deckMoreLabel(0), null);
+});
+
+test('two courses draw one peek card, three draw two', () => {
+  assert.deepEqual(deckLayers(2), [{ depth: 1, offset: 11, scale: 0.95, opacity: 0.72 }]);
+  assert.deepEqual(deckLayers(3), [
+    { depth: 1, offset: 11, scale: 0.95, opacity: 0.72 },
+    { depth: 2, offset: 20, scale: 0.9, opacity: 0.46 },
+  ]);
+});
+
+test('the deck stops at two peek cards however many courses are saved', () => {
+  assert.equal(deckLayers(4).length, 2);
+  assert.equal(deckLayers(40).length, 2);
+  assert.equal(DECK_PEEK_LIMIT, 2);
+});
+
+test('the label counts every hidden course, not just the ones drawn', () => {
+  // A deck drawing two layers over twelve courses still says eleven are
+  // waiting: the figure belongs to the learner's library, not to the artwork.
+  assert.equal(deckMoreLabel(2), '1 more course');
+  assert.equal(deckMoreLabel(3), '2 more courses');
+  assert.equal(deckMoreLabel(12), '11 more courses');
+});
+
+test('the stagger starts at zero, steps, and then stops', () => {
+  assert.equal(deckStaggerMilliseconds(0), 0);
+  assert.equal(deckStaggerMilliseconds(-3), 0);
+  assert.equal(deckStaggerMilliseconds(1), 35);
+  assert.equal(deckStaggerMilliseconds(3), 105);
+  assert.equal(deckStaggerMilliseconds(8), 280);
+  // Capped: forty saved courses must not mean a 1.4s wait for the list.
+  assert.equal(deckStaggerMilliseconds(40), 280);
 });

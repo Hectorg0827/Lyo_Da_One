@@ -15,6 +15,13 @@ import SwiftUI
 struct FocusCourseCard: View {
     let item: UIStackItem
     let onAction: () -> Void
+    /// Takes over the card body's tap, for the top card of a collapsed deck.
+    ///
+    /// When the stack is closed, tapping the card that is sitting on top of
+    /// it should open the stack, not turn that one card over. The Resume
+    /// button and the flip button stay exactly as they are either way, so a
+    /// collapsed deck never costs a learner a tap on the way to studying.
+    var onTapBody: (() -> Void)? = nil
 
     @State private var isFlipped = false
 
@@ -49,10 +56,23 @@ struct FocusCourseCard: View {
         )
         .animation(.spring(response: 0.48, dampingFraction: 0.84), value: isFlipped)
         .contentShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .onTapGesture { flip() }
+        .onTapGesture { tapBody() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.title)
-        .accessibilityAction(named: isFlipped ? "Show progress" : "Show description") { flip() }
+        .accessibilityAction(named: bodyActionName) { tapBody() }
+    }
+
+    private var bodyActionName: String {
+        if onTapBody != nil { return "Open the stack" }
+        return isFlipped ? "Show progress" : "Show description"
+    }
+
+    private func tapBody() {
+        if let override = onTapBody {
+            override()
+            return
+        }
+        flip()
     }
 
     private func flip() {

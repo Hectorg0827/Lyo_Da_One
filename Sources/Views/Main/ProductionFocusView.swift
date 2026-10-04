@@ -29,6 +29,8 @@ struct FocusView: View {
 
     @State private var isRefreshing = false
     @State private var filter: FocusPresentation.Filter = .all
+    /// Saved courses start stacked, and open on a tap. See `courseStack`.
+    @State private var deckExpanded = false
 
     private var user: User? { rootViewModel.currentUser }
 
@@ -256,18 +258,144 @@ struct FocusView: View {
         }
     }
 
+    /// Saved courses, as a deck that opens.
+    ///
+    /// Closed, it is one card with the rest of the library stacked under it,
+    /// so a screenful of courses does not begin as a wall of cards. Open, it
+    /// is the plain vertical list, which is what the learner is actually here
+    /// to read.
+    ///
+    /// The top card is the same view in both states — not a copy, not a
+    /// placeholder — so opening the deck never reloads or flashes the course
+    /// the learner is most likely coming back for, and its Resume button
+    /// works while the deck is still closed. Only the card body's tap is
+    /// taken over, to open the deck.
     private var courseStack: some View {
         VStack(spacing: 12) {
-            ForEach(visibleCourses) { item in
-                FocusCourseCard(
-                    item: item,
-                    onAction: { openCourse(item) }
-                )
+            if let top = visibleCourses.first {
+                ZStack(alignment: .top) {
+                    if !deckExpanded {
+                        peekLayers
+                    }
+
+                    FocusCourseCard(
+                        item: top,
+                        onAction: { openCourse(top) },
+                        onTapBody: topCardTap
+                    )
+                }
+                // Room for the peek cards, which are offset rather than laid
+                // out, so they would otherwise overlap whatever comes next.
+                .padding(.bottom, deckExpanded ? 0 : deepestPeekOffset)
             }
+
+            if deckExpanded {
+                ForEach(Array(visibleCourses.dropFirst().enumerated()), id: \.element.id) { index, item in
+                    FocusCourseCard(
+                        item: item,
+                        onAction: { openCourse(item) }
+                    )
+                    .transition(deckTransition(index: index))
+                }
+            }
+
+            deckControl
         }
         // Cards cancel the screen gutter and keep 2pt, so they run to ~99% of
         // the screen width while the headings above stay on the margin.
         .padding(.horizontal, -(gutter - 2))
+    }
+
+    private var deckLayers: [FocusPresentation.DeckLayer] {
+        FocusPresentation.deckLayers(cardCount: visibleCourses.count)
+    }
+
+    private var deepestPeekOffset: CGFloat {
+        CGFloat(deckLayers.last?.offset ?? 0)
+    }
+
+    /// Blank cards under the top one. They carry no title and no figures: they
+    /// stand for courses the learner has, and a title drawn at 90% scale and
+    /// half opacity would be a label nobody can read.
+    private var peekLayers: some View {
+        ForEach(deckLayers.reversed()) { layer in
+            RoundedRectangle(cornerRadius: 21, style: .continuous)
+                .fill(Color(hex: "1C2436").opacity(layer.opacity))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        .stroke(Color.white.opacity(0.11), lineWidth: 1)
+                }
+                .frame(height: 206)
+                .scaleEffect(x: CGFloat(layer.scale), y: 1, anchor: .top)
+                .offset(y: CGFloat(layer.offset))
+                .transition(.opacity)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The top card opens the deck only while the deck is closed and there is
+    /// something under it. Otherwise the card keeps its own tap, which flips
+    /// it over for the description.
+    private var topCardTap: (() -> Void)? {
+        guard !deckExpanded, !deckLayers.isEmpty else { return nil }
+        return { setDeck(expanded: true) }
+    }
+
+    /// Open the stack, or put it back.
+    ///
+    /// Collapsed, this says how many courses are waiting — the real number
+    /// from the list, not the two cards drawn behind the top one.
+    @ViewBuilder
+    private var deckControl: some View {
+        if let more = FocusPresentation.deckMoreLabel(cardCount: visibleCourses.count) {
+            Button {
+                setDeck(expanded: !deckExpanded)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.stack")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(deckExpanded ? "Stack them back up" : more)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    Image(systemName: deckExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(Color.white.opacity(0.05), in: Capsule())
+                .overlay {
+                    Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(
+                deckExpanded
+                    ? "Closes the list back into a stack"
+                    : "Opens the stack into a list of every saved course"
+            )
+        }
+    }
+
+    /// Cards arrive one after another rather than all at once, which is what
+    /// makes the deck read as opening instead of simply appearing. The delays
+    /// are shared with web and Android and capped, so a large library does not
+    /// mean waiting for the list.
+    private func deckTransition(index: Int) -> AnyTransition {
+        let delay = Double(FocusPresentation.deckStaggerMilliseconds(index: index)) / 1000
+        return .asymmetric(
+            insertion: .scale(scale: 0.96, anchor: .top)
+                .combined(with: .opacity)
+                .animation(.spring(response: 0.42, dampingFraction: 0.88).delay(delay)),
+            removal: .opacity.animation(.easeOut(duration: 0.14))
+        )
+    }
+
+    private func setDeck(expanded: Bool) {
+        HapticManager.shared.light()
+        withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
+            deckExpanded = expanded
+        }
     }
 
     private var filterChips: some View {
@@ -445,7 +573,7 @@ private struct FocusEmptyLearningCard: View {
         .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                .stroke(Color.white.opacity(0.11), lineWidth: 1)
         }
     }
 }

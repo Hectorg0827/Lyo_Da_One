@@ -179,6 +179,76 @@ enum FocusPresentation {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    // MARK: - The deck
+
+    /// One of the cards stacked behind the top of a collapsed deck.
+    ///
+    /// The figures are a shared table rather than a formula because iOS, web
+    /// and Android all draw this deck, and a table is the only version of
+    /// "11 points down, 95% the size" that cannot quietly drift between three
+    /// codebases. `FocusPresentationTests` pins them.
+    struct DeckLayer: Equatable, Identifiable {
+        /// 1 is the card directly behind the top one.
+        let depth: Int
+        /// Points below the top card's own top edge.
+        let offset: Double
+        let scale: Double
+        let opacity: Double
+
+        var id: Int { depth }
+    }
+
+    /// The peek cards behind the top card of a collapsed deck.
+    ///
+    /// Two at most, however many courses are saved: a third layer costs
+    /// pixels and carries no information, and the real number is written on
+    /// the control beneath the deck instead. A learner with one saved course
+    /// gets no layers, so they never have to open anything.
+    static func deckLayers(cardCount: Int) -> [DeckLayer] {
+        guard cardCount > 1 else { return [] }
+        let peek = min(cardCount - 1, deckPeekLimit)
+        return (1...peek).map { depth in
+            DeckLayer(
+                depth: depth,
+                offset: deckOffsets[depth - 1],
+                scale: deckScales[depth - 1],
+                opacity: deckOpacities[depth - 1]
+            )
+        }
+    }
+
+    /// What the control under a collapsed deck says.
+    ///
+    /// It counts the courses the deck is really holding back — the list's own
+    /// length, less the card already on top — and not the peek cards drawn,
+    /// which stop at two. A deck that drew two layers over twelve courses and
+    /// said "2 more" would be understating the learner's own library.
+    static func deckMoreLabel(cardCount: Int) -> String? {
+        guard cardCount > 1 else { return nil }
+        let hidden = cardCount - 1
+        return hidden == 1 ? "1 more course" : "\(hidden) more courses"
+    }
+
+    /// How long the card at `index` waits before it slides into place, in ms.
+    ///
+    /// Whole milliseconds rather than fractional seconds, so three languages'
+    /// floating point cannot disagree about the timing. Capped, so a learner
+    /// with forty saved courses is not watching cards arrive for a second and
+    /// a half.
+    static func deckStaggerMilliseconds(index: Int) -> Int {
+        guard index > 0 else { return 0 }
+        return deckStaggerStep * min(index, deckStaggerLimit)
+    }
+
+    /// Peek cards drawn behind the top one, at most.
+    static let deckPeekLimit = 2
+
+    private static let deckOffsets: [Double] = [11, 20]
+    private static let deckScales: [Double] = [0.95, 0.9]
+    private static let deckOpacities: [Double] = [0.72, 0.46]
+    private static let deckStaggerStep = 35
+    private static let deckStaggerLimit = 8
+
     // MARK: - The back of the card
 
     /// What the back of a course card says about the course.

@@ -153,4 +153,60 @@ class FocusPresentationTest {
             assertEquals("motif drifted for \"$title\"", motif, FocusPresentation.motifFor(title))
         }
     }
+
+    // ── The deck ──────────────────────────────────────────────────────────
+    //
+    // Three platforms draw the collapsed deck from the same table, so these
+    // values are a cross-platform contract: the matching Swift and JavaScript
+    // suites assert the same numbers.
+
+    @Test
+    fun `a single course has no deck to open`() {
+        assertTrue(FocusPresentation.deckLayers(1).isEmpty())
+        assertEquals(null, FocusPresentation.deckMoreLabel(1))
+        assertTrue(FocusPresentation.deckLayers(0).isEmpty())
+        assertEquals(null, FocusPresentation.deckMoreLabel(0))
+    }
+
+    @Test
+    fun `two courses draw one peek card, three draw two`() {
+        assertEquals(
+            listOf(FocusPresentation.DeckLayer(1, 11f, 0.95f, 0.72f)),
+            FocusPresentation.deckLayers(2),
+        )
+        assertEquals(
+            listOf(
+                FocusPresentation.DeckLayer(1, 11f, 0.95f, 0.72f),
+                FocusPresentation.DeckLayer(2, 20f, 0.9f, 0.46f),
+            ),
+            FocusPresentation.deckLayers(3),
+        )
+    }
+
+    @Test
+    fun `the deck stops at two peek cards however many courses are saved`() {
+        assertEquals(2, FocusPresentation.deckLayers(4).size)
+        assertEquals(2, FocusPresentation.deckLayers(40).size)
+        assertEquals(2, FocusPresentation.DECK_PEEK_LIMIT)
+    }
+
+    @Test
+    fun `the label counts every hidden course, not just the ones drawn`() {
+        // A deck drawing two layers over twelve courses still says eleven are
+        // waiting: the figure belongs to the learner's library, not the art.
+        assertEquals("1 more course", FocusPresentation.deckMoreLabel(2))
+        assertEquals("2 more courses", FocusPresentation.deckMoreLabel(3))
+        assertEquals("11 more courses", FocusPresentation.deckMoreLabel(12))
+    }
+
+    @Test
+    fun `the stagger starts at zero, steps, and then stops`() {
+        assertEquals(0, FocusPresentation.deckStaggerMilliseconds(0))
+        assertEquals(0, FocusPresentation.deckStaggerMilliseconds(-3))
+        assertEquals(35, FocusPresentation.deckStaggerMilliseconds(1))
+        assertEquals(105, FocusPresentation.deckStaggerMilliseconds(3))
+        assertEquals(280, FocusPresentation.deckStaggerMilliseconds(8))
+        // Capped: forty saved courses must not mean a 1.4s wait for the list.
+        assertEquals(280, FocusPresentation.deckStaggerMilliseconds(40))
+    }
 }
