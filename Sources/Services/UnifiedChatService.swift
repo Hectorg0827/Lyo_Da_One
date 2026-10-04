@@ -107,7 +107,8 @@ final class UnifiedChatService: ObservableObject {
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
         mode: String = "chat",
-        forcedIntent: String? = nil
+        forcedIntent: String? = nil,
+        responseChannel: String = "text"
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -165,6 +166,7 @@ final class UnifiedChatService: ObservableObject {
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
+            responseChannel: responseChannel,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
                 Task { @MainActor [weak self] in
@@ -405,12 +407,29 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        speakResponse: Bool = false
+        speakResponse: Bool = false,
+        responseChannel: String? = nil
     ) async {
-        // Re-route through sendMessage which now uses ChatRouter for two-speed routing
+        // Voice remains the same canonical Chat turn. speakResponse is retained
+        // for source compatibility; it selects the voice presentation channel.
+        let channel = responseChannel ?? (speakResponse ? "voice" : "text")
         _ = await sendMessage(
-            text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent
+            text,
+            attachments: attachments,
+            context: context,
+            mode: mode,
+            forcedIntent: forcedIntent,
+            responseChannel: channel
         )
+    }
+
+    /// Stop only the in-flight generation for an intentional voice barge-in.
+    /// Persisted conversation state remains intact for the next canonical turn.
+    func cancelCurrentResponse() {
+        streamTimeoutTask?.cancel()
+        streamTimeoutTask = nil
+        lyo2ChatService.cancelActiveStream()
+        isLoading = false
     }
 
     // MARK: - Conversation Memory Window
@@ -430,7 +449,8 @@ final class UnifiedChatService: ObservableObject {
 
     func sendMessageLyo2(
         text: String,
-        attachments: [MessageAttachment] = []
+        attachments: [MessageAttachment] = [],
+        responseChannel: String = "text"
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
@@ -468,7 +488,8 @@ final class UnifiedChatService: ObservableObject {
             attachmentIds: attachments.map { $0.id },
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
-            clientMessageId: userMessage.id
+            clientMessageId: userMessage.id,
+            responseChannel: responseChannel
         ) { [weak self] event in
             guard let self else { return }
             self.handleLyo2Event(event, aiMessageId: aiMessageId)
