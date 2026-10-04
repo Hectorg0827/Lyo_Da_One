@@ -207,7 +207,7 @@ class ChatVoiceController {
 
   private patch(patch: Partial<ChatVoiceState>) {
     this.state = { ...this.state, ...patch };
-    for (const listener of this.listeners) listener(this.state);
+    this.listeners.forEach((listener) => listener(this.state));
   }
 
   private startListening() {
@@ -402,8 +402,8 @@ class ChatVoiceController {
     const data = new Uint8Array(this.analyser.fftSize);
     this.analyser.getByteTimeDomainData(data);
     let sum = 0;
-    for (const sample of data) {
-      const normalized = (sample - 128) / 128;
+    for (let index = 0; index < data.length; index += 1) {
+      const normalized = (data[index] - 128) / 128;
       sum += normalized * normalized;
     }
     const rms = Math.sqrt(sum / data.length);
