@@ -107,7 +107,8 @@ final class UnifiedChatService: ObservableObject {
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
         mode: String = "chat",
-        forcedIntent: String? = nil
+        forcedIntent: String? = nil,
+        voiceSession: Lyo2VoiceSessionContext? = nil
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -165,6 +166,7 @@ final class UnifiedChatService: ObservableObject {
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
+            voiceSession: voiceSession,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
                 Task { @MainActor [weak self] in
@@ -405,11 +407,17 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        speakResponse: Bool = false
+        speakResponse: Bool = false,
+        voiceSession: Lyo2VoiceSessionContext? = nil
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
         _ = await sendMessage(
-            text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent
+            text,
+            attachments: attachments,
+            context: context,
+            mode: mode,
+            forcedIntent: forcedIntent,
+            voiceSession: voiceSession
         )
     }
 
