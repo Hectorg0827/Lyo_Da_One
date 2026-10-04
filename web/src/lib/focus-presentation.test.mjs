@@ -8,6 +8,8 @@ import {
   BLURB_DESCRIPTION,
   BLURB_NONE,
   BLURB_STATUS,
+  DECK_CARD_GAP,
+  DECK_NEXT_CARD_PEEK,
   DECK_PEEK_LIMIT,
   FILTER_ALL,
   FILTER_FINISHED,
@@ -19,6 +21,7 @@ import {
   actionLabel,
   blurbFor,
   countForFilter,
+  deckCardWidth,
   deckLayers,
   deckMoreLabel,
   deckStaggerMilliseconds,
@@ -201,6 +204,28 @@ test('the label counts every hidden course, not just the ones drawn', () => {
   assert.equal(deckMoreLabel(2), '1 more course');
   assert.equal(deckMoreLabel(3), '2 more courses');
   assert.equal(deckMoreLabel(12), '11 more courses');
+});
+
+test('an opened card leaves the next one showing', () => {
+  // The opened deck scrolls sideways, so a card the full width of the screen
+  // would hide every course after the first behind a swipe nothing signals.
+  assert.equal(DECK_NEXT_CARD_PEEK, 34);
+  assert.equal(DECK_CARD_GAP, 12);
+  assert.equal(deckCardWidth(390), 344);
+  assert.equal(deckCardWidth(430), 384);
+});
+
+test('the leftover room is exactly the peek', () => {
+  // The next card starts one gap after this one ends, so exactly the peek is
+  // left over. This is the relationship the figures exist to hold.
+  const container = 412;
+  assert.equal(container - (deckCardWidth(container) + DECK_CARD_GAP), DECK_NEXT_CARD_PEEK);
+});
+
+test('a container too narrow for a card gives no card', () => {
+  assert.equal(deckCardWidth(0), 0);
+  assert.equal(deckCardWidth(-20), 0);
+  assert.equal(deckCardWidth(30), 0);
 });
 
 test('the stagger starts at zero, steps, and then stops', () => {

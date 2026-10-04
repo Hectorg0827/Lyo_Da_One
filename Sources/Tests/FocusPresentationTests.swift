@@ -494,6 +494,30 @@ final class FocusDeckTests: XCTestCase {
         XCTAssertEqual(FocusPresentation.deckMoreLabel(cardCount: 12), "11 more courses")
     }
 
+    /// The opened deck scrolls sideways, so a card the full width of the
+    /// screen would hide every course after the first behind a swipe nothing
+    /// signals. The card gives up room so the next one's edge always shows.
+    func testAnOpenedCardLeavesTheNextOneShowing() {
+        XCTAssertEqual(FocusPresentation.deckNextCardPeek, 34)
+        XCTAssertEqual(FocusPresentation.deckCardGap, 12)
+        XCTAssertEqual(FocusPresentation.deckCardWidth(containerWidth: 390), 344)
+        XCTAssertEqual(FocusPresentation.deckCardWidth(containerWidth: 430), 384)
+    }
+
+    /// The next card starts one gap after this one ends, so exactly the peek
+    /// is left over. This is the relationship the figures exist to hold.
+    func testTheLeftoverRoomIsExactlyThePeek() {
+        let container: Double = 412
+        let card = FocusPresentation.deckCardWidth(containerWidth: container)
+        XCTAssertEqual(container - (card + FocusPresentation.deckCardGap), FocusPresentation.deckNextCardPeek)
+    }
+
+    func testAContainerTooNarrowForACardGivesNoCard() {
+        XCTAssertEqual(FocusPresentation.deckCardWidth(containerWidth: 0), 0)
+        XCTAssertEqual(FocusPresentation.deckCardWidth(containerWidth: -20), 0)
+        XCTAssertEqual(FocusPresentation.deckCardWidth(containerWidth: 30), 0)
+    }
+
     func testTheFirstCardArrivesWithNoDelay() {
         XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: 0), 0)
         XCTAssertEqual(FocusPresentation.deckStaggerMilliseconds(index: -3), 0)

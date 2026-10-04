@@ -78,6 +78,16 @@ const scalars = {
     web: scalar(web, /DECK_STAGGER_STEP = (\d+)/, 'web deck stagger step'),
     Android: scalar(kotlin, /DECK_STAGGER_STEP = (\d+)/, 'Android deck stagger step'),
   },
+  'next-card peek': {
+    iOS: scalar(swift, /deckNextCardPeek: Double = (\d+)/, 'iOS deck next-card peek'),
+    web: scalar(web, /DECK_NEXT_CARD_PEEK = (\d+)/, 'web deck next-card peek'),
+    Android: scalar(kotlin, /DECK_NEXT_CARD_PEEK = (\d+)f/, 'Android deck next-card peek'),
+  },
+  'card gap': {
+    iOS: scalar(swift, /deckCardGap: Double = (\d+)/, 'iOS deck card gap'),
+    web: scalar(web, /DECK_CARD_GAP = (\d+)/, 'web deck card gap'),
+    Android: scalar(kotlin, /DECK_CARD_GAP = (\d+)f/, 'Android deck card gap'),
+  },
   'stagger limit': {
     iOS: scalar(swift, /deckStaggerLimit = (\d+)/, 'iOS deck stagger limit'),
     web: scalar(web, /DECK_STAGGER_LIMIT = (\d+)/, 'web deck stagger limit'),
@@ -110,6 +120,20 @@ for (const [label, source] of [['iOS', swift], ['web', web], ['Android', kotlin]
   }
 }
 
+// An opened deck scrolls sideways on all three, and each card has to stop
+// short of the container so the next one's edge shows. A platform that let a
+// card run the full width would hide every course after the first behind a
+// swipe nothing signals.
+for (const [label, source, pattern] of [
+  ['iOS', swift, /deckCardWidth\(containerWidth:/],
+  ['web', web, /export function deckCardWidth\(/],
+  ['Android', kotlin, /fun deckCardWidth\(/],
+]) {
+  if (!pattern.test(source)) {
+    throw new Error(`${label}: the opened deck has no shared card width`);
+  }
+}
+
 console.log(
-  'Focus deck geometry, stagger and count label are identical on iOS, web and Android.',
+  'Focus deck geometry, card width, stagger and count label are identical on iOS, web and Android.',
 );

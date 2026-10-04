@@ -260,43 +260,20 @@ struct FocusView: View {
 
     /// Saved courses, as a deck that opens.
     ///
-    /// Closed, it is one card with the rest of the library stacked under it,
-    /// so a screenful of courses does not begin as a wall of cards. Open, it
-    /// is the plain vertical list, which is what the learner is actually here
-    /// to read.
+    /// Shut, it is one card with the rest of the library stacked under it, so
+    /// a screenful of courses does not begin as a wall of cards. Its Resume
+    /// button is live in that state — only the card body's tap is taken over
+    /// — so a learner coming back to a course never opens the deck first.
     ///
-    /// The top card is the same view in both states — not a copy, not a
-    /// placeholder — so opening the deck never reloads or flashes the course
-    /// the learner is most likely coming back for, and its Resume button
-    /// works while the deck is still closed. Only the card body's tap is
-    /// taken over, to open the deck.
+    /// Open, it is one row that scrolls sideways and snaps card to card. The
+    /// whole library then costs the screen one card's height instead of one
+    /// per course, which is what makes the rest of Focus reachable.
     private var courseStack: some View {
         VStack(spacing: 12) {
-            if let top = visibleCourses.first {
-                ZStack(alignment: .top) {
-                    if !deckExpanded {
-                        peekLayers
-                    }
-
-                    FocusCourseCard(
-                        item: top,
-                        onAction: { openCourse(top) },
-                        onTapBody: topCardTap
-                    )
-                }
-                // Room for the peek cards, which are offset rather than laid
-                // out, so they would otherwise overlap whatever comes next.
-                .padding(.bottom, deckExpanded ? 0 : deepestPeekOffset)
-            }
-
             if deckExpanded {
-                ForEach(Array(visibleCourses.dropFirst().enumerated()), id: \.element.id) { index, item in
-                    FocusCourseCard(
-                        item: item,
-                        onAction: { openCourse(item) }
-                    )
-                    .transition(deckTransition(index: index))
-                }
+                openDeck
+            } else if let top = visibleCourses.first {
+                shutDeck(top: top)
             }
 
             deckControl
@@ -304,6 +281,51 @@ struct FocusView: View {
         // Cards cancel the screen gutter and keep 2pt, so they run to ~99% of
         // the screen width while the headings above stay on the margin.
         .padding(.horizontal, -(gutter - 2))
+    }
+
+    /// One card, with the rest of the library stacked under it.
+    private func shutDeck(top: UIStackItem) -> some View {
+        ZStack(alignment: .top) {
+            peekLayers
+
+            FocusCourseCard(
+                item: top,
+                onAction: { openCourse(top) },
+                onTapBody: topCardTap
+            )
+        }
+        // Room for the peek cards, which are offset rather than laid out, so
+        // they would otherwise overlap whatever comes next.
+        .padding(.bottom, deepestPeekOffset)
+    }
+
+    /// Every saved course, in one row that scrolls sideways.
+    ///
+    /// Each card stops short of the container so the next one's edge is
+    /// always showing. A card the full width of the screen would put every
+    /// course after the first behind a swipe nothing signals, which is the
+    /// mistake the carousel this screen replaced already made. The width and
+    /// the gap come from `FocusPresentation`, so web and Android leave the
+    /// same sliver showing.
+    private var openDeck: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: CGFloat(FocusPresentation.deckCardGap)) {
+                ForEach(Array(visibleCourses.enumerated()), id: \.element.id) { index, item in
+                    FocusCourseCard(
+                        item: item,
+                        onAction: { openCourse(item) }
+                    )
+                    .containerRelativeFrame(.horizontal) { width, _ in
+                        CGFloat(FocusPresentation.deckCardWidth(containerWidth: Double(width)))
+                    }
+                    .transition(deckTransition(index: index))
+                }
+            }
+            .scrollTargetLayout()
+            .padding(.horizontal, 2)
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollClipDisabled()
     }
 
     private var deckLayers: [FocusPresentation.DeckLayer] {
@@ -333,8 +355,8 @@ struct FocusView: View {
         }
     }
 
-    /// The top card opens the deck only while the deck is closed and there is
-    /// something under it. Otherwise the card keeps its own tap, which flips
+    /// The top card opens the deck only while the deck is shut and there is
+    /// something under it. Otherwise the card keeps its own tap, which turns
     /// it over for the description.
     private var topCardTap: (() -> Void)? {
         guard !deckExpanded, !deckLayers.isEmpty else { return nil }
@@ -343,8 +365,8 @@ struct FocusView: View {
 
     /// Open the stack, or put it back.
     ///
-    /// Collapsed, this says how many courses are waiting — the real number
-    /// from the list, not the two cards drawn behind the top one.
+    /// Shut, this says how many courses are waiting — the real number from
+    /// the list, not the two cards drawn behind the top one.
     @ViewBuilder
     private var deckControl: some View {
         if let more = FocusPresentation.deckMoreLabel(cardCount: visibleCourses.count) {
@@ -380,11 +402,11 @@ struct FocusView: View {
     /// Cards arrive one after another rather than all at once, which is what
     /// makes the deck read as opening instead of simply appearing. The delays
     /// are shared with web and Android and capped, so a large library does not
-    /// mean waiting for the list.
+    /// mean waiting for the row.
     private func deckTransition(index: Int) -> AnyTransition {
         let delay = Double(FocusPresentation.deckStaggerMilliseconds(index: index)) / 1000
         return .asymmetric(
-            insertion: .scale(scale: 0.96, anchor: .top)
+            insertion: .scale(scale: 0.96, anchor: .leading)
                 .combined(with: .opacity)
                 .animation(.spring(response: 0.42, dampingFraction: 0.88).delay(delay)),
             removal: .opacity.animation(.easeOut(duration: 0.14))

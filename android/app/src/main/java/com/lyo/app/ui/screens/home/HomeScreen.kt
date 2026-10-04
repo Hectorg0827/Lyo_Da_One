@@ -2,16 +2,17 @@ package com.lyo.app.ui.screens.home
 
 import android.content.Intent
 import android.widget.Toast
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,7 +53,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -340,23 +341,77 @@ fun HomeScreen(nav: NavHostController) {
                     //
                     // Shut, it is one card with the rest of the library
                     // stacked under it, so a screenful of courses does not
-                    // begin as a wall of cards. Open, it is the plain
-                    // vertical list, which is what the learner is here to
-                    // read.
+                    // begin as a wall of cards. Its Resume button is live in
+                    // that state — only the card body's tap is taken over —
+                    // so a learner coming back to a course never has to open
+                    // the deck first.
                     //
-                    // The top card is the same composable in both states, so
-                    // its Resume button works while the deck is still shut.
-                    // Only the card body's tap is taken over, to open it.
+                    // Open, it is one row that scrolls sideways and snaps
+                    // card to card. The whole library then costs the screen
+                    // one card's height instead of one per course.
                     val layers = FocusPresentation.deckLayers(visible.size)
-                    val peekRoom by animateDpAsState(
-                        targetValue = if (deckExpanded) 0.dp else (layers.lastOrNull()?.offset ?: 0f).dp,
-                        animationSpec = tween(durationMillis = 260),
-                        label = "deckPeekRoom",
-                    )
 
                     Column {
-                        Box(modifier = Modifier.fillMaxWidth().padding(bottom = peekRoom)) {
-                            if (!deckExpanded) {
+                        if (deckExpanded) {
+                            // Each card stops short of the container so the
+                            // next one's edge is always showing. A card the
+                            // full width of the screen would put every course
+                            // after the first behind a swipe nothing signals,
+                            // which is the mistake the LazyRow of small cards
+                            // this replaced already made. The width and the
+                            // gap come from FocusPresentation, so iOS and web
+                            // leave the same sliver showing.
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                val cardWidth = FocusPresentation.deckCardWidth(maxWidth.value).dp
+                                val rowState = rememberLazyListState()
+                                LazyRow(
+                                    state = rowState,
+                                    flingBehavior = rememberSnapFlingBehavior(rowState),
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        FocusPresentation.DECK_CARD_GAP.dp,
+                                    ),
+                                ) {
+                                    itemsIndexed(visible, key = { _, row -> row.id }) { index, stackItem ->
+                                        // Cards arrive one after another
+                                        // rather than all at once, which is
+                                        // what makes the deck read as opening
+                                        // instead of simply appearing. The
+                                        // delays are shared with iOS and web,
+                                        // and capped.
+                                        var arrived by remember { mutableStateOf(false) }
+                                        LaunchedEffect(Unit) { arrived = true }
+                                        val appear by animateFloatAsState(
+                                            targetValue = if (arrived) 1f else 0f,
+                                            animationSpec = tween(
+                                                durationMillis = 260,
+                                                delayMillis = FocusPresentation.deckStaggerMilliseconds(index),
+                                            ),
+                                            label = "deckCardAppear",
+                                        )
+
+                                        Box(
+                                            modifier = Modifier
+                                                .width(cardWidth)
+                                                .graphicsLayer {
+                                                    alpha = appear
+                                                    scaleX = 0.96f + 0.04f * appear
+                                                    scaleY = 0.96f + 0.04f * appear
+                                                },
+                                        ) {
+                                            StackDeckCard(item = stackItem, nav = nav)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    // Room for the peek cards, which are
+                                    // offset rather than laid out, so they
+                                    // would otherwise overlap what follows.
+                                    .padding(bottom = (layers.lastOrNull()?.offset ?: 0f).dp),
+                            ) {
                                 // Blank cards, deliberately: they stand for
                                 // courses the learner has, and a title drawn
                                 // at 90% scale and half opacity would be a
@@ -377,60 +432,19 @@ fun HomeScreen(nav: NavHostController) {
                                             .border(1.dp, Color(0x1CFFFFFF), RoundedCornerShape(21.dp)),
                                     )
                                 }
-                            }
 
-                            val openDeck: (() -> Unit)? =
-                                if (!deckExpanded && layers.isNotEmpty()) {
-                                    ({ deckExpanded = true })
-                                } else {
-                                    null
-                                }
-
-                            StackDeckCard(
-                                item = visible.first(),
-                                nav = nav,
-                                onTapBody = openDeck,
-                            )
-                        }
-
-                        if (deckExpanded) {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.padding(top = 12.dp),
-                            ) {
-                                visible.drop(1).forEachIndexed { index, stackItem ->
-                                    // Keyed, so each card's arrival state
-                                    // belongs to that course and not to a
-                                    // position in the list.
-                                    key(stackItem.id) {
-                                        // Cards arrive one after another
-                                        // rather than all at once, which is
-                                        // what makes the deck read as opening
-                                        // instead of simply appearing. The
-                                        // delays are shared with iOS and web,
-                                        // and capped.
-                                        var arrived by remember { mutableStateOf(false) }
-                                        LaunchedEffect(Unit) { arrived = true }
-                                        val appear by animateFloatAsState(
-                                            targetValue = if (arrived) 1f else 0f,
-                                            animationSpec = tween(
-                                                durationMillis = 260,
-                                                delayMillis = FocusPresentation.deckStaggerMilliseconds(index),
-                                            ),
-                                            label = "deckCardAppear",
-                                        )
-
-                                        Box(
-                                            modifier = Modifier.graphicsLayer {
-                                                alpha = appear
-                                                scaleX = 0.96f + 0.04f * appear
-                                                scaleY = 0.96f + 0.04f * appear
-                                            },
-                                        ) {
-                                            StackDeckCard(item = stackItem, nav = nav)
-                                        }
+                                val openDeck: (() -> Unit)? =
+                                    if (layers.isNotEmpty()) {
+                                        ({ deckExpanded = true })
+                                    } else {
+                                        null
                                     }
-                                }
+
+                                StackDeckCard(
+                                    item = visible.first(),
+                                    nav = nav,
+                                    onTapBody = openDeck,
+                                )
                             }
                         }
 

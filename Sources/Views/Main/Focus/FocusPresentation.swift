@@ -240,6 +240,28 @@ enum FocusPresentation {
         return deckStaggerStep * min(index, deckStaggerLimit)
     }
 
+    /// How much of the next card shows past the right edge of the current one.
+    ///
+    /// An opened deck scrolls sideways, and a card the full width of the
+    /// screen would put every course after the first behind a swipe nothing
+    /// signals — which is the exact thing this screen was rebuilt to stop
+    /// doing. So each card gives up this much room and the next one's edge
+    /// stays visible.
+    static let deckNextCardPeek: Double = 34
+
+    /// The gap between cards in an opened deck.
+    static let deckCardGap: Double = 12
+
+    /// How wide one card is, in an opened deck inside a container this wide.
+    ///
+    /// The next card starts one gap later, so exactly `deckNextCardPeek` of
+    /// it is showing. Zero for a container too narrow to hold a card and the
+    /// peek both, because a negative width is not a card.
+    static func deckCardWidth(containerWidth: Double) -> Double {
+        guard containerWidth > 0 else { return 0 }
+        return max(containerWidth - deckNextCardPeek - deckCardGap, 0)
+    }
+
     /// Peek cards drawn behind the top one, at most.
     static let deckPeekLimit = 2
 

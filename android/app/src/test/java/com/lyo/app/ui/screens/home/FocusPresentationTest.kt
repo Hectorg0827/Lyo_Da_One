@@ -200,6 +200,37 @@ class FocusPresentationTest {
     }
 
     @Test
+    fun `an opened card leaves the next one showing`() {
+        // The opened deck scrolls sideways, so a card the full width of the
+        // screen would hide every course after the first behind a swipe
+        // nothing signals.
+        assertEquals(34f, FocusPresentation.DECK_NEXT_CARD_PEEK, 0.001f)
+        assertEquals(12f, FocusPresentation.DECK_CARD_GAP, 0.001f)
+        assertEquals(344f, FocusPresentation.deckCardWidth(390f), 0.001f)
+        assertEquals(384f, FocusPresentation.deckCardWidth(430f), 0.001f)
+    }
+
+    @Test
+    fun `the leftover room is exactly the peek`() {
+        // The next card starts one gap after this one ends, so exactly the
+        // peek is left over. This is the relationship the figures hold.
+        val container = 412f
+        val card = FocusPresentation.deckCardWidth(container)
+        assertEquals(
+            FocusPresentation.DECK_NEXT_CARD_PEEK,
+            container - (card + FocusPresentation.DECK_CARD_GAP),
+            0.001f,
+        )
+    }
+
+    @Test
+    fun `a container too narrow for a card gives no card`() {
+        assertEquals(0f, FocusPresentation.deckCardWidth(0f), 0.001f)
+        assertEquals(0f, FocusPresentation.deckCardWidth(-20f), 0.001f)
+        assertEquals(0f, FocusPresentation.deckCardWidth(30f), 0.001f)
+    }
+
+    @Test
     fun `the stagger starts at zero, steps, and then stops`() {
         assertEquals(0, FocusPresentation.deckStaggerMilliseconds(0))
         assertEquals(0, FocusPresentation.deckStaggerMilliseconds(-3))

@@ -149,6 +149,32 @@ export function countForFilter(items, filter) {
  */
 export const DECK_PEEK_LIMIT = 2;
 
+/**
+ * How much of the next card shows past the right edge of the current one.
+ *
+ * An opened deck scrolls sideways, and a card the full width of the screen
+ * would put every course after the first behind a swipe nothing signals —
+ * the exact thing this screen was rebuilt to stop doing. So each card gives
+ * up this much room and the next one's edge stays visible.
+ */
+export const DECK_NEXT_CARD_PEEK = 34;
+
+/** The gap between cards in an opened deck. */
+export const DECK_CARD_GAP = 12;
+
+/**
+ * How wide one card is, in an opened deck inside a container this wide.
+ *
+ * The next card starts one gap later, so exactly `DECK_NEXT_CARD_PEEK` of it
+ * is showing. Zero for a container too narrow to hold a card and the peek
+ * both, because a negative width is not a card.
+ */
+export function deckCardWidth(containerWidth) {
+  const width = Number.isFinite(containerWidth) ? containerWidth : 0;
+  if (width <= 0) return 0;
+  return Math.max(width - DECK_NEXT_CARD_PEEK - DECK_CARD_GAP, 0);
+}
+
 const DECK_OFFSETS = Object.freeze([11, 20]);
 const DECK_SCALES = Object.freeze([0.95, 0.9]);
 const DECK_OPACITIES = Object.freeze([0.72, 0.46]);

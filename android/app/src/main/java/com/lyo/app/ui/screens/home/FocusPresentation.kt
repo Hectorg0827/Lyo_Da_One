@@ -157,6 +157,32 @@ object FocusPresentation {
     /** Peek cards drawn behind the top one, at most. */
     const val DECK_PEEK_LIMIT = 2
 
+    /**
+     * How much of the next card shows past the right edge of the current one.
+     *
+     * An opened deck scrolls sideways, and a card the full width of the
+     * screen would put every course after the first behind a swipe nothing
+     * signals — the exact thing this screen was rebuilt to stop doing. So
+     * each card gives up this much room and the next one's edge stays
+     * visible.
+     */
+    const val DECK_NEXT_CARD_PEEK = 34f
+
+    /** The gap between cards in an opened deck. */
+    const val DECK_CARD_GAP = 12f
+
+    /**
+     * How wide one card is, in an opened deck inside a container this wide.
+     *
+     * The next card starts one gap later, so exactly [DECK_NEXT_CARD_PEEK] of
+     * it is showing. Zero for a container too narrow to hold a card and the
+     * peek both, because a negative width is not a card.
+     */
+    fun deckCardWidth(containerWidth: Float): Float {
+        if (containerWidth <= 0f) return 0f
+        return maxOf(containerWidth - DECK_NEXT_CARD_PEEK - DECK_CARD_GAP, 0f)
+    }
+
     private val DECK_OFFSETS = listOf(11f, 20f)
     private val DECK_SCALES = listOf(0.95f, 0.9f)
     private val DECK_OPACITIES = listOf(0.72f, 0.46f)
