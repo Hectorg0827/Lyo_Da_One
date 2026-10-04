@@ -57,6 +57,9 @@ class LyoAIViewModel: ObservableObject {
     /// mic only AFTER the AI's spoken response finishes (not the instant the send
     /// call returns), so funnel questions and streamed answers aren't cut off.
     private var voiceLoopActive: Bool = false
+    private var voiceTurnDebounceTask: Task<Void, Never>?
+    private let voiceEndOfTurnDelayNanoseconds: UInt64 = 650_000_000
+    private let voiceBargeInThreshold: Float = 0.18
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -166,8 +169,32 @@ class LyoAIViewModel: ObservableObject {
         sttService.$transcript
             .receive(on: RunLoop.main)
             .sink { [weak self] text in
-                if self?.isVoiceActive == true && !text.isEmpty {
-                    self?.inputText = text
+                guard let self, self.voiceLoopActive, !text.isEmpty else { return }
+                self.inputText = text
+                self.lastLiveTranscript = text
+
+                // In conversational mode the microphone stays armed while Lyo
+                // speaks. A real learner utterance interrupts playback and the
+                // in-flight Chat stream, but remains on the same conversation.
+                if self.isAISpeaking {
+                    self.stopSpeaking()
+                    self.unifiedChat.interruptCurrentResponse()
+                    self.shouldAutoSpeakCurrentResponse = false
+                }
+
+                self.voiceTurnDebounceTask?.cancel()
+                let captured = text
+                self.voiceTurnDebounceTask = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: self?.voiceEndOfTurnDelayNanoseconds ?? 650_000_000)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        guard let self,
+                              self.voiceLoopActive,
+                              self.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                == captured.trimmingCharacters(in: .whitespacesAndNewlines)
+                        else { return }
+                        Task { await self.sendMessage() }
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -201,48 +228,42 @@ class LyoAIViewModel: ObservableObject {
             self.ttsService.setEmotion(emotion)
         }
 
-        // SYNC AI SPEAKING STATE
-        Publishers.Merge(
-            AudioStreamManager.shared.$isAISpeaking,
-            ttsService.$isSpeaking
-        )
-        .receive(on: RunLoop.main)
-        .assign(to: &$isAISpeaking)
+        // Conversational voice is a delivery layer over Unified Chat.
+        // There is no second live-voice AI or AudioStreamManager model path.
+        ttsService.$isSpeaking
+            .receive(on: RunLoop.main)
+            .sink { [weak self] speaking in
+                self?.isAISpeaking = speaking
+                self?.aiLiveAudioLevel = speaking ? 1.0 : 0.0
+            }
+            .store(in: &cancellables)
 
         // Artifact tracking removed — classrooms use their own component state
 
         unifiedChat.$isLoading
             .receive(on: RunLoop.main)
-            .assign(to: &$isLoading)
+            .sink { [weak self] loading in
+                self?.isLoading = loading
+                self?.isAIThinking = loading && !(self?.isAISpeaking ?? false)
+            }
+            .store(in: &cancellables)
 
         unifiedChat.$suggestions
             .receive(on: RunLoop.main)
             .assign(to: &$suggestions)
 
-        // Live Mode Bindings
-        AudioStreamManager.shared.$isLive
+        sttService.$audioLevel
             .receive(on: RunLoop.main)
-            .assign(to: &$isLiveMode)
-
-        AudioStreamManager.shared.$userAudioLevel
-            .receive(on: RunLoop.main)
-            .assign(to: &$userLiveAudioLevel)
-
-        AudioStreamManager.shared.$aiAudioLevel
-            .receive(on: RunLoop.main)
-            .assign(to: &$aiLiveAudioLevel)
-
-        AudioStreamManager.shared.$isAIThinking
-            .receive(on: RunLoop.main)
-            .assign(to: &$isAIThinking)
-
-        AudioStreamManager.shared.$lastTranscript
-            .receive(on: RunLoop.main)
-            .assign(to: &$lastLiveTranscript)
-
-        AudioStreamManager.shared.$activeWidget
-            .receive(on: RunLoop.main)
-            .assign(to: &$activeLiveWidget)
+            .sink { [weak self] level in
+                guard let self else { return }
+                self.userLiveAudioLevel = level
+                if self.voiceLoopActive && self.isAISpeaking && level >= self.voiceBargeInThreshold {
+                    self.stopSpeaking()
+                    self.unifiedChat.interruptCurrentResponse()
+                    self.shouldAutoSpeakCurrentResponse = false
+                }
+            }
+            .store(in: &cancellables)
 
         // Handle Course Navigation from Unified Chat
         // Note: triggerCourseNavigation() now calls executeOpenClassroom() directly,
@@ -414,14 +435,10 @@ class LyoAIViewModel: ObservableObject {
     // MARK: - Voice Control
 
     func toggleVoiceMode() {
-        if isVoiceActive {
-            stopListening()
+        if voiceLoopActive || isLiveMode || isVoiceActive {
+            stopLiveMode()
         } else {
-            // Stop live mode if active before starting voice mode
-            if isLiveMode {
-                stopLiveMode()
-            }
-            startListening()
+            startLiveMode()
         }
     }
 
@@ -436,26 +453,30 @@ class LyoAIViewModel: ObservableObject {
     }
 
     func startLiveMode() {
-        // Stop turn-based voice mode if active
-        if isVoiceActive {
-            stopListening()
-        }
-
-        Task {
-            let userId = await TokenManager.shared.getUserId() ?? "anonymous"
-            let sessionId = "live-\(userId)"
-            await AudioStreamManager.shared.startLiveMode(sessionId: sessionId)
-        }
+        // "Live" is now continuous I/O around the exact same Unified Chat
+        // contract, memory, tools, multimodal context and teaching policy.
+        isLiveMode = true
+        isAudioOutputEnabled = true
+        voiceLoopActive = true
+        startListening()
     }
 
     func stopLiveMode() {
-        AudioStreamManager.shared.stopLiveMode()
+        isLiveMode = false
+        isAudioOutputEnabled = false
+        voiceTurnDebounceTask?.cancel()
+        voiceTurnDebounceTask = nil
+        stopListening()
+        lastLiveTranscript = ""
+        userLiveAudioLevel = 0
+        aiLiveAudioLevel = 0
+        isAIThinking = false
     }
 
     func startListening() {
-        // For barge-in, we don't stop TTS here. We let it play.
-        // If user speaks, onSpeechDetected will stop TTS.
-
+        // Keep the microphone armed through thinking/speaking so a learner can
+        // barge in. Shared voiceChat audio-session echo cancellation prevents
+        // Lyo's own speech from becoming a new user turn.
         voiceLoopActive = true
 
         guard !sttService.isRecording else {
@@ -480,6 +501,8 @@ class LyoAIViewModel: ObservableObject {
     }
 
     func stopListening() {
+        voiceTurnDebounceTask?.cancel()
+        voiceTurnDebounceTask = nil
         sttService.stopRecording()
         isVoiceActive = false
         voiceLoopActive = false  // Manual stop ends the conversational loop
@@ -695,7 +718,7 @@ class LyoAIViewModel: ObservableObject {
         attachments = []
 
         // Capture voice state
-        let shouldResumeListening = isVoiceActive
+        let shouldResumeListening = voiceLoopActive || isLiveMode || isVoiceActive
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         
         // Reset TTS buffer for the new response
@@ -731,7 +754,8 @@ class LyoAIViewModel: ObservableObject {
             context: nil,
             mode: mode ?? uiState?.currentAIMode ?? "chat",
             forcedIntent: selectedIntent,
-            speakResponse: shouldSpeak
+            speakResponse: shouldSpeak,
+            voiceSession: shouldResumeListening
         )
 
         // Safety net: if we're in a voice loop but nothing is being spoken
