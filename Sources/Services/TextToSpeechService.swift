@@ -74,10 +74,12 @@ class TextToSpeechService: NSObject, ObservableObject {
         deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
 
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-        } catch {
-            Log.audio.error("Failed to deactivate audio session: \(error)")
+        if !VoiceInputService.shared.isRecording {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            } catch {
+                Log.audio.error("Failed to deactivate audio session: \(error)")
+            }
         }
     }
 
@@ -253,7 +255,7 @@ class TextToSpeechService: NSObject, ObservableObject {
         playerItem = nil
         removePlaybackObserver()
 
-        if !keepSessionActive {
+        if !keepSessionActive && !VoiceInputService.shared.isRecording {
             do {
                 try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
             } catch {
