@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { SpeechPreparationCache, playSpeechResponse, boardTransitionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { buildClassroomWsUrl, classroomSceneStart } from '@/lib/classroom-contract.mjs';
 import { updateCourseProgress } from '@/lib/stack';
@@ -232,15 +233,15 @@ let turnQueue: DirectorTurn[] = [];
 let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
 let speechAbort: AbortController | null = null;
-let activeAudio: HTMLAudioElement | null = null;
-let activeAudioUrl: string | null = null;
 let speechGeneration = 0;
 let authToken: string | null = null;
 // Speech requests are started as soon as teacher turns arrive, not when the
 // previous line finishes. The cache is deliberately tiny and session-local:
 // it exists only to overlap network/TTS latency with time the learner is
 // already listening to the current turn.
-const prefetchedSpeech = new Map<string, Promise<Blob | null>>();
+const prefetchedSpeech = new SpeechPreparationCache(3);
+let learnerActionStarted: number | null = null;
+let contentLatencyRecorded = false;
 let idCounter = 0;
 let pendingErase = false; // erase lazily when the NEW scene's content arrives
 const nextId = () => `cf_${++idCounter}`;
@@ -263,17 +264,6 @@ function stopSpeech() {
   speechGeneration += 1;
   speechAbort?.abort();
   speechAbort = null;
-  if (activeAudio) {
-    activeAudio.onended = null;
-    activeAudio.onerror = null;
-    activeAudio.pause();
-    activeAudio.src = '';
-    activeAudio = null;
-  }
-  if (activeAudioUrl) {
-    URL.revokeObjectURL(activeAudioUrl);
-    activeAudioUrl = null;
-  }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
@@ -415,12 +405,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     return `${language}|${rate.toFixed(2)}|${text}`;
   }
 
-  async function requestSpeechBlob(
+  async function requestSpeechResponse(
     text: string,
     language: string,
     rate: number,
     signal?: AbortSignal,
-  ): Promise<Blob | null> {
+  ): Promise<Response | null> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (API_KEY) headers['X-API-Key'] = API_KEY;
@@ -441,7 +431,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       },
     );
     if (!response.ok) return null;
-    return response.blob();
+    return response;
   }
 
   function prefetchSpeechLine(text: string) {
@@ -449,14 +439,23 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
     const key = speechCacheKey(text, language, rate);
-    if (prefetchedSpeech.has(key)) return;
-    const pending = requestSpeechBlob(text, language, rate).catch(() => null);
-    prefetchedSpeech.set(key, pending);
-    while (prefetchedSpeech.size > 6) {
-      const oldest = prefetchedSpeech.keys().next().value as string | undefined;
-      if (!oldest) break;
-      prefetchedSpeech.delete(oldest);
-    }
+    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(text, language, rate, signal));
+  }
+
+  function recordResponseLatency(phase: 'content' | 'audio') {
+    if (learnerActionStarted === null || typeof performance === 'undefined') return;
+    if (phase === 'content' && contentLatencyRecorded) return;
+    if (phase === 'content') contentLatencyRecorded = true;
+    const duration = performance.now() - learnerActionStarted;
+    // Numeric timings only; no learner answers, topics, or identifiers.
+    try {
+      performance.clearMeasures(`classroom.action_to_${phase}`);
+      performance.measure(`classroom.action_to_${phase}`, { start: learnerActionStarted, duration });
+    } catch { /* Older browser timing APIs must never block the teacher. */ }
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('classroom:latency', {
+      detail: { phase, durationMs: duration },
+    }));
+    if (phase === 'audio') learnerActionStarted = null;
   }
 
   function speakWithLocalizedDeviceVoice(
@@ -487,6 +486,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           onDone();
         }
       };
+      utterance.onstart = () => recordResponseLatency('audio');
       utterance.onend = done;
       utterance.onerror = done;
       window.speechSynthesis.speak(utterance);
@@ -503,61 +503,26 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
 
     const generation = ++speechGeneration;
-    const controller = new AbortController();
-    speechAbort = controller;
     const language = get().languageCode || 'auto';
-
-    void (async () => {
-      try {
-        const rate = get().speechRate;
-        const key = speechCacheKey(text, language, rate);
-        const prefetched = prefetchedSpeech.get(key);
-        const audioBlob = prefetched
-          ? await prefetched
-          : await requestSpeechBlob(text, language, rate, controller.signal);
-        prefetchedSpeech.delete(key);
-        if (!audioBlob) throw new Error('Shared voice unavailable');
-        if (generation !== speechGeneration) return;
-
-        activeAudioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(activeAudioUrl);
-        activeAudio = audio;
-        let finished = false;
-        const cleanup = () => {
-          if (activeAudio === audio) activeAudio = null;
-          if (activeAudioUrl) {
-            URL.revokeObjectURL(activeAudioUrl);
-            activeAudioUrl = null;
-          }
-        };
-        const done = () => {
-          if (finished) return;
-          finished = true;
-          cleanup();
-          if (generation === speechGeneration) onDone();
-        };
-        audio.onended = done;
-        audio.onerror = done;
-        await audio.play();
-      } catch {
-        if (controller.signal.aborted || generation !== speechGeneration) return;
-        if (activeAudio) {
-          activeAudio.onended = null;
-          activeAudio.onerror = null;
-          activeAudio.pause();
-          activeAudio = null;
-        }
-        if (activeAudioUrl) {
-          URL.revokeObjectURL(activeAudioUrl);
-          activeAudioUrl = null;
-        }
-        // Emergency fallback only: choose a device voice in the correct locale.
-        // The shared neural voice remains the normal cross-platform path.
-        speakWithLocalizedDeviceVoice(text, language, generation, onDone);
-      } finally {
-        if (speechAbort === controller) speechAbort = null;
-      }
-    })();
+    const rate = get().speechRate;
+    const prepared = prefetchedSpeech.take(speechCacheKey(text, language, rate));
+    const controller = prepared?.controller || new AbortController();
+    speechAbort = controller;
+    const response = prepared?.response || requestSpeechResponse(text, language, rate, controller.signal);
+    void playSpeechResponse(response, {
+      signal: controller.signal,
+      onStarted: () => { if (generation === speechGeneration) recordResponseLatency('audio'); },
+    }).then(() => {
+      if (generation === speechGeneration) onDone();
+    }).catch((error: { playbackStarted?: boolean }) => {
+      if (controller.signal.aborted || generation !== speechGeneration) return;
+      // Never replay a partially spoken sentence after a network failure.
+      if (error.playbackStarted) onDone();
+      else speakWithLocalizedDeviceVoice(text, language, generation, onDone);
+    }).finally(() => {
+      controller.abort();
+      if (speechAbort === controller) speechAbort = null;
+    });
   }
 
   function pushTranscript(speaker: string, text: string) {
@@ -575,6 +540,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function addBoardElement(el: BoardElement) {
     maybeEraseForNewScene();
+    recordResponseLatency('content');
     sfx('chalk');
     set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
   }
@@ -644,7 +610,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   function learnerTakesFloor() {
     stopPlayer();
     turnQueue = [];
-    set({ caption: null, activeSpeaker: null, prompt: null, revealedCount: 0 });
+    prefetchedSpeech.clear();
+    set({ lyoState: 'listening', caption: null, activeSpeaker: null, prompt: null, revealedCount: 0 });
   }
 
   function playNext() {
@@ -717,12 +684,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
                 : s.board.filter((b) => b.id !== el.id), // nothing found — erase quietly
             }));
           });
-          playTimer = setTimeout(playNext, 1800);
+          playTimer = setTimeout(playNext, boardTransitionDelay());
           return;
         }
         if (action === 'bullets' && turn.items?.length) {
           addBoardElement({ id: nextId(), kind: 'bullets', items: turn.items });
-          playTimer = setTimeout(playNext, Math.min(turn.items.length * 700 + 800, 4200));
+          playTimer = setTimeout(playNext, boardTransitionDelay());
           return;
         }
         if (action === 'chart' && turn.labels?.length && turn.values?.length) {
@@ -731,7 +698,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             chartType: turn.chart_type === 'line' ? 'line' : 'bar',
             labels: turn.labels, values: turn.values,
           });
-          playTimer = setTimeout(playNext, 2400);
+          playTimer = setTimeout(playNext, boardTransitionDelay());
           return;
         }
         if (action === 'explorable' && turn.expression && turn.params?.length) {
@@ -740,21 +707,21 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             expression: turn.expression, params: turn.params,
             xMin: turn.x_min, xMax: turn.x_max, prompt: turn.prompt,
           });
-          playTimer = setTimeout(playNext, 2000);
+          playTimer = setTimeout(playNext, boardTransitionDelay());
           return;
         }
         if (action === 'highlight') {
           const term = (turn.content ?? '').trim();
           if (term) {
             highlightBoardTerm(term);
-            playTimer = setTimeout(playNext, 1600);
+            playTimer = setTimeout(playNext, boardTransitionDelay());
             return;
           }
         }
         const content = (turn.content ?? '').trim();
         if (content) {
           addBoardElement(classifyBoardContent(content));
-          playTimer = setTimeout(playNext, 2400);
+          playTimer = setTimeout(playNext, boardTransitionDelay());
           return;
         }
         break;
@@ -802,13 +769,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function enqueueTurns(turns: DirectorTurn[]) {
-    maybeEraseForNewScene();
+    recordResponseLatency('content');
     // Start the next few voice requests immediately. While line one is
     // playing, lines two and three can finish synthesizing instead of making
     // the learner sit through a fresh network/provider round-trip at every
     // transition.
     turns
-      .filter((turn) => turn.type === 'speech' && (turn.text ?? '').trim())
+      .filter((turn) => (turn.type === 'speech' || turn.type === 'user_prompt') && (turn.text ?? '').trim())
       .slice(0, 3)
       .forEach((turn) => prefetchSpeechLine((turn.text ?? '').trim()));
     turnQueue.push(...turns);
@@ -921,6 +888,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         set({ recordConcepts: conceptsFromClassScene(start?.scene) });
         // A new scene invalidates every older queued or playing turn.
         stopPlayer();
+        prefetchedSpeech.clear();
         turnQueue = [];
         // Mark for erase, but keep the current board up while the teacher
         // "prepares" — it only wipes when the new content arrives.
@@ -984,6 +952,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     if (answerData) payload.answer_data = answerData;
     try {
       ws.send(JSON.stringify(payload));
+      if (actionIntent !== 'update_activity') {
+        learnerActionStarted = performance.now();
+        contentLatencyRecorded = false;
+      }
       return true;
     } catch {
       return false;
@@ -1053,14 +1025,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         board: [], boardHistory: [], recordConcepts: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
-        progressCurrent: 0, progressTotal: 0,
+        isPaused: false, progressCurrent: 0, progressTotal: 0,
         continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue', error: null,
       });
 
       const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
       ws = socket;
-      socket.onopen = () => set({ status: 'live' });
-      socket.onmessage = (e) => handleMessage(String(e.data));
+      socket.onopen = () => { if (ws === socket) set({ status: 'live' }); };
+      socket.onmessage = (e) => { if (ws === socket) handleMessage(String(e.data)); };
       socket.onerror = () => {
         if (ws === socket) set({ status: 'error', error: 'Connection to the classroom failed.' });
       };
@@ -1077,6 +1049,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       stopPlayer();
       turnQueue = [];
       authToken = null;
+      prefetchedSpeech.clear();
+      learnerActionStarted = null;
       if (ws) { try { ws.close(); } catch { /* noop */ } ws = null; }
       set({ status: 'idle' });
     },
@@ -1317,6 +1291,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const next = !get().voiceOn;
       set({ voiceOn: next });
       if (!next) {
+        prefetchedSpeech.clear();
         if (playTimer) { clearTimeout(playTimer); playTimer = null; }
         stopSpeech();
         if (playing) playNext();

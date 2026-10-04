@@ -12,6 +12,7 @@ class TextToSpeechService: NSObject, ObservableObject {
 
     private let repository: TTSRepository = DefaultTTSRepository()
     private var speechQueue: [(text: String, language: String)] = []
+    private var playbackGeneration = 0
     private var playbackTask: Task<Void, Never>?
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
@@ -65,6 +66,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     }
 
     func stop() {
+        playbackGeneration += 1
         speechQueue.removeAll()
         playbackTask?.cancel()
         playbackTask = nil
@@ -82,15 +84,18 @@ class TextToSpeechService: NSObject, ObservableObject {
     private func startPlaybackIfNeeded() {
         guard playbackTask == nil else { return }
 
+        let generation = playbackGeneration
         playbackTask = Task { [weak self] in
-            await self?.processQueue()
+            await self?.processQueue(generation: generation)
         }
     }
 
-    private func processQueue() async {
-        defer { playbackTask = nil }
+    private func processQueue(generation: Int) async {
+        defer {
+            if generation == playbackGeneration { playbackTask = nil }
+        }
 
-        while !Task.isCancelled {
+        while !Task.isCancelled && generation == playbackGeneration {
             guard !speechQueue.isEmpty else { break }
 
             let item = speechQueue.removeFirst()
@@ -114,6 +119,9 @@ class TextToSpeechService: NSObject, ObservableObject {
             }
         }
 
+        // A canceled turn may finish after a new question has started speech.
+        // It must never clear that new task, player, or speaking indicator.
+        guard generation == playbackGeneration else { return }
         let finishedNaturally = !Task.isCancelled && speechQueue.isEmpty
         isSpeaking = false
         cleanupPlayer()
@@ -165,6 +173,7 @@ class TextToSpeechService: NSObject, ObservableObject {
                     queue: .main
                 ) { [weak self] _ in
                     Task { @MainActor [weak self] in
+                        guard self?.playerItem === item else { return }
                         self?.resumePlaybackContinuation()
                     }
                 }
@@ -172,6 +181,7 @@ class TextToSpeechService: NSObject, ObservableObject {
             }
         }, onCancel: {
             Task { @MainActor [weak self] in
+                guard self?.playerItem === item else { return }
                 self?.cancelActivePlayback()
             }
         })
@@ -183,6 +193,7 @@ class TextToSpeechService: NSObject, ObservableObject {
         text: String,
         language: String
     ) async throws {
+        let generation = playbackGeneration
         let detectedFamily = NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue
         let family = language.lowercased() == "auto"
             ? detectedFamily
@@ -208,7 +219,9 @@ class TextToSpeechService: NSObject, ObservableObject {
                 try await Task.sleep(nanoseconds: 100_000_000)
             }
         } catch {
-            deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
+            if generation == playbackGeneration {
+                deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
+            }
             throw error
         }
     }

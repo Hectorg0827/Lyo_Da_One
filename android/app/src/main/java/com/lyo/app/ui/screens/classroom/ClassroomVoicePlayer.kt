@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaPlayer
 import android.net.Uri
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Base64
 import com.google.gson.JsonParser
 import com.lyo.app.BuildConfig
@@ -22,6 +23,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /**
  * Plays the same backend-rendered teacher audio as Web and iOS.
@@ -31,11 +33,12 @@ class ClassroomVoicePlayer(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var playbackJob: Job? = null
-    private var activeCall: Call? = null
+    @Volatile private var activeCall: Call? = null
     private var player: MediaPlayer? = null
     private var audioFile: File? = null
-    private var generation = 0
+    @Volatile private var generation = 0
     private var enabled = true
+    private var completion: (() -> Unit)? = null
     private val deviceTts = TextToSpeech(appContext) { }
 
     fun setEnabled(value: Boolean) {
@@ -43,13 +46,37 @@ class ClassroomVoicePlayer(context: Context) {
         if (!value) stop()
     }
 
-    fun play(text: String, language: String) {
+    init {
+        deviceTts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+            override fun onDone(utteranceId: String?) { finishFallback(utteranceId) }
+            @Deprecated("Android callback")
+            override fun onError(utteranceId: String?) { finishFallback(utteranceId) }
+        })
+    }
+
+    private fun finishFallback(id: String?) {
+        scope.launch {
+            if (id == "lyo-classroom-${generation}") finishTurn(generation)
+        }
+    }
+
+    private fun finishTurn(requestedGeneration: Int) {
+        if (requestedGeneration != generation) return
+        releaseCurrentPlayer()
+        val done = completion
+        completion = null
+        done?.invoke()
+    }
+
+    fun play(text: String, language: String, onComplete: (() -> Unit)? = null) {
         stop()
-        if (!enabled || text.isBlank()) return
+        if (!enabled || text.isBlank()) { onComplete?.invoke(); return }
+        completion = onComplete
         val requestedGeneration = generation
         playbackJob = scope.launch {
             try {
-                val file = fetchSharedVoice(text, language)
+                val file = fetchSharedVoice(text, language, requestedGeneration)
                 if (requestedGeneration != generation || !enabled) {
                     file.delete()
                     return@launch
@@ -67,6 +94,7 @@ class ClassroomVoicePlayer(context: Context) {
 
     fun stop() {
         generation += 1
+        completion = null
         activeCall?.cancel()
         activeCall = null
         playbackJob?.cancel()
@@ -87,7 +115,7 @@ class ClassroomVoicePlayer(context: Context) {
         scope.cancel()
     }
 
-    private suspend fun fetchSharedVoice(text: String, language: String): File =
+    private suspend fun fetchSharedVoice(text: String, language: String, requestedGeneration: Int): File =
         withContext(Dispatchers.IO) {
             val body = ApiClient.gson.toJson(
                 mapOf(
@@ -104,7 +132,13 @@ class ClassroomVoicePlayer(context: Context) {
                 .post(body)
                 .build()
             val call = ApiClient.okHttp.newCall(request)
+            if (requestedGeneration != generation) throw CancellationException()
             activeCall = call
+            if (requestedGeneration != generation) {
+                call.cancel()
+                throw CancellationException()
+            }
+            call.timeout().timeout(8, TimeUnit.SECONDS)
             call.execute().use { response ->
                 if (!response.isSuccessful) {
                     error("Shared voice returned ${response.code}")
@@ -116,7 +150,7 @@ class ClassroomVoicePlayer(context: Context) {
                 File.createTempFile("lyo_classroom_", ".mp3", appContext.cacheDir)
                     .apply { writeBytes(bytes) }
             }.also {
-                activeCall = null
+                if (activeCall === call) activeCall = null
             }
         }
 
@@ -125,14 +159,16 @@ class ClassroomVoicePlayer(context: Context) {
         val nextPlayer = MediaPlayer().apply {
             setDataSource(appContext, Uri.fromFile(file))
             setOnCompletionListener {
-                if (requestedGeneration == generation) releaseCurrentPlayer()
+                finishTurn(requestedGeneration)
             }
             setOnErrorListener { _, _, _ ->
-                releaseCurrentPlayer()
+                finishTurn(requestedGeneration)
                 true
             }
-            prepare()
-            start()
+            setOnPreparedListener {
+                if (requestedGeneration == generation && enabled) start()
+            }
+            prepareAsync()
         }
         player = nextPlayer
     }
@@ -155,12 +191,13 @@ class ClassroomVoicePlayer(context: Context) {
         }
         deviceTts.language = Locale.forLanguageTag(tag)
         deviceTts.setSpeechRate(0.98f)
-        deviceTts.speak(
+        val result = deviceTts.speak(
             text,
             TextToSpeech.QUEUE_FLUSH,
             null,
             "lyo-classroom-${generation}",
         )
+        if (result == TextToSpeech.ERROR) finishTurn(generation)
     }
 }
 
