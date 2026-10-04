@@ -32,6 +32,7 @@ class Lyo2ChatService: ObservableObject {
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil,
+        responseChannel: String = "text",
         onEvent: @escaping (Lyo2StreamEvent) -> Void
     ) {
         // Cancel any in-flight stream before starting a new one
@@ -60,7 +61,8 @@ class Lyo2ChatService: ObservableObject {
             stateSummary: mergedStateSummary,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
-            clientMessageId: clientMessageId
+            clientMessageId: clientMessageId,
+            responseChannel: responseChannel
         )
         
         let baseURL = AppConfig.baseURL
@@ -109,6 +111,15 @@ class Lyo2ChatService: ObservableObject {
                 self?.activeStreamManager = nil
             }
         }
+    }
+
+    /// Intentional interruption for conversational voice barge-in.
+    /// The next spoken turn starts a fresh canonical stream; no separate voice AI exists.
+    func cancelActiveStream() {
+        safetyTimeoutTask?.cancel()
+        safetyTimeoutTask = nil
+        activeStreamManager?.cancel()
+        activeStreamManager = nil
     }
 
     /// Grade an in-chat check against the block the server itself emitted.
