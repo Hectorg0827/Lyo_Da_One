@@ -74,10 +74,12 @@ class TextToSpeechService: NSObject, ObservableObject {
         deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
 
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-        } catch {
-            Log.audio.error("Failed to deactivate audio session: \(error)")
+        if !VoiceInputService.shared.isRecording {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            } catch {
+                Log.audio.error("Failed to deactivate audio session: \(error)")
+            }
         }
     }
 
@@ -253,7 +255,7 @@ class TextToSpeechService: NSObject, ObservableObject {
         playerItem = nil
         removePlaybackObserver()
 
-        if !keepSessionActive {
+        if !keepSessionActive && !VoiceInputService.shared.isRecording {
             do {
                 try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
             } catch {
@@ -271,7 +273,14 @@ class TextToSpeechService: NSObject, ObservableObject {
 
     private func configureAudioSession(active: Bool) throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .allowAirPlay])
+        // Match VoiceInputService so speech playback does not tear down the
+        // microphone. This is one full-duplex conversational audio session,
+        // with iOS voiceChat echo cancellation doing the acoustic separation.
+        try session.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetooth, .duckOthers]
+        )
         if active {
             try session.setActive(true)
         }

@@ -21,6 +21,16 @@ class Lyo2ChatService: ObservableObject {
     private var teachingRuntimeByConversation: [String: TeachingRuntimeClientState] = [:]
     
     // MARK: - API
+
+    /// Interrupt the current Chat stream without ending the conversation.
+    /// Voice barge-in uses this so the next utterance starts on the same
+    /// canonical conversation and interaction contract.
+    func cancelActiveStream() {
+        activeStreamManager?.cancel()
+        activeStreamManager = nil
+        safetyTimeoutTask?.cancel()
+        safetyTimeoutTask = nil
+    }
     
     func sendMessageStreaming(
         text: String,

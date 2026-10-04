@@ -40,6 +40,7 @@ export interface CourseRevisionInput {
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
+  voiceSession?: boolean;
 }
 
 /**
@@ -155,6 +156,7 @@ interface ChatStore {
   // fetched — see fetchSessionSummary / fetchDueReviews below.
   sessionSummary: SessionSummary | null;
   dueReviews: DueReviewItem[];
+  voiceSessionActive: boolean;
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -180,6 +182,8 @@ interface ChatStore {
   dismissSessionSummary: () => void;
   fetchDueReviews: () => Promise<void>;
   dismissDueReview: (skillId: string) => void;
+  setVoiceSessionActive: (active: boolean) => void;
+  interruptGeneration: () => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -193,6 +197,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isHydrating: false,
   sessionSummary: null,
   dueReviews: [],
+  voiceSessionActive: false,
+
+  setVoiceSessionActive: (active) => set({ voiceSessionActive: active }),
+  interruptGeneration: () => {
+    activeStreamToken += 1;
+    activeStreamController?.abort();
+    activeStreamController = null;
+    set({
+      isGenerating: false,
+      generationProgress: 0,
+      generationActivity: 'thinking',
+      courseGenerationState: null,
+    });
+  },
 
   createConversation: () => {
     const state = get();
@@ -805,10 +823,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        teachingStateSummary(
-          teachingRuntimeFor(convoId),
-          options.courseContext
-        ) as Record<string, unknown> | undefined
+        {
+          ...(
+            teachingStateSummary(
+              teachingRuntimeFor(convoId),
+              options.courseContext
+            ) as Record<string, unknown> | undefined
+          ),
+          ...(options.voiceSession || get().voiceSessionActive
+            ? { voice_session: { active: true, transport: 'client_stt_tts' } }
+            : {}),
+        }
       );
     } catch {
       if (streamToken === activeStreamToken) {

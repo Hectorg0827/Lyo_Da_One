@@ -1401,6 +1401,40 @@ export const api = {
     },
   },
 
+  // ── Shared neural voice ──
+  tts: {
+    async synthesizeStream(
+      text: string,
+      options: { language?: string; speed?: number; signal?: AbortSignal } = {}
+    ): Promise<Blob> {
+      const token = getAccessToken();
+      const res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          text,
+          language: options.language ?? 'auto',
+          speed: options.speed ?? 1.0,
+          format: 'mp3',
+        }),
+        signal: options.signal,
+      });
+      if (!res.ok) {
+        let message = `Voice synthesis failed (HTTP ${res.status})`;
+        try {
+          message = errorMessageFrom(await res.json(), res.status);
+        } catch {
+          // Keep the transport error when the provider returns non-JSON.
+        }
+        throw new ApiError(message, res.status);
+      }
+      return res.blob();
+    },
+  },
+
   // ── AI ──
   ai: {
     async generate(prompt: string, taskType = 'GENERAL') {

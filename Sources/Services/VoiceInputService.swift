@@ -123,7 +123,14 @@ class VoiceInputService: ObservableObject {
         // Configure audio session
         #if os(iOS)
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+        // Shared full-duplex session: recognition and Lyo speech can coexist.
+        // voiceChat mode enables the platform's acoustic echo cancellation,
+        // which is required for barge-in without feeding Lyo its own voice.
+        try audioSession.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetooth, .duckOthers]
+        )
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         #endif
         

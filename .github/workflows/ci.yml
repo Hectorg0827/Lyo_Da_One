@@ -40,6 +40,9 @@ jobs:
       - name: Verify chat structured-content contract
         run: node scripts/verify-chat-blocks-parity.mjs
 
+      - name: Verify conversational voice stays on canonical Chat
+        run: node scripts/verify-chat-voice-contract.mjs
+
       - name: Verify canonical learning progress contract
         run: node scripts/verify-learning-progress-parity.mjs
 
