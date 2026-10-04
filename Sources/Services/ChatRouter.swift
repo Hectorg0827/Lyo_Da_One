@@ -82,6 +82,7 @@ final class ChatRouter: ObservableObject {
         conversationHistory: [ConversationMessage] = [],
         conversationId: String? = nil,
         clientMessageId: String? = nil,
+        responseChannel: String = "text",
         onAgentBlock: ((AgentBlock) -> Void)? = nil,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)? = nil
     ) async -> ChatRouteResult {
@@ -98,6 +99,26 @@ final class ChatRouter: ObservableObject {
         Log.ai.info(
             "🎯 Intent: \(intent.category.rawValue) | Tier: \(intent.tier.label) | Confidence: \(String(format: "%.0f%%", intent.confidence * 100))"
         )
+
+        // Conversational voice is a presentation layer over canonical Chat,
+        // never a separate AI. Force spoken turns through Lyo 2.0 so the same
+        // InteractionContract, memory, tools, and learner state remain authoritative.
+        if responseChannel == "voice" {
+            return await handleDeepPath(
+                message: message,
+                media: media,
+                attachmentIds: attachmentIds,
+                mode: mode,
+                intent: intent,
+                forcedIntent: forcedIntent,
+                conversationHistory: conversationHistory,
+                conversationId: conversationId,
+                clientMessageId: clientMessageId,
+                responseChannel: responseChannel,
+                onStreamEvent: onStreamEvent,
+                startTime: startTime
+            )
+        }
 
         // Attachments must use the Lyo 2.0 stream because the quick endpoint is
         // text-only. This prevents a selected image from silently becoming a URL.
@@ -255,6 +276,7 @@ final class ChatRouter: ObservableObject {
         conversationHistory: [ConversationMessage],
         conversationId: String?,
         clientMessageId: String?,
+        responseChannel: String = "text",
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
         startTime: CFAbsoluteTime
     ) async -> ChatRouteResult {
@@ -276,7 +298,8 @@ final class ChatRouter: ObservableObject {
             stateSummary: buildStateSummary(mode: mode, intent: intent),
             conversationHistory: memoryWindow,
             conversationId: conversationId,
-            clientMessageId: clientMessageId
+            clientMessageId: clientMessageId,
+            responseChannel: responseChannel
         ) { event in
             onStreamEvent?(event)
 
