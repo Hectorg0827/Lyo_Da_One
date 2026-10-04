@@ -1,14 +1,18 @@
 package com.lyo.app.ui.screens.chat
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -73,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.data.api.AiConversationMessageDto
@@ -97,6 +102,8 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -195,6 +202,11 @@ fun ChatScreen(nav: NavHostController) {
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    var voiceConversation by remember { mutableStateOf(false) }
+    var liveVoiceTranscript by remember { mutableStateOf("") }
+    var voiceListenNonce by remember { mutableStateOf(0) }
+    var continuousRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
+    var streamJob by remember { mutableStateOf<Job?>(null) }
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -215,6 +227,7 @@ fun ChatScreen(nav: NavHostController) {
             override fun onDone(utteranceId: String?) {
                 mainHandler.post {
                     if (speakingMessageId == utteranceId) speakingMessageId = null
+                    if (voiceConversation) voiceListenNonce += 1
                 }
             }
 
@@ -222,6 +235,7 @@ fun ChatScreen(nav: NavHostController) {
             override fun onError(utteranceId: String?) {
                 mainHandler.post {
                     if (speakingMessageId == utteranceId) speakingMessageId = null
+                    if (voiceConversation) voiceListenNonce += 1
                 }
             }
         })
@@ -233,6 +247,10 @@ fun ChatScreen(nav: NavHostController) {
             textToSpeech = null
             textToSpeechReady = false
             speakingMessageId = null
+            continuousRecognizer?.destroy()
+            continuousRecognizer = null
+            streamJob?.cancel()
+            streamJob = null
         }
     }
 
@@ -253,6 +271,19 @@ fun ChatScreen(nav: NavHostController) {
                     .take(MAX_CHAT_CHARS)
                 inputError = null
             }
+        }
+    }
+
+    val voicePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            voiceConversation = true
+            voiceListenNonce += 1
+            inputError = null
+        } else {
+            voiceConversation = false
+            inputError = "Microphone permission is required for live voice."
         }
     }
 
@@ -307,7 +338,8 @@ fun ChatScreen(nav: NavHostController) {
         inputError = null
         isStreaming = true
 
-        scope.launch {
+        streamJob?.cancel()
+        streamJob = scope.launch {
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -337,6 +369,7 @@ fun ChatScreen(nav: NavHostController) {
                             sizeBytes = attachment.size,
                         )
                     },
+                    voiceSession = voiceConversation,
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -367,6 +400,128 @@ fun ChatScreen(nav: NavHostController) {
                 )
             }
             isStreaming = false
+            streamJob = null
+
+            if (voiceConversation) {
+                val assistant = messages.lastOrNull { it.role == "assistant" && it.content.isNotBlank() }
+                val spokenText = assistant?.let { parseChatContent(it.content).text }?.trim().orEmpty()
+                val engine = textToSpeech
+                if (assistant != null && spokenText.isNotBlank() && textToSpeechReady && engine != null) {
+                    engine.stop()
+                    speakingMessageId = assistant.id
+                    engine.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, assistant.id)
+                } else {
+                    voiceListenNonce += 1
+                }
+            }
+        }
+    }
+
+    fun stopVoiceConversation() {
+        voiceConversation = false
+        dictating = false
+        liveVoiceTranscript = ""
+        runCatching { continuousRecognizer?.cancel() }
+        textToSpeech?.stop()
+        speakingMessageId = null
+    }
+
+    fun startVoiceRecognition() {
+        if (!voiceConversation || isStreaming || speakingMessageId != null) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        val recognizer = continuousRecognizer ?: return
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        liveVoiceTranscript = ""
+        runCatching {
+            recognizer.startListening(intent)
+            dictating = true
+        }.onFailure {
+            dictating = false
+            inputError = "Speech recognition is not available on this device."
+        }
+    }
+
+    DisposableEffect(context) {
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            onDispose { }
+        } else {
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    dictating = true
+                    liveVoiceTranscript = ""
+                }
+
+                override fun onBeginningOfSpeech() {
+                    // Full-duplex barge-in: user speech owns the floor.
+                    textToSpeech?.stop()
+                    speakingMessageId = null
+                    if (isStreaming) {
+                        streamJob?.cancel()
+                        streamJob = null
+                        isStreaming = false
+                    }
+                }
+
+                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onBufferReceived(buffer: ByteArray?) = Unit
+                override fun onEndOfSpeech() { dictating = false }
+
+                override fun onError(error: Int) {
+                    dictating = false
+                    if (voiceConversation) {
+                        mainHandler.postDelayed({ voiceListenNonce += 1 }, 250)
+                    }
+                }
+
+                override fun onResults(results: Bundle?) {
+                    dictating = false
+                    val transcript = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                        ?.trim()
+                        .orEmpty()
+                    liveVoiceTranscript = transcript
+                    if (transcript.isNotBlank() && voiceConversation) {
+                        send(transcript)
+                    } else if (voiceConversation) {
+                        voiceListenNonce += 1
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    liveVoiceTranscript = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                        ?.trim()
+                        .orEmpty()
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) = Unit
+            })
+            continuousRecognizer = recognizer
+            onDispose {
+                recognizer.cancel()
+                recognizer.destroy()
+                if (continuousRecognizer === recognizer) continuousRecognizer = null
+            }
+        }
+    }
+
+    LaunchedEffect(voiceConversation, voiceListenNonce, isStreaming, speakingMessageId) {
+        if (voiceConversation && !isStreaming && speakingMessageId == null) {
+            delay(180)
+            startVoiceRecognition()
         }
     }
 
@@ -478,6 +633,8 @@ fun ChatScreen(nav: NavHostController) {
                 onClick = {
                     textToSpeech?.stop()
                     speakingMessageId = null
+                    streamJob?.cancel()
+                    streamJob = null
                     activeConversationId = null
                     pendingAttachments.clear()
                     inputError = null
@@ -567,6 +724,35 @@ fun ChatScreen(nav: NavHostController) {
             )
         }
 
+        if (voiceConversation) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LyoPurple.copy(alpha = 0.10f))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Icon(Icons.Default.Mic, contentDescription = null, tint = LyoPurple)
+                Text(
+                    text = when {
+                        speakingMessageId != null -> "Lyo is speaking — start talking to interrupt"
+                        isStreaming -> "Lyo is thinking…"
+                        liveVoiceTranscript.isNotBlank() -> liveVoiceTranscript
+                        else -> "Listening…"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = ::stopVoiceConversation) {
+                    Text("End", color = LyoPurple)
+                }
+            }
+        }
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -604,23 +790,27 @@ fun ChatScreen(nav: NavHostController) {
             }
 
             IconButton(
-                onClick = ::startDictation,
-                enabled = !isStreaming && !uploadingAttachment && !dictating,
+                onClick = {
+                    if (voiceConversation) {
+                        stopVoiceConversation()
+                    } else if (
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        voiceConversation = true
+                        voiceListenNonce += 1
+                    } else {
+                        voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                enabled = !uploadingAttachment,
                 modifier = Modifier.size(44.dp),
             ) {
-                if (dictating) {
-                    CircularProgressIndicator(
-                        color = LyoPurple,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Dictate message",
-                        tint = TextSecondary,
-                    )
-                }
+                Icon(
+                    imageVector = if (voiceConversation) Icons.Default.Stop else Icons.Default.Mic,
+                    contentDescription = if (voiceConversation) "End live voice" else "Start live voice",
+                    tint = if (voiceConversation) LyoPurple else TextSecondary,
+                )
             }
 
             OutlinedTextField(
@@ -631,6 +821,7 @@ fun ChatScreen(nav: NavHostController) {
                     Text(
                         when {
                             isStreaming -> "Lyo is thinking…"
+                            voiceConversation && dictating -> "Listening…"
                             dictating -> "Listening…"
                             else -> "Ask Lyo anything…"
                         },
