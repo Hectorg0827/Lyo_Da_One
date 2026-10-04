@@ -18,7 +18,7 @@ import {
   teachingStateSummary,
 } from '@/lib/teaching-runtime.mjs';
 
-export type GenerationActivity = 'thinking' | 'response' | 'course';
+export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
 export interface CourseGenerationState {
   phase: 'intent' | 'planning' | 'lessons' | 'practice' | 'finalizing' | 'ready' | string;
@@ -694,6 +694,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 : undefined;
             if (metrics) patchAiMessage({ metadata: { latency: metrics } });
           } else if (chunk.type === 'search_status') {
+            set({ generationActivity: 'searching' });
             patchAiMessage({
               metadata: {
                 liveSearchStatus:
