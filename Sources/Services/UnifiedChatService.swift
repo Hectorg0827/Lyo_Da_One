@@ -80,6 +80,16 @@ final class UnifiedChatService: ObservableObject {
 
     // MARK: - Public API
 
+    /// Interrupt generation in-place for conversational voice barge-in.
+    /// This cancels transport only; the conversation, memory, learner state and
+    /// next interaction contract stay on the same canonical Chat thread.
+    func interruptCurrentResponse() {
+        streamTimeoutTask?.cancel()
+        streamTimeoutTask = nil
+        lyo2ChatService.cancelActiveStream()
+        isLoading = false
+    }
+
     /// Start a completely new chat session
     /// Clears local state and generates a new session ID to ensure isolation
     func startNewChat(withId id: String? = nil) {
