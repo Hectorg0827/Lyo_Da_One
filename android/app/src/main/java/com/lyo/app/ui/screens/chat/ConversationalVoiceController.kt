@@ -130,7 +130,7 @@ class ConversationalVoiceController(
 
     private fun speakNextOrListen() {
         if (!active) return
-        val next = speechQueue.removeFirstOrNull()
+        val next = speechQueue.pollFirst()
         if (next == null) {
             currentSpokenText = ""
             setPhase(Phase.LISTENING)
