@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
+import { useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
 import type { ChatAttachment } from '@/types';
+import { useChatVoiceSession } from '@/hooks/useChatVoiceSession';
 
 const MAX_CHARS = 4000;
 const MAX_ROWS = 6;
@@ -26,27 +27,6 @@ const SUPPORTED_ATTACHMENT_TYPES = new Set([
   'text/csv',
   'application/json',
 ]);
-
-// Minimal typing for the Web Speech API (not yet in lib.dom for all targets).
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-};
-
-function getSpeechRecognition(): SpeechRecognitionLike | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as unknown as Record<string, unknown>;
-  const Ctor = (w.SpeechRecognition || w.webkitSpeechRecognition) as
-    | (new () => SpeechRecognitionLike)
-    | undefined;
-  return Ctor ? new Ctor() : null;
-}
 
 function attachmentMimeType(file: File): string {
   const reportedType = file.type.toLowerCase();
@@ -70,20 +50,11 @@ export default function ChatInputBar() {
   const { sendMessage, isGenerating, generationActivity, reviseActiveCourse } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
-  const [listening, setListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const dictationBaseRef = useRef('');
-
-  useEffect(() => {
-    setSpeechSupported(getSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
-  }, []);
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -93,46 +64,33 @@ export default function ChatInputBar() {
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
   }, []);
 
+  const handleVoiceTranscript = useCallback((text: string) => {
+    setValue(text.slice(0, MAX_CHARS));
+    requestAnimationFrame(adjustHeight);
+  }, [adjustHeight]);
+
+  const handleFinalVoiceUtterance = useCallback(async (text: string) => {
+    const utterance = text.trim();
+    if (!utterance) return;
+    const sentAttachments = attachments;
+    setAttachments([]);
+    setValue('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    await sendMessage(utterance, sentAttachments, { responseChannel: 'voice' });
+  }, [attachments, sendMessage]);
+
+  const voice = useChatVoiceSession({
+    onTranscript: handleVoiceTranscript,
+    onFinalUtterance: handleFinalVoiceUtterance,
+  });
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (e.target.value.length > MAX_CHARS) return;
     setValue(e.target.value);
     adjustHeight();
   };
 
-  // ── Voice dictation (Web Speech API) ──────────────────────────────────────
-
-  const toggleDictation = () => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const recognition = getSpeechRecognition();
-    if (!recognition) return;
-    recognitionRef.current = recognition;
-    dictationBaseRef.current = value ? value.replace(/\s*$/, ' ') : '';
-    recognition.lang = navigator.language || 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setValue((dictationBaseRef.current + transcript).slice(0, MAX_CHARS));
-      adjustHeight();
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => {
-      setListening(false);
-      toast.error("Couldn't access the microphone");
-    };
-    try {
-      recognition.start();
-      setListening(true);
-    } catch {
-      toast.error('Voice input is unavailable');
-    }
-  };
+  // ── Conversational voice uses canonical Chat; see useChatVoiceSession. ────────
 
   // ── Attachments (shared consumer media API) ───────────────────────────────
 
@@ -203,7 +161,7 @@ export default function ChatInputBar() {
       || (isGenerating && !isCourseAdjustable)
       || uploading
     ) return;
-    recognitionRef.current?.stop();
+    if (voice.active) voice.stop();
 
     setValue('');
     const sentAttachments = attachments;
@@ -228,9 +186,18 @@ export default function ChatInputBar() {
   const charCount = value.length;
   const showCount = charCount > MAX_CHARS * 0.75;
   const canSend =
-    (value.trim().length > 0 || attachments.length > 0)
+    !voice.active
+    && (value.trim().length > 0 || attachments.length > 0)
     && (!isGenerating || isCourseAdjustable)
     && !uploading;
+
+  const voiceStatusLabel = {
+    off: 'Voice',
+    listening: 'Listening',
+    thinking: 'Thinking',
+    speaking: 'Lyo speaking',
+    error: 'Voice unavailable',
+  }[voice.status];
 
   return (
     <div className="relative px-3 py-3 md:px-6 md:py-4">
@@ -282,13 +249,17 @@ export default function ChatInputBar() {
           placeholder={
             isCourseAdjustable
               ? 'Adjust the course while it builds…'
+              : voice.status === 'listening'
+              ? 'Listening…'
+              : voice.status === 'thinking'
+              ? 'Lyo is thinking…'
+              : voice.status === 'speaking'
+              ? 'Tap the mic to interrupt'
               : isGenerating
               ? 'Lyo is thinking…'
-              : listening
-              ? 'Listening…'
               : 'Message Lyo...'
           }
-          disabled={isGenerating && !isCourseAdjustable}
+          disabled={voice.active || (isGenerating && !isCourseAdjustable)}
           rows={1}
           className={cn(
             'w-full resize-none bg-transparent text-base text-white placeholder-white/35',
@@ -313,18 +284,33 @@ export default function ChatInputBar() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || isGenerating || attachments.length >= MAX_ATTACHMENTS}
+            disabled={uploading || isGenerating || voice.active || attachments.length >= MAX_ATTACHMENTS}
             className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/90 hover:bg-white/15 transition-all duration-200 shrink-0 disabled:opacity-50"
             title="Attach an image or document"
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-[18px] h-[18px]" strokeWidth={1.5} />}
           </button>
 
-          {/* Mode pill */}
-          <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold select-none">
-            <MessageCircle className="w-3.5 h-3.5 fill-current" />
-            Chat
-          </span>
+          {/* Same Chat AI; voice only changes the presentation channel. */}
+          {voice.active ? (
+            <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-accent-orange/15 text-accent-orange text-xs font-semibold select-none">
+              <Mic className="w-3.5 h-3.5" />
+              {voiceStatusLabel}
+              <button
+                type="button"
+                onClick={voice.stop}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-white/10"
+                title="End voice conversation"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold select-none">
+              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+              Chat
+            </span>
+          )}
 
           <div className="flex-1" />
 
@@ -345,39 +331,52 @@ export default function ChatInputBar() {
             )}
           </AnimatePresence>
 
-          {/* Voice dictation — hidden entirely when the browser can't do it */}
-          {speechSupported && (
+          {/* Conversational voice: tap while Lyo speaks/thinks to barge in. */}
+          {voice.supported && (
             <button
               type="button"
-              onClick={toggleDictation}
+              onClick={() => {
+                if (!voice.active) voice.start();
+                else if (voice.status === 'speaking' || voice.status === 'thinking') voice.bargeIn();
+                else voice.stop();
+              }}
               className={cn(
                 'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
-                listening
+                voice.active
                   ? 'text-accent-orange bg-accent-orange/15 animate-pulse'
                   : 'text-white/90 hover:bg-white/10'
               )}
-              title={listening ? 'Stop dictating' : 'Dictate your message'}
+              title={
+                !voice.active
+                  ? 'Start voice conversation'
+                  : voice.status === 'speaking' || voice.status === 'thinking'
+                  ? 'Interrupt Lyo and speak'
+                  : 'End voice conversation'
+              }
             >
               <Mic className="w-[18px] h-[18px]" />
             </button>
           )}
 
-          {/* Send — white circle, dark arrow (iOS) */}
-          <motion.button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSend}
-            whileTap={canSend ? { scale: 0.9 } : {}}
-            className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
-              canSend
-                ? 'bg-white text-black shadow-lg shadow-black/30 hover:opacity-90'
-                : 'bg-white/10 text-white/25 cursor-not-allowed'
-            )}
-            title="Send message"
-          >
-            <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
-          </motion.button>
+          {!voice.active && (
+            {/* Send — white circle, dark arrow (iOS) */}
+            <motion.button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSend}
+              whileTap={canSend ? { scale: 0.9 } : {}}
+              className={cn(
+                'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
+                canSend
+                  ? 'bg-white text-black shadow-lg shadow-black/30 hover:opacity-90'
+                  : 'bg-white/10 text-white/25 cursor-not-allowed'
+              )}
+              title="Send message"
+            >
+              <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+            </motion.button>
+  
+          )}
         </div>
       </div>
 
