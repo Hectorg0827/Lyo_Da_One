@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle } from 'lucide-react';
+import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle, AudioLines } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
 import type { ChatAttachment } from '@/types';
+import ConversationalVoiceLayer from './ConversationalVoiceLayer';
 
 const MAX_CHARS = 4000;
 const MAX_ROWS = 6;
@@ -67,7 +68,14 @@ function attachmentMimeType(file: File): string {
 }
 
 export default function ChatInputBar() {
-  const { sendMessage, isGenerating, generationActivity, reviseActiveCourse } = useChatStore();
+  const {
+    sendMessage,
+    isGenerating,
+    generationActivity,
+    reviseActiveCourse,
+    voiceSessionActive,
+    setVoiceSessionActive,
+  } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
   const [listening, setListening] = useState(false);
@@ -234,6 +242,8 @@ export default function ChatInputBar() {
 
   return (
     <div className="relative px-3 py-3 md:px-6 md:py-4">
+      <ConversationalVoiceLayer />
+
       {/* Pending attachment chips */}
       <div className="flex gap-2 mb-2 overflow-x-auto max-w-3xl mx-auto">
         <AnimatePresence initial={false}>
@@ -320,11 +330,27 @@ export default function ChatInputBar() {
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-[18px] h-[18px]" strokeWidth={1.5} />}
           </button>
 
-          {/* Mode pill */}
-          <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold select-none">
-            <MessageCircle className="w-3.5 h-3.5 fill-current" />
-            Chat
-          </span>
+          {/* Mode pill — voice is a delivery layer over the same Chat contract. */}
+          <button
+            type="button"
+            onClick={() => setVoiceSessionActive(!voiceSessionActive)}
+            disabled={!speechSupported}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold select-none transition-colors',
+              voiceSessionActive
+                ? 'bg-lyo-500/20 text-lyo-200 border border-lyo-500/25'
+                : 'bg-white/10 text-white hover:bg-white/15',
+              !speechSupported && 'opacity-40 cursor-not-allowed'
+            )}
+            title={speechSupported ? (voiceSessionActive ? 'End live voice conversation' : 'Start live voice conversation') : 'Voice is unavailable in this browser'}
+          >
+            {voiceSessionActive ? (
+              <AudioLines className="w-3.5 h-3.5" />
+            ) : (
+              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+            )}
+            {voiceSessionActive ? 'Voice' : 'Chat'}
+          </button>
 
           <div className="flex-1" />
 
@@ -346,7 +372,7 @@ export default function ChatInputBar() {
           </AnimatePresence>
 
           {/* Voice dictation — hidden entirely when the browser can't do it */}
-          {speechSupported && (
+          {speechSupported && !voiceSessionActive && (
             <button
               type="button"
               onClick={toggleDictation}
