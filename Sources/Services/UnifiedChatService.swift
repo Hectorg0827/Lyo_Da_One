@@ -107,7 +107,8 @@ final class UnifiedChatService: ObservableObject {
         attachments: [MessageAttachment] = [],
         context: ChatContext? = nil,
         mode: String = "chat",
-        forcedIntent: String? = nil
+        forcedIntent: String? = nil,
+        voiceSession: Bool = false
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -162,6 +163,7 @@ final class UnifiedChatService: ObservableObject {
             attachmentIds: attachmentIds,
             mode: mode,
             forcedIntent: forcedIntent,
+            voiceSession: voiceSession,
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
@@ -405,11 +407,17 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        speakResponse: Bool = false
+        speakResponse: Bool = false,
+        voiceSession: Bool = false
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
         _ = await sendMessage(
-            text, attachments: attachments, context: context, mode: mode, forcedIntent: forcedIntent
+            text,
+            attachments: attachments,
+            context: context,
+            mode: mode,
+            forcedIntent: forcedIntent,
+            voiceSession: voiceSession || speakResponse
         )
     }
 
@@ -430,7 +438,8 @@ final class UnifiedChatService: ObservableObject {
 
     func sendMessageLyo2(
         text: String,
-        attachments: [MessageAttachment] = []
+        attachments: [MessageAttachment] = [],
+        voiceSession: Bool = false
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
@@ -466,6 +475,9 @@ final class UnifiedChatService: ObservableObject {
             text: trimmedText,
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
+            stateSummary: voiceSession
+                ? ["voice_session": AnyCodable(["active": true, "transport": "client_stt_tts"])]
+                : [:],
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id
