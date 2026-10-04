@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioLines, Mic, MicOff, Volume2 } from 'lucide-react';
+import { AudioLines, MicOff, Volume2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -37,7 +37,6 @@ export default function ConversationalVoiceLayer() {
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
-  const [supported, setSupported] = useState(false);
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
@@ -49,6 +48,7 @@ export default function ConversationalVoiceLayer() {
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
+  const ttsPrefetchAbortRef = useRef<AbortController | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -72,7 +72,9 @@ export default function ConversationalVoiceLayer() {
 
   const stopSpeech = useCallback(() => {
     ttsAbortRef.current?.abort();
+    ttsPrefetchAbortRef.current?.abort();
     ttsAbortRef.current = null;
+    ttsPrefetchAbortRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
@@ -152,18 +154,30 @@ export default function ConversationalVoiceLayer() {
   const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audioRef.current = audio;
-    audio.onended = () => {
+    let settled = false;
+    const cleanup = () => {
       URL.revokeObjectURL(url);
       if (audioRef.current === audio) audioRef.current = null;
+    };
+    audioRef.current = audio;
+    audio.onended = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolve();
     };
     audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      if (audioRef.current === audio) audioRef.current = null;
+      if (settled) return;
+      settled = true;
+      cleanup();
       reject(new Error('Audio playback failed'));
     };
-    void audio.play().catch(reject);
+    void audio.play().catch((error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    });
   }), []);
 
   const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
@@ -187,24 +201,38 @@ export default function ConversationalVoiceLayer() {
     lastSpokenMessageIdRef.current = messageId;
 
     try {
-      let next: Promise<Blob> | null = null;
+      let next: { promise: Promise<Blob>; controller: AbortController } | null = null;
       for (let index = 0; index < chunks.length && activeRef.current; index++) {
-        const controller = new AbortController();
-        ttsAbortRef.current = controller;
-        const blob = next ?? api.tts.synthesizeStream(chunks[index], {
-          language: navigator.language || 'auto',
-          speed: 1.02,
-          signal: controller.signal,
-        });
+        const current = next ?? (() => {
+          const controller = new AbortController();
+          return {
+            controller,
+            promise: api.tts.synthesizeStream(chunks[index], {
+              language: navigator.language || 'auto',
+              speed: 1.02,
+              signal: controller.signal,
+            }),
+          };
+        })();
+        ttsAbortRef.current = current.controller;
+        ttsPrefetchAbortRef.current = null;
+
         if (index + 1 < chunks.length) {
-          const preloadController = new AbortController();
-          next = api.tts.synthesizeStream(chunks[index + 1], {
-            language: navigator.language || 'auto',
-            speed: 1.02,
-            signal: preloadController.signal,
-          });
-        } else next = null;
-        await playBlob(await blob);
+          const controller = new AbortController();
+          next = {
+            controller,
+            promise: api.tts.synthesizeStream(chunks[index + 1], {
+              language: navigator.language || 'auto',
+              speed: 1.02,
+              signal: controller.signal,
+            }),
+          };
+          ttsPrefetchAbortRef.current = controller;
+        } else {
+          next = null;
+        }
+
+        await playBlob(await current.promise);
       }
     } catch {
       if (activeRef.current && phaseRef.current === 'speaking') {
@@ -212,6 +240,7 @@ export default function ConversationalVoiceLayer() {
       }
     } finally {
       ttsAbortRef.current = null;
+      ttsPrefetchAbortRef.current = null;
       if (activeRef.current && phaseRef.current === 'speaking') {
         changePhase('listening');
         startRecognition();
@@ -232,9 +261,12 @@ export default function ConversationalVoiceLayer() {
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
-    setSupported(createSpeechRecognition() !== null);
+    if (!createSpeechRecognition() || !navigator.mediaDevices?.getUserMedia) {
+      changePhase('error');
+      return;
+    }
     let cancelled = false;
-    void navigator.mediaDevices?.getUserMedia({
+    void navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     }).then((stream) => {
       if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
