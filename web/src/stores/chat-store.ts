@@ -20,6 +20,12 @@ import {
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
 
+export interface VoicePlaybackCue {
+  messageId: string;
+  text: string;
+  latencyMs?: number;
+}
+
 export interface CourseGenerationState {
   phase: 'intent' | 'planning' | 'lessons' | 'practice' | 'finalizing' | 'ready' | string;
   progress: number;
@@ -157,6 +163,7 @@ interface ChatStore {
   sessionSummary: SessionSummary | null;
   dueReviews: DueReviewItem[];
   voiceSessionActive: boolean;
+  voicePlaybackCue: VoicePlaybackCue | null;
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -183,6 +190,7 @@ interface ChatStore {
   fetchDueReviews: () => Promise<void>;
   dismissDueReview: (skillId: string) => void;
   setVoiceSessionActive: (active: boolean) => void;
+  consumeVoicePlaybackCue: (messageId: string) => void;
   interruptGeneration: () => void;
 }
 
@@ -198,8 +206,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionSummary: null,
   dueReviews: [],
   voiceSessionActive: false,
+  voicePlaybackCue: null,
 
-  setVoiceSessionActive: (active) => set({ voiceSessionActive: active }),
+  setVoiceSessionActive: (active) =>
+    set({
+      voiceSessionActive: active,
+      ...(active ? {} : { voicePlaybackCue: null }),
+    }),
+  consumeVoicePlaybackCue: (messageId) =>
+    set((state) => (
+      state.voicePlaybackCue?.messageId === messageId
+        ? { voicePlaybackCue: null }
+        : {}
+    )),
   interruptGeneration: () => {
     activeStreamToken += 1;
     activeStreamController?.abort();
@@ -209,6 +228,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       generationProgress: 0,
       generationActivity: 'thinking',
       courseGenerationState: null,
+      voicePlaybackCue: null,
     });
   },
 
@@ -438,6 +458,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         : null,
       courseRevisionUndo:
         options.forcedIntent === 'COURSE' ? s.courseRevisionUndo : null,
+      // A new learner turn invalidates any unconsumed spoken cue from the
+      // previous response. Stream-token gating below prevents the aborted
+      // stream from reintroducing it.
+      voicePlaybackCue: null,
     }));
 
     // The server is the source of truth for history. Sending only the current
@@ -613,6 +637,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 },
               },
             });
+          } else if (chunk.type === 'voice_ready' && typeof chunk.text === 'string') {
+            const spokenText = chunk.text.trim();
+            if (spokenText) {
+              set({
+                voicePlaybackCue: {
+                  // Use the device-local assistant id. The callback is already
+                  // guarded by streamToken, so a barge-in cannot make an old
+                  // server event speak over the replacement turn.
+                  messageId: aiMessageId,
+                  text: spokenText,
+                  latencyMs: typeof chunk.latency_ms === 'number' ? chunk.latency_ms : undefined,
+                },
+              });
+            }
           } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
@@ -848,6 +886,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         generationProgress: 0,
         generationActivity: 'thinking',
         courseGenerationState: null,
+        voicePlaybackCue: null,
       });
       try {
         // A broken SSE connection does not imply the server failed. Reload the
