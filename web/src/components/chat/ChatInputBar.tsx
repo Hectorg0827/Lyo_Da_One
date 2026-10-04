@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
+import { useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle } from 'lucide-react';
+import { ArrowUp, Plus, Mic, MicOff, X, FileText, Loader2, MessageCircle, AudioLines } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
 import type { ChatAttachment } from '@/types';
+import { useConversationalVoice } from '@/hooks/use-conversational-voice';
 
 const MAX_CHARS = 4000;
 const MAX_ROWS = 6;
@@ -26,27 +27,6 @@ const SUPPORTED_ATTACHMENT_TYPES = new Set([
   'text/csv',
   'application/json',
 ]);
-
-// Minimal typing for the Web Speech API (not yet in lib.dom for all targets).
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-};
-
-function getSpeechRecognition(): SpeechRecognitionLike | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as unknown as Record<string, unknown>;
-  const Ctor = (w.SpeechRecognition || w.webkitSpeechRecognition) as
-    | (new () => SpeechRecognitionLike)
-    | undefined;
-  return Ctor ? new Ctor() : null;
-}
 
 function attachmentMimeType(file: File): string {
   const reportedType = file.type.toLowerCase();
@@ -70,20 +50,12 @@ export default function ChatInputBar() {
   const { sendMessage, isGenerating, generationActivity, reviseActiveCourse } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
-  const [listening, setListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const dictationBaseRef = useRef('');
-
-  useEffect(() => {
-    setSpeechSupported(getSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
-  }, []);
+  const voice = useConversationalVoice();
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -97,41 +69,6 @@ export default function ChatInputBar() {
     if (e.target.value.length > MAX_CHARS) return;
     setValue(e.target.value);
     adjustHeight();
-  };
-
-  // ── Voice dictation (Web Speech API) ──────────────────────────────────────
-
-  const toggleDictation = () => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const recognition = getSpeechRecognition();
-    if (!recognition) return;
-    recognitionRef.current = recognition;
-    dictationBaseRef.current = value ? value.replace(/\s*$/, ' ') : '';
-    recognition.lang = navigator.language || 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setValue((dictationBaseRef.current + transcript).slice(0, MAX_CHARS));
-      adjustHeight();
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => {
-      setListening(false);
-      toast.error("Couldn't access the microphone");
-    };
-    try {
-      recognition.start();
-      setListening(true);
-    } catch {
-      toast.error('Voice input is unavailable');
-    }
   };
 
   // ── Attachments (shared consumer media API) ───────────────────────────────
@@ -203,7 +140,7 @@ export default function ChatInputBar() {
       || (isGenerating && !isCourseAdjustable)
       || uploading
     ) return;
-    recognitionRef.current?.stop();
+    if (voice.active) voice.stop();
 
     setValue('');
     const sentAttachments = attachments;
@@ -264,6 +201,36 @@ export default function ChatInputBar() {
         </AnimatePresence>
       </div>
 
+      {voice.active && (
+        <div className="max-w-3xl mx-auto mb-2 flex items-center justify-center gap-2 text-xs text-white/60">
+          <span
+            className={cn(
+              'w-2 h-2 rounded-full',
+              voice.phase === 'listening' && 'bg-green-400 animate-pulse',
+              voice.phase === 'thinking' && 'bg-lyo-400 animate-pulse',
+              voice.phase === 'speaking' && 'bg-accent-orange animate-pulse',
+              voice.phase === 'idle' && 'bg-white/30'
+            )}
+          />
+          <span>
+            {voice.phase === 'listening'
+              ? (voice.partialTranscript ? `Hearing: “${voice.partialTranscript}”` : 'Listening')
+              : voice.phase === 'thinking'
+                ? 'Thinking'
+                : voice.phase === 'speaking'
+                  ? 'Speaking — talk to interrupt'
+                  : 'Voice conversation'}
+          </span>
+          <button
+            type="button"
+            onClick={voice.stop}
+            className="ml-1 px-2 py-1 rounded-full border border-white/10 hover:bg-white/10 text-white/70"
+          >
+            End
+          </button>
+        </div>
+      )}
+
       {/* Input island — mirrors iOS HybridInputBar: black rounded-24 card,
           rotating angular-gradient border tinted by AI state, text field on
           top, controls row below (+ / Chat pill · mic / send). */}
@@ -284,8 +251,13 @@ export default function ChatInputBar() {
               ? 'Adjust the course while it builds…'
               : isGenerating
               ? 'Lyo is thinking…'
-              : listening
-              ? 'Listening…'
+              : voice.active
+              ? (
+                  voice.phase === 'listening' ? (voice.partialTranscript || 'Listening…')
+                  : voice.phase === 'thinking' ? 'Lyo is thinking…'
+                  : voice.phase === 'speaking' ? 'Lyo is speaking — start talking to interrupt…'
+                  : 'Voice conversation'
+                )
               : 'Message Lyo...'
           }
           disabled={isGenerating && !isCourseAdjustable}
@@ -345,20 +317,27 @@ export default function ChatInputBar() {
             )}
           </AnimatePresence>
 
-          {/* Voice dictation — hidden entirely when the browser can't do it */}
-          {speechSupported && (
+          {/* Conversational voice — the same Chat brain, spoken continuously. */}
+          {voice.supported && (
             <button
               type="button"
-              onClick={toggleDictation}
+              onClick={voice.toggle}
               className={cn(
                 'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
-                listening
-                  ? 'text-accent-orange bg-accent-orange/15 animate-pulse'
+                voice.active
+                  ? 'text-accent-orange bg-accent-orange/15'
                   : 'text-white/90 hover:bg-white/10'
               )}
-              title={listening ? 'Stop dictating' : 'Dictate your message'}
+              title={voice.active ? 'End voice conversation' : 'Start voice conversation'}
+              aria-pressed={voice.active}
             >
-              <Mic className="w-[18px] h-[18px]" />
+              {voice.active ? (
+                voice.phase === 'speaking'
+                  ? <AudioLines className="w-[18px] h-[18px] animate-pulse" />
+                  : <MicOff className="w-[18px] h-[18px]" />
+              ) : (
+                <Mic className="w-[18px] h-[18px]" />
+              )}
             </button>
           )}
 
