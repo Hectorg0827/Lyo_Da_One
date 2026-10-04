@@ -95,6 +95,7 @@ export default function ChatInputBar() {
     const unsubscribe = chatVoiceController.subscribe(setVoiceState);
     return () => {
       recognitionRef.current?.stop();
+      chatVoiceController.deactivate();
       unsubscribe();
     };
   }, []);
@@ -152,6 +153,12 @@ export default function ChatInputBar() {
     if (voiceState.active) {
       chatVoiceController.deactivate();
       return;
+    }
+    // Voice owns the conversational floor. If a text response is already in
+    // flight, explicitly interrupt it before opening the microphone so two
+    // streams can never race against the same conversation.
+    if (isGenerating) {
+      cancelActiveResponse();
     }
     recognitionRef.current?.stop();
     setListening(false);
