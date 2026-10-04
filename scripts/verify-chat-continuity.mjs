@@ -104,7 +104,7 @@ const contracts = [
     name: 'Android multimodal chat UI',
     path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
     needles: [
-      'RecognizerIntent.ACTION_RECOGNIZE_SPEECH',
+      'ConversationalVoiceController',
       'TextToSpeech',
       'ApiClient.api.uploadMedia',
       'folder = "chat"',
