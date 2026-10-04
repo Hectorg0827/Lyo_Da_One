@@ -176,8 +176,10 @@ export default function ConversationalVoiceLayer() {
     let settled = false;
     const cleanup = () => {
       URL.revokeObjectURL(url);
-      if (audioRef.current === audio) audioRef.current = null;
-      if (audioCancelRef.current === cancel) audioCancelRef.current = null;
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        audioCancelRef.current = null;
+      }
     };
     const finish = () => {
       if (settled) return;
