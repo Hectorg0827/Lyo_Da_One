@@ -12,6 +12,7 @@ import type {
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { parseCanonicalChatContent } from '@/lib/chat-attachments';
+import { emitVoiceTextSegment } from '@/lib/conversational-voice';
 import {
   emptyTeachingRuntimeState,
   reduceTeachingPolicy,
@@ -623,6 +624,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             if (sources.length) {
               patchAiMessage({ metadata: { sources } });
             }
+          } else if (
+            chunk.type === 'voice_text_segment'
+            && typeof chunk.text === 'string'
+          ) {
+            emitVoiceTextSegment(
+              chunk.text,
+              typeof chunk.sequence === 'number' ? chunk.sequence : 0
+            );
           } else if (chunk.type === 'course_generation') {
             const eventProgress =
               typeof chunk.progress === 'number'
