@@ -34,6 +34,8 @@ const contracts = [
     path: 'web/src/stores/chat-store.ts',
     needles: [
       "chunk.type === 'smart_blocks'",
+      "chunk.type === 'interaction_contract'",
+      "chunk.type === 'sources'",
       // Server-suggested follow-ups were dropped entirely before.
       "chunk.type === 'actions'",
       // Blocks count as content, or a blocks-only turn is treated as empty
@@ -47,7 +49,7 @@ const contracts = [
   {
     name: 'Web renders each lesson beat distinctly',
     path: 'web/src/components/chat/blocks/BlockRenderer.tsx',
-    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", 'CheckBlock'],
+    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock'],
   },
   {
     name: 'Web check is graded by the server',
