@@ -72,7 +72,7 @@ const contracts = [
     name: 'web response-aware generation activity',
     path: 'web/src/stores/chat-store.ts',
     needles: [
-      "GenerationActivity = 'thinking' | 'response' | 'course'",
+      "GenerationActivity = 'thinking' | 'searching' | 'response' | 'course'",
       "generationActivity: 'thinking'",
       "generationActivity: 'course'",
     ],
