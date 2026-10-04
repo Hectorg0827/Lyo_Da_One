@@ -82,6 +82,7 @@ final class ChatRouter: ObservableObject {
         conversationHistory: [ConversationMessage] = [],
         conversationId: String? = nil,
         clientMessageId: String? = nil,
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         onAgentBlock: ((AgentBlock) -> Void)? = nil,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)? = nil
     ) async -> ChatRouteResult {
@@ -99,9 +100,10 @@ final class ChatRouter: ObservableObject {
             "🎯 Intent: \(intent.category.rawValue) | Tier: \(intent.tier.label) | Confidence: \(String(format: "%.0f%%", intent.confidence * 100))"
         )
 
-        // Attachments must use the Lyo 2.0 stream because the quick endpoint is
-        // text-only. This prevents a selected image from silently becoming a URL.
-        if !media.isEmpty {
+        // Attachments and live voice must use the canonical Lyo 2.0 stream.
+        // Voice is a transport channel on the interaction contract; routing it
+        // through the legacy quick endpoint would create a second behavior path.
+        if !media.isEmpty || voiceSession?.active == true {
             return await handleDeepPath(
                 message: message,
                 media: media,
@@ -112,6 +114,7 @@ final class ChatRouter: ObservableObject {
                 conversationHistory: conversationHistory,
                 conversationId: conversationId,
                 clientMessageId: clientMessageId,
+                voiceSession: voiceSession,
                 onStreamEvent: onStreamEvent,
                 startTime: startTime
             )
@@ -255,6 +258,7 @@ final class ChatRouter: ObservableObject {
         conversationHistory: [ConversationMessage],
         conversationId: String?,
         clientMessageId: String?,
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         onStreamEvent: ((Lyo2StreamEvent) -> Void)?,
         startTime: CFAbsoluteTime
     ) async -> ChatRouteResult {
@@ -274,6 +278,7 @@ final class ChatRouter: ObservableObject {
             attachmentIds: attachmentIds,
             forcedIntent: forcedIntent,
             stateSummary: buildStateSummary(mode: mode, intent: intent),
+            voiceSession: voiceSession,
             conversationHistory: memoryWindow,
             conversationId: conversationId,
             clientMessageId: clientMessageId
