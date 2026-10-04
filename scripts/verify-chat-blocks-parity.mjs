@@ -54,7 +54,7 @@ const contracts = [
   {
     name: 'Android canonical Chat stream carries voice session metadata',
     path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
-    needles: ['ChatVoiceSession', '"voice_session"', '"/api/v1/lyo2/chat/stream"'],
+    needles: ['ChatVoiceSession', '"voice_session"', 'POST /api/v1/lyo2/chat/stream'],
   },
   {
     name: 'Web conversational voice uses canonical Chat transport',
