@@ -183,13 +183,15 @@ class LyoAIViewModel: ObservableObject {
                 // A real learner utterance owns the floor. Interrupt either
                 // speech playback or model generation in place, then debounce
                 // the new utterance into the same Unified Chat conversation.
-                if self.isAISpeaking {
+                let wasSpeaking = self.isAISpeaking
+                let wasLoading = self.isLoading
+                if wasSpeaking {
                     self.stopSpeaking()
                 }
-                if self.isLoading {
+                if wasLoading {
                     self.unifiedChat.interruptCurrentResponse()
                 }
-                if self.isAISpeaking || self.isLoading {
+                if wasSpeaking || wasLoading {
                     self.shouldAutoSpeakCurrentResponse = false
                 }
 
