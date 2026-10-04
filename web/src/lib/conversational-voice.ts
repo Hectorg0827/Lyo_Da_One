@@ -32,7 +32,7 @@ export function createSpeechRecognition(): SpeechRecognitionLike | null {
 export function normalizeForEchoCheck(text: string): string {
   return text
     .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/[^A-Za-z0-9À-ɏ\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -46,7 +46,7 @@ export function isLikelyPlaybackEcho(heard: string, spoken: string): boolean {
   const aWords = new Set(a.split(' '));
   const bWords = new Set(b.split(' '));
   let overlap = 0;
-  for (const word of aWords) if (bWords.has(word)) overlap += 1;
+  aWords.forEach((word) => { if (bWords.has(word)) overlap += 1; });
   return overlap / Math.max(1, Math.min(aWords.size, bWords.size)) >= 0.82;
 }
 
