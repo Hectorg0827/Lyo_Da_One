@@ -93,6 +93,12 @@ class ConversationalVoiceController(
         tts = null
     }
 
+    fun resumeListening() {
+        if (!active) return
+        setPhase(Phase.LISTENING)
+        startRecognition()
+    }
+
     fun markThinking() {
         if (!active) return
         setPhase(Phase.THINKING)
