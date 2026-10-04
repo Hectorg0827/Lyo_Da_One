@@ -593,6 +593,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     };
 
     const streamToken = ++activeStreamToken;
+    const streamStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    let firstVisibleChunkRecorded = false;
 
     try {
       activeStreamController = api.chat.stream(
@@ -670,12 +672,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 outline: outline ?? state.courseGenerationState?.outline,
               },
             }));
-          } else if (chunk.type === 'answer' || chunk.type === 'text') {
+          } else if (chunk.type === 'answer' || chunk.type === 'text' || chunk.type === 'text_delta') {
             const text = blockContent?.text as string
               || (chunk.payload as Record<string, unknown>)?.text as string
               || (chunk.content as string)
               || '';
-            if (text) appendToAiMessage(text);
+            if (text) {
+              if (!firstVisibleChunkRecorded) {
+                firstVisibleChunkRecorded = true;
+                const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                patchAiMessage({
+                  metadata: { clientTtftMs: Math.round(now - streamStartedAt) },
+                });
+              }
+              appendToAiMessage(text);
+            }
+          } else if (chunk.type === 'latency') {
+            const metrics =
+              chunk.metrics && typeof chunk.metrics === 'object'
+                ? chunk.metrics as Record<string, unknown>
+                : undefined;
+            if (metrics) patchAiMessage({ metadata: { latency: metrics } });
+          } else if (chunk.type === 'search_status') {
+            patchAiMessage({
+              metadata: {
+                liveSearchStatus:
+                  typeof chunk.status === 'string' ? chunk.status : 'searching',
+              },
+            });
           } else if (chunk.type === 'clarification' && typeof chunk.text === 'string') {
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
