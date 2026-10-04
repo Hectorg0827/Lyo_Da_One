@@ -34,6 +34,8 @@ export default function ConversationalVoiceLayer() {
   const sendMessage = useChatStore((state) => state.sendMessage);
   const interruptGeneration = useChatStore((state) => state.interruptGeneration);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
+  const voicePlaybackCue = useChatStore((state) => state.voicePlaybackCue);
+  const consumeVoicePlaybackCue = useChatStore((state) => state.consumeVoicePlaybackCue);
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
@@ -255,12 +257,17 @@ export default function ConversationalVoiceLayer() {
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
     stopSpeech();
+    // voice_ready can arrive while the HTTP stream is still finishing
+    // SmartBlocks/persistence. Once the learner takes the floor, invalidate the
+    // old delivery stream so no late event can start stale speech.
+    if (useChatStore.getState().isGenerating) interruptGeneration();
+    awaitingAssistantRef.current = false;
     loudFramesRef.current = 0;
     finalTranscriptRef.current = '';
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
@@ -334,6 +341,31 @@ export default function ConversationalVoiceLayer() {
       animationFrameRef.current = null;
     };
   }, [active, bargeIn]);
+
+  useEffect(() => {
+    if (
+      !active
+      || !awaitingAssistantRef.current
+      || !voicePlaybackCue
+      || !voicePlaybackCue.text.trim()
+    ) return;
+    if (voicePlaybackCue.messageId === lastSpokenMessageIdRef.current) {
+      consumeVoicePlaybackCue(voicePlaybackCue.messageId);
+      return;
+    }
+
+    // This is the earliest authoritative spoken representation of the same
+    // canonical Chat turn. Do not wait for sources/actions/[DONE] after the
+    // answer is already complete.
+    awaitingAssistantRef.current = false;
+    consumeVoicePlaybackCue(voicePlaybackCue.messageId);
+    void speakAssistant(voicePlaybackCue.messageId, voicePlaybackCue.text);
+  }, [
+    active,
+    consumeVoicePlaybackCue,
+    speakAssistant,
+    voicePlaybackCue,
+  ]);
 
   useEffect(() => {
     if (!active || isGenerating || !awaitingAssistantRef.current) return;
