@@ -77,6 +77,8 @@ const contracts = [
       "generationActivity: 'course'",
       "chunk.type === 'answer' || chunk.type === 'text' || chunk.type === 'text_delta'",
       "clientTtftMs",
+      "stream_capabilities: { text_delta: true }",
+      "receivedTextDelta",
     ],
   },
   {
@@ -172,6 +174,7 @@ const contracts = [
     needles: [
       'case .textDelta(let text):',
       'content: messages[idx].content + text',
+      'shouldAnimate: !hadStreamedText',
     ],
   },
   {
@@ -219,7 +222,26 @@ const contracts = [
   },
 ];
 
-const failures = [];
+const failures = [,
+  {
+    name: 'Android incremental stream compatibility',
+    path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
+    needles: [
+      'data class FinalAnswer',
+      '"stream_capabilities" to mapOf("text_delta" to true)',
+      'obj.get("type")?.asString == "text_delta"',
+      'ChatStreamEvent.FinalAnswer',
+    ],
+  },
+  {
+    name: 'Android final stream snapshot reconciliation',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
+    needles: [
+      'is ChatStreamEvent.FinalAnswer',
+      'content = event.text',
+    ],
+  }
+];
 for (const contract of contracts) {
   const source = fs.readFileSync(contract.path, 'utf8');
   for (const needle of contract.needles) {
