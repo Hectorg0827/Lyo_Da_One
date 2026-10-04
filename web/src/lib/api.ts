@@ -129,6 +129,20 @@ export function errorMessageFrom(body: unknown, status: number): string {
  * call that merely *decorates* Home must never be able to evict them from it.
  * The front door is supposed to work for guests.
  */
+async function readableErrorFromResponse(res: Response): Promise<string> {
+  try {
+    const body = await res.clone().json();
+    return errorMessageFrom(body, res.status);
+  } catch {
+    try {
+      const text = await res.text();
+      return text.trim() || `HTTP ${res.status}`;
+    } catch {
+      return `HTTP ${res.status}`;
+    }
+  }
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit & { skipAuth?: boolean; optionalAuth?: boolean } = {}
@@ -444,7 +458,14 @@ export const api = {
         size_bytes: number;
       }>,
       forcedIntent?: 'COURSE',
-      stateSummary?: Record<string, unknown>
+      stateSummary?: Record<string, unknown>,
+      voiceSession?: {
+        active: boolean;
+        locale?: string;
+        turn_id?: string;
+        interrupted_previous_turn?: boolean;
+        hands_free?: boolean;
+      }
     ): AbortController {
       const controller = new AbortController();
 
@@ -465,6 +486,7 @@ export const api = {
             media,
             forced_intent: forcedIntent,
             state_summary: stateSummary,
+            voice_session: voiceSession,
           }),
           signal: controller.signal,
         });
@@ -1398,6 +1420,40 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ filename, content_type: contentType, folder }),
       });
+    },
+  },
+
+  // ── Shared conversational voice ──
+  tts: {
+    /**
+     * Stream the exact same server-rendered Lyo voice used by Classroom.
+     * This is a transport renderer only; Chat's interaction contract remains
+     * the intelligence layer.
+     */
+    async stream(
+      text: string,
+      options: { language?: string; speed?: number; signal?: AbortSignal } = {}
+    ): Promise<Response> {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = getAccessToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+        method: 'POST',
+        headers,
+        signal: options.signal,
+        body: JSON.stringify({
+          text,
+          voice: 'nova',
+          format: 'mp3',
+          speed: options.speed ?? 1.0,
+          content_type: 'conversation',
+          language: options.language || 'auto',
+        }),
+      });
+      if (!res.ok) {
+        throw new ApiError(await readableErrorFromResponse(res), res.status);
+      }
+      return res;
     },
   },
 
