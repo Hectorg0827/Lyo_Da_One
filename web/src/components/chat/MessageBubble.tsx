@@ -65,8 +65,19 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   // plain-text version of the same lesson. Only hide that fallback when the
   // blocks will actually show something — otherwise a turn whose blocks this
   // client cannot render would collapse to an empty bubble.
-  const hasBlocks =
-    !isUser && Array.isArray(message.blocks) && message.blocks.some(canRenderBlock);
+  const supplementalBlocks =
+    !isUser && Array.isArray(message.blocks)
+      ? message.blocks.filter(
+          (block) => block.type === 'interactive' && block.subtype === 'sourceNavigator'
+        )
+      : [];
+  const primaryBlocks =
+    !isUser && Array.isArray(message.blocks)
+      ? message.blocks.filter(
+          (block) => !(block.type === 'interactive' && block.subtype === 'sourceNavigator')
+        )
+      : [];
+  const hasBlocks = primaryBlocks.some(canRenderBlock);
 
   // Helper to extract OPEN_CLASSROOM JSON block from assistant messages.
   // Uses string-aware brace counting — a lazy regex stops at the FIRST '}',
@@ -215,7 +226,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
               'bg-white/5 border border-white/10 text-white/80 rounded-bl-sm backdrop-blur-sm'
             )}
           >
-            <BlockRenderer blocks={message.blocks!} message={message} />
+            <BlockRenderer blocks={primaryBlocks} message={message} />
           </div>
         )}
 
@@ -292,6 +303,12 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                 {label}
               </button>
             ))}
+          </div>
+        )}
+
+        {!isUser && supplementalBlocks.length > 0 && (
+          <div className="w-full mt-2">
+            <BlockRenderer blocks={supplementalBlocks} message={message} />
           </div>
         )}
 
