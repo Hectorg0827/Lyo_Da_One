@@ -798,10 +798,38 @@ class LyoAIViewModel: ObservableObject {
         let chunks = extractTTSChunks(from: newContent)
         
         for chunk in chunks {
-            Log.ai.debug("🔊 Enqueuing chunk for TTS: \(chunk)")
-            ttsService.enqueue(chunk)
+            let spokenChunk = sanitizeForSpeech(chunk)
+            if !spokenChunk.isEmpty {
+                Log.ai.debug("🔊 Enqueuing canonical Chat chunk for TTS")
+                ttsService.enqueue(spokenChunk)
+            }
+            // Track raw offsets even though citations/markdown stay visual-only.
             lastSentToTTSText += chunk
         }
+    }
+
+    private func sanitizeForSpeech(_ text: String) -> String {
+        var spoken = text
+        spoken = spoken.replacingOccurrences(
+            of: "【[^】]+】",
+            with: "",
+            options: .regularExpression
+        )
+        spoken = spoken.replacingOccurrences(
+            of: "\\[([^\\]]+)\\]\\([^)]+\\)",
+            with: "$1",
+            options: .regularExpression
+        )
+        spoken = spoken.replacingOccurrences(
+            of: "[*_#>|]",
+            with: "",
+            options: .regularExpression
+        )
+        return spoken.replacingOccurrences(
+            of: "\\s+",
+            with: " ",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func extractTTSChunks(from text: String) -> [String] {
