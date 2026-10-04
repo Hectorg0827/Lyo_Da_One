@@ -235,6 +235,7 @@ class LyoAIViewModel: ObservableObject {
             .sink { [weak self] speaking in
                 self?.isAISpeaking = speaking
                 self?.aiLiveAudioLevel = speaking ? 1.0 : 0.0
+                if speaking { self?.isAIThinking = false }
             }
             .store(in: &cancellables)
 
@@ -466,6 +467,7 @@ class LyoAIViewModel: ObservableObject {
         isAudioOutputEnabled = false
         voiceTurnDebounceTask?.cancel()
         voiceTurnDebounceTask = nil
+        inputText = ""
         stopListening()
         lastLiveTranscript = ""
         userLiveAudioLevel = 0
