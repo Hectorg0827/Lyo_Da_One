@@ -484,7 +484,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             return {
               ...c,
               messages: c.messages.map((m) =>
-                m.id === aiMessageId ? { ...m, ...patch } : m
+                m.id === aiMessageId
+                  ? {
+                      ...m,
+                      ...patch,
+                      metadata: patch.metadata
+                        ? { ...m.metadata, ...patch.metadata }
+                        : m.metadata,
+                    }
+                  : m
               ),
               updatedAt: new Date().toISOString(),
             };
@@ -576,11 +584,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
-          if (chunk.type === 'teaching_policy') {
+          if (chunk.type === 'interaction_contract') {
+            patchAiMessage({
+              metadata: {
+                interactionContract: {
+                  mode: chunk.mode,
+                  depth: chunk.depth,
+                  fastLane: chunk.fast_lane,
+                  reasonCode: chunk.reason_code,
+                },
+              },
+            });
+          } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
               reduceTeachingPolicy(teachingRuntimeFor(convoId!), chunk)
             );
+          } else if (chunk.type === 'sources') {
+            const sources = Array.isArray(chunk.sources) ? chunk.sources : [];
+            if (sources.length) {
+              patchAiMessage({ metadata: { sources } });
+            }
           } else if (chunk.type === 'course_generation') {
             const eventProgress =
               typeof chunk.progress === 'number'
