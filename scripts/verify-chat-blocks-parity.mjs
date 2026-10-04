@@ -30,6 +30,43 @@ const contracts = [
     needles: [...CHAT_BLOCK_TYPES.map((t) => `'${t}'`), 'ChatBlock', 'CheckAnswerResult'],
   },
   {
+    name: 'Web conversational voice uses canonical Chat transport',
+    path: 'web/src/lib/chat-voice.ts',
+    needles: [
+      'chatVoiceController',
+      'api.tts.stream',
+      'playSpeechResponse',
+      'interruptAndListen',
+      'interruptedPreviousTurn',
+      'sendTurn',
+    ],
+    forbidden: [
+      '/api/v1/ai/chat',
+      '/voice-ai',
+      'new WebSocket(',
+    ],
+  },
+  {
+    name: 'Web voice turn is sent through the canonical interaction contract',
+    path: 'web/src/stores/chat-store.ts',
+    needles: [
+      'options.voiceSession',
+      'chatVoiceController.enqueueAssistantText',
+      'chatVoiceController.finishAssistantTurn',
+      'cancelActiveResponse',
+    ],
+  },
+  {
+    name: 'Web chat request carries voice transport metadata, not a second AI request',
+    path: 'web/src/lib/api.ts',
+    needles: ['voice_session: voiceSession', '/api/v1/lyo2/chat/stream', '/api/v1/tts/synthesize/stream'],
+  },
+  {
+    name: 'Chat composer exposes live voice conversation',
+    path: 'web/src/components/chat/ChatInputBar.tsx',
+    needles: ['toggleConversationVoice', 'interruptAndListen', 'Voice conversation', 'voiceSession'],
+  },
+  {
     name: 'Web consumes the smart_blocks event',
     path: 'web/src/stores/chat-store.ts',
     needles: [
