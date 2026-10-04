@@ -598,6 +598,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 },
               },
             });
+          } else if (chunk.type === 'voice_turn') {
+            patchAiMessage({
+              metadata: {
+                voiceTurn: {
+                  id: chunk.voice_turn_id,
+                  phase: chunk.phase,
+                  interactionMode: chunk.interaction_mode,
+                },
+              },
+            });
+          } else if (chunk.type === 'voice_delivery') {
+            const segments = Array.isArray(chunk.segments)
+              ? chunk.segments.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+              : [];
+            if (segments.length) {
+              patchAiMessage({
+                metadata: {
+                  voiceTurn: {
+                    id: chunk.voice_turn_id,
+                    phase: chunk.phase,
+                  },
+                  voiceSegments: segments,
+                  voiceLanguage: typeof chunk.language === 'string' ? chunk.language : 'auto',
+                  voiceInterruptible: chunk.interruptible !== false,
+                },
+              });
+            }
           } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
