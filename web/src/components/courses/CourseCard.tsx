@@ -1,32 +1,14 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { BookOpen, Clock, Users, Star } from 'lucide-react';
+import { Clock, Users, Star } from 'lucide-react';
 import { Course } from '@/types';
 import { cn, formatDuration, formatNumber, getInitials } from '@/lib/utils';
+import CourseArtwork from '@/components/home/CourseArtwork';
 
 interface CourseCardProps {
   course: Course;
   onClick?: () => void;
-}
-
-const categoryGradients: Record<string, string> = {
-  programming: 'from-blue-600/40 to-cyan-500/40',
-  mathematics: 'from-purple-600/40 to-pink-500/40',
-  science: 'from-green-600/40 to-teal-500/40',
-  history: 'from-amber-600/40 to-orange-500/40',
-  language: 'from-rose-600/40 to-pink-500/40',
-  art: 'from-violet-600/40 to-fuchsia-500/40',
-  music: 'from-indigo-600/40 to-blue-500/40',
-  business: 'from-emerald-600/40 to-green-500/40',
-  design: 'from-pink-600/40 to-rose-500/40',
-  health: 'from-teal-600/40 to-cyan-500/40',
-  default: 'from-lyo-600/40 to-accent-purple/40',
-};
-
-function getCategoryGradient(category: string): string {
-  const key = category.toLowerCase();
-  return categoryGradients[key] ?? categoryGradients.default;
 }
 
 const difficultyStyles: Record<string, { bg: string; text: string; label: string }> = {
@@ -37,7 +19,6 @@ const difficultyStyles: Record<string, { bg: string; text: string; label: string
 
 export default function CourseCard({ course, onClick }: CourseCardProps) {
   const difficulty = difficultyStyles[course.difficulty] ?? difficultyStyles.beginner;
-  const gradient = getCategoryGradient(course.category);
   const hasProgress = course.progress !== undefined && course.progress > 0;
 
   const renderStars = (rating: number) => {
@@ -73,9 +54,10 @@ export default function CourseCard({ course, onClick }: CourseCardProps) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className={cn('w-full h-full bg-gradient-to-br', gradient, 'flex items-center justify-center')}>
-            <BookOpen className="w-10 h-10 text-white/40" />
-          </div>
+          <CourseArtwork
+            title={`${course.category} ${course.title}`}
+            className="h-full w-full"
+          />
         )}
 
         {/* AI Generated badge */}
