@@ -52,6 +52,11 @@ const contracts = [
     needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock'],
   },
   {
+    name: 'Web keeps grounded answer prose beside supplemental sources',
+    path: 'web/src/components/chat/MessageBubble.tsx',
+    needles: ['supplementalBlocks', 'primaryBlocks', 'sourceNavigator'],
+  },
+  {
     name: 'Web check is graded by the server',
     path: 'web/src/components/chat/blocks/CheckBlock.tsx',
     needles: [
