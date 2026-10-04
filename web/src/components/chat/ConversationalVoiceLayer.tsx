@@ -314,8 +314,8 @@ export default function ConversationalVoiceLayer() {
         const samples = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
-        for (const sample of samples) {
-          const normalized = (sample - 128) / 128;
+        for (let i = 0; i < samples.length; i++) {
+          const normalized = (samples[i] - 128) / 128;
           sum += normalized * normalized;
         }
         const rms = Math.sqrt(sum / samples.length);
