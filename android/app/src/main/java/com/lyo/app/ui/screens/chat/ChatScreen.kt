@@ -174,6 +174,24 @@ private data class ParsedChatContent(
     val attachments: List<LinkedAttachment>,
 )
 
+private fun voiceTextForChatMessage(message: ChatMsg?): String {
+    if (message == null) return ""
+    val blockText = message.blocks.orEmpty().mapNotNull { block ->
+        when (val content = block.content) {
+            is com.lyo.app.data.api.SmartBlockContent.Text -> content.payload.text
+            is com.lyo.app.data.api.SmartBlockContent.Quiz -> content.payload.question
+            is com.lyo.app.data.api.SmartBlockContent.Flashcard -> content.payload.front
+            is com.lyo.app.data.api.SmartBlockContent.DataViz -> content.payload.title
+            is com.lyo.app.data.api.SmartBlockContent.Interactive -> content.payload.title
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+    }.joinToString(" ")
+
+    return ChatVoiceController.sanitizeForSpeech(
+        message.content.ifBlank { blockText },
+    )
+}
+
 private val Suggestions = listOf(
     "Explain quantum computing",
     "Make me a study plan",
@@ -472,24 +490,6 @@ fun ChatScreen(nav: NavHostController) {
             // No onFailure handler: best-effort, same as web/iOS. A failed
             // grade leaves the check pending rather than faking a verdict —
             // the option stays tappable so the learner can try again.
-        }
-    }
-
-    fun startDictation() {
-        if (isStreaming || uploadingAttachment || dictating) return
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your message to Lyo")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-        try {
-            dictating = true
-            inputError = null
-            speechLauncher.launch(intent)
-        } catch (_: ActivityNotFoundException) {
-            dictating = false
-            inputError = "Speech recognition is not available on this device."
         }
     }
 
