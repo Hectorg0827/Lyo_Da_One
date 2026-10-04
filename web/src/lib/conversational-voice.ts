@@ -89,3 +89,33 @@ export function splitSpeechChunks(text: string, maxChars = 260): string[] {
   if (current) chunks.push(current);
   return chunks;
 }
+
+
+export type VoiceTextSegment = {
+  text: string;
+  sequence: number;
+};
+
+type VoiceTextSegmentListener = (segment: VoiceTextSegment) => void;
+
+const voiceTextSegmentListeners = new Set<VoiceTextSegmentListener>();
+
+/**
+ * Ephemeral delivery bus for spoken segments.
+ *
+ * Segments are deliberately not persisted in Zustand or conversation history.
+ * The canonical final answer remains the only stored assistant message; this
+ * bus only lets the voice renderer start TTS while that answer is generating.
+ */
+export function emitVoiceTextSegment(text: string, sequence = 0) {
+  const clean = stripForSpeech(text);
+  if (!clean) return;
+  for (const listener of voiceTextSegmentListeners) {
+    listener({ text: clean, sequence });
+  }
+}
+
+export function subscribeVoiceTextSegments(listener: VoiceTextSegmentListener) {
+  voiceTextSegmentListeners.add(listener);
+  return () => voiceTextSegmentListeners.delete(listener);
+}
