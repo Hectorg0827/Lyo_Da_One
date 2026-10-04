@@ -546,13 +546,19 @@ fun ChatScreen(nav: NavHostController) {
             Text("LYO", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
             TextButton(onClick = { nav.navigate("test-prep") }) { Text("Test Prep", color = LyoPurple) }
             TextButton(
-                enabled = !isStreaming && !uploadingAttachment,
+                enabled = !uploadingAttachment,
                 onClick = {
+                    voiceController.stop()
+                    streamJob?.cancel()
+                    streamJob = null
+                    isStreaming = false
+                    inFlightAssistantId = null
                     textToSpeech?.stop()
                     speakingMessageId = null
                     activeConversationId = null
                     pendingAttachments.clear()
                     inputError = null
+                    input = ""
                     messages.clear()
                 },
             ) { Text("New chat", color = LyoPurple) }
@@ -656,7 +662,7 @@ fun ChatScreen(nav: NavHostController) {
                         ),
                     )
                 },
-                enabled = !isStreaming && !uploadingAttachment &&
+                enabled = !voiceActive && !isStreaming && !uploadingAttachment &&
                     pendingAttachments.size < MAX_CHAT_ATTACHMENTS,
                 modifier = Modifier.size(44.dp),
             ) {
@@ -676,35 +682,43 @@ fun ChatScreen(nav: NavHostController) {
             }
 
             IconButton(
-                onClick = ::startDictation,
-                enabled = !isStreaming && !uploadingAttachment && !dictating,
+                onClick = {
+                    when (voiceState) {
+                        ChatVoiceState.OFF, ChatVoiceState.ERROR -> startConversationalVoice()
+                        ChatVoiceState.THINKING, ChatVoiceState.SPEAKING -> voiceController.bargeIn()
+                        ChatVoiceState.LISTENING -> voiceController.stop()
+                    }
+                },
+                enabled = !uploadingAttachment,
                 modifier = Modifier.size(44.dp),
             ) {
-                if (dictating) {
-                    CircularProgressIndicator(
-                        color = LyoPurple,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Dictate message",
-                        tint = TextSecondary,
-                    )
-                }
+                Icon(
+                    imageVector = if (voiceState == ChatVoiceState.LISTENING) {
+                        Icons.Default.Stop
+                    } else {
+                        Icons.Default.Mic
+                    },
+                    contentDescription = when (voiceState) {
+                        ChatVoiceState.OFF, ChatVoiceState.ERROR -> "Start voice conversation"
+                        ChatVoiceState.LISTENING -> "End voice conversation"
+                        ChatVoiceState.THINKING, ChatVoiceState.SPEAKING -> "Interrupt Lyo and speak"
+                    },
+                    tint = if (voiceActive) LyoPurple else TextSecondary,
+                )
             }
 
             OutlinedTextField(
                 value = input,
                 onValueChange = { if (it.length <= MAX_CHAT_CHARS) input = it },
-                enabled = !isStreaming,
+                enabled = !voiceActive && !isStreaming,
                 placeholder = {
                     Text(
-                        when {
-                            isStreaming -> "Lyo is thinking…"
-                            dictating -> "Listening…"
-                            else -> "Ask Lyo anything…"
+                        when (voiceState) {
+                            ChatVoiceState.LISTENING -> "Listening…"
+                            ChatVoiceState.THINKING -> "Lyo is thinking…"
+                            ChatVoiceState.SPEAKING -> "Lyo is speaking — tap mic to interrupt"
+                            ChatVoiceState.ERROR -> "Voice unavailable — type instead"
+                            ChatVoiceState.OFF -> if (isStreaming) "Lyo is thinking…" else "Ask Lyo anything…"
                         },
                         color = TextSecondary,
                     )
@@ -721,25 +735,27 @@ fun ChatScreen(nav: NavHostController) {
                 modifier = Modifier.weight(1f),
             )
 
-            IconButton(
-                onClick = { send(input) },
-                enabled = !isStreaming &&
-                    !uploadingAttachment &&
-                    (input.isNotBlank() || pendingAttachments.isNotEmpty()),
-                modifier = Modifier
-                    .padding(start = 6.dp)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isStreaming || uploadingAttachment) LyoPurple.copy(alpha = 0.4f)
-                        else LyoPurple,
-                    ),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = Color.White,
-                )
+            if (!voiceActive) {
+                IconButton(
+                    onClick = { send(input) },
+                    enabled = !isStreaming &&
+                        !uploadingAttachment &&
+                        (input.isNotBlank() || pendingAttachments.isNotEmpty()),
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isStreaming || uploadingAttachment) LyoPurple.copy(alpha = 0.4f)
+                            else LyoPurple,
+                        ),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        tint = Color.White,
+                    )
+                }
             }
         }
     }
