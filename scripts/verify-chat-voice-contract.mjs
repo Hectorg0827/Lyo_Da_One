@@ -20,6 +20,8 @@ const contracts = [
       'api.tts.synthesizeStream',
       'createSpeechRecognition',
       'bargeIn',
+      'voicePlaybackCue',
+      'speakAssistant(voicePlaybackCue.messageId, voicePlaybackCue.text)',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -30,6 +32,8 @@ const contracts = [
       "voice_session: { active: true, transport: 'client_stt_tts' }",
       'interruptGeneration',
       'activeStreamController?.abort()',
+      "chunk.type === 'voice_ready'",
+      'voicePlaybackCue',
     ],
   },
   {
@@ -53,6 +57,7 @@ const contracts = [
       'startListening()',
       'voiceSession: shouldResumeListening',
       'unifiedChat.interruptCurrentResponse()',
+      'handleTTSStreaming',
     ],
     forbidden: [
       'await AudioStreamManager.shared.startLiveMode',
@@ -73,6 +78,8 @@ const contracts = [
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
       'engine.speak',
+      'ChatStreamEvent.VoiceReady',
+      'voiceReadySpoken',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -84,6 +91,8 @@ const contracts = [
       '"voice_session"',
       '"client_stt_tts"',
       '"api/v1/lyo2/chat/stream"',
+      'data class VoiceReady',
+      'obj.get("type")?.asString == "voice_ready"',
     ],
   },
 ];
