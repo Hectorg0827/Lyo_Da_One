@@ -23,6 +23,7 @@ import {
   ArrowRight,
   Play,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
@@ -115,18 +116,22 @@ function ActionButton({
 
 function ActionStrip({
   reel,
+  onAsk,
+  onCourse,
   onLike,
   onSave,
   onShare,
 }: {
   reel: Reel;
+  onAsk: () => void;
+  onCourse: () => void;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
 }) {
   return (
     <div className="flex flex-col items-center gap-4 shrink-0">
-      <ActionButton label="Ask Lio">
+      <ActionButton label="Ask Lio" onClick={onAsk}>
         <span
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center"
           style={{ background: 'linear-gradient(135deg, #007aff, #af52de)' }}
@@ -135,7 +140,7 @@ function ActionStrip({
         </span>
       </ActionButton>
 
-      <ActionButton label="Course">
+      <ActionButton label="Course" onClick={onCourse}>
         <span className="w-[38px] h-[38px] rounded-full flex items-center justify-center bg-black/60 border border-white/30">
           <GitBranch className="w-[18px] h-[18px] text-white" />
         </span>
@@ -192,7 +197,7 @@ function InfoOverlay({ reel }: { reel: Reel }) {
         </span>
         <div className="flex flex-col gap-[2px] min-w-0">
           <span className="text-base font-semibold text-white truncate">{reel.author.name}</span>
-          <span className="text-[11px] text-white/80">Verified Mentor</span>
+          
         </div>
       </div>
 
@@ -240,12 +245,16 @@ function InfoOverlay({ reel }: { reel: Reel }) {
 function ReelSlide({
   reel,
   isActive,
+  onAsk,
+  onCourse,
   onLike,
   onSave,
   onShare,
 }: {
   reel: Reel;
   isActive: boolean;
+  onAsk: () => void;
+  onCourse: () => void;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -319,7 +328,14 @@ function ReelSlide({
       {/* Bottom content */}
       <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-[110px] md:pb-8">
         <InfoOverlay reel={reel} />
-        <ActionStrip reel={reel} onLike={onLike} onSave={onSave} onShare={onShare} />
+        <ActionStrip
+          reel={reel}
+          onAsk={onAsk}
+          onCourse={onCourse}
+          onLike={onLike}
+          onSave={onSave}
+          onShare={onShare}
+        />
       </div>
     </section>
   );
@@ -347,6 +363,7 @@ function EmptyState({ message }: { message: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DiscoverPage() {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -411,6 +428,14 @@ export default function DiscoverPage() {
     [patch]
   );
 
+  const handleAsk = useCallback((reel: Reel) => {
+    router.push(`/chat?prompt=${encodeURIComponent(`Explain ${reel.title} and help me understand it.`)}`);
+  }, [router]);
+
+  const handleCourse = useCallback((reel: Reel) => {
+    router.push(`/chat?prompt=${encodeURIComponent(`Create a course about ${reel.title}.`)}`);
+  }, [router]);
+
   const handleShare = useCallback(async (reel: Reel) => {
     const url = `${window.location.origin}/discover?clip=${reel.id}`;
     try {
@@ -455,6 +480,8 @@ export default function DiscoverPage() {
               key={reel.id}
               reel={reel}
               isActive={i === activeIndex}
+              onAsk={() => handleAsk(reel)}
+              onCourse={() => handleCourse(reel)}
               onLike={() => handleLike(reel)}
               onSave={() => handleSave(reel)}
               onShare={() => handleShare(reel)}
