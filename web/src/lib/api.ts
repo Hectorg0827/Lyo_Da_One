@@ -444,7 +444,8 @@ export const api = {
         size_bytes: number;
       }>,
       forcedIntent?: 'COURSE',
-      stateSummary?: Record<string, unknown>
+      stateSummary?: Record<string, unknown>,
+      responseChannel: 'text' | 'voice' = 'text'
     ): AbortController {
       const controller = new AbortController();
 
@@ -465,6 +466,7 @@ export const api = {
             media,
             forced_intent: forcedIntent,
             state_summary: stateSummary,
+            response_channel: responseChannel,
           }),
           signal: controller.signal,
         });
@@ -1398,6 +1400,51 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ filename, content_type: contentType, folder }),
       });
+    },
+  },
+
+  // ── Shared speech output ──
+  tts: {
+    /**
+     * Stream the same backend voice used by Classroom. This is presentation
+     * only: the words still come from the canonical Chat interaction contract.
+     */
+    async stream(
+      text: string,
+      options: {
+        language?: string;
+        speed?: number;
+        voice?: string;
+        signal?: AbortSignal;
+      } = {}
+    ): Promise<Response> {
+      const doFetch = (authToken: string | null) =>
+        fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          signal: options.signal,
+          body: JSON.stringify({
+            text,
+            voice: options.voice ?? 'nova',
+            format: 'mp3',
+            speed: options.speed ?? 0.98,
+            content_type: 'conversation',
+            language: options.language ?? 'auto',
+          }),
+        });
+
+      let response = await doFetch(getAccessToken());
+      if (response.status === 401) {
+        const refreshed = await tryRefreshToken();
+        if (refreshed) response = await doFetch(getAccessToken());
+      }
+      if (!response.ok) {
+        throw new ApiError('Speech synthesis failed', response.status);
+      }
+      return response;
     },
   },
 
