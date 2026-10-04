@@ -9,6 +9,7 @@ import {
   createSpeechRecognition,
   isLikelyPlaybackEcho,
   splitSpeechChunks,
+  subscribeVoiceTextSegments,
   type SpeechRecognitionLike,
 } from '@/lib/conversational-voice';
 
@@ -45,10 +46,15 @@ export default function ConversationalVoiceLayer() {
   const finalTranscriptRef = useRef('');
   const lastSpokenTextRef = useRef('');
   const awaitingAssistantRef = useRef(false);
+  const streamedSpeechRef = useRef(false);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCancelRef = useRef<(() => void) | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
   const ttsPrefetchAbortRef = useRef<AbortController | null>(null);
+  const streamedQueueRef = useRef<string[]>([]);
+  const streamedWorkerActiveRef = useRef(false);
+  const speechGenerationRef = useRef(0);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -71,10 +77,15 @@ export default function ConversationalVoiceLayer() {
   }, []);
 
   const stopSpeech = useCallback(() => {
+    speechGenerationRef.current += 1;
+    streamedQueueRef.current = [];
+    streamedWorkerActiveRef.current = false;
     ttsAbortRef.current?.abort();
     ttsPrefetchAbortRef.current?.abort();
     ttsAbortRef.current = null;
     ttsPrefetchAbortRef.current = null;
+    audioCancelRef.current?.();
+    audioCancelRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
@@ -92,10 +103,14 @@ export default function ConversationalVoiceLayer() {
       changePhase('listening');
       return;
     }
+
     stopSpeech();
     stopRecognition();
     if (useChatStore.getState().isGenerating) interruptGeneration();
+
+    streamedSpeechRef.current = false;
     awaitingAssistantRef.current = true;
+    lastSpokenTextRef.current = '';
     changePhase('thinking');
     await sendMessage(transcript, [], { voiceSession: true });
   }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
@@ -129,8 +144,8 @@ export default function ConversationalVoiceLayer() {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (combined) {
         // Browser engines disagree about when an utterance becomes "final".
-        // Our own silence endpointing keeps turn-taking fast and works from
-        // stable interim text instead of waiting for the browser to decide.
+        // Endpoint on stable silence rather than waiting on browser-specific
+        // final-result timing.
         silenceTimerRef.current = setTimeout(() => {
           void sendVoiceTurn(combined);
         }, END_OF_TURN_SILENCE_MS);
@@ -162,14 +177,25 @@ export default function ConversationalVoiceLayer() {
     const cleanup = () => {
       URL.revokeObjectURL(url);
       if (audioRef.current === audio) audioRef.current = null;
+      if (audioCancelRef.current === cancel) audioCancelRef.current = null;
     };
-    audioRef.current = audio;
-    audio.onended = () => {
+    const finish = () => {
       if (settled) return;
       settled = true;
       cleanup();
       resolve();
     };
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      audio.pause();
+      cleanup();
+      resolve();
+    };
+
+    audioRef.current = audio;
+    audioCancelRef.current = cancel;
+    audio.onended = finish;
     audio.onerror = () => {
       if (settled) return;
       settled = true;
@@ -195,9 +221,82 @@ export default function ConversationalVoiceLayer() {
     window.speechSynthesis.speak(utterance);
   }), []);
 
+  const finishStreamedTurnIfReady = useCallback(() => {
+    if (
+      !activeRef.current
+      || useChatStore.getState().isGenerating
+      || streamedWorkerActiveRef.current
+      || streamedQueueRef.current.length > 0
+      || !awaitingAssistantRef.current
+    ) {
+      return;
+    }
+    const latest = latestAssistantMessage();
+    if (latest) lastSpokenMessageIdRef.current = latest.id;
+    awaitingAssistantRef.current = false;
+    changePhase('listening');
+    startRecognition();
+  }, [changePhase, startRecognition]);
+
+  const drainStreamedSpeech = useCallback(async () => {
+    if (streamedWorkerActiveRef.current || !activeRef.current) return;
+
+    streamedWorkerActiveRef.current = true;
+    const generation = speechGenerationRef.current;
+    stopRecognition();
+    changePhase('speaking');
+    speakingStartedAtRef.current = performance.now();
+
+    try {
+      while (
+        activeRef.current
+        && generation === speechGenerationRef.current
+        && streamedQueueRef.current.length > 0
+      ) {
+        const text = streamedQueueRef.current.shift()!;
+        lastSpokenTextRef.current = `${lastSpokenTextRef.current} ${text}`.trim();
+
+        const controller = new AbortController();
+        ttsAbortRef.current = controller;
+        try {
+          const blob = await api.tts.synthesizeStream(text, {
+            language: navigator.language || 'auto',
+            speed: 1.02,
+            signal: controller.signal,
+          });
+          if (generation !== speechGenerationRef.current) break;
+          await playBlob(blob);
+        } catch {
+          if (
+            generation === speechGenerationRef.current
+            && !controller.signal.aborted
+            && phaseRef.current === 'speaking'
+          ) {
+            await browserSpeechFallback(text);
+          }
+        } finally {
+          if (ttsAbortRef.current === controller) ttsAbortRef.current = null;
+        }
+      }
+    } finally {
+      if (generation === speechGenerationRef.current) {
+        streamedWorkerActiveRef.current = false;
+        finishStreamedTurnIfReady();
+      }
+    }
+  }, [
+    browserSpeechFallback,
+    changePhase,
+    finishStreamedTurnIfReady,
+    playBlob,
+    stopRecognition,
+  ]);
+
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
     const chunks = splitSpeechChunks(text);
     if (!chunks.length || !activeRef.current) return;
+    const generation = speechGenerationRef.current;
+
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
@@ -206,7 +305,13 @@ export default function ConversationalVoiceLayer() {
 
     try {
       let next: { promise: Promise<Blob>; controller: AbortController } | null = null;
-      for (let index = 0; index < chunks.length && activeRef.current; index++) {
+      for (
+        let index = 0;
+        index < chunks.length
+          && activeRef.current
+          && generation === speechGenerationRef.current;
+        index++
+      ) {
         const current = next ?? (() => {
           const controller = new AbortController();
           return {
@@ -239,13 +344,22 @@ export default function ConversationalVoiceLayer() {
         await playBlob(await current.promise);
       }
     } catch {
-      if (activeRef.current && phaseRef.current === 'speaking') {
+      if (
+        activeRef.current
+        && generation === speechGenerationRef.current
+        && phaseRef.current === 'speaking'
+      ) {
         await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '));
       }
     } finally {
       ttsAbortRef.current = null;
       ttsPrefetchAbortRef.current = null;
-      if (activeRef.current && phaseRef.current === 'speaking') {
+      if (
+        activeRef.current
+        && generation === speechGenerationRef.current
+        && phaseRef.current === 'speaking'
+      ) {
+        awaitingAssistantRef.current = false;
         changePhase('listening');
         startRecognition();
       }
@@ -254,13 +368,29 @@ export default function ConversationalVoiceLayer() {
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    awaitingAssistantRef.current = false;
+    streamedSpeechRef.current = false;
     stopSpeech();
+    if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
     finalTranscriptRef.current = '';
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
+
+  useEffect(() => {
+    return subscribeVoiceTextSegments(({ text }) => {
+      if (!activeRef.current || !awaitingAssistantRef.current || !text.trim()) return;
+      streamedSpeechRef.current = true;
+      streamedQueueRef.current.push(text.trim());
+      if (phaseRef.current !== 'speaking') {
+        changePhase('speaking');
+        speakingStartedAtRef.current = performance.now();
+      }
+      void drainStreamedSpeech();
+    });
+  }, [changePhase, drainStreamedSpeech]);
 
   useEffect(() => {
     if (!active) return;
@@ -275,7 +405,8 @@ export default function ConversationalVoiceLayer() {
     }).then((stream) => {
       if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
       mediaStreamRef.current = stream;
-      const Context = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const Context = window.AudioContext
+        || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (Context) {
         const context = new Context();
         const source = context.createMediaStreamSource(stream);
@@ -297,6 +428,7 @@ export default function ConversationalVoiceLayer() {
     activeRef.current = active;
     if (active) return;
     awaitingAssistantRef.current = false;
+    streamedSpeechRef.current = false;
     stopRecognition();
     stopSpeech();
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -314,7 +446,11 @@ export default function ConversationalVoiceLayer() {
     if (!active) return;
     const tick = () => {
       const analyser = analyserRef.current;
-      if (analyser && phaseRef.current === 'speaking' && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS) {
+      if (
+        analyser
+        && phaseRef.current === 'speaking'
+        && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS
+      ) {
         const samples = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
@@ -323,9 +459,13 @@ export default function ConversationalVoiceLayer() {
           sum += normalized * normalized;
         }
         const rms = Math.sqrt(sum / samples.length);
-        loudFramesRef.current = rms > BARGE_IN_RMS_THRESHOLD ? loudFramesRef.current + 1 : 0;
+        loudFramesRef.current = rms > BARGE_IN_RMS_THRESHOLD
+          ? loudFramesRef.current + 1
+          : 0;
         if (loudFramesRef.current >= BARGE_IN_FRAMES) bargeIn();
-      } else loudFramesRef.current = 0;
+      } else {
+        loudFramesRef.current = 0;
+      }
       animationFrameRef.current = requestAnimationFrame(tick);
     };
     animationFrameRef.current = requestAnimationFrame(tick);
@@ -337,11 +477,25 @@ export default function ConversationalVoiceLayer() {
 
   useEffect(() => {
     if (!active || isGenerating || !awaitingAssistantRef.current) return;
+
+    if (streamedSpeechRef.current) {
+      finishStreamedTurnIfReady();
+      return;
+    }
+
+    // Structured workflows and providers that cannot token-stream still fall
+    // back to the canonical final answer. They remain the same voice session;
+    // only the low-latency delivery optimization is absent for that turn.
     const latest = latestAssistantMessage();
     if (!latest || latest.id === lastSpokenMessageIdRef.current || !latest.content.trim()) return;
-    awaitingAssistantRef.current = false;
     void speakAssistant(latest.id, latest.content);
-  }, [active, activeConversationId, isGenerating, speakAssistant]);
+  }, [
+    active,
+    activeConversationId,
+    finishStreamedTurnIfReady,
+    isGenerating,
+    speakAssistant,
+  ]);
 
   const endSession = () => setVoiceSessionActive(false);
 
@@ -363,7 +517,11 @@ export default function ConversationalVoiceLayer() {
         'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
         phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
       )}>
-        {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
+        {phase === 'speaking'
+          ? <Volume2 className="w-4 h-4" />
+          : phase === 'error'
+            ? <MicOff className="w-4 h-4" />
+            : <AudioLines className="w-4 h-4" />}
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold text-white/85">Live conversation</div>
