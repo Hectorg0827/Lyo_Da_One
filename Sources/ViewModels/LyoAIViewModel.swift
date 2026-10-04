@@ -57,6 +57,10 @@ class LyoAIViewModel: ObservableObject {
     /// mic only AFTER the AI's spoken response finishes (not the instant the send
     /// call returns), so funnel questions and streamed answers aren't cut off.
     private var voiceLoopActive: Bool = false
+    /// True when the learner took the floor before the previous spoken Chat
+    /// turn completed. Sent to the canonical interaction contract on the next
+    /// utterance; it changes delivery, never the learner's intent.
+    private var voiceInterruptedPreviousTurn: Bool = false
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -425,10 +429,13 @@ class LyoAIViewModel: ObservableObject {
         }
     }
 
-    // MARK: - True Live Mode Control
+    // MARK: - Conversational Voice Control
 
+    /// The old "True Live Mode" used a separate AudioStreamManager AI path.
+    /// Keep the UI entry point, but make it an alias for canonical Chat voice
+    /// so text and speech always share one interaction contract and memory.
     func toggleLiveMode() {
-        if isLiveMode {
+        if isLiveMode || voiceLoopActive {
             stopLiveMode()
         } else {
             startLiveMode()
@@ -436,27 +443,28 @@ class LyoAIViewModel: ObservableObject {
     }
 
     func startLiveMode() {
-        // Stop turn-based voice mode if active
-        if isVoiceActive {
-            stopListening()
-        }
-
-        Task {
-            let userId = await TokenManager.shared.getUserId() ?? "anonymous"
-            let sessionId = "live-\(userId)"
-            await AudioStreamManager.shared.startLiveMode(sessionId: sessionId)
-        }
+        AudioStreamManager.shared.stopLiveMode()
+        isLiveMode = true
+        startListening()
     }
 
     func stopLiveMode() {
         AudioStreamManager.shared.stopLiveMode()
+        isLiveMode = false
+        stopListening()
     }
 
     func startListening() {
-        // For barge-in, we don't stop TTS here. We let it play.
-        // If user speaks, onSpeechDetected will stop TTS.
+        // A tap while Lyo is thinking/speaking is an explicit barge-in.
+        // Cancel the current canonical SSE/TTS turn before opening the mic.
+        if isAISpeaking || unifiedChat.isLoading {
+            voiceInterruptedPreviousTurn = true
+            unifiedChat.cancelActiveResponse()
+            stopSpeaking()
+        }
 
         voiceLoopActive = true
+        isLiveMode = true
 
         guard !sttService.isRecording else {
             isVoiceActive = true
@@ -483,6 +491,7 @@ class LyoAIViewModel: ObservableObject {
         sttService.stopRecording()
         isVoiceActive = false
         voiceLoopActive = false  // Manual stop ends the conversational loop
+        isLiveMode = false
         stopSpeaking()  // Also stop TTS if we are fully stopping voice mode
 
         // If we have text, send it automatically in conversational mode
@@ -694,9 +703,19 @@ class LyoAIViewModel: ObservableObject {
         inputText = ""
         attachments = []
 
-        // Capture voice state
-        let shouldResumeListening = isVoiceActive
+        // Capture voice state before the microphone is stopped for this turn.
+        let shouldResumeListening = isVoiceActive || voiceLoopActive || isLiveMode
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
+        let voiceSession = shouldResumeListening
+            ? Lyo2VoiceSessionContext(
+                active: true,
+                locale: Locale.current.identifier,
+                turnId: UUID().uuidString,
+                interruptedPreviousTurn: voiceInterruptedPreviousTurn,
+                handsFree: true
+            )
+            : nil
+        voiceInterruptedPreviousTurn = false
         
         // Reset TTS buffer for the new response
         lastSentToTTSText = ""
@@ -731,7 +750,8 @@ class LyoAIViewModel: ObservableObject {
             context: nil,
             mode: mode ?? uiState?.currentAIMode ?? "chat",
             forcedIntent: selectedIntent,
-            speakResponse: shouldSpeak
+            speakResponse: shouldSpeak,
+            voiceSession: voiceSession
         )
 
         // Safety net: if we're in a voice loop but nothing is being spoken
