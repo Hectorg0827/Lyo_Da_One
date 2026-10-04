@@ -411,7 +411,10 @@ class LyoAIViewModel: ObservableObject {
         }
     }
 
-    // MARK: - True Live Mode Control
+    // MARK: - Conversational Voice Compatibility
+    //
+    // Existing "Live" UI controls enter the canonical Chat voice loop.
+    // AudioStreamManager's separate live-agent path is intentionally bypassed.
 
     func toggleLiveMode() {
         if isLiveMode {
@@ -422,25 +425,25 @@ class LyoAIViewModel: ObservableObject {
     }
 
     func startLiveMode() {
-        // Stop turn-based voice mode if active
-        if isVoiceActive {
-            stopListening()
-        }
-
-        Task {
-            let userId = await TokenManager.shared.getUserId() ?? "anonymous"
-            let sessionId = "live-\(userId)"
-            await AudioStreamManager.shared.startLiveMode(sessionId: sessionId)
-        }
+        isLiveMode = true
+        voiceLoopActive = true
+        startListening()
     }
 
     func stopLiveMode() {
-        AudioStreamManager.shared.stopLiveMode()
+        isLiveMode = false
+        stopListening()
     }
 
     func startListening() {
-        // For barge-in, we don't stop TTS here. We let it play.
-        // If user speaks, onSpeechDetected will stop TTS.
+        // Barge-in owns the floor: stop speech and any unfinished canonical
+        // response before reopening the microphone.
+        if ttsService.isSpeaking {
+            stopSpeaking()
+        }
+        if unifiedChat.isLoading {
+            unifiedChat.cancelCurrentResponse()
+        }
 
         voiceLoopActive = true
 
@@ -681,7 +684,7 @@ class LyoAIViewModel: ObservableObject {
         attachments = []
 
         // Capture voice state
-        let shouldResumeListening = isVoiceActive
+        let shouldResumeListening = isVoiceActive || voiceLoopActive
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         
         // Reset TTS buffer for the new response
@@ -717,7 +720,8 @@ class LyoAIViewModel: ObservableObject {
             context: nil,
             mode: mode ?? uiState?.currentAIMode ?? "chat",
             forcedIntent: selectedIntent,
-            speakResponse: shouldSpeak
+            speakResponse: shouldSpeak,
+            responseChannel: shouldResumeListening ? "voice" : "text"
         )
 
         // Safety net: if we're in a voice loop but nothing is being spoken
