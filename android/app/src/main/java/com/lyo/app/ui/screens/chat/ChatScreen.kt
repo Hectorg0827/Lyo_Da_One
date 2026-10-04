@@ -204,6 +204,7 @@ fun ChatScreen(nav: NavHostController) {
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
+    var lastSpokenVoiceText by remember { mutableStateOf("") }
     var voiceListenNonce by remember { mutableStateOf(0) }
     var continuousRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     var streamJob by remember { mutableStateOf<Job?>(null) }
@@ -408,6 +409,7 @@ fun ChatScreen(nav: NavHostController) {
                 val engine = textToSpeech
                 if (assistant != null && spokenText.isNotBlank() && textToSpeechReady && engine != null) {
                     engine.stop()
+                    lastSpokenVoiceText = spokenText
                     speakingMessageId = assistant.id
                     engine.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, assistant.id)
                 } else {
@@ -415,6 +417,24 @@ fun ChatScreen(nav: NavHostController) {
                 }
             }
         }
+    }
+
+    fun isLikelyVoiceEcho(heard: String): Boolean {
+        val normalize: (String) -> String = { value ->
+            value.lowercase()
+                .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+        val a = normalize(heard)
+        val b = normalize(lastSpokenVoiceText)
+        if (a.isBlank() || b.isBlank()) return false
+        if (a.length >= 12 && b.contains(a)) return true
+        if (b.length >= 12 && a.contains(b)) return true
+        val aw = a.split(" ").filter { it.isNotBlank() }.toSet()
+        val bw = b.split(" ").filter { it.isNotBlank() }.toSet()
+        val overlap = aw.intersect(bw).size
+        return overlap.toFloat() / maxOf(1, minOf(aw.size, bw.size)).toFloat() >= 0.82f
     }
 
     fun stopVoiceConversation() {
@@ -427,7 +447,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     fun startVoiceRecognition() {
-        if (!voiceConversation || isStreaming || speakingMessageId != null) return
+        if (!voiceConversation || dictating) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -463,10 +483,10 @@ fun ChatScreen(nav: NavHostController) {
                 }
 
                 override fun onBeginningOfSpeech() {
-                    // Full-duplex barge-in: user speech owns the floor.
-                    textToSpeech?.stop()
-                    speakingMessageId = null
-                    if (isStreaming) {
+                    // During model generation there is no playback to echo, so
+                    // actual speech can interrupt immediately. While Lyo is
+                    // speaking we wait for partial text and reject likely echo.
+                    if (speakingMessageId == null && isStreaming) {
                         streamJob?.cancel()
                         streamJob = null
                         isStreaming = false
@@ -492,19 +512,43 @@ fun ChatScreen(nav: NavHostController) {
                         ?.trim()
                         .orEmpty()
                     liveVoiceTranscript = transcript
-                    if (transcript.isNotBlank() && voiceConversation) {
+
+                    if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
+                        textToSpeech?.stop()
+                        speakingMessageId = null
+                        if (isStreaming) {
+                            streamJob?.cancel()
+                            streamJob = null
+                            isStreaming = false
+                        }
                         send(transcript)
-                    } else if (voiceConversation) {
-                        voiceListenNonce += 1
                     }
+                    if (voiceConversation) voiceListenNonce += 1
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
-                    liveVoiceTranscript = partialResults
+                    val partial = partialResults
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
+                    liveVoiceTranscript = partial
+                    if (
+                        partial.isNotBlank() &&
+                        voiceConversation &&
+                        speakingMessageId != null &&
+                        !isLikelyVoiceEcho(partial)
+                    ) {
+                        // Confirmed non-echo speech: barge in now instead of
+                        // waiting for the final recognition result.
+                        textToSpeech?.stop()
+                        speakingMessageId = null
+                        if (isStreaming) {
+                            streamJob?.cancel()
+                            streamJob = null
+                            isStreaming = false
+                        }
+                    }
                 }
 
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -519,7 +563,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     LaunchedEffect(voiceConversation, voiceListenNonce, isStreaming, speakingMessageId) {
-        if (voiceConversation && !isStreaming && speakingMessageId == null) {
+        if (voiceConversation && !dictating) {
             delay(180)
             startVoiceRecognition()
         }
@@ -591,6 +635,7 @@ fun ChatScreen(nav: NavHostController) {
         if (spokenText.isBlank()) return
 
         engine.stop()
+        lastSpokenVoiceText = spokenText
         speakingMessageId = message.id
         engine.speak(
             spokenText,
