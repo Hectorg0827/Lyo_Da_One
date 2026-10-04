@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap
 sealed class ChatStreamEvent {
     data class Chunk(val text: String) : ChatStreamEvent()
     data class Conversation(val id: String) : ChatStreamEvent()
+    /** Canonical final text is ready for TTS; the stream may still emit UI metadata. */
+    data class VoiceReady(val text: String, val latencyMs: Long? = null) : ChatStreamEvent()
     /**
      * Structured lesson content — every beat of a composed lesson (hook,
      * callout, dataViz, flashcard, quiz, ...), not just plain prose. Web and
@@ -197,6 +199,13 @@ object ChatStreamClient {
                 )
             obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
                 ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
+            obj.get("type")?.asString == "voice_ready" && obj.has("text") ->
+                ChatStreamEvent.VoiceReady(
+                    text = obj.get("text").asString,
+                    latencyMs = obj.get("latency_ms")
+                        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
+                        ?.asLong,
+                )
             obj.get("type")?.asString == "answer" && obj.has("block") -> {
                 val text = obj.getAsJsonObject("block")
                     ?.getAsJsonObject("content")

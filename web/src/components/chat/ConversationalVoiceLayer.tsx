@@ -34,6 +34,8 @@ export default function ConversationalVoiceLayer() {
   const sendMessage = useChatStore((state) => state.sendMessage);
   const interruptGeneration = useChatStore((state) => state.interruptGeneration);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
+  const voicePlaybackCue = useChatStore((state) => state.voicePlaybackCue);
+  const consumeVoicePlaybackCue = useChatStore((state) => state.consumeVoicePlaybackCue);
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
@@ -45,6 +47,7 @@ export default function ConversationalVoiceLayer() {
   const finalTranscriptRef = useRef('');
   const lastSpokenTextRef = useRef('');
   const awaitingAssistantRef = useRef(false);
+  const canonicalAnswerReadyRef = useRef(false);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
@@ -94,7 +97,21 @@ export default function ConversationalVoiceLayer() {
     }
     stopSpeech();
     stopRecognition();
-    if (useChatStore.getState().isGenerating) interruptGeneration();
+    if (useChatStore.getState().isGenerating) {
+      if (canonicalAnswerReadyRef.current) {
+        // The answer already exists and is speaking. Preserve the same Chat
+        // stream until its SmartBlocks/sources/persistence finish, while the
+        // learner's recognized interruption waits locally as the next turn.
+        while (activeRef.current && useChatStore.getState().isGenerating) {
+          await new Promise((resolve) => window.setTimeout(resolve, 40));
+        }
+      } else if (useChatStore.getState().isGenerating) {
+        // Before voice_ready, interruption means the learner is replacing
+        // unfinished model work, so cancellation is correct.
+        interruptGeneration();
+      }
+    }
+    canonicalAnswerReadyRef.current = false;
     awaitingAssistantRef.current = true;
     changePhase('thinking');
     await sendMessage(transcript, [], { voiceSession: true });
@@ -255,12 +272,16 @@ export default function ConversationalVoiceLayer() {
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
     stopSpeech();
+    // A sound spike may be a real interruption or a false-positive from the
+    // speaker. Stop audio immediately, but preserve the canonical Chat stream
+    // until speech recognition confirms a learner turn.
+    awaitingAssistantRef.current = false;
     loudFramesRef.current = 0;
     finalTranscriptRef.current = '';
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
@@ -297,6 +318,7 @@ export default function ConversationalVoiceLayer() {
     activeRef.current = active;
     if (active) return;
     awaitingAssistantRef.current = false;
+    canonicalAnswerReadyRef.current = false;
     stopRecognition();
     stopSpeech();
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -334,6 +356,32 @@ export default function ConversationalVoiceLayer() {
       animationFrameRef.current = null;
     };
   }, [active, bargeIn]);
+
+  useEffect(() => {
+    if (
+      !active
+      || !awaitingAssistantRef.current
+      || !voicePlaybackCue
+      || !voicePlaybackCue.text.trim()
+    ) return;
+    if (voicePlaybackCue.messageId === lastSpokenMessageIdRef.current) {
+      consumeVoicePlaybackCue(voicePlaybackCue.messageId);
+      return;
+    }
+
+    // This is the earliest authoritative spoken representation of the same
+    // canonical Chat turn. Do not wait for sources/actions/[DONE] after the
+    // answer is already complete.
+    awaitingAssistantRef.current = false;
+    canonicalAnswerReadyRef.current = true;
+    consumeVoicePlaybackCue(voicePlaybackCue.messageId);
+    void speakAssistant(voicePlaybackCue.messageId, voicePlaybackCue.text);
+  }, [
+    active,
+    consumeVoicePlaybackCue,
+    speakAssistant,
+    voicePlaybackCue,
+  ]);
 
   useEffect(() => {
     if (!active || isGenerating || !awaitingAssistantRef.current) return;
