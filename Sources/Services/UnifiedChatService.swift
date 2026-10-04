@@ -421,6 +421,16 @@ final class UnifiedChatService: ObservableObject {
         )
     }
 
+    /// Interrupt the current canonical Chat turn so voice can take the floor.
+    /// This cancels transport only; the next spoken utterance goes through the
+    /// same interaction contract and conversation.
+    func cancelActiveResponse() {
+        streamTimeoutTask?.cancel()
+        streamTimeoutTask = nil
+        lyo2ChatService.cancelActiveStream()
+        isLoading = false
+    }
+
     // MARK: - Conversation Memory Window
 
     /// Maximum number of recent messages to include as context for the AI.
