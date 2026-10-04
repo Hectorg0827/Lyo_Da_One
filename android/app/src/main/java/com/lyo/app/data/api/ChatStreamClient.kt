@@ -38,6 +38,15 @@ data class ChatMediaRef(
     val sizeBytes: Long,
 )
 
+data class ChatVoiceSession(
+    val active: Boolean = true,
+    val locale: String = java.util.Locale.getDefault().toLanguageTag(),
+    val turnId: String = java.util.UUID.randomUUID().toString(),
+    val interruptedPreviousTurn: Boolean = false,
+    val handsFree: Boolean = true,
+)
+
+
 /**
  * SSE client for POST /api/v1/lyo2/chat/stream — reads `data: {json}` lines
  * until `data: [DONE]`, mirroring the web client's api.chat.stream().
@@ -87,6 +96,7 @@ object ChatStreamClient {
         conversationId: String,
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
+        voiceSession: ChatVoiceSession? = null,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -105,6 +115,15 @@ object ChatStreamClient {
                     ),
                 )
             }
+        }
+        voiceSession?.let { voice ->
+            requestFields["voice_session"] = mapOf(
+                "active" to voice.active,
+                "locale" to voice.locale,
+                "turn_id" to voice.turnId,
+                "interrupted_previous_turn" to voice.interruptedPreviousTurn,
+                "hands_free" to voice.handsFree,
+            )
         }
         if (media.isNotEmpty()) {
             requestFields["media"] = media.map { item ->
