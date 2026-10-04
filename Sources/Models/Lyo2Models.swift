@@ -8,6 +8,36 @@ struct Lyo2ConversationTurn: Codable {
     let content: String
 }
 
+struct Lyo2VoiceSessionContext: Codable {
+    let active: Bool
+    let locale: String
+    let turnId: String?
+    let interruptedPreviousTurn: Bool
+    let handsFree: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case active
+        case locale
+        case turnId = "turn_id"
+        case interruptedPreviousTurn = "interrupted_previous_turn"
+        case handsFree = "hands_free"
+    }
+
+    init(
+        active: Bool = true,
+        locale: String = Locale.current.identifier,
+        turnId: String? = nil,
+        interruptedPreviousTurn: Bool = false,
+        handsFree: Bool = true
+    ) {
+        self.active = active
+        self.locale = locale
+        self.turnId = turnId
+        self.interruptedPreviousTurn = interruptedPreviousTurn
+        self.handsFree = handsFree
+    }
+}
+
 struct Lyo2RouterRequest: Codable {
     let userId: String
     let text: String?
@@ -16,6 +46,7 @@ struct Lyo2RouterRequest: Codable {
     let activeArtifact: Lyo2ActiveArtifactContext?
     let forcedIntent: String?
     let stateSummary: [String: AnyCodable]
+    let voiceSession: Lyo2VoiceSessionContext?
     /// Recent conversation history so the AI maintains context across turns.
     let conversationHistory: [Lyo2ConversationTurn]?
     let conversationId: String?
@@ -31,6 +62,7 @@ struct Lyo2RouterRequest: Codable {
         case activeArtifact = "active_artifact"
         case forcedIntent = "forced_intent"
         case stateSummary = "state_summary"
+        case voiceSession = "voice_session"
         case conversationHistory = "conversation_history"
         case conversationId = "conversation_id"
         case deviceId = "device_id"
@@ -46,6 +78,7 @@ struct Lyo2RouterRequest: Codable {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         deviceId: String = "ios",
@@ -58,6 +91,7 @@ struct Lyo2RouterRequest: Codable {
         self.activeArtifact = activeArtifact
         self.forcedIntent = forcedIntent
         self.stateSummary = stateSummary
+        self.voiceSession = voiceSession
         self.conversationHistory = conversationHistory
         self.conversationId = conversationId
         self.deviceId = deviceId
