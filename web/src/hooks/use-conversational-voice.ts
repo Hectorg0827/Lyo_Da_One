@@ -84,7 +84,7 @@ async function playStreamingResponse(
       const onOpen = async () => {
         try {
           const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
-          const append = (chunk: Uint8Array) =>
+          const append = (chunk: ArrayBuffer) =>
             new Promise<void>((resolveAppend, rejectAppend) => {
               const onUpdate = () => { cleanup(); resolveAppend(); };
               const onError = () => { cleanup(); rejectAppend(new Error('Audio buffer failed')); };
@@ -104,7 +104,11 @@ async function playStreamingResponse(
             const { done, value } = await reader.read();
             if (done) break;
             if (!value?.byteLength) continue;
-            await append(value);
+            const chunk = value.buffer.slice(
+              value.byteOffset,
+              value.byteOffset + value.byteLength
+            ) as ArrayBuffer;
+            await append(chunk);
             if (!started) {
               started = true;
               await audio.play();
