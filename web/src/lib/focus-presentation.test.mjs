@@ -21,6 +21,7 @@ import {
   actionLabel,
   blurbFor,
   countForFilter,
+  deckCanOpen,
   deckCardWidth,
   deckLayers,
   deckMoreLabel,
@@ -182,6 +183,26 @@ test('a single course has no deck to open', () => {
   assert.equal(deckMoreLabel(1), null);
   assert.deepEqual(deckLayers(0), []);
   assert.equal(deckMoreLabel(0), null);
+});
+
+test('one card is not a deck to open', () => {
+  // A filter can narrow an open deck to one course. The component asks this
+  // every render, so the deck closes itself instead of leaving a lone
+  // narrowed card in a horizontal scroller with no way back.
+  assert.equal(deckCanOpen(0), false);
+  assert.equal(deckCanOpen(1), false);
+  assert.equal(deckCanOpen(2), true);
+  assert.equal(deckCanOpen(40), true);
+});
+
+test('openability agrees with the layers and the label', () => {
+  // The three answers have to agree: something to open, something drawn
+  // behind the top card, and something for the control to say.
+  for (let count = 0; count <= 6; count += 1) {
+    const canOpen = deckCanOpen(count);
+    assert.equal(canOpen, deckLayers(count).length > 0, `layers disagree at ${count}`);
+    assert.equal(canOpen, deckMoreLabel(count) !== null, `label disagrees at ${count}`);
+  }
 });
 
 test('two courses draw one peek card, three draw two', () => {

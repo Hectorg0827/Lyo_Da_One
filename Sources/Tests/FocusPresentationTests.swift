@@ -462,6 +462,26 @@ final class FocusDeckTests: XCTestCase {
         XCTAssertNil(FocusPresentation.deckMoreLabel(cardCount: 0))
     }
 
+    /// A filter can narrow an open deck to one course. The screen asks this
+    /// every time it draws, so the deck closes itself instead of leaving a
+    /// lone narrowed card in a sideways scroller with no way back.
+    func testOneCardIsNotADeckToOpen() {
+        XCTAssertFalse(FocusPresentation.deckCanOpen(cardCount: 0))
+        XCTAssertFalse(FocusPresentation.deckCanOpen(cardCount: 1))
+        XCTAssertTrue(FocusPresentation.deckCanOpen(cardCount: 2))
+        XCTAssertTrue(FocusPresentation.deckCanOpen(cardCount: 40))
+    }
+
+    /// The three answers have to agree: something to open, something drawn
+    /// behind the top card, and something for the control to say.
+    func testOpenabilityAgreesWithTheLayersAndTheLabel() {
+        for count in 0...6 {
+            let canOpen = FocusPresentation.deckCanOpen(cardCount: count)
+            XCTAssertEqual(canOpen, !FocusPresentation.deckLayers(cardCount: count).isEmpty)
+            XCTAssertEqual(canOpen, FocusPresentation.deckMoreLabel(cardCount: count) != nil)
+        }
+    }
+
     func testTwoCoursesDrawOnePeekCard() {
         let layers = FocusPresentation.deckLayers(cardCount: 2)
         XCTAssertEqual(layers.count, 1)

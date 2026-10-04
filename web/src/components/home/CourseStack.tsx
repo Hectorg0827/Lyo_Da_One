@@ -17,6 +17,7 @@ import {
   actionLabel,
   blurbFor,
   countForFilter,
+  deckCanOpen,
   DECK_CARD_GAP,
   DECK_NEXT_CARD_PEEK,
   deckLayers,
@@ -86,6 +87,13 @@ export default function CourseStack({
   const deepestPeek = layers.length > 0 ? layers[layers.length - 1].offset : 0;
   const more = deckMoreLabel(visible.length);
 
+  // `expanded` alone is not enough. A learner can open the deck and then pick
+  // a filter holding one course, and an open deck over one card is a lone
+  // narrowed card in a horizontal scroller with its own control gone. Asking
+  // the rule every render means the deck closes itself, and opens again when
+  // a filter with more courses comes back.
+  const isOpen = expanded && deckCanOpen(visible.length);
+
   if (items.length === 0) {
     return (
       <Link
@@ -132,7 +140,7 @@ export default function CourseStack({
         </p>
       ) : (
         <div className="space-y-3">
-          {expanded ? (
+          {isOpen ? (
             /* Open, the deck is a sideways row that snaps card to card.
                Cards arrive one after another rather than all at once, which
                is what makes it read as opening instead of simply appearing.
@@ -197,13 +205,13 @@ export default function CourseStack({
                from the list, not the two cards drawn behind the top one. */
             <button
               type="button"
-              onClick={() => setExpanded(!expanded)}
-              aria-expanded={expanded}
+              onClick={() => setExpanded(!isOpen)}
+              aria-expanded={isOpen}
               className="flex w-full items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] py-2.5 font-rounded text-[12px] font-semibold tabular-nums text-white/70 transition-colors duration-200 hover:bg-white/[0.09] hover:text-white"
             >
               <Layers size={12} />
-              {expanded ? 'Stack them back up' : more}
-              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {isOpen ? 'Stack them back up' : more}
+              {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
           )}
         </div>

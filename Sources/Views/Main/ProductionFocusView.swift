@@ -270,7 +270,7 @@ struct FocusView: View {
     /// per course, which is what makes the rest of Focus reachable.
     private var courseStack: some View {
         VStack(spacing: 12) {
-            if deckExpanded {
+            if isDeckOpen {
                 openDeck
             } else if let top = visibleCourses.first {
                 shutDeck(top: top)
@@ -328,6 +328,17 @@ struct FocusView: View {
         .scrollClipDisabled()
     }
 
+    /// Whether the deck is open *and* still has something to be open about.
+    ///
+    /// `deckExpanded` alone is not enough. A learner can open the deck and
+    /// then pick a filter holding one course, and an open deck over one card
+    /// is a lone narrowed card in a sideways scroller with its own control
+    /// gone. Asking the rule every time means the deck closes itself, and
+    /// re-opens when a filter with more courses comes back.
+    private var isDeckOpen: Bool {
+        deckExpanded && FocusPresentation.deckCanOpen(cardCount: visibleCourses.count)
+    }
+
     private var deckLayers: [FocusPresentation.DeckLayer] {
         FocusPresentation.deckLayers(cardCount: visibleCourses.count)
     }
@@ -359,7 +370,7 @@ struct FocusView: View {
     /// something under it. Otherwise the card keeps its own tap, which turns
     /// it over for the description.
     private var topCardTap: (() -> Void)? {
-        guard !deckExpanded, !deckLayers.isEmpty else { return nil }
+        guard !isDeckOpen, !deckLayers.isEmpty else { return nil }
         return { setDeck(expanded: true) }
     }
 
@@ -371,15 +382,15 @@ struct FocusView: View {
     private var deckControl: some View {
         if let more = FocusPresentation.deckMoreLabel(cardCount: visibleCourses.count) {
             Button {
-                setDeck(expanded: !deckExpanded)
+                setDeck(expanded: !isDeckOpen)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "rectangle.stack")
                         .font(.system(size: 11, weight: .semibold))
-                    Text(deckExpanded ? "Stack them back up" : more)
+                    Text(isDeckOpen ? "Stack them back up" : more)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                    Image(systemName: deckExpanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: isDeckOpen ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .bold))
                 }
                 .foregroundStyle(.white.opacity(0.7))
@@ -392,9 +403,9 @@ struct FocusView: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint(
-                deckExpanded
-                    ? "Closes the list back into a stack"
-                    : "Opens the stack into a list of every saved course"
+                isDeckOpen
+                    ? "Closes the row back into a stack"
+                    : "Opens the stack into a row of every saved course"
             )
         }
     }

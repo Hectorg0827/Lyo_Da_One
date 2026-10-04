@@ -154,6 +154,16 @@ object FocusPresentation {
         val opacity: Float,
     )
 
+    /**
+     * Whether a deck of this many cards has anything to open.
+     *
+     * One card is not a deck. The screen has to ask this on every
+     * composition, not once: a filter can narrow an open deck down to a
+     * single course, and a deck left open over one card is a lone narrowed
+     * card in a LazyRow with no control to close it.
+     */
+    fun deckCanOpen(cardCount: Int): Boolean = cardCount > 1
+
     /** Peek cards drawn behind the top one, at most. */
     const val DECK_PEEK_LIMIT = 2
 

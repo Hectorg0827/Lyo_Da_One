@@ -150,6 +150,19 @@ export function countForFilter(items, filter) {
 export const DECK_PEEK_LIMIT = 2;
 
 /**
+ * Whether a deck of this many cards has anything to open.
+ *
+ * One card is not a deck. The component has to ask this every render, not
+ * once: a filter can narrow an open deck down to a single course, and a deck
+ * left open over one card is a lone narrowed card in a horizontal scroller
+ * with no control to close it.
+ */
+export function deckCanOpen(cardCount) {
+  const count = Number.isFinite(cardCount) ? Math.trunc(cardCount) : 0;
+  return count > 1;
+}
+
+/**
  * How much of the next card shows past the right edge of the current one.
  *
  * An opened deck scrolls sideways, and a card the full width of the screen

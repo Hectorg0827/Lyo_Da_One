@@ -134,6 +134,21 @@ for (const [label, source, pattern] of [
   }
 }
 
+// One card is not a deck. Every platform has to ask this on each draw, not
+// once when the learner taps: a filter can narrow an open deck to a single
+// course, and a deck left open over one card is a lone narrowed card in a
+// sideways scroller with its own close control gone.
+for (const [label, source, pattern] of [
+  ['iOS', swift, /func deckCanOpen\(cardCount:/],
+  ['web', web, /export function deckCanOpen\(/],
+  ['Android', kotlin, /fun deckCanOpen\(/],
+]) {
+  if (!pattern.test(source)) {
+    throw new Error(`${label}: no shared rule for whether the deck can open`);
+  }
+}
+
 console.log(
-  'Focus deck geometry, card width, stagger and count label are identical on iOS, web and Android.',
+  'Focus deck geometry, card width, openability, stagger and count label are ' +
+    'identical on iOS, web and Android.',
 );

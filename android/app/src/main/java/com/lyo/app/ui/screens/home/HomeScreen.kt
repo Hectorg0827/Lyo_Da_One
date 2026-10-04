@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SmartToy
@@ -350,9 +351,16 @@ fun HomeScreen(nav: NavHostController) {
                     // card to card. The whole library then costs the screen
                     // one card's height instead of one per course.
                     val layers = FocusPresentation.deckLayers(visible.size)
+                    // `deckExpanded` alone is not enough. A learner can open
+                    // the deck and then pick a filter holding one course, and
+                    // an open deck over one card is a lone narrowed card in a
+                    // LazyRow with its own control gone. Asking the rule on
+                    // every composition means the deck closes itself, and
+                    // opens again when a filter with more courses comes back.
+                    val deckOpen = deckExpanded && FocusPresentation.deckCanOpen(visible.size)
 
                     Column {
-                        if (deckExpanded) {
+                        if (deckOpen) {
                             // Each card stops short of the container so the
                             // next one's edge is always showing. A card the
                             // full width of the screen would put every course
@@ -460,16 +468,16 @@ fun HomeScreen(nav: NavHostController) {
                                     .padding(top = 12.dp)
                                     .clip(RoundedCornerShape(50))
                                     .background(Color(0x0DFFFFFF))
-                                    .clickable { deckExpanded = !deckExpanded }
+                                    .clickable { deckExpanded = !deckOpen }
                                     .padding(vertical = 10.dp),
                             ) {
                                 Text(
-                                    text = if (deckExpanded) "Stack them back up" else more,
+                                    text = if (deckOpen) "Stack them back up" else more,
                                     style = MaterialTheme.typography.labelLarge,
                                     color = TextSecondary,
                                 )
                                 Icon(
-                                    imageVector = if (deckExpanded) {
+                                    imageVector = if (deckOpen) {
                                         Icons.Filled.KeyboardArrowUp
                                     } else {
                                         Icons.Filled.KeyboardArrowDown
@@ -670,6 +678,11 @@ private fun StackDeckCard(
  * flip that stood between a learner and the thing they opened the app for
  * would be a worse screen with a nicer animation.
  *
+ * The corner button flips it too. That matters when the body's tap is taken
+ * over by [onTapBody] — the top card of a shut deck opens the deck instead
+ * of turning over — because the description has to stay reachable either
+ * way.
+ *
  * What it will not do is draw a progress figure the stack does not have. The
  * branching lives in [FocusPresentation], which is unit-tested.
  */
@@ -745,11 +758,16 @@ private fun StackCourseCard(
                 )
             }
 
-            StackCardMenu(
-                onShareExternally = onShareExternally,
-                onPostToCommunity = onPostToCommunity,
+            Row(
                 modifier = Modifier.align(Alignment.TopEnd),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StackCardMenu(
+                    onShareExternally = onShareExternally,
+                    onPostToCommunity = onPostToCommunity,
+                )
+                FlipButton(flipped = false, onClick = { flipped = true })
+            }
 
             Column(
                 modifier = Modifier
@@ -819,6 +837,12 @@ private fun StackCourseCard(
                 )
                 Box(modifier = Modifier.fillMaxSize().background(Color(0xDB141A2A)))
 
+                FlipButton(
+                    flipped = true,
+                    onClick = { flipped = false },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                )
+
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -871,6 +895,30 @@ private fun StackCourseCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Turns a course card over.
+ *
+ * A real control, not decoration. The card body's own tap used to be the
+ * only way to flip, which was fine until the top card of a shut deck gave
+ * that tap up to opening the deck: without this button the description of
+ * the course on top could not be reached without opening the deck first.
+ * Web has always had it; iOS and Android were the odd ones out.
+ */
+@Composable
+private fun FlipButton(
+    flipped: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onClick, modifier = modifier) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = if (flipped) "Show progress" else "Show description",
+            tint = Color.White,
+        )
     }
 }
 

@@ -169,6 +169,28 @@ class FocusPresentationTest {
     }
 
     @Test
+    fun `one card is not a deck to open`() {
+        // A filter can narrow an open deck to one course. The screen asks
+        // this on every composition, so the deck closes itself instead of
+        // leaving a lone narrowed card in a LazyRow with no way back.
+        assertFalse(FocusPresentation.deckCanOpen(0))
+        assertFalse(FocusPresentation.deckCanOpen(1))
+        assertTrue(FocusPresentation.deckCanOpen(2))
+        assertTrue(FocusPresentation.deckCanOpen(40))
+    }
+
+    @Test
+    fun `openability agrees with the layers and the label`() {
+        // The three answers have to agree: something to open, something
+        // drawn behind the top card, and something for the control to say.
+        for (count in 0..6) {
+            val canOpen = FocusPresentation.deckCanOpen(count)
+            assertEquals(canOpen, FocusPresentation.deckLayers(count).isNotEmpty())
+            assertEquals(canOpen, FocusPresentation.deckMoreLabel(count) != null)
+        }
+    }
+
+    @Test
     fun `two courses draw one peek card, three draw two`() {
         assertEquals(
             listOf(FocusPresentation.DeckLayer(1, 11f, 0.95f, 0.72f)),

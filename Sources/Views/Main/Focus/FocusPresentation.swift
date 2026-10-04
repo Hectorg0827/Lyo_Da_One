@@ -262,6 +262,16 @@ enum FocusPresentation {
         return max(containerWidth - deckNextCardPeek - deckCardGap, 0)
     }
 
+    /// Whether a deck of this many cards has anything to open.
+    ///
+    /// One card is not a deck. The screen has to ask this every time it
+    /// draws, not once: a filter can narrow an open deck down to a single
+    /// course, and a deck left open over one card is a lone narrowed card in
+    /// a sideways scroller with no way back.
+    static func deckCanOpen(cardCount: Int) -> Bool {
+        cardCount > 1
+    }
+
     /// Peek cards drawn behind the top one, at most.
     static let deckPeekLimit = 2
 
