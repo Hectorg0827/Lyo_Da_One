@@ -5,11 +5,14 @@ import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,18 +20,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SmartToy
@@ -55,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -84,8 +93,6 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(nav: NavHostController) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var overview by remember { mutableStateOf<JsonObject?>(null) }
     var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
     var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
@@ -94,6 +101,8 @@ fun HomeScreen(nav: NavHostController) {
     var catalogError by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var stackFilter by remember { mutableStateOf(FocusPresentation.Filter.All) }
+    // Saved courses start stacked, and open on a tap. See the deck below.
+    var deckExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         runCatching { ApiClient.api.gamificationOverview() }
@@ -329,41 +338,155 @@ fun HomeScreen(nav: NavHostController) {
                         modifier = Modifier.padding(vertical = 20.dp),
                     )
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        visible.forEach { stackItem ->
-                            StackCourseCard(
-                                item = stackItem,
-                                onResume = {
-                                    val courseId = stackItem.contentId ?: stackItem.id.toString()
-                                    nav.navigate(Routes.classroom(courseId))
-                                },
-                                onShareExternally = {
-                                    val courseId = stackItem.contentId ?: stackItem.id.toString()
-                                    val shareUrl = StackRepository.courseShareUrl(courseId)
-                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, "Check out \"${stackItem.title}\" on Lyo! $shareUrl")
-                                    }
-                                    context.startActivity(Intent.createChooser(sendIntent, null))
-                                },
-                                onPostToCommunity = {
-                                    val courseId = stackItem.contentId ?: stackItem.id.toString()
-                                    val progressPercent = (stackItem.progress.coerceIn(0f, 1f) * 100).toInt()
-                                    scope.launch {
-                                        val posted = StackRepository.postCourseToCommunity(
-                                            courseId,
-                                            stackItem.title,
-                                            progressPercent,
+                    // Saved courses, as a deck that opens.
+                    //
+                    // Shut, it is one card with the rest of the library
+                    // stacked under it, so a screenful of courses does not
+                    // begin as a wall of cards. Its Resume button is live in
+                    // that state — only the card body's tap is taken over —
+                    // so a learner coming back to a course never has to open
+                    // the deck first.
+                    //
+                    // Open, it is one row that scrolls sideways and snaps
+                    // card to card. The whole library then costs the screen
+                    // one card's height instead of one per course.
+                    val layers = FocusPresentation.deckLayers(visible.size)
+                    // `deckExpanded` alone is not enough. A learner can open
+                    // the deck and then pick a filter holding one course, and
+                    // an open deck over one card is a lone narrowed card in a
+                    // LazyRow with its own control gone. Asking the rule on
+                    // every composition means the deck closes itself, and
+                    // opens again when a filter with more courses comes back.
+                    val deckOpen = deckExpanded && FocusPresentation.deckCanOpen(visible.size)
+
+                    Column {
+                        if (deckOpen) {
+                            // Each card stops short of the container so the
+                            // next one's edge is always showing. A card the
+                            // full width of the screen would put every course
+                            // after the first behind a swipe nothing signals,
+                            // which is the mistake the LazyRow of small cards
+                            // this replaced already made. The width and the
+                            // gap come from FocusPresentation, so iOS and web
+                            // leave the same sliver showing.
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                val cardWidth = FocusPresentation.deckCardWidth(maxWidth.value).dp
+                                val rowState = rememberLazyListState()
+                                LazyRow(
+                                    state = rowState,
+                                    flingBehavior = rememberSnapFlingBehavior(rowState),
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        FocusPresentation.DECK_CARD_GAP.dp,
+                                    ),
+                                ) {
+                                    itemsIndexed(visible, key = { _, row -> row.id }) { index, stackItem ->
+                                        // Cards arrive one after another
+                                        // rather than all at once, which is
+                                        // what makes the deck read as opening
+                                        // instead of simply appearing. The
+                                        // delays are shared with iOS and web,
+                                        // and capped.
+                                        var arrived by remember { mutableStateOf(false) }
+                                        LaunchedEffect(Unit) { arrived = true }
+                                        val appear by animateFloatAsState(
+                                            targetValue = if (arrived) 1f else 0f,
+                                            animationSpec = tween(
+                                                durationMillis = 260,
+                                                delayMillis = FocusPresentation.deckStaggerMilliseconds(index),
+                                            ),
+                                            label = "deckCardAppear",
                                         )
-                                        val message = if (posted) {
-                                            "Posted \"${stackItem.title}\" to Community"
-                                        } else {
-                                            "Couldn't post right now — try again later"
+
+                                        Box(
+                                            modifier = Modifier
+                                                .width(cardWidth)
+                                                .graphicsLayer {
+                                                    alpha = appear
+                                                    scaleX = 0.96f + 0.04f * appear
+                                                    scaleY = 0.96f + 0.04f * appear
+                                                },
+                                        ) {
+                                            StackDeckCard(item = stackItem, nav = nav)
                                         }
-                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                            )
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    // Room for the peek cards, which are
+                                    // offset rather than laid out, so they
+                                    // would otherwise overlap what follows.
+                                    .padding(bottom = (layers.lastOrNull()?.offset ?: 0f).dp),
+                            ) {
+                                // Blank cards, deliberately: they stand for
+                                // courses the learner has, and a title drawn
+                                // at 90% scale and half opacity would be a
+                                // label nobody can read.
+                                layers.reversed().forEach { layer ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(206.dp)
+                                            .offset(y = layer.offset.dp)
+                                            .graphicsLayer {
+                                                scaleX = layer.scale
+                                                transformOrigin = TransformOrigin(0.5f, 0f)
+                                                alpha = layer.opacity
+                                            }
+                                            .clip(RoundedCornerShape(21.dp))
+                                            .background(Color(0xFF1C2436))
+                                            .border(1.dp, Color(0x1CFFFFFF), RoundedCornerShape(21.dp)),
+                                    )
+                                }
+
+                                val openDeck: (() -> Unit)? =
+                                    if (layers.isNotEmpty()) {
+                                        ({ deckExpanded = true })
+                                    } else {
+                                        null
+                                    }
+
+                                StackDeckCard(
+                                    item = visible.first(),
+                                    nav = nav,
+                                    onTapBody = openDeck,
+                                )
+                            }
+                        }
+
+                        // Shut, this says how many courses are waiting — the
+                        // real number from the list, not the two cards drawn
+                        // behind the top one.
+                        FocusPresentation.deckMoreLabel(visible.size)?.let { more ->
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0x0DFFFFFF))
+                                    .clickable { deckExpanded = !deckOpen }
+                                    .padding(vertical = 10.dp),
+                            ) {
+                                Text(
+                                    text = if (deckOpen) "Stack them back up" else more,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TextSecondary,
+                                )
+                                Icon(
+                                    imageVector = if (deckOpen) {
+                                        Icons.Filled.KeyboardArrowUp
+                                    } else {
+                                        Icons.Filled.KeyboardArrowDown
+                                    },
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -500,12 +623,65 @@ private fun StatCard(
  * platform-agnostic list — see StackRepository's doc comment.
  */
 /**
+ * One card of the deck, with the navigation and sharing this screen wires up.
+ *
+ * Extracted so the top of the deck and the cards underneath it are literally
+ * the same call: a deck whose top card quietly had different actions from the
+ * rest would be a trap rather than a shortcut.
+ */
+@Composable
+private fun StackDeckCard(
+    item: StackItemDto,
+    nav: NavHostController,
+    onTapBody: (() -> Unit)? = null,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val courseId = item.contentId ?: item.id.toString()
+
+    StackCourseCard(
+        item = item,
+        onTapBody = onTapBody,
+        onResume = { nav.navigate(Routes.classroom(courseId)) },
+        onShareExternally = {
+            val shareUrl = StackRepository.courseShareUrl(courseId)
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "Check out \"${item.title}\" on Lyo! $shareUrl")
+            }
+            context.startActivity(Intent.createChooser(sendIntent, null))
+        },
+        onPostToCommunity = {
+            val progressPercent = (item.progress.coerceIn(0f, 1f) * 100).toInt()
+            scope.launch {
+                val posted = StackRepository.postCourseToCommunity(
+                    courseId,
+                    item.title,
+                    progressPercent,
+                )
+                val message = if (posted) {
+                    "Posted \"${item.title}\" to Community"
+                } else {
+                    "Couldn't post right now — try again later"
+                }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            }
+        },
+    )
+}
+
+/**
  * One saved course, as a card that turns over.
  *
  * The front carries the action deliberately: tapping the card body flips it,
  * but Resume is its own button on the front, so studying stays one tap. A
  * flip that stood between a learner and the thing they opened the app for
  * would be a worse screen with a nicer animation.
+ *
+ * The corner button flips it too. That matters when the body's tap is taken
+ * over by [onTapBody] — the top card of a shut deck opens the deck instead
+ * of turning over — because the description has to stay reachable either
+ * way.
  *
  * What it will not do is draw a progress figure the stack does not have. The
  * branching lives in [FocusPresentation], which is unit-tested.
@@ -516,6 +692,15 @@ private fun StackCourseCard(
     onResume: () -> Unit,
     onShareExternally: () -> Unit,
     onPostToCommunity: () -> Unit,
+    /**
+     * Takes over the card body's tap, for the top card of a shut deck.
+     *
+     * When the deck is shut, tapping the card sitting on top of it should
+     * open the deck, not turn that one card over. Resume and the flip button
+     * are untouched either way, so a shut deck never costs a learner a tap
+     * on the way to studying.
+     */
+    onTapBody: (() -> Unit)? = null,
 ) {
     var flipped by remember(item.id) { mutableStateOf(false) }
     val rotation by animateFloatAsState(
@@ -536,7 +721,9 @@ private fun StackCourseCard(
                 cameraDistance = 14f * density
             }
             .clip(RoundedCornerShape(21.dp))
-            .clickable { flipped = !flipped },
+            .clickable {
+                if (onTapBody != null) onTapBody() else flipped = !flipped
+            },
     ) {
         // Past the halfway point the back is facing the viewer, so the faces
         // swap there and neither is ever shown mirrored.
@@ -571,11 +758,16 @@ private fun StackCourseCard(
                 )
             }
 
-            StackCardMenu(
-                onShareExternally = onShareExternally,
-                onPostToCommunity = onPostToCommunity,
+            Row(
                 modifier = Modifier.align(Alignment.TopEnd),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StackCardMenu(
+                    onShareExternally = onShareExternally,
+                    onPostToCommunity = onPostToCommunity,
+                )
+                FlipButton(flipped = false, onClick = { flipped = true })
+            }
 
             Column(
                 modifier = Modifier
@@ -645,6 +837,12 @@ private fun StackCourseCard(
                 )
                 Box(modifier = Modifier.fillMaxSize().background(Color(0xDB141A2A)))
 
+                FlipButton(
+                    flipped = true,
+                    onClick = { flipped = false },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                )
+
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -697,6 +895,30 @@ private fun StackCourseCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Turns a course card over.
+ *
+ * A real control, not decoration. The card body's own tap used to be the
+ * only way to flip, which was fine until the top card of a shut deck gave
+ * that tap up to opening the deck: without this button the description of
+ * the course on top could not be reached without opening the deck first.
+ * Web has always had it; iOS and Android were the odd ones out.
+ */
+@Composable
+private fun FlipButton(
+    flipped: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onClick, modifier = modifier) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = if (flipped) "Show progress" else "Show description",
+            tint = Color.White,
+        )
     }
 }
 

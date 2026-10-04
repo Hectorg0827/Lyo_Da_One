@@ -9,12 +9,23 @@ import SwiftUI
 // that stood between a learner and the thing they opened the app for would be
 // a worse screen with a nicer animation.
 //
+// The corner button flips it too. That matters when the body's tap is taken
+// over by `onTapBody` — the top card of a shut deck opens the deck instead of
+// turning over — because the description has to stay reachable either way.
+//
 // What it will not do is draw a progress figure the stack does not have. The
 // branching lives in `FocusPresentation`, which is unit-tested.
 
 struct FocusCourseCard: View {
     let item: UIStackItem
     let onAction: () -> Void
+    /// Takes over the card body's tap, for the top card of a collapsed deck.
+    ///
+    /// When the stack is closed, tapping the card that is sitting on top of
+    /// it should open the stack, not turn that one card over. The Resume
+    /// button and the flip button stay exactly as they are either way, so a
+    /// collapsed deck never costs a learner a tap on the way to studying.
+    var onTapBody: (() -> Void)? = nil
 
     @State private var isFlipped = false
 
@@ -49,10 +60,30 @@ struct FocusCourseCard: View {
         )
         .animation(.spring(response: 0.48, dampingFraction: 0.84), value: isFlipped)
         .contentShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .onTapGesture { flip() }
+        .onTapGesture { tapBody() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.title)
-        .accessibilityAction(named: isFlipped ? "Show progress" : "Show description") { flip() }
+        .accessibilityAction(named: bodyActionName) { tapBody() }
+        .accessibilityAction(named: flipActionName) { flip() }
+    }
+
+    private var bodyActionName: String {
+        if onTapBody != nil { return "Open the stack" }
+        return isFlipped ? "Show progress" : "Show description"
+    }
+
+    /// Turning the card over stays an action on the card itself, not only a
+    /// button in its corner, so it survives the body tap being taken over.
+    private var flipActionName: String {
+        isFlipped ? "Show progress" : "Show description"
+    }
+
+    private func tapBody() {
+        if let override = onTapBody {
+            override()
+            return
+        }
+        flip()
     }
 
     private func flip() {
@@ -180,16 +211,26 @@ struct FocusCourseCard: View {
         }
     }
 
+    /// The control that turns the card over.
+    ///
+    /// A real button, not decoration. It used to be an unhittable image,
+    /// which was fine while the card body's own tap did the flipping — but
+    /// the top card of a shut deck gives that tap up to opening the deck, so
+    /// without this the description of the course on top could not be
+    /// reached at all without opening the deck first. Web has always had
+    /// this button; iOS and Android were the odd ones out.
     private var flipAffordance: some View {
-        Image(systemName: "arrow.counterclockwise")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 29, height: 29)
-            .background(.ultraThinMaterial, in: Circle())
-            .overlay { Circle().stroke(Color.white.opacity(0.16), lineWidth: 1) }
-            .rotationEffect(.degrees(isFlipped ? -180 : 0))
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        Button(action: flip) {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 29, height: 29)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay { Circle().stroke(Color.white.opacity(0.16), lineWidth: 1) }
+                .rotationEffect(.degrees(isFlipped ? -180 : 0))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFlipped ? "Show progress" : "Show description")
     }
 
     // MARK: - Back

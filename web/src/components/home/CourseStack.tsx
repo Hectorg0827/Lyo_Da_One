@@ -3,7 +3,7 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Clock, Play, RotateCcw, Check, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, Play, RotateCcw, Check, Layers } from 'lucide-react';
 import type { StackItem } from '@/lib/stack';
 import CourseArtwork from '@/components/home/CourseArtwork';
 import {
@@ -17,6 +17,12 @@ import {
   actionLabel,
   blurbFor,
   countForFilter,
+  deckCanOpen,
+  DECK_CARD_GAP,
+  DECK_NEXT_CARD_PEEK,
+  deckLayers,
+  deckMoreLabel,
+  deckStaggerMilliseconds,
   isFinished,
   matchesFilter,
   progressFor,
@@ -33,6 +39,16 @@ import {
  * Tapping a card turns it over for the description the backend already sends
  * and this page previously dropped. The action stays on the front, so
  * resuming a course is still one click and never behind an animation.
+ *
+ * The list arrives as a deck: one card with the rest stacked under it, which
+ * opens into a sideways row on a click. Shut, its Resume link already works,
+ * so a learner coming back to a course is never made to open an animation
+ * first — only the card body's click is taken over.
+ *
+ * Open, each card gives up room so the next one's edge is visible. A card the
+ * full width of the screen would put every course after the first behind a
+ * swipe nothing signals, which is what the row of small cards this replaced
+ * already did wrong.
  */
 
 function formatTouched(dateStr?: string | null): string | null {
@@ -60,11 +76,23 @@ export default function CourseStack({
   renderMenu?: (item: StackItem) => ReactNode;
 }) {
   const [filter, setFilter] = useState<string>(FILTER_ALL);
+  const [expanded, setExpanded] = useState(false);
 
   const visible = useMemo(
     () => items.filter((item) => matchesFilter(item, filter)),
     [items, filter],
   );
+
+  const layers = deckLayers(visible.length);
+  const deepestPeek = layers.length > 0 ? layers[layers.length - 1].offset : 0;
+  const more = deckMoreLabel(visible.length);
+
+  // `expanded` alone is not enough. A learner can open the deck and then pick
+  // a filter holding one course, and an open deck over one card is a lone
+  // narrowed card in a horizontal scroller with its own control gone. Asking
+  // the rule every render means the deck closes itself, and opens again when
+  // a filter with more courses comes back.
+  const isOpen = expanded && deckCanOpen(visible.length);
 
   if (items.length === 0) {
     return (
@@ -112,17 +140,105 @@ export default function CourseStack({
         </p>
       ) : (
         <div className="space-y-3">
-          {visible.map((item) => (
-            <CourseCard key={item.id} item={item} menu={renderMenu?.(item)} />
-          ))}
+          {isOpen ? (
+            /* Open, the deck is a sideways row that snaps card to card.
+               Cards arrive one after another rather than all at once, which
+               is what makes it read as opening instead of simply appearing.
+               The delays and the widths are shared with iOS and Android. */
+            <div
+              className="no-scrollbar -mx-4 flex snap-x snap-mandatory overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
+              style={{ gap: DECK_CARD_GAP }}
+            >
+              {visible.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  className="shrink-0 snap-start"
+                  style={{ width: `calc(100% - ${DECK_NEXT_CARD_PEEK + DECK_CARD_GAP}px)` }}
+                  initial={{ opacity: 0, scale: 0.96, x: 28 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 320,
+                    damping: 30,
+                    delay: deckStaggerMilliseconds(index) / 1000,
+                  }}
+                >
+                  <CourseCard item={item} menu={renderMenu?.(item)} />
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            /* Shut, the top card is live — artwork, progress and a working
+               Resume link. Only the card body's click is taken over, so a
+               learner coming back to a course never has to open the deck
+               first. */
+            <div className="relative" style={{ paddingBottom: deepestPeek }}>
+              {layers.map((layer) => (
+                /* Blank cards, deliberately: they stand for courses the
+                   learner has, and a title drawn at 90% scale and half
+                   opacity would be a label nobody can read. */
+                <div
+                  key={layer.depth}
+                  aria-hidden
+                  className="absolute inset-x-0 h-[206px] rounded-[21px] border border-white/[0.11] bg-[#1C2436]"
+                  style={{
+                    top: layer.offset,
+                    opacity: layer.opacity,
+                    transform: `scaleX(${layer.scale})`,
+                    transformOrigin: 'top center',
+                  }}
+                />
+              ))}
+
+              <div className="relative z-10">
+                <CourseCard
+                  item={visible[0]}
+                  menu={renderMenu?.(visible[0])}
+                  onBodyClick={layers.length === 0 ? undefined : () => setExpanded(true)}
+                />
+              </div>
+            </div>
+          )}
+
+          {more && (
+            /* Shut, this says how many courses are waiting — the real number
+               from the list, not the two cards drawn behind the top one. */
+            <button
+              type="button"
+              onClick={() => setExpanded(!isOpen)}
+              aria-expanded={isOpen}
+              className="flex w-full items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] py-2.5 font-rounded text-[12px] font-semibold tabular-nums text-white/70 transition-colors duration-200 hover:bg-white/[0.09] hover:text-white"
+            >
+              <Layers size={12} />
+              {isOpen ? 'Stack them back up' : more}
+              {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function CourseCard({ item, menu }: { item: StackItem; menu?: ReactNode }) {
+function CourseCard({
+  item,
+  menu,
+  onBodyClick,
+}: {
+  item: StackItem;
+  menu?: ReactNode;
+  /**
+   * Takes over the card body's click, for the top card of a closed deck.
+   *
+   * When the deck is shut, clicking the card sitting on top of it should open
+   * the deck, not turn that one card over. The Resume link and the flip
+   * button are untouched either way, so a closed deck never costs a learner
+   * a click on the way to studying.
+   */
+  onBodyClick?: () => void;
+}) {
   const [flipped, setFlipped] = useState(false);
+  const openBack = onBodyClick ?? (() => setFlipped(true));
 
   const href = `/courses/${item.content_id || item.id}`;
   const action = actionFor(item);
@@ -141,14 +257,16 @@ function CourseCard({ item, menu }: { item: StackItem; menu?: ReactNode }) {
         {/* ── Front ── */}
         <div
           className="absolute inset-0 overflow-hidden rounded-[21px] border border-white/10 shadow-[0_18px_32px_-16px_rgba(0,0,0,0.95)] [backface-visibility:hidden]"
-          onClick={() => setFlipped(true)}
+          onClick={openBack}
           role="button"
           tabIndex={flipped ? -1 : 0}
-          aria-label={`${item.title} — show description`}
+          aria-label={
+            onBodyClick ? `${item.title} — open the stack` : `${item.title} — show description`
+          }
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
-              setFlipped(true);
+              openBack();
             }
           }}
         >

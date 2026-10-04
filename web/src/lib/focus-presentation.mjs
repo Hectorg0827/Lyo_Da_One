@@ -141,6 +141,116 @@ export function countForFilter(items, filter) {
 }
 
 /**
+ * Peek cards drawn behind the top one, at most.
+ *
+ * Two, however many courses are saved: a third layer costs pixels and
+ * carries no information, and the real number is written on the control
+ * beneath the deck instead.
+ */
+export const DECK_PEEK_LIMIT = 2;
+
+/**
+ * Whether a deck of this many cards has anything to open.
+ *
+ * One card is not a deck. The component has to ask this every render, not
+ * once: a filter can narrow an open deck down to a single course, and a deck
+ * left open over one card is a lone narrowed card in a horizontal scroller
+ * with no control to close it.
+ */
+export function deckCanOpen(cardCount) {
+  const count = Number.isFinite(cardCount) ? Math.trunc(cardCount) : 0;
+  return count > 1;
+}
+
+/**
+ * How much of the next card shows past the right edge of the current one.
+ *
+ * An opened deck scrolls sideways, and a card the full width of the screen
+ * would put every course after the first behind a swipe nothing signals —
+ * the exact thing this screen was rebuilt to stop doing. So each card gives
+ * up this much room and the next one's edge stays visible.
+ */
+export const DECK_NEXT_CARD_PEEK = 34;
+
+/** The gap between cards in an opened deck. */
+export const DECK_CARD_GAP = 12;
+
+/**
+ * How wide one card is, in an opened deck inside a container this wide.
+ *
+ * The next card starts one gap later, so exactly `DECK_NEXT_CARD_PEEK` of it
+ * is showing. Zero for a container too narrow to hold a card and the peek
+ * both, because a negative width is not a card.
+ */
+export function deckCardWidth(containerWidth) {
+  const width = Number.isFinite(containerWidth) ? containerWidth : 0;
+  if (width <= 0) return 0;
+  return Math.max(width - DECK_NEXT_CARD_PEEK - DECK_CARD_GAP, 0);
+}
+
+const DECK_OFFSETS = Object.freeze([11, 20]);
+const DECK_SCALES = Object.freeze([0.95, 0.9]);
+const DECK_OPACITIES = Object.freeze([0.72, 0.46]);
+const DECK_STAGGER_STEP = 35;
+const DECK_STAGGER_LIMIT = 8;
+
+/**
+ * The cards stacked behind the top of a collapsed deck.
+ *
+ * The figures are a shared table rather than a formula because iOS, web and
+ * Android all draw this deck, and a table is the only version of "11 pixels
+ * down, 95% the size" that cannot quietly drift between three codebases.
+ * `focus-presentation.test.mjs` pins them, as do the Swift and Kotlin suites.
+ *
+ * A learner with one saved course gets no layers, so they never have to open
+ * anything to reach it.
+ */
+export function deckLayers(cardCount) {
+  const count = Number.isFinite(cardCount) ? Math.trunc(cardCount) : 0;
+  if (count <= 1) return [];
+  const peek = Math.min(count - 1, DECK_PEEK_LIMIT);
+  const layers = [];
+  for (let depth = 1; depth <= peek; depth += 1) {
+    layers.push({
+      depth,
+      offset: DECK_OFFSETS[depth - 1],
+      scale: DECK_SCALES[depth - 1],
+      opacity: DECK_OPACITIES[depth - 1],
+    });
+  }
+  return layers;
+}
+
+/**
+ * What the control under a collapsed deck says.
+ *
+ * It counts the courses the deck is really holding back — the list's own
+ * length, less the card already on top — and not the peek cards drawn, which
+ * stop at two. A deck that drew two layers over twelve courses and said
+ * "2 more" would be understating the learner's own library. Returns null when
+ * nothing is hidden.
+ */
+export function deckMoreLabel(cardCount) {
+  const count = Number.isFinite(cardCount) ? Math.trunc(cardCount) : 0;
+  if (count <= 1) return null;
+  const hidden = count - 1;
+  return hidden === 1 ? '1 more course' : `${hidden} more courses`;
+}
+
+/**
+ * How long the card at `index` waits before it slides into place, in ms.
+ *
+ * Whole milliseconds rather than fractional seconds, so three languages'
+ * floating point cannot disagree about the timing. Capped, so a learner with
+ * forty saved courses is not watching cards arrive for a second and a half.
+ */
+export function deckStaggerMilliseconds(index) {
+  const position = Number.isFinite(index) ? Math.trunc(index) : 0;
+  if (position <= 0) return 0;
+  return DECK_STAGGER_STEP * Math.min(position, DECK_STAGGER_LIMIT);
+}
+
+/**
  * Which generated motif a course's artwork draws.
  *
  * Subject keywords first, so organic chemistry really does get bonds and

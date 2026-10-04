@@ -8,6 +8,9 @@ import {
   BLURB_DESCRIPTION,
   BLURB_NONE,
   BLURB_STATUS,
+  DECK_CARD_GAP,
+  DECK_NEXT_CARD_PEEK,
+  DECK_PEEK_LIMIT,
   FILTER_ALL,
   FILTER_FINISHED,
   FILTER_IN_PROGRESS,
@@ -18,6 +21,11 @@ import {
   actionLabel,
   blurbFor,
   countForFilter,
+  deckCanOpen,
+  deckCardWidth,
+  deckLayers,
+  deckMoreLabel,
+  deckStaggerMilliseconds,
   isFinished,
   matchesFilter,
   motifFor,
@@ -162,4 +170,91 @@ test('iOS and web choose the same motif for the same course', () => {
   for (const [title, motif] of Object.entries(shared)) {
     assert.equal(motifFor(title), motif, `motif drifted for ${JSON.stringify(title)}`);
   }
+});
+
+// ── The deck ──────────────────────────────────────────────────────────────
+//
+// Three platforms draw the collapsed deck from the same table, so these
+// values are a cross-platform contract: the matching Swift and Kotlin suites
+// assert the same numbers.
+
+test('a single course has no deck to open', () => {
+  assert.deepEqual(deckLayers(1), []);
+  assert.equal(deckMoreLabel(1), null);
+  assert.deepEqual(deckLayers(0), []);
+  assert.equal(deckMoreLabel(0), null);
+});
+
+test('one card is not a deck to open', () => {
+  // A filter can narrow an open deck to one course. The component asks this
+  // every render, so the deck closes itself instead of leaving a lone
+  // narrowed card in a horizontal scroller with no way back.
+  assert.equal(deckCanOpen(0), false);
+  assert.equal(deckCanOpen(1), false);
+  assert.equal(deckCanOpen(2), true);
+  assert.equal(deckCanOpen(40), true);
+});
+
+test('openability agrees with the layers and the label', () => {
+  // The three answers have to agree: something to open, something drawn
+  // behind the top card, and something for the control to say.
+  for (let count = 0; count <= 6; count += 1) {
+    const canOpen = deckCanOpen(count);
+    assert.equal(canOpen, deckLayers(count).length > 0, `layers disagree at ${count}`);
+    assert.equal(canOpen, deckMoreLabel(count) !== null, `label disagrees at ${count}`);
+  }
+});
+
+test('two courses draw one peek card, three draw two', () => {
+  assert.deepEqual(deckLayers(2), [{ depth: 1, offset: 11, scale: 0.95, opacity: 0.72 }]);
+  assert.deepEqual(deckLayers(3), [
+    { depth: 1, offset: 11, scale: 0.95, opacity: 0.72 },
+    { depth: 2, offset: 20, scale: 0.9, opacity: 0.46 },
+  ]);
+});
+
+test('the deck stops at two peek cards however many courses are saved', () => {
+  assert.equal(deckLayers(4).length, 2);
+  assert.equal(deckLayers(40).length, 2);
+  assert.equal(DECK_PEEK_LIMIT, 2);
+});
+
+test('the label counts every hidden course, not just the ones drawn', () => {
+  // A deck drawing two layers over twelve courses still says eleven are
+  // waiting: the figure belongs to the learner's library, not to the artwork.
+  assert.equal(deckMoreLabel(2), '1 more course');
+  assert.equal(deckMoreLabel(3), '2 more courses');
+  assert.equal(deckMoreLabel(12), '11 more courses');
+});
+
+test('an opened card leaves the next one showing', () => {
+  // The opened deck scrolls sideways, so a card the full width of the screen
+  // would hide every course after the first behind a swipe nothing signals.
+  assert.equal(DECK_NEXT_CARD_PEEK, 34);
+  assert.equal(DECK_CARD_GAP, 12);
+  assert.equal(deckCardWidth(390), 344);
+  assert.equal(deckCardWidth(430), 384);
+});
+
+test('the leftover room is exactly the peek', () => {
+  // The next card starts one gap after this one ends, so exactly the peek is
+  // left over. This is the relationship the figures exist to hold.
+  const container = 412;
+  assert.equal(container - (deckCardWidth(container) + DECK_CARD_GAP), DECK_NEXT_CARD_PEEK);
+});
+
+test('a container too narrow for a card gives no card', () => {
+  assert.equal(deckCardWidth(0), 0);
+  assert.equal(deckCardWidth(-20), 0);
+  assert.equal(deckCardWidth(30), 0);
+});
+
+test('the stagger starts at zero, steps, and then stops', () => {
+  assert.equal(deckStaggerMilliseconds(0), 0);
+  assert.equal(deckStaggerMilliseconds(-3), 0);
+  assert.equal(deckStaggerMilliseconds(1), 35);
+  assert.equal(deckStaggerMilliseconds(3), 105);
+  assert.equal(deckStaggerMilliseconds(8), 280);
+  // Capped: forty saved courses must not mean a 1.4s wait for the list.
+  assert.equal(deckStaggerMilliseconds(40), 280);
 });

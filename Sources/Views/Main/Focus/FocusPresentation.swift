@@ -179,6 +179,108 @@ enum FocusPresentation {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    // MARK: - The deck
+
+    /// One of the cards stacked behind the top of a collapsed deck.
+    ///
+    /// The figures are a shared table rather than a formula because iOS, web
+    /// and Android all draw this deck, and a table is the only version of
+    /// "11 points down, 95% the size" that cannot quietly drift between three
+    /// codebases. `FocusPresentationTests` pins them.
+    struct DeckLayer: Equatable, Identifiable {
+        /// 1 is the card directly behind the top one.
+        let depth: Int
+        /// Points below the top card's own top edge.
+        let offset: Double
+        let scale: Double
+        let opacity: Double
+
+        var id: Int { depth }
+    }
+
+    /// The peek cards behind the top card of a collapsed deck.
+    ///
+    /// Two at most, however many courses are saved: a third layer costs
+    /// pixels and carries no information, and the real number is written on
+    /// the control beneath the deck instead. A learner with one saved course
+    /// gets no layers, so they never have to open anything.
+    static func deckLayers(cardCount: Int) -> [DeckLayer] {
+        guard cardCount > 1 else { return [] }
+        let peek = min(cardCount - 1, deckPeekLimit)
+        return (1...peek).map { depth in
+            DeckLayer(
+                depth: depth,
+                offset: deckOffsets[depth - 1],
+                scale: deckScales[depth - 1],
+                opacity: deckOpacities[depth - 1]
+            )
+        }
+    }
+
+    /// What the control under a collapsed deck says.
+    ///
+    /// It counts the courses the deck is really holding back — the list's own
+    /// length, less the card already on top — and not the peek cards drawn,
+    /// which stop at two. A deck that drew two layers over twelve courses and
+    /// said "2 more" would be understating the learner's own library.
+    static func deckMoreLabel(cardCount: Int) -> String? {
+        guard cardCount > 1 else { return nil }
+        let hidden = cardCount - 1
+        return hidden == 1 ? "1 more course" : "\(hidden) more courses"
+    }
+
+    /// How long the card at `index` waits before it slides into place, in ms.
+    ///
+    /// Whole milliseconds rather than fractional seconds, so three languages'
+    /// floating point cannot disagree about the timing. Capped, so a learner
+    /// with forty saved courses is not watching cards arrive for a second and
+    /// a half.
+    static func deckStaggerMilliseconds(index: Int) -> Int {
+        guard index > 0 else { return 0 }
+        return deckStaggerStep * min(index, deckStaggerLimit)
+    }
+
+    /// How much of the next card shows past the right edge of the current one.
+    ///
+    /// An opened deck scrolls sideways, and a card the full width of the
+    /// screen would put every course after the first behind a swipe nothing
+    /// signals — which is the exact thing this screen was rebuilt to stop
+    /// doing. So each card gives up this much room and the next one's edge
+    /// stays visible.
+    static let deckNextCardPeek: Double = 34
+
+    /// The gap between cards in an opened deck.
+    static let deckCardGap: Double = 12
+
+    /// How wide one card is, in an opened deck inside a container this wide.
+    ///
+    /// The next card starts one gap later, so exactly `deckNextCardPeek` of
+    /// it is showing. Zero for a container too narrow to hold a card and the
+    /// peek both, because a negative width is not a card.
+    static func deckCardWidth(containerWidth: Double) -> Double {
+        guard containerWidth > 0 else { return 0 }
+        return max(containerWidth - deckNextCardPeek - deckCardGap, 0)
+    }
+
+    /// Whether a deck of this many cards has anything to open.
+    ///
+    /// One card is not a deck. The screen has to ask this every time it
+    /// draws, not once: a filter can narrow an open deck down to a single
+    /// course, and a deck left open over one card is a lone narrowed card in
+    /// a sideways scroller with no way back.
+    static func deckCanOpen(cardCount: Int) -> Bool {
+        cardCount > 1
+    }
+
+    /// Peek cards drawn behind the top one, at most.
+    static let deckPeekLimit = 2
+
+    private static let deckOffsets: [Double] = [11, 20]
+    private static let deckScales: [Double] = [0.95, 0.9]
+    private static let deckOpacities: [Double] = [0.72, 0.46]
+    private static let deckStaggerStep = 35
+    private static let deckStaggerLimit = 8
+
     // MARK: - The back of the card
 
     /// What the back of a course card says about the course.
