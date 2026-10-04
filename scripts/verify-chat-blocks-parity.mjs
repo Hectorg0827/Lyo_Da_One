@@ -30,6 +30,33 @@ const contracts = [
     needles: [...CHAT_BLOCK_TYPES.map((t) => `'${t}'`), 'ChatBlock', 'CheckAnswerResult'],
   },
   {
+    name: 'iOS conversational voice stays on canonical Chat transport',
+    path: 'Sources/ViewModels/LyoAIViewModel.swift',
+    needles: [
+      'Lyo2VoiceSessionContext',
+      'voiceInterruptedPreviousTurn',
+      'unifiedChat.cancelActiveResponse()',
+      'voiceSession: voiceSession',
+    ],
+    forbidden: ['startLiveMode(sessionId:'],
+  },
+  {
+    name: 'iOS canonical request carries voice session metadata',
+    path: 'Sources/Models/Lyo2Models.swift',
+    needles: ['Lyo2VoiceSessionContext', 'voiceSession = "voice_session"'],
+  },
+  {
+    name: 'Android conversational voice stays on canonical Chat transport',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatVoiceController.kt',
+    needles: ['ChatVoiceController', 'onTranscript', 'ClassroomVoicePlayer'],
+    forbidden: ['/voice-ai', 'WebSocket'],
+  },
+  {
+    name: 'Android canonical Chat stream carries voice session metadata',
+    path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
+    needles: ['ChatVoiceSession', '"voice_session"', '"/api/v1/lyo2/chat/stream"'],
+  },
+  {
     name: 'Web conversational voice uses canonical Chat transport',
     path: 'web/src/lib/chat-voice.ts',
     needles: [
