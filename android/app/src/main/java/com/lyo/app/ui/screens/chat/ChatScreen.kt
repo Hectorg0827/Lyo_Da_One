@@ -624,10 +624,14 @@ fun ChatScreen(nav: NavHostController) {
                     liveVoiceTranscript = transcript
 
                     if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
+                        if (speakingMessageId != null || isStreaming) {
+                            voiceInterruptedPreviousTurn = true
+                        }
                         textToSpeech?.stop()
+                        pendingVoiceUtterances = 0
+                        voiceReadyForListening = false
                         speakingMessageId = null
                         if (isStreaming) {
-                            voiceInterruptedPreviousTurn = true
                             streamJob?.cancel()
                             streamJob = null
                             isStreaming = false
