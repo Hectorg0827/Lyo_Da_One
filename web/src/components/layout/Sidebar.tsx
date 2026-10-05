@@ -170,7 +170,7 @@ export function Sidebar() {
       <div className="px-2 py-3 border-t border-[var(--border)] shrink-0">
         <div
           className={cn(
-            'flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer',
+            'flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors',
             collapsed && 'justify-center',
           )}
         >
