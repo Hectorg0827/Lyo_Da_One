@@ -102,6 +102,9 @@ object ChatStreamClient {
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
         voiceSession: Boolean = false,
+        voiceInterruptedPreviousTurn: Boolean = false,
+        voiceTurnId: String? = null,
+        voiceLocale: String = java.util.Locale.getDefault().toLanguageTag(),
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -121,9 +124,12 @@ object ChatStreamClient {
             }
         }
         if (voiceSession) {
-            stateSummary["voice_session"] = mapOf(
+            requestFields["voice_session"] = mapOf(
                 "active" to true,
                 "transport" to "client_stt_tts",
+                "locale" to voiceLocale,
+                "turn_id" to (voiceTurnId ?: clientMessageId),
+                "interrupted_previous_turn" to voiceInterruptedPreviousTurn,
                 "delivery" to "segments",
                 "hands_free" to true,
             )
