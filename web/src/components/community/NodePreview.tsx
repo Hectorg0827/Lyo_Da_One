@@ -236,7 +236,6 @@ export default function NodePreview({
   const reduceMotion = useReducedMotion() === true
   return (
     <motion.article
-      key={node.key}
       aria-labelledby={headingId}
       initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.985 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
