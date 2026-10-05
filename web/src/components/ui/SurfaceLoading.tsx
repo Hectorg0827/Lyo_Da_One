@@ -24,7 +24,7 @@ export default function SurfaceLoading({
             animate={reduceMotion ? undefined : { scale: [0.92, 1.08, 0.92], opacity: [0.45, 0.8, 0.45] }}
             transition={reduceMotion ? undefined : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
           />
-          <MascotAvatar idle size={62} />
+          <MascotAvatar idle={!reduceMotion} size={62} />
         </motion.div>
 
         <p className="text-sm font-semibold text-white/80">{label}</p>
