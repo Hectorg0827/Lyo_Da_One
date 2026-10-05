@@ -57,6 +57,12 @@ final class UnifiedChatService: ObservableObject {
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
+    /// Voice is a delivery layer over this same canonical turn. These callbacks
+    /// expose server-owned phrase boundaries without creating a second AI path.
+    var onVoiceTextSegment: ((String, Int, String?) -> Void)?
+    var onVoiceReady: ((String, Int, String?) -> Void)?
+    var onVoiceIncomplete: ((String?) -> Void)?
+
     // MARK: - Private Properties
 
     /// Cancellable timeout task for the current stream.
@@ -118,7 +124,8 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -174,6 +181,7 @@ final class UnifiedChatService: ObservableObject {
             mode: mode,
             forcedIntent: forcedIntent,
             voiceSession: voiceSession,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
@@ -418,7 +426,8 @@ final class UnifiedChatService: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         speakResponse: Bool = false,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
         _ = await sendMessage(
@@ -427,7 +436,8 @@ final class UnifiedChatService: ObservableObject {
             context: context,
             mode: mode,
             forcedIntent: forcedIntent,
-            voiceSession: voiceSession || speakResponse
+            voiceSession: voiceSession || speakResponse,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn
         )
     }
 
@@ -449,7 +459,8 @@ final class UnifiedChatService: ObservableObject {
     func sendMessageLyo2(
         text: String,
         attachments: [MessageAttachment] = [],
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
@@ -485,9 +496,14 @@ final class UnifiedChatService: ObservableObject {
             text: trimmedText,
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
-            stateSummary: voiceSession
-                ? ["voice_session": AnyCodable(["active": true, "transport": "client_stt_tts"])]
-                : [:],
+            stateSummary: [:],
+            voiceSession: voiceSession
+                ? Lyo2VoiceSessionContext(
+                    turnId: userMessage.id,
+                    interruptedPreviousTurn: voiceInterruptedPreviousTurn,
+                    delivery: "segments"
+                )
+                : nil,
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id
@@ -522,6 +538,15 @@ final class UnifiedChatService: ObservableObject {
         Log.ai.info("📲 UnifiedChat: received event: \(String(describing: event).prefix(120))")
 
         switch event {
+        case .voiceTextSegment(let text, let sequence, let messageId):
+            onVoiceTextSegment?(text, sequence, messageId)
+
+        case .voiceReady(let text, let segmentsDelivered, let messageId):
+            onVoiceReady?(text, segmentsDelivered, messageId)
+
+        case .voiceIncomplete(let messageId):
+            onVoiceIncomplete?(messageId)
+
         case .teachingPolicy(let policy):
             // Lyo2ChatService already persists this per conversation and folds
             // it into the next request's state_summary. Keep the UI layer
