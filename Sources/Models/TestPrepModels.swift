@@ -201,3 +201,92 @@ enum TestPrepDateParsing {
         return nil
     }
 }
+
+
+// MARK: - Lyo Coach / Learning OS
+
+/// Evidence-grounded readiness. readinessIndex is an internal ordinal index,
+/// never a predicted exam grade; calibrated stays false until real outcomes
+/// justify that claim.
+struct CoachReadiness: Codable, Equatable {
+    let readinessIndex: Double
+    let readinessLevel: String
+    let calibrated: Bool
+    let assessedSkills: Int
+    let totalSkills: Int
+    let criticalGaps: Int
+
+    var label: String {
+        switch readinessLevel {
+        case "ready": return "Ready"
+        case "getting_there": return "Getting there"
+        case "not_ready": return "Not ready yet"
+        default: return "Readiness unavailable"
+        }
+    }
+
+    var explanation: String {
+        if totalSkills <= 0 { return "Add the skills for this goal to measure readiness." }
+        if assessedSkills <= 0 { return "No skill has been assessed yet. Start the first check below." }
+        if criticalGaps > 0 {
+            return "\(criticalGaps) \(criticalGaps == 1 ? "skill still needs" : "skills still need") application evidence."
+        }
+        return "Your required skills have strong evidence. Keep retrieval light and current."
+    }
+}
+
+struct CoachGoal: Codable, Equatable, Identifiable {
+    let id: String
+    let goalType: String
+    let title: String
+    let subject: String?
+    let status: String
+    let deadline: String?
+}
+
+struct CoachMissionItem: Codable, Equatable, Identifiable {
+    let goalId: String
+    let goalTitle: String
+    let skillId: String
+    let conceptId: String
+    let title: String
+    let action: String
+    let targetEvidenceType: String?
+    let recommendedSurface: String
+    let estimatedMinutes: Int
+    let priorityScore: Double
+    let reason: String
+
+    var id: String { skillId }
+
+    var actionLabel: String {
+        switch action {
+        case "diagnose": return "Quick check"
+        case "remediate": return "Repair the gap"
+        case "guide": return "Guided practice"
+        case "check_application": return "Apply it"
+        case "check_transfer": return "Challenge"
+        case "review": return "Retrieve it"
+        case "advance": return "Light review"
+        default: return "Study"
+        }
+    }
+}
+
+struct CoachToday: Codable, Equatable {
+    let primaryGoalId: String?
+    let activeGoals: [CoachGoal]
+    let readiness: [String: CoachReadiness]
+    let mission: [CoachMissionItem]
+    let totalMinutes: Int
+    let coachNote: String
+    let generatedAt: String
+
+    func testGoal(subject: String?) -> CoachGoal? {
+        if let subject,
+           let exact = activeGoals.first(where: { $0.goalType == "test" && $0.subject == subject }) {
+            return exact
+        }
+        return activeGoals.first(where: { $0.goalType == "test" })
+    }
+}
