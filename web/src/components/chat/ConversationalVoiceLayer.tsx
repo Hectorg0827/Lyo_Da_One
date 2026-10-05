@@ -61,6 +61,7 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentDrainActiveRef = useRef(false);
   const voiceTurnClosedRef = useRef(false);
   const voiceSegmentsReceivedRef = useRef(false);
+  const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
@@ -108,6 +109,7 @@ export default function ConversationalVoiceLayer() {
     voiceSegmentDrainActiveRef.current = false;
     voiceTurnClosedRef.current = false;
     voiceSegmentsReceivedRef.current = false;
+    spokenVoiceSegmentKeysRef.current.clear();
     changePhase('thinking');
     await sendMessage(transcript, [], { voiceSession: true });
   }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
@@ -270,11 +272,14 @@ export default function ConversationalVoiceLayer() {
     if (event.type === 'voice_text_segment') {
       voiceSegmentsReceivedRef.current = true;
       awaitingAssistantRef.current = true;
+      const segmentKey = event.messageId + ':' + event.sequence;
+      if (spokenVoiceSegmentKeysRef.current.has(segmentKey)) return;
       if (
         voiceSegmentQueueRef.current.some(
           (item) => item.messageId === event.messageId && item.sequence === event.sequence,
         )
       ) return;
+      spokenVoiceSegmentKeysRef.current.add(segmentKey);
       voiceSegmentQueueRef.current.push({
         text: event.text,
         sequence: event.sequence,
