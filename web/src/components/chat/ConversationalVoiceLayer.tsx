@@ -66,6 +66,7 @@ export default function ConversationalVoiceLayer() {
   const voicePlaybackChainRef = useRef<Promise<void>>(Promise.resolve());
   const seenVoiceSegmentsRef = useRef(new Set<string>());
   const voiceReadyRef = useRef(false);
+  const sendVoiceTurnRef = useRef<(raw: string) => void>(() => undefined);
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
@@ -95,6 +96,158 @@ export default function ConversationalVoiceLayer() {
     }
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
   }, []);
+
+  const startRecognition = useCallback(() => {
+    if (!activeRef.current || phaseRef.current === 'speaking') return;
+    stopRecognition();
+    const recognition = createSpeechRecognition();
+    if (!recognition) {
+      changePhase('error');
+      return;
+    }
+    recognitionRef.current = recognition;
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.onresult = (event) => {
+      let finalText = finalTranscriptRef.current;
+      let interimText = '';
+      const start = event.resultIndex ?? 0;
+      for (let i = start; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = result?.[0]?.transcript?.trim() ?? '';
+        if (!transcript) continue;
+        if (result.isFinal) finalText = `${finalText} ${transcript}`.trim();
+        else interimText = `${interimText} ${transcript}`.trim();
+      }
+      finalTranscriptRef.current = finalText;
+      const combined = `${finalText} ${interimText}`.trim();
+      setLiveTranscript(combined);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (combined) {
+        // Browser engines disagree about when an utterance becomes "final".
+        // Our own silence endpointing keeps turn-taking fast and works from
+        // stable interim text instead of waiting for the browser to decide.
+        silenceTimerRef.current = setTimeout(() => {
+          sendVoiceTurnRef.current(combined);
+        }, END_OF_TURN_SILENCE_MS);
+      }
+    };
+    recognition.onerror = (event) => {
+      if (!activeRef.current) return;
+      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      changePhase('error');
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      if (activeRef.current && phaseRef.current === 'listening') {
+        window.setTimeout(() => startRecognition(), 120);
+      }
+    };
+    try {
+      recognition.start();
+      changePhase('listening');
+    } catch {
+      changePhase('error');
+    }
+  }, [changePhase, stopRecognition]);
+
+  const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    let settled = false;
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      if (audioRef.current === audio) audioRef.current = null;
+    };
+    audioRef.current = audio;
+    audio.onended = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    audio.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Audio playback failed'));
+    };
+    void audio.play().catch((error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    });
+  }), []);
+
+  const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = navigator.language || 'en-US';
+    utterance.rate = 1.02;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => resolve();
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }), []);
+
+  const speakAssistant = useCallback(async (messageId: string, text: string) => {
+    const chunks = splitSpeechChunks(text);
+    if (!chunks.length || !activeRef.current) return;
+    stopRecognition();
+    changePhase('speaking');
+    speakingStartedAtRef.current = performance.now();
+    lastSpokenTextRef.current = text;
+    lastSpokenMessageIdRef.current = messageId;
+
+    try {
+      let next: { promise: Promise<Blob>; controller: AbortController } | null = null;
+      for (let index = 0; index < chunks.length && activeRef.current; index++) {
+        const current = next ?? (() => {
+          const controller = new AbortController();
+          return {
+            controller,
+            promise: api.tts.synthesizeStream(chunks[index], {
+              language: navigator.language || 'auto',
+              speed: 1.02,
+              signal: controller.signal,
+            }),
+          };
+        })();
+        ttsAbortRef.current = current.controller;
+        ttsPrefetchAbortRef.current = null;
+
+        if (index + 1 < chunks.length) {
+          const controller = new AbortController();
+          next = {
+            controller,
+            promise: api.tts.synthesizeStream(chunks[index + 1], {
+              language: navigator.language || 'auto',
+              speed: 1.02,
+              signal: controller.signal,
+            }),
+          };
+          ttsPrefetchAbortRef.current = controller;
+        } else {
+          next = null;
+        }
+
+        await playBlob(await current.promise);
+      }
+    } catch {
+      if (activeRef.current && phaseRef.current === 'speaking') {
+        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '));
+      }
+    } finally {
+      ttsAbortRef.current = null;
+      ttsPrefetchAbortRef.current = null;
+      if (activeRef.current && phaseRef.current === 'speaking') {
+        changePhase('listening');
+        startRecognition();
+      }
+    }
+  }, [browserSpeechFallback, changePhase, playBlob, startRecognition, stopRecognition]);
 
   const sendVoiceTurn = useCallback(async (raw: string) => {
     const transcript = raw.trim();
@@ -244,157 +397,10 @@ export default function ConversationalVoiceLayer() {
     stopSpeech,
   ]);
 
-  const startRecognition = useCallback(() => {
-    if (!activeRef.current || phaseRef.current === 'speaking') return;
-    stopRecognition();
-    const recognition = createSpeechRecognition();
-    if (!recognition) {
-      changePhase('error');
-      return;
-    }
-    recognitionRef.current = recognition;
-    recognition.lang = navigator.language || 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onresult = (event) => {
-      let finalText = finalTranscriptRef.current;
-      let interimText = '';
-      const start = event.resultIndex ?? 0;
-      for (let i = start; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result?.[0]?.transcript?.trim() ?? '';
-        if (!transcript) continue;
-        if (result.isFinal) finalText = `${finalText} ${transcript}`.trim();
-        else interimText = `${interimText} ${transcript}`.trim();
-      }
-      finalTranscriptRef.current = finalText;
-      const combined = `${finalText} ${interimText}`.trim();
-      setLiveTranscript(combined);
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (combined) {
-        // Browser engines disagree about when an utterance becomes "final".
-        // Our own silence endpointing keeps turn-taking fast and works from
-        // stable interim text instead of waiting for the browser to decide.
-        silenceTimerRef.current = setTimeout(() => {
-          void sendVoiceTurn(combined);
-        }, END_OF_TURN_SILENCE_MS);
-      }
-    };
-    recognition.onerror = (event) => {
-      if (!activeRef.current) return;
-      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
-      changePhase('error');
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      if (activeRef.current && phaseRef.current === 'listening') {
-        window.setTimeout(() => startRecognition(), 120);
-      }
-    };
-    try {
-      recognition.start();
-      changePhase('listening');
-    } catch {
-      changePhase('error');
-    }
-  }, [changePhase, sendVoiceTurn, stopRecognition]);
 
-  const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    let settled = false;
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      if (audioRef.current === audio) audioRef.current = null;
-    };
-    audioRef.current = audio;
-    audio.onended = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-    audio.onerror = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error('Audio playback failed'));
-    };
-    void audio.play().catch((error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    });
-  }), []);
-
-  const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = navigator.language || 'en-US';
-    utterance.rate = 1.02;
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  }), []);
-
-  const speakAssistant = useCallback(async (messageId: string, text: string) => {
-    const chunks = splitSpeechChunks(text);
-    if (!chunks.length || !activeRef.current) return;
-    stopRecognition();
-    changePhase('speaking');
-    speakingStartedAtRef.current = performance.now();
-    lastSpokenTextRef.current = text;
-    lastSpokenMessageIdRef.current = messageId;
-
-    try {
-      let next: { promise: Promise<Blob>; controller: AbortController } | null = null;
-      for (let index = 0; index < chunks.length && activeRef.current; index++) {
-        const current = next ?? (() => {
-          const controller = new AbortController();
-          return {
-            controller,
-            promise: api.tts.synthesizeStream(chunks[index], {
-              language: navigator.language || 'auto',
-              speed: 1.02,
-              signal: controller.signal,
-            }),
-          };
-        })();
-        ttsAbortRef.current = current.controller;
-        ttsPrefetchAbortRef.current = null;
-
-        if (index + 1 < chunks.length) {
-          const controller = new AbortController();
-          next = {
-            controller,
-            promise: api.tts.synthesizeStream(chunks[index + 1], {
-              language: navigator.language || 'auto',
-              speed: 1.02,
-              signal: controller.signal,
-            }),
-          };
-          ttsPrefetchAbortRef.current = controller;
-        } else {
-          next = null;
-        }
-
-        await playBlob(await current.promise);
-      }
-    } catch {
-      if (activeRef.current && phaseRef.current === 'speaking') {
-        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '));
-      }
-    } finally {
-      ttsAbortRef.current = null;
-      ttsPrefetchAbortRef.current = null;
-      if (activeRef.current && phaseRef.current === 'speaking') {
-        changePhase('listening');
-        startRecognition();
-      }
-    }
-  }, [browserSpeechFallback, changePhase, playBlob, startRecognition, stopRecognition]);
+  useEffect(() => {
+    sendVoiceTurnRef.current = (raw: string) => { void sendVoiceTurn(raw); };
+  }, [sendVoiceTurn]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
