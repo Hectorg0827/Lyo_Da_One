@@ -37,10 +37,17 @@ export interface CourseRevisionInput {
   focus?: string;
 }
 
+export type VoiceDeliveryEvent =
+  | { type: 'segment'; text: string; sequence: number; messageId?: string }
+  | { type: 'ready'; text: string; segmentsDelivered: number; messageId?: string }
+  | { type: 'incomplete'; messageId?: string };
+
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
   voiceSession?: boolean;
+  voiceInterruptedPreviousTurn?: boolean;
+  onVoiceEvent?: (event: VoiceDeliveryEvent) => void;
 }
 
 /**
@@ -602,7 +609,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
-          if (chunk.type === 'interaction_contract') {
+          if (chunk.type === 'voice_text_segment' && typeof chunk.text === 'string') {
+            options.onVoiceEvent?.({
+              type: 'segment',
+              text: chunk.text,
+              sequence: typeof chunk.sequence === 'number' ? chunk.sequence : 0,
+              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : undefined,
+            });
+          } else if (chunk.type === 'voice_ready' && typeof chunk.text === 'string') {
+            options.onVoiceEvent?.({
+              type: 'ready',
+              text: chunk.text,
+              segmentsDelivered:
+                typeof chunk.segments_delivered === 'number' ? chunk.segments_delivered : 0,
+              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : undefined,
+            });
+          } else if (chunk.type === 'voice_incomplete') {
+            options.onVoiceEvent?.({
+              type: 'incomplete',
+              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : undefined,
+            });
+          } else if (chunk.type === 'interaction_contract') {
             patchAiMessage({
               metadata: {
                 interactionContract: {
@@ -823,17 +850,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        {
-          ...(
-            teachingStateSummary(
-              teachingRuntimeFor(convoId),
-              options.courseContext
-            ) as Record<string, unknown> | undefined
-          ),
-          ...(options.voiceSession || get().voiceSessionActive
-            ? { voice_session: { active: true, transport: 'client_stt_tts' } }
-            : {}),
-        }
+        teachingStateSummary(
+          teachingRuntimeFor(convoId),
+          options.courseContext
+        ) as Record<string, unknown> | undefined,
+        options.voiceSession || get().voiceSessionActive
+          ? {
+              active: true,
+              transport: 'client_stt_tts',
+              locale: typeof navigator !== 'undefined' ? navigator.language : 'auto',
+              turn_id: userMessage.id,
+              interrupted_previous_turn: Boolean(options.voiceInterruptedPreviousTurn),
+              hands_free: true,
+              delivery: 'segments',
+            }
+          : undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {
