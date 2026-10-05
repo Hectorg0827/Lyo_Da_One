@@ -15,6 +15,12 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# Which commit this image serves, reported by /api/health so a deploy can be
+# told apart from the build before it. Railway builds this file itself and
+# supplies RAILWAY_GIT_COMMIT_SHA at runtime instead, so this stays empty
+# there and the health route falls back to Railway's own variable.
+ARG GIT_COMMIT=""
+ENV LYO_GIT_COMMIT=$GIT_COMMIT
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
