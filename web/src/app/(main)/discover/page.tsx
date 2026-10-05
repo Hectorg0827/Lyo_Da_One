@@ -10,7 +10,7 @@
  * DiscoverViewModel.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Sparkles,
@@ -23,7 +23,7 @@ import {
   ArrowRight,
   Play,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
@@ -362,15 +362,17 @@ function EmptyState({ message }: { message: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function DiscoverPage() {
+function DiscoverContent() {
   const router = useRouter();
-  const [query, setQuery] = useState('');
+  const searchParams = useSearchParams();
+  const queryParam = searchParams.get('q')?.trim() ?? '';
+  const [query, setQuery] = useState(queryParam);
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    const initialQuery = new URLSearchParams(window.location.search).get('q')?.trim();
-    if (initialQuery) setQuery(initialQuery);
-  }, []);
+    setQuery(queryParam);
+    setActiveIndex(0);
+  }, [queryParam]);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -509,5 +511,14 @@ export default function DiscoverPage() {
         </label>
       </div>
     </div>
+  );
+}
+
+
+export default function DiscoverPage() {
+  return (
+    <Suspense fallback={<div className="h-full bg-black" aria-label="Loading Discover" />}>
+      <DiscoverContent />
+    </Suspense>
   );
 }
