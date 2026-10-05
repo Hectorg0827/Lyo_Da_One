@@ -14,6 +14,7 @@ import {
   normalizeLevel,
   normalizeLanguage,
   normalizeSessionMinutes,
+  normalizeServerSessionMinutes,
 } from './entry-contract.mjs';
 
 const query = (href) => new URL(href, 'https://lyo.test').searchParams;
@@ -231,12 +232,28 @@ test('every session length the front door offers is one the Classroom honours', 
   const classroom = readFileSync(
     new URL('../app/(main)/classroom/page.tsx', import.meta.url), 'utf8',
   );
-  assert.match(classroom, /normalizeSessionMinutes\(params\.get\('duration'\)\)/);
+  assert.match(classroom, /normalizeServerSessionMinutes\(params\.get\('duration'\)\)/);
   assert.match(classroom, /SESSION_LENGTHS\.map/);
   // And the server clamps to 3-60, so nothing offered may fall outside it.
   for (const minutes of SESSION_LENGTHS) {
     assert.ok(minutes >= 3 && minutes <= 60, `${minutes} is outside the server's 3-60 clamp`);
   }
+});
+
+test('server-owned mission durations preserve exact bounded minutes', () => {
+  assert.equal(normalizeServerSessionMinutes(7), 7);
+  assert.equal(normalizeServerSessionMinutes('15'), 15);
+  assert.equal(normalizeServerSessionMinutes(2), null);
+  assert.equal(normalizeServerSessionMinutes(61), null);
+  assert.equal(normalizeServerSessionMinutes(7.5), null);
+
+  const params = query(classroomEntryHref({
+    topic: 'Mitosis',
+    serverMinutes: 7,
+  }));
+  assert.equal(params.get('duration'), '7');
+  // Learner-facing front-door answers remain strict presets.
+  assert.equal(normalizeSessionMinutes(7), null);
 });
 
 test('normalisers accept exactly what is offered and nothing else', () => {
