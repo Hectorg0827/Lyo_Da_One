@@ -34,3 +34,28 @@ test('checks reuse the teaching runtime rather than inventing a client quiz', ()
   assert.doesNotMatch(href, /mode=review/);
   assert.equal(actionLabel('check_transfer'), 'Challenge');
 });
+
+
+test('mission handoffs carry the server-owned session duration', () => {
+  const href = missionEntryHref({
+    title: 'Mitosis',
+    concept_id: 'mitosis',
+    action: 'guide',
+    target_evidence_type: 'application',
+    estimated_minutes: 10,
+  });
+  assert.match(href, /duration=10/);
+});
+
+test('review handoffs keep both retention identity and duration', () => {
+  const href = missionEntryHref({
+    title: 'Cell division',
+    concept_id: 'cell-division',
+    action: 'review',
+    target_evidence_type: 'retention',
+    estimated_minutes: 5,
+  });
+  assert.match(href, /mode=review/);
+  assert.match(href, /reviewConceptId=cell-division/);
+  assert.match(href, /duration=5/);
+});
