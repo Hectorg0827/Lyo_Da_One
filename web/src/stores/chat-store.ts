@@ -37,10 +37,34 @@ export interface CourseRevisionInput {
   focus?: string;
 }
 
+export interface VoiceTextSegment {
+  text: string;
+  sequence: number;
+  messageId: string;
+}
+
+export interface VoiceReady {
+  text: string;
+  messageId?: string;
+  speak: boolean;
+  replayed: boolean;
+  sequence?: number;
+}
+
+export interface VoiceIncomplete {
+  messageId?: string;
+  message?: string;
+  replayed: boolean;
+}
+
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
   voiceSession?: boolean;
+  voiceInterruptedPreviousTurn?: boolean;
+  onVoiceSegment?: (event: VoiceTextSegment) => void;
+  onVoiceReady?: (event: VoiceReady) => void;
+  onVoiceIncomplete?: (event: VoiceIncomplete) => void;
 }
 
 /**
@@ -602,7 +626,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
-          if (chunk.type === 'interaction_contract') {
+          if (chunk.type === 'voice_text_segment') {
+            const text = typeof chunk.text === 'string' ? chunk.text : '';
+            const sequence = typeof chunk.sequence === 'number' ? chunk.sequence : 0;
+            const messageId = typeof chunk.message_id === 'string' ? chunk.message_id : '';
+            if (text && sequence > 0 && messageId) {
+              options.onVoiceSegment?.({ text, sequence, messageId });
+            }
+          } else if (chunk.type === 'voice_ready') {
+            const text = typeof chunk.text === 'string' ? chunk.text : '';
+            if (text) {
+              options.onVoiceReady?.({
+                text,
+                messageId: typeof chunk.message_id === 'string' ? chunk.message_id : undefined,
+                speak: chunk.speak !== false,
+                replayed: chunk.replayed === true,
+                sequence: typeof chunk.sequence === 'number' ? chunk.sequence : undefined,
+              });
+            }
+          } else if (chunk.type === 'voice_incomplete') {
+            options.onVoiceIncomplete?.({
+              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : undefined,
+              message: typeof chunk.message === 'string' ? chunk.message : undefined,
+              replayed: chunk.replayed === true,
+            });
+          } else if (chunk.type === 'interaction_contract') {
             patchAiMessage({
               metadata: {
                 interactionContract: {
@@ -823,17 +871,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        {
-          ...(
-            teachingStateSummary(
-              teachingRuntimeFor(convoId),
-              options.courseContext
-            ) as Record<string, unknown> | undefined
-          ),
-          ...(options.voiceSession || get().voiceSessionActive
-            ? { voice_session: { active: true, transport: 'client_stt_tts' } }
-            : {}),
-        }
+        teachingStateSummary(
+          teachingRuntimeFor(convoId),
+          options.courseContext
+        ) as Record<string, unknown> | undefined,
+        options.voiceSession || get().voiceSessionActive
+          ? {
+              active: true,
+              transport: 'client_stt_tts',
+              locale: typeof navigator !== 'undefined' ? (navigator.language || 'auto') : 'auto',
+              turn_id: userMessage.id,
+              interrupted_previous_turn: options.voiceInterruptedPreviousTurn === true,
+              hands_free: true,
+              delivery: 'segments',
+            }
+          : undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {
