@@ -444,7 +444,16 @@ export const api = {
         size_bytes: number;
       }>,
       forcedIntent?: 'COURSE',
-      stateSummary?: Record<string, unknown>
+      stateSummary?: Record<string, unknown>,
+      voiceSession?: {
+        active: boolean;
+        transport: 'client_stt_tts';
+        locale?: string;
+        turn_id?: string;
+        interrupted_previous_turn?: boolean;
+        hands_free?: boolean;
+        delivery: 'answer' | 'ready' | 'segments';
+      }
     ): AbortController {
       const controller = new AbortController();
 
@@ -465,6 +474,7 @@ export const api = {
             media,
             forced_intent: forcedIntent,
             state_summary: stateSummary,
+            voice_session: voiceSession,
           }),
           signal: controller.signal,
         });

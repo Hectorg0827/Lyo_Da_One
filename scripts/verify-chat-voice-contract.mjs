@@ -3,9 +3,10 @@
  * Conversational voice must remain a transport/delivery layer over canonical Chat.
  *
  * This contract intentionally forbids a second voice AI path. Every platform
- * must send voice turns through the same Lyo2 Chat stream and mark
- * state_summary.voice_session.active=true so the backend interaction contract
- * changes delivery style without changing intent, memory, tools or pedagogy.
+ * must send voice turns through the same Lyo2 Chat stream and advertise the
+ * typed top-level voice_session capability with delivery="segments". The
+ * backend interaction contract changes delivery style without changing intent,
+ * memory, tools or pedagogy.
  */
 import fs from 'node:fs';
 
@@ -15,7 +16,10 @@ const contracts = [
     name: 'Web voice uses canonical Chat store',
     path: 'web/src/components/chat/ConversationalVoiceLayer.tsx',
     needles: [
-      'sendMessage(transcript, [], { voiceSession: true })',
+      'voiceSession: true',
+      'voiceInterruptedPreviousTurn',
+      'onVoiceEvent',
+      'enqueueVoiceSegment',
       'interruptGeneration()',
       'api.tts.synthesizeStream',
       'createSpeechRecognition',
@@ -27,7 +31,11 @@ const contracts = [
     name: 'Web transport marks voice session',
     path: 'web/src/stores/chat-store.ts',
     needles: [
-      "voice_session: { active: true, transport: 'client_stt_tts' }",
+      "delivery: 'segments'",
+      'voiceInterruptedPreviousTurn',
+      "chunk.type === 'voice_text_segment'",
+      "chunk.type === 'voice_ready'",
+      "chunk.type === 'voice_incomplete'",
       'interruptGeneration',
       'activeStreamController?.abort()',
     ],
@@ -37,12 +45,25 @@ const contracts = [
     path: 'Sources/Services/ChatRouter.swift',
     needles: [
       'voiceSession: Bool = false',
+      'voiceInterruptedPreviousTurn: Bool = false',
       'if voiceSession',
-      '"voice_session"',
-      '"client_stt_tts"',
+      'Lyo2VoiceSessionContext(',
+      'delivery: "segments"',
       'handleDeepPath',
     ],
     forbidden: ['AudioStreamManager.shared.startLiveMode'],
+  },
+  {
+    name: 'iOS transport decodes server voice delivery hints',
+    path: 'Sources/Services/Lyo2ChatService.swift',
+    needles: [
+      'case "voice_text_segment"',
+      'case "voice_ready"',
+      'case "voice_incomplete"',
+      '.voiceTextSegment',
+      '.voiceReady',
+      '.voiceIncomplete',
+    ],
   },
   {
     name: 'iOS live mode aliases Unified Chat voice loop',
@@ -52,7 +73,11 @@ const contracts = [
       'voiceLoopActive = true',
       'startListening()',
       'voiceSession: shouldResumeListening',
+      'voiceInterruptedPreviousTurn: interruptedPreviousTurn',
       'unifiedChat.interruptCurrentResponse()',
+      'onVoiceTextSegment',
+      'onVoiceReady',
+      'onVoiceIncomplete',
     ],
     forbidden: [
       'await AudioStreamManager.shared.startLiveMode',
@@ -70,6 +95,10 @@ const contracts = [
     needles: [
       'SpeechRecognizer.createSpeechRecognizer',
       'voiceSession = voiceConversation',
+      'voiceInterruptedPreviousTurn = interruptedPreviousTurn',
+      'ChatStreamEvent.VoiceSegment',
+      'ChatStreamEvent.VoiceReady',
+      'ChatStreamEvent.VoiceIncomplete',
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
       'engine.speak',
@@ -81,8 +110,13 @@ const contracts = [
     path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
     needles: [
       'voiceSession: Boolean = false',
+      'voiceInterruptedPreviousTurn: Boolean = false',
       '"voice_session"',
       '"client_stt_tts"',
+      '"delivery" to "segments"',
+      '"voice_text_segment"',
+      '"voice_ready"',
+      '"voice_incomplete"',
       '"api/v1/lyo2/chat/stream"',
     ],
   },
@@ -118,5 +152,5 @@ if (failures.length) {
 
 console.log(
   'Conversational voice contract: Web, iOS and Android use canonical Chat ' +
-  'with STT/TTS transport, voice_session delivery metadata and barge-in; no separate voice AI path.'
+  'with STT/TTS transport, typed segment delivery, interruption metadata and barge-in; no separate voice AI path.'
 );

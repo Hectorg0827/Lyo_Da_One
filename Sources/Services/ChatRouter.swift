@@ -80,6 +80,7 @@ final class ChatRouter: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
         conversationHistory: [ConversationMessage] = [],
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -112,6 +113,7 @@ final class ChatRouter: ObservableObject {
                 intent: intent,
                 forcedIntent: forcedIntent,
                 voiceSession: true,
+                voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
                 conversationHistory: conversationHistory,
                 conversationId: conversationId,
                 clientMessageId: clientMessageId,
@@ -274,6 +276,7 @@ final class ChatRouter: ObservableObject {
         intent: ClassifiedIntent,
         forcedIntent: String? = nil,
         voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
         conversationHistory: [ConversationMessage],
         conversationId: String?,
         clientMessageId: String?,
@@ -296,6 +299,13 @@ final class ChatRouter: ObservableObject {
             attachmentIds: attachmentIds,
             forcedIntent: forcedIntent,
             stateSummary: buildStateSummary(mode: mode, intent: intent, voiceSession: voiceSession),
+            voiceSession: voiceSession
+                ? Lyo2VoiceSessionContext(
+                    turnId: clientMessageId,
+                    interruptedPreviousTurn: voiceInterruptedPreviousTurn,
+                    delivery: "segments"
+                )
+                : nil,
             conversationHistory: memoryWindow,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -360,13 +370,6 @@ final class ChatRouter: ObservableObject {
 
         if let emotion = intent.emotionalContext {
             summary["emotional_context"] = AnyCodable(emotion.rawValue)
-        }
-
-        if voiceSession {
-            summary["voice_session"] = AnyCodable([
-                "active": true,
-                "transport": "client_stt_tts",
-            ])
         }
 
         return summary

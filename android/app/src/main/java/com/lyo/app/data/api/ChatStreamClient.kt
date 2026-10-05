@@ -25,6 +25,17 @@ sealed class ChatStreamEvent {
      * iOS decode this same `smart_blocks` event; see chat-contract.mjs.
      */
     data class SmartBlocks(val blocks: List<SmartBlock>) : ChatStreamEvent()
+    data class VoiceSegment(
+        val text: String,
+        val sequence: Int,
+        val messageId: String?,
+    ) : ChatStreamEvent()
+    data class VoiceReady(
+        val text: String,
+        val segmentsDelivered: Int,
+        val messageId: String?,
+    ) : ChatStreamEvent()
+    data class VoiceIncomplete(val messageId: String?) : ChatStreamEvent()
     data object Done : ChatStreamEvent()
     data class Error(val message: String) : ChatStreamEvent()
 }
@@ -88,6 +99,7 @@ object ChatStreamClient {
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
         voiceSession: Boolean = false,
+        voiceInterruptedPreviousTurn: Boolean = false,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -106,14 +118,19 @@ object ChatStreamClient {
                 )
             }
         }
-        if (voiceSession) {
-            stateSummary["voice_session"] = mapOf(
-                "active" to true,
-                "transport" to "client_stt_tts",
-            )
-        }
         if (stateSummary.isNotEmpty()) {
             requestFields["state_summary"] = stateSummary
+        }
+        if (voiceSession) {
+            requestFields["voice_session"] = mapOf(
+                "active" to true,
+                "transport" to "client_stt_tts",
+                "locale" to java.util.Locale.getDefault().toLanguageTag(),
+                "turn_id" to clientMessageId,
+                "interrupted_previous_turn" to voiceInterruptedPreviousTurn,
+                "hands_free" to true,
+                "delivery" to "segments",
+            )
         }
         if (media.isNotEmpty()) {
             requestFields["media"] = media.map { item ->
@@ -194,6 +211,22 @@ object ChatStreamClient {
             obj.get("type")?.asString == "error" ->
                 ChatStreamEvent.Error(
                     obj.get("message")?.asString ?: "The response could not be generated.",
+                )
+            obj.get("type")?.asString == "voice_text_segment" && obj.has("text") ->
+                ChatStreamEvent.VoiceSegment(
+                    text = obj.get("text").asString,
+                    sequence = obj.get("sequence")?.asInt ?: 0,
+                    messageId = obj.get("message_id")?.takeUnless { it.isJsonNull }?.asString,
+                )
+            obj.get("type")?.asString == "voice_ready" && obj.has("text") ->
+                ChatStreamEvent.VoiceReady(
+                    text = obj.get("text").asString,
+                    segmentsDelivered = obj.get("segments_delivered")?.asInt ?: 0,
+                    messageId = obj.get("message_id")?.takeUnless { it.isJsonNull }?.asString,
+                )
+            obj.get("type")?.asString == "voice_incomplete" ->
+                ChatStreamEvent.VoiceIncomplete(
+                    messageId = obj.get("message_id")?.takeUnless { it.isJsonNull }?.asString,
                 )
             obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
                 ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
