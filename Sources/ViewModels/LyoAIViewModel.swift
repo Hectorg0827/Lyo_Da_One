@@ -60,7 +60,7 @@ class LyoAIViewModel: ObservableObject {
     /// call returns), so funnel questions and streamed answers aren't cut off.
     private var voiceLoopActive: Bool = false
     private var voiceTurnDebounceTask: Task<Void, Never>?
-    private let voiceEndOfTurnDelayNanoseconds: UInt64 = 650_000_000
+    private var voiceInterruptedPreviousTurn = false
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -195,12 +195,14 @@ class LyoAIViewModel: ObservableObject {
                 }
                 if wasSpeaking || wasLoading {
                     self.shouldAutoSpeakCurrentResponse = false
+                    self.voiceInterruptedPreviousTurn = true
                 }
 
                 self.voiceTurnDebounceTask?.cancel()
                 let captured = text
+                let endpointDelay = self.voiceEndOfTurnDelayNanoseconds(for: captured)
                 self.voiceTurnDebounceTask = Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: self?.voiceEndOfTurnDelayNanoseconds ?? 650_000_000)
+                    try? await Task.sleep(nanoseconds: endpointDelay)
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         guard let self,
@@ -814,6 +816,9 @@ class LyoAIViewModel: ObservableObject {
         // Capture voice state
         let shouldResumeListening = voiceLoopActive || isLiveMode || isVoiceActive
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
+        let interruptedPreviousTurn = voiceInterruptedPreviousTurn
+        let voiceTurnId = UUID().uuidString
+        voiceInterruptedPreviousTurn = false
         
         // Reset TTS buffer for the new response
         lastSentToTTSText = ""
@@ -851,7 +856,10 @@ class LyoAIViewModel: ObservableObject {
             mode: mode ?? uiState?.currentAIMode ?? "chat",
             forcedIntent: selectedIntent,
             speakResponse: shouldSpeak,
-            voiceSession: shouldResumeListening
+            voiceSession: shouldResumeListening,
+            voiceInterruptedPreviousTurn: interruptedPreviousTurn,
+            voiceTurnId: voiceTurnId,
+            voiceLocale: Locale.current.identifier
         )
 
         // Safety net: if we're in a voice loop but nothing is being spoken
@@ -904,6 +912,41 @@ class LyoAIViewModel: ObservableObject {
     }
 
     // MARK: - Incremental TTS Logic
+
+    private func voiceEndOfTurnDelayNanoseconds(for text: String) -> UInt64 {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return 900_000_000 }
+
+        let lower = normalized.lowercased()
+        let shortComplete: Set<String> = [
+            "yes", "yeah", "yep", "no", "nope", "okay", "ok", "sure",
+            "right", "thanks", "thank you", "got it", "exactly", "correct",
+            "sí", "si", "vale", "gracias",
+        ]
+        if shortComplete.contains(lower) { return 420_000_000 }
+        if normalized.last.map({ ".!?".contains($0) }) == true { return 430_000_000 }
+        if normalized.hasSuffix(",") || normalized.hasSuffix(";")
+            || normalized.hasSuffix(":") || normalized.hasSuffix("...")
+        {
+            return 1_100_000_000
+        }
+
+        let lastWord = lower
+            .split(whereSeparator: { !$0.isLetter })
+            .last
+            .map(String.init) ?? ""
+        let openEnded: Set<String> = [
+            "and", "but", "or", "because", "so", "if", "when", "while",
+            "that", "to", "with", "for", "from", "about",
+            "y", "pero", "porque", "si", "cuando", "con", "para", "de",
+        ]
+        if openEnded.contains(lastWord) { return 1_100_000_000 }
+
+        let wordCount = normalized.split(whereSeparator: { $0.isWhitespace }).count
+        if wordCount <= 2 { return 900_000_000 }
+        if wordCount <= 5 { return 700_000_000 }
+        return 620_000_000
+    }
 
     private func isLikelyVoiceEcho(_ heard: String) -> Bool {
         func normalize(_ value: String) -> String {
