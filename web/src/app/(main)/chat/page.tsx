@@ -8,6 +8,7 @@ import ChatInterface from '@/components/chat/ChatInterface';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
+import SurfaceLoading from '@/components/ui/SurfaceLoading';
 
 export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -121,7 +122,7 @@ export default function ChatPage() {
           {/* ChatInterface reads `?prompt=` to accept a seeded opening turn
               (Home's "I have a test" entry), so it needs a Suspense boundary
               for the same reason ClassroomPage does. */}
-          <Suspense fallback={<div className="h-full" />}>
+          <Suspense fallback={<SurfaceLoading label="Opening your conversation…" />}>
             <ChatInterface />
           </Suspense>
         </div>

@@ -24,6 +24,7 @@ import { upsertCourseOnStart } from '@/lib/stack';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
+import SurfaceLoading from '@/components/ui/SurfaceLoading';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ const LYO_STATE_IMG: Record<string, string> = {
 
 export default function ClassroomPage() {
   return (
-    <Suspense fallback={<div className="h-full" />}>
+    <Suspense fallback={<SurfaceLoading label="Preparing the classroom…" />}>
       <ClassroomStage />
     </Suspense>
   );
