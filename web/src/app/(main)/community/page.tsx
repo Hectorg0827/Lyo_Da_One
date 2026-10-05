@@ -596,6 +596,7 @@ export default function CommunityPage() {
 
   const preview = selectedNode ? (
     <NodePreview
+      key={selectedNode.key}
       node={selectedNode}
       busy={actions.busy.has(selectedNode.key)}
       onClose={closePreview}
