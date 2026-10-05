@@ -348,6 +348,11 @@ function EmptyState({ message }: { message: string }) {
 
 export default function DiscoverPage() {
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    const incoming = new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
+    if (incoming) setQuery(incoming);
+  }, []);
   const [activeIndex, setActiveIndex] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -470,8 +475,8 @@ export default function DiscoverPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search topics, courses, skills…"
-            aria-label="Search discoveries"
+            placeholder="Search learning clips…"
+            aria-label="Search learning clips"
             className="flex-1 bg-transparent text-white placeholder-white/70 text-[15px] focus:outline-none"
           />
         </label>
