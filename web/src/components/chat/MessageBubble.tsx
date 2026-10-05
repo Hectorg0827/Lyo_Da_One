@@ -6,7 +6,9 @@ import ReactMarkdown from 'react-markdown';
 import { Copy, Check, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
+import type { CoachToday } from '@/lib/coach-api';
 import CourseGenerationCard from './CourseGenerationCard';
+import CoachMissionCard from './CoachMissionCard';
 import MascotAvatar from './MascotAvatar';
 import BlockRenderer from './blocks/BlockRenderer';
 import { canRenderBlock } from './blocks/can-render';
@@ -168,6 +170,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const normalizedAssistantContent = isUser ? displayContent : normalizeLatexDelimiters(displayContent);
   const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
   const displayType = ocData ? 'course_proposal' : message.type;
+  const coachView = !isUser && message.metadata?.coach && typeof message.metadata.coach === 'object'
+    ? message.metadata.coach as CoachToday
+    : null;
+  const coachTimeBudgetMinutes =
+    typeof message.metadata?.coachTimeBudgetMinutes === 'number'
+      ? message.metadata.coachTimeBudgetMinutes
+      : null;
 
   // Determine if this specific card is active and currently generating in the store
   const activeConvo = getActiveConversation();
@@ -213,6 +222,16 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             isGenerating={isCurrentlyGeneratingThis}
             generationProgress={generationProgress}
             generationState={isCurrentlyGeneratingThis ? courseGenerationState : null}
+          />
+        )}
+
+        {/* Coach is a structured projection of the same durable prose
+            answer. The card adds actionable mission handoffs without making
+            Chat a second planner or tutor. */}
+        {!isUser && coachView && (
+          <CoachMissionCard
+            view={coachView}
+            timeBudgetMinutes={coachTimeBudgetMinutes}
           />
         )}
 
