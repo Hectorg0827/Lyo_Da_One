@@ -116,14 +116,16 @@ export default function ConversationalVoiceLayer() {
       return;
     }
 
-    const interruptedPreviousTurn = voiceInterruptedPreviousTurnRef.current;
+    const generationStillActive = useChatStore.getState().isGenerating;
+    const interruptedPreviousTurn =
+      voiceInterruptedPreviousTurnRef.current || generationStillActive;
     voiceInterruptedPreviousTurnRef.current = false;
     serverVoiceEventSeenRef.current = false;
     voiceTurnReadyRef.current = false;
     lastSpokenTextRef.current = '';
     stopSpeech();
     stopRecognition();
-    if (useChatStore.getState().isGenerating) interruptGeneration();
+    if (generationStillActive) interruptGeneration();
     awaitingAssistantRef.current = true;
     changePhase('thinking');
     await sendMessage(transcript, [], {
