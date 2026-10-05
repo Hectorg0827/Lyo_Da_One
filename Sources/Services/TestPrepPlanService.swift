@@ -113,6 +113,23 @@ struct IntakeTurnRequest: Codable {
     var materials: [PrepMaterial] = []
 }
 
+
+
+extension Endpoints {
+    /// Lyo Coach is the goal/evidence control plane shared by Test Prep,
+    /// Classroom and Chat. It is intentionally separate from StudyPlans:
+    /// Test Prep is one adapter into the general goal model.
+    enum Coach: Endpoint {
+        case today
+
+        var path: String { "/api/v1/me/coach/today" }
+        var method: HTTPMethod { .get }
+        var body: Encodable? { nil }
+        var queryItems: [URLQueryItem]? { nil }
+        var cacheTTL: TimeInterval { 0 }
+    }
+}
+
 // MARK: - Study plan service
 
 /// Reads and writes a learner's study plan through the real routes.
@@ -170,6 +187,13 @@ actor TestPrepPlanService {
     func todaySessions() async throws -> [PlannedSession] {
         try await client.request(
             Endpoints.StudyPlans.todaySessions,
+            cachePolicy: .reloadIgnoringCache
+        )
+    }
+
+    func coachToday() async throws -> CoachToday {
+        try await client.request(
+            Endpoints.Coach.today,
             cachePolicy: .reloadIgnoringCache
         )
     }
