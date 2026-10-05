@@ -12,8 +12,6 @@ import {
   MonitorPlay,
   Plus,
   Eye,
-  TrendingUp,
-  Users,
   Loader2,
   Send,
   Trash2,
@@ -108,7 +106,6 @@ function adaptComment(raw: Record<string, unknown>): ClipComment {
   };
 }
 
-const tabs = ['For You', 'Following', 'Trending'];
 
 async function shareClip(clip: Clip) {
   const url = `${window.location.origin}/clips?clip=${clip.id}`;
@@ -494,7 +491,6 @@ function ClipFullscreen({
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ClipsPage() {
-  const [activeTab, setActiveTab] = useState('For You');
   const [viewMode, setViewMode] = useState<'grid' | 'feed'>('grid');
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
   const [commentsClip, setCommentsClip] = useState<Clip | null>(null);
@@ -537,22 +533,6 @@ export default function ClipsPage() {
             Create Clip
           </button>
         </div>
-      </div>
-
-      <div className="mb-6 flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition ${
-              activeTab === tab ? 'bg-lyo-600 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            {tab === 'Trending' && <TrendingUp className="h-3.5 w-3.5" />}
-            {tab === 'Following' && <Users className="h-3.5 w-3.5" />}
-            {tab}
-          </button>
-        ))}
       </div>
 
       {isLoading ? (
