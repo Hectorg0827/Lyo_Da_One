@@ -53,6 +53,8 @@ class LyoAIViewModel: ObservableObject {
     @Published var isAudioOutputEnabled: Bool = false
     private var lastSentToTTSText: String = ""
     private var shouldAutoSpeakCurrentResponse: Bool = false
+    private var streamedVoiceSegmentKeys: Set<String> = []
+    private var voiceSegmentStreamOpen: Bool = false
     /// True while a conversational voice loop is in progress. Used to re-arm the
     /// mic only AFTER the AI's spoken response finishes (not the instant the send
     /// call returns), so funnel questions and streamed answers aren't cut off.
@@ -243,7 +245,13 @@ class LyoAIViewModel: ObservableObject {
             guard let self = self else { return }
             self.currentlyPlayingMessageId = nil  // Reset playing state
 
-            if self.voiceLoopActive && !self.sttService.isRecording {
+            // A segment can finish while the canonical Chat answer is still
+            // generating. Do not give the microphone the floor between
+            // segments; voice_ready closes the spoken delivery turn.
+            if self.voiceLoopActive
+                && !self.voiceSegmentStreamOpen
+                && !self.sttService.isRecording
+            {
                 self.startListening()
             }
         }
@@ -258,6 +266,61 @@ class LyoAIViewModel: ObservableObject {
             Log.ai.info("🎭 LyoAIViewModel: Updating emotion to \(emotion)")
             self.currentEmotion = emotion
             self.ttsService.setEmotion(emotion)
+        }
+
+        unifiedChat.onVoiceTextSegment = { [weak self] text, sequence, messageId in
+            guard let self, self.voiceLoopActive || self.isAudioOutputEnabled else { return }
+            let key = "\(messageId):\(sequence)"
+            guard !self.streamedVoiceSegmentKeys.contains(key) else { return }
+            self.streamedVoiceSegmentKeys.insert(key)
+            self.voiceSegmentStreamOpen = true
+
+            // Server segmentation is produced from the exact canonical Chat
+            // response. Once it starts, disable the older message-diff TTS
+            // path so the same sentence can never be spoken twice.
+            self.shouldAutoSpeakCurrentResponse = false
+            self.lastSentToTTSText = (
+                self.lastSentToTTSText + " " + text
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            self.currentlyPlayingMessageId = messageId
+            self.ttsService.enqueue(text)
+        }
+
+        unifiedChat.onVoiceReady = { [weak self] text, messageId, speak in
+            guard let self else { return }
+            let deliveredSegments = self.streamedVoiceSegmentKeys.contains {
+                $0.hasPrefix("\(messageId):")
+            }
+            self.voiceSegmentStreamOpen = false
+
+            if (self.voiceLoopActive || self.isAudioOutputEnabled)
+                && speak
+                && !deliveredSegments
+                && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                // Compatibility fallback: a voice-ready turn can still carry
+                // one complete canonical answer if no early segment was emitted.
+                self.shouldAutoSpeakCurrentResponse = false
+                self.currentlyPlayingMessageId = messageId
+                self.lastSentToTTSText = text
+                self.ttsService.enqueue(text)
+            } else if self.voiceLoopActive
+                && !self.isAISpeaking
+                && !self.sttService.isRecording
+            {
+                self.startListening()
+            }
+        }
+
+        unifiedChat.onVoiceIncomplete = { [weak self] _, _ in
+            guard let self else { return }
+            self.voiceSegmentStreamOpen = false
+            if self.voiceLoopActive
+                && !self.isAISpeaking
+                && !self.sttService.isRecording
+            {
+                self.startListening()
+            }
         }
 
         // Conversational voice is a delivery layer over Unified Chat.
@@ -500,6 +563,8 @@ class LyoAIViewModel: ObservableObject {
         userLiveAudioLevel = 0
         aiLiveAudioLevel = 0
         isAIThinking = false
+        streamedVoiceSegmentKeys.removeAll()
+        voiceSegmentStreamOpen = false
     }
 
     func startListening() {
@@ -752,6 +817,8 @@ class LyoAIViewModel: ObservableObject {
         
         // Reset TTS buffer for the new response
         lastSentToTTSText = ""
+        streamedVoiceSegmentKeys.removeAll()
+        voiceSegmentStreamOpen = false
         shouldAutoSpeakCurrentResponse = shouldSpeak
 
         // Mark the conversational voice loop active BEFORE clearing isVoiceActive,
