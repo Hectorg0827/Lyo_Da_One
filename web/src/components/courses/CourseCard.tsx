@@ -55,7 +55,7 @@ export default function CourseCard({ course, onClick }: CourseCardProps) {
           />
         ) : (
           <CourseArtwork
-            title={`${course.category} ${course.title}`}
+            title={course.title}
             className="h-full w-full"
           />
         )}
