@@ -89,3 +89,46 @@ export function splitSpeechChunks(text: string, maxChars = 260): string[] {
   if (current) chunks.push(current);
   return chunks;
 }
+
+
+export type VoiceStreamEvent =
+  | {
+      type: 'voice_text_segment';
+      text: string;
+      sequence: number;
+      messageId: string;
+    }
+  | {
+      type: 'voice_ready';
+      text: string;
+      messageId: string;
+      speak: boolean;
+    }
+  | {
+      type: 'voice_incomplete';
+      text: string;
+      messageId: string;
+    };
+
+const voiceStreamTarget =
+  typeof EventTarget !== 'undefined' ? new EventTarget() : null;
+const VOICE_STREAM_EVENT = 'lyo-voice-stream';
+
+export function publishVoiceStreamEvent(event: VoiceStreamEvent): void {
+  if (!voiceStreamTarget || typeof CustomEvent === 'undefined') return;
+  voiceStreamTarget.dispatchEvent(
+    new CustomEvent<VoiceStreamEvent>(VOICE_STREAM_EVENT, { detail: event }),
+  );
+}
+
+export function subscribeVoiceStreamEvents(
+  handler: (event: VoiceStreamEvent) => void,
+): () => void {
+  if (!voiceStreamTarget) return () => undefined;
+  const listener = (raw: Event) => {
+    const event = raw as CustomEvent<VoiceStreamEvent>;
+    if (event.detail) handler(event.detail);
+  };
+  voiceStreamTarget.addEventListener(VOICE_STREAM_EVENT, listener);
+  return () => voiceStreamTarget.removeEventListener(VOICE_STREAM_EVENT, listener);
+}
