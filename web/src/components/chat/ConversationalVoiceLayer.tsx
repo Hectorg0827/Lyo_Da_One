@@ -388,7 +388,10 @@ export default function ConversationalVoiceLayer() {
   };
 
   const bargeIn = useCallback(() => {
-    if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    if (
+      !activeRef.current ||
+      (phaseRef.current !== 'speaking' && phaseRef.current !== 'thinking')
+    ) return;
     voiceInterruptedPreviousTurnRef.current = true;
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
@@ -452,7 +455,14 @@ export default function ConversationalVoiceLayer() {
     if (!active) return;
     const tick = () => {
       const analyser = analyserRef.current;
-      if (analyser && phaseRef.current === 'speaking' && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS) {
+      const phaseNow = phaseRef.current;
+      const canInterrupt =
+        phaseNow === 'thinking' ||
+        (
+          phaseNow === 'speaking' &&
+          performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS
+        );
+      if (analyser && canInterrupt) {
         const samples = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
