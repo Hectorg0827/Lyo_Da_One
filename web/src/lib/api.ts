@@ -874,6 +874,14 @@ export const api = {
     },
   },
 
+  // ── Lyo Coach / Learning OS control plane ──
+  coach: {
+    /** Receding-horizon mission derived from canonical evidence across active goals. */
+    async today() {
+      return request<import('./coach-api').CoachToday>('/api/v1/me/coach/today');
+    },
+  },
+
   // ── Test prep ──
   //
   // The server has had all of this since Phase E and no client called any of
