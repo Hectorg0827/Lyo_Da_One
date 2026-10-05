@@ -366,6 +366,8 @@ final class ChatRouter: ObservableObject {
             summary["voice_session"] = AnyCodable([
                 "active": true,
                 "transport": "client_stt_tts",
+                "delivery": "segments",
+                "hands_free": true,
             ])
         }
 

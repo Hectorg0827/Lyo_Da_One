@@ -19,6 +19,20 @@ import java.util.concurrent.ConcurrentHashMap
 sealed class ChatStreamEvent {
     data class Chunk(val text: String) : ChatStreamEvent()
     data class Conversation(val id: String) : ChatStreamEvent()
+    data class VoiceSegment(
+        val text: String,
+        val sequence: Int,
+        val messageId: String,
+    ) : ChatStreamEvent()
+    data class VoiceReady(
+        val text: String,
+        val messageId: String,
+        val speak: Boolean,
+    ) : ChatStreamEvent()
+    data class VoiceIncomplete(
+        val text: String,
+        val messageId: String,
+    ) : ChatStreamEvent()
     /**
      * Structured lesson content — every beat of a composed lesson (hook,
      * callout, dataViz, flashcard, quiz, ...), not just plain prose. Web and
@@ -110,6 +124,8 @@ object ChatStreamClient {
             stateSummary["voice_session"] = mapOf(
                 "active" to true,
                 "transport" to "client_stt_tts",
+                "delivery" to "segments",
+                "hands_free" to true,
             )
         }
         if (stateSummary.isNotEmpty()) {
@@ -197,6 +213,26 @@ object ChatStreamClient {
                 )
             obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
                 ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
+            obj.get("type")?.asString == "voice_text_segment" &&
+                obj.has("text") && obj.has("sequence") && obj.has("message_id") ->
+                ChatStreamEvent.VoiceSegment(
+                    text = obj.get("text").asString,
+                    sequence = obj.get("sequence").asInt,
+                    messageId = obj.get("message_id").asString,
+                )
+            obj.get("type")?.asString == "voice_ready" &&
+                obj.has("text") && obj.has("message_id") ->
+                ChatStreamEvent.VoiceReady(
+                    text = obj.get("text").asString,
+                    messageId = obj.get("message_id").asString,
+                    speak = !obj.has("speak") || obj.get("speak").asBoolean,
+                )
+            obj.get("type")?.asString == "voice_incomplete" ->
+                ChatStreamEvent.VoiceIncomplete(
+                    text = obj.get("text")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
+                    messageId = obj.get("message_id")?.takeIf { it.isJsonPrimitive }?.asString
+                        ?: "voice-incomplete",
+                )
             obj.get("type")?.asString == "answer" && obj.has("block") -> {
                 val text = obj.getAsJsonObject("block")
                     ?.getAsJsonObject("content")

@@ -57,6 +57,13 @@ final class UnifiedChatService: ObservableObject {
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
+    /// Voice is a delivery layer over this same canonical Chat turn. These
+    /// callbacks expose early speakable text without creating a second model
+    /// session or changing the persisted assistant answer.
+    var onVoiceTextSegment: ((String, Int, String) -> Void)?
+    var onVoiceReady: ((String, String, Bool) -> Void)?
+    var onVoiceIncomplete: ((String, String) -> Void)?
+
     // MARK: - Private Properties
 
     /// Cancellable timeout task for the current stream.
@@ -486,7 +493,12 @@ final class UnifiedChatService: ObservableObject {
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
             stateSummary: voiceSession
-                ? ["voice_session": AnyCodable(["active": true, "transport": "client_stt_tts"])]
+                ? ["voice_session": AnyCodable([
+                    "active": true,
+                    "transport": "client_stt_tts",
+                    "delivery": "segments",
+                    "hands_free": true,
+                ])]
                 : [:],
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
@@ -527,6 +539,15 @@ final class UnifiedChatService: ObservableObject {
             // it into the next request's state_summary. Keep the UI layer
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
+
+        case .voiceTextSegment(let text, let sequence, let messageId):
+            onVoiceTextSegment?(text, sequence, messageId)
+
+        case .voiceReady(let text, let messageId, let speak):
+            onVoiceReady?(text, messageId, speak)
+
+        case .voiceIncomplete(let text, let messageId):
+            onVoiceIncomplete?(text, messageId)
 
         case .conversation(let id):
             if id != currentConversationId {

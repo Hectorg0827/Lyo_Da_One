@@ -380,6 +380,35 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 } catch {
                     Log.ai.error("Lyo2 Decoding Error (teaching_policy): \(error)")
                 }
+
+            case "voice_text_segment":
+                if let text = json["text"] as? String,
+                   let sequence = json["sequence"] as? Int,
+                   let messageId = json["message_id"] as? String {
+                    didReceiveContentEvent = true
+                    callback?(.voiceTextSegment(
+                        text: text,
+                        sequence: sequence,
+                        messageId: messageId
+                    ))
+                }
+
+            case "voice_ready":
+                if let text = json["text"] as? String,
+                   let messageId = json["message_id"] as? String {
+                    didReceiveContentEvent = true
+                    callback?(.voiceReady(
+                        text: text,
+                        messageId: messageId,
+                        speak: (json["speak"] as? Bool) ?? true
+                    ))
+                }
+
+            case "voice_incomplete":
+                let text = json["text"] as? String ?? ""
+                let messageId = json["message_id"] as? String ?? lastEventId ?? "voice-incomplete"
+                didReceiveContentEvent = true
+                callback?(.voiceIncomplete(text: text, messageId: messageId))
                 
             case "clarification":
                 if let text = json["text"] as? String {

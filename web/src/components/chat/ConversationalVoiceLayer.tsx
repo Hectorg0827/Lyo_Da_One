@@ -9,7 +9,9 @@ import {
   createSpeechRecognition,
   isLikelyPlaybackEcho,
   splitSpeechChunks,
+  subscribeVoiceStreamEvents,
   type SpeechRecognitionLike,
+  type VoiceStreamEvent,
 } from '@/lib/conversational-voice';
 
 type VoicePhase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -55,6 +57,11 @@ export default function ConversationalVoiceLayer() {
   const animationFrameRef = useRef<number | null>(null);
   const speakingStartedAtRef = useRef(0);
   const loudFramesRef = useRef(0);
+  const voiceSegmentQueueRef = useRef<Array<{ text: string; sequence: number; messageId: string }>>([]);
+  const voiceSegmentDrainActiveRef = useRef(false);
+  const voiceTurnClosedRef = useRef(false);
+  const voiceSegmentsReceivedRef = useRef(false);
+  const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
@@ -81,6 +88,8 @@ export default function ConversationalVoiceLayer() {
       audioRef.current = null;
     }
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
+    voiceSegmentQueueRef.current = [];
+    voiceSegmentDrainActiveRef.current = false;
   }, []);
 
   const sendVoiceTurn = useCallback(async (raw: string) => {
@@ -95,7 +104,16 @@ export default function ConversationalVoiceLayer() {
     stopSpeech();
     stopRecognition();
     if (useChatStore.getState().isGenerating) interruptGeneration();
+    // Echo suppression is turn-local. Once a genuine learner utterance is
+    // accepted, forget prior assistant speech before collecting the next reply.
+    lastSpokenTextRef.current = '';
+    lastSpokenMessageIdRef.current = null;
     awaitingAssistantRef.current = true;
+    voiceSegmentQueueRef.current = [];
+    voiceSegmentDrainActiveRef.current = false;
+    voiceTurnClosedRef.current = false;
+    voiceSegmentsReceivedRef.current = false;
+    spokenVoiceSegmentKeysRef.current.clear();
     changePhase('thinking');
     await sendMessage(transcript, [], { voiceSession: true });
   }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
@@ -195,6 +213,118 @@ export default function ConversationalVoiceLayer() {
     window.speechSynthesis.speak(utterance);
   }), []);
 
+  const finishSegmentTurnIfReady = useCallback(() => {
+    if (
+      !activeRef.current
+      || !voiceTurnClosedRef.current
+      || voiceSegmentDrainActiveRef.current
+      || voiceSegmentQueueRef.current.length > 0
+    ) return;
+    awaitingAssistantRef.current = false;
+    changePhase('listening');
+    startRecognition();
+  }, [changePhase, startRecognition]);
+
+  const drainVoiceSegments = useCallback(async () => {
+    if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
+    voiceSegmentDrainActiveRef.current = true;
+    stopRecognition();
+    changePhase('speaking');
+    speakingStartedAtRef.current = performance.now();
+
+    try {
+      while (activeRef.current && voiceSegmentQueueRef.current.length > 0) {
+        const segment = voiceSegmentQueueRef.current.shift();
+        if (!segment) break;
+        const spoken = segment.text.trim();
+        if (!spoken) continue;
+
+        lastSpokenTextRef.current = (lastSpokenTextRef.current + ' ' + spoken).trim();
+        lastSpokenMessageIdRef.current = segment.messageId;
+
+        try {
+          const controller = new AbortController();
+          ttsAbortRef.current = controller;
+          const blob = await api.tts.synthesizeStream(spoken, {
+            language: navigator.language || 'auto',
+            speed: 1.02,
+            signal: controller.signal,
+          });
+          await playBlob(blob);
+        } catch {
+          if (!activeRef.current || phaseRef.current !== 'speaking') break;
+          await browserSpeechFallback(spoken);
+        } finally {
+          ttsAbortRef.current = null;
+        }
+      }
+    } finally {
+      voiceSegmentDrainActiveRef.current = false;
+      finishSegmentTurnIfReady();
+    }
+  }, [
+    browserSpeechFallback,
+    changePhase,
+    finishSegmentTurnIfReady,
+    playBlob,
+    stopRecognition,
+  ]);
+
+  const handleVoiceStreamEvent = useCallback((event: VoiceStreamEvent) => {
+    if (!activeRef.current) return;
+
+    if (event.type === 'voice_text_segment') {
+      voiceSegmentsReceivedRef.current = true;
+      awaitingAssistantRef.current = true;
+      const segmentKey = event.messageId + ':' + event.sequence;
+      if (spokenVoiceSegmentKeysRef.current.has(segmentKey)) return;
+      if (
+        voiceSegmentQueueRef.current.some(
+          (item) => item.messageId === event.messageId && item.sequence === event.sequence,
+        )
+      ) return;
+      spokenVoiceSegmentKeysRef.current.add(segmentKey);
+      voiceSegmentQueueRef.current.push({
+        text: event.text,
+        sequence: event.sequence,
+        messageId: event.messageId,
+      });
+      voiceSegmentQueueRef.current.sort((a, b) => a.sequence - b.sequence);
+      void drainVoiceSegments();
+      return;
+    }
+
+    if (event.type === 'voice_ready') {
+      voiceTurnClosedRef.current = true;
+      if (
+        !voiceSegmentsReceivedRef.current
+        && event.speak
+        && event.text.trim()
+      ) {
+        voiceSegmentsReceivedRef.current = true;
+        const fallbackKey = event.messageId + ':ready';
+        if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
+          spokenVoiceSegmentKeysRef.current.add(fallbackKey);
+          voiceSegmentQueueRef.current.push({
+            text: event.text,
+            sequence: Number.MAX_SAFE_INTEGER,
+            messageId: event.messageId,
+          });
+          void drainVoiceSegments();
+          return;
+        }
+      }
+      finishSegmentTurnIfReady();
+      return;
+    }
+
+    if (event.type === 'voice_incomplete') {
+      voiceTurnClosedRef.current = true;
+      finishSegmentTurnIfReady();
+    }
+  }, [drainVoiceSegments, finishSegmentTurnIfReady]);
+
+  useEffect(() => subscribeVoiceStreamEvents(handleVoiceStreamEvent), [handleVoiceStreamEvent]);
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
     const chunks = splitSpeechChunks(text);
     if (!chunks.length || !activeRef.current) return;
@@ -255,12 +385,13 @@ export default function ConversationalVoiceLayer() {
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
     stopSpeech();
+    if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
     finalTranscriptRef.current = '';
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
@@ -338,10 +469,16 @@ export default function ConversationalVoiceLayer() {
   useEffect(() => {
     if (!active || isGenerating || !awaitingAssistantRef.current) return;
     const latest = latestAssistantMessage();
-    if (!latest || latest.id === lastSpokenMessageIdRef.current || !latest.content.trim()) return;
+    if (!latest || !latest.content.trim()) return;
+    if (voiceSegmentsReceivedRef.current) {
+      voiceTurnClosedRef.current = true;
+      finishSegmentTurnIfReady();
+      return;
+    }
+    if (latest.id === lastSpokenMessageIdRef.current) return;
     awaitingAssistantRef.current = false;
     void speakAssistant(latest.id, latest.content);
-  }, [active, activeConversationId, isGenerating, speakAssistant]);
+  }, [active, activeConversationId, finishSegmentTurnIfReady, isGenerating, speakAssistant]);
 
   const endSession = () => setVoiceSessionActive(false);
 

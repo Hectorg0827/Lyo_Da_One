@@ -12,6 +12,7 @@ import type {
 import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { parseCanonicalChatContent } from '@/lib/chat-attachments';
+import { publishVoiceStreamEvent } from '@/lib/conversational-voice';
 import {
   emptyTeachingRuntimeState,
   reduceTeachingPolicy,
@@ -602,7 +603,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (streamToken !== activeStreamToken) return;
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
-          if (chunk.type === 'interaction_contract') {
+          if (chunk.type === 'voice_text_segment') {
+            if (
+              typeof chunk.text === 'string'
+              && typeof chunk.sequence === 'number'
+              && typeof chunk.message_id === 'string'
+            ) {
+              publishVoiceStreamEvent({
+                type: 'voice_text_segment',
+                text: chunk.text,
+                sequence: chunk.sequence,
+                messageId: chunk.message_id,
+              });
+            }
+          } else if (chunk.type === 'voice_ready') {
+            if (typeof chunk.text === 'string' && typeof chunk.message_id === 'string') {
+              publishVoiceStreamEvent({
+                type: 'voice_ready',
+                text: chunk.text,
+                messageId: chunk.message_id,
+                speak: chunk.speak !== false,
+              });
+            }
+          } else if (chunk.type === 'voice_incomplete') {
+            publishVoiceStreamEvent({
+              type: 'voice_incomplete',
+              text: typeof chunk.text === 'string' ? chunk.text : '',
+              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : aiMessageId,
+            });
+          } else if (chunk.type === 'interaction_contract') {
             patchAiMessage({
               metadata: {
                 interactionContract: {
@@ -831,7 +860,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ) as Record<string, unknown> | undefined
           ),
           ...(options.voiceSession || get().voiceSessionActive
-            ? { voice_session: { active: true, transport: 'client_stt_tts' } }
+            ? {
+                voice_session: {
+                  active: true,
+                  transport: 'client_stt_tts',
+                  delivery: 'segments',
+                  hands_free: true,
+                },
+              }
             : {}),
         }
       );
