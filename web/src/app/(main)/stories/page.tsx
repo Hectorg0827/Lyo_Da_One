@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Heart, Send, Loader2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
@@ -172,7 +172,6 @@ export default function StoriesPage() {
   const [storyIndex, setStoryIndex] = useState(0);
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [replyText, setReplyText] = useState('');
 
   const currentStory = stories[storyIndex];
   const currentSlide = currentStory?.slides[slideIndex];
@@ -336,24 +335,6 @@ export default function StoriesPage() {
           <ChevronRight className="h-5 w-5" />
         </button>
 
-        {/* Reply bar */}
-        <div className="absolute bottom-4 left-4 right-4 z-10 flex items-center gap-2">
-          <input
-            type="text"
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Reply to story..."
-            className="flex-1 rounded-full bg-white/10 px-4 py-2.5 text-sm text-white placeholder-white/40 backdrop-blur-sm outline-none focus:bg-white/20"
-          />
-          <button className="rounded-full bg-white/10 p-2.5 text-white backdrop-blur-sm hover:bg-white/20">
-            <Heart className="h-5 w-5" />
-          </button>
-          {replyText && (
-            <button className="rounded-full bg-lyo-600 p-2.5 text-white">
-              <Send className="h-5 w-5" />
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Story indicators */}
