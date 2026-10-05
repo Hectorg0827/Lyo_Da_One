@@ -15,6 +15,8 @@ export interface ClassroomEntry {
   /** The learner's optional answers. Each is dropped when unrecognised. */
   level?: ClassroomLevel | string | null;
   minutes?: number | string | null;
+  /** Canonical server-owned duration (3–60), including precise Coach time boxes. */
+  serverMinutes?: number | string | null;
   language?: string | null;
 }
 
@@ -36,6 +38,7 @@ export const CLASSROOM_LANGUAGES: readonly ClassroomLanguageOption[];
 export function normalizeLevel(level?: string | null): ClassroomLevel | null;
 export function normalizeLanguage(language?: string | null): string | null;
 export function normalizeSessionMinutes(minutes?: number | string | null): number | null;
+export function normalizeServerSessionMinutes(minutes?: number | string | null): number | null;
 
 export const TEST_PREP_OPENING_TURN: string;
 export function defaultObjective(topic: string): string;
