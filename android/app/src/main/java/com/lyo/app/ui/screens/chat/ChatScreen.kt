@@ -363,6 +363,9 @@ fun ChatScreen(nav: NavHostController) {
         streamedVoiceSegmentKeys.clear()
         voiceSegmentStreamOpen = false
         pendingVoiceUtterances = 0
+        // Echo suppression must compare only against the assistant reply for
+        // this turn, never the accumulated speech from earlier turns.
+        lastSpokenVoiceText = ""
 
         streamJob?.cancel()
         streamJob = scope.launch {
@@ -415,27 +418,34 @@ fun ChatScreen(nav: NavHostController) {
                         is ChatStreamEvent.VoiceSegment -> {
                             if (voiceConversation && event.text.isNotBlank()) {
                                 val key = "${event.messageId}:${event.sequence}"
-                                if (streamedVoiceSegmentKeys.add(key)) {
-                                    voiceSegmentStreamOpen = true
-                                    lastSpokenVoiceText = listOf(
-                                        lastSpokenVoiceText,
-                                        event.text,
-                                    ).filter { it.isNotBlank() }.joinToString(" ")
+                                voiceSegmentStreamOpen = true
+                                if (
+                                    textToSpeechReady &&
+                                    !streamedVoiceSegmentKeys.contains(key)
+                                ) {
                                     val utteranceId =
                                         "voice-segment:${event.messageId}:${event.sequence}"
-                                    speakingMessageId = utteranceId
-                                    if (textToSpeechReady) {
-                                        pendingVoiceUtterances += 1
-                                        textToSpeech?.speak(
+                                    pendingVoiceUtterances += 1
+                                    val accepted = textToSpeech?.speak(
+                                        event.text,
+                                        if (pendingVoiceUtterances == 1) {
+                                            TextToSpeech.QUEUE_FLUSH
+                                        } else {
+                                            TextToSpeech.QUEUE_ADD
+                                        },
+                                        null,
+                                        utteranceId,
+                                    ) == TextToSpeech.SUCCESS
+                                    if (accepted) {
+                                        streamedVoiceSegmentKeys.add(key)
+                                        lastSpokenVoiceText = listOf(
+                                            lastSpokenVoiceText,
                                             event.text,
-                                            if (pendingVoiceUtterances == 1) {
-                                                TextToSpeech.QUEUE_FLUSH
-                                            } else {
-                                                TextToSpeech.QUEUE_ADD
-                                            },
-                                            null,
-                                            utteranceId,
-                                        )
+                                        ).filter { it.isNotBlank() }.joinToString(" ")
+                                        speakingMessageId = utteranceId
+                                    } else {
+                                        pendingVoiceUtterances =
+                                            (pendingVoiceUtterances - 1).coerceAtLeast(0)
                                     }
                                 }
                             }
