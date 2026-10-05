@@ -59,6 +59,12 @@ class LyoAIViewModel: ObservableObject {
     private var voiceLoopActive: Bool = false
     private var voiceTurnDebounceTask: Task<Void, Never>?
     private let voiceEndOfTurnDelayNanoseconds: UInt64 = 650_000_000
+    /// Set by a real barge-in and consumed by the next canonical Chat request.
+    private var voiceInterruptedPreviousTurn: Bool = false
+    /// Once the backend emits voice delivery events, disable the legacy
+    /// message-observer TTS path so the canonical answer is never spoken twice.
+    private var serverVoiceDeliveryActive: Bool = false
+    private var deliveredVoiceSegments: Set<String> = []
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -192,7 +198,10 @@ class LyoAIViewModel: ObservableObject {
                     self.unifiedChat.interruptCurrentResponse()
                 }
                 if wasSpeaking || wasLoading {
+                    self.voiceInterruptedPreviousTurn = true
                     self.shouldAutoSpeakCurrentResponse = false
+                    self.serverVoiceDeliveryActive = false
+                    self.deliveredVoiceSegments.removeAll()
                 }
 
                 self.voiceTurnDebounceTask?.cancel()
@@ -258,6 +267,47 @@ class LyoAIViewModel: ObservableObject {
             Log.ai.info("🎭 LyoAIViewModel: Updating emotion to \(emotion)")
             self.currentEmotion = emotion
             self.ttsService.setEmotion(emotion)
+        }
+
+        // Canonical Chat emits speakable phrases while the same answer is still
+        // being generated. Queue those phrases directly into the existing TTS
+        // service; never invoke another model or construct another answer.
+        unifiedChat.onVoiceTextSegment = { [weak self] segment in
+            guard let self, self.voiceLoopActive else { return }
+            let key = "\(segment.messageId):\(segment.sequence)"
+            guard self.deliveredVoiceSegments.insert(key).inserted else { return }
+            self.serverVoiceDeliveryActive = true
+            self.shouldAutoSpeakCurrentResponse = false
+            self.currentlyPlayingMessageId = segment.messageId
+            self.lastSentToTTSText += (self.lastSentToTTSText.isEmpty ? "" : " ") + segment.text
+            self.ttsService.enqueue(segment.text, language: Locale.current.identifier)
+        }
+
+        unifiedChat.onVoiceReady = { [weak self] event in
+            guard let self, self.voiceLoopActive else { return }
+            self.serverVoiceDeliveryActive = true
+            self.shouldAutoSpeakCurrentResponse = false
+
+            // Segment delivery already spoke the canonical answer incrementally.
+            // A final ready event with speak=false is screen/history completion,
+            // not permission to repeat the whole answer.
+            if !event.speak || !self.deliveredVoiceSegments.isEmpty {
+                return
+            }
+
+            self.lastSentToTTSText = event.text
+            self.speak(text: event.text, messageId: event.messageId)
+        }
+
+        unifiedChat.onVoiceIncomplete = { [weak self] _ in
+            guard let self else { return }
+            self.shouldAutoSpeakCurrentResponse = false
+            self.serverVoiceDeliveryActive = false
+            self.deliveredVoiceSegments.removeAll()
+            self.stopSpeaking()
+            if self.voiceLoopActive && !self.sttService.isRecording {
+                self.startListening()
+            }
         }
 
         // Conversational voice is a delivery layer over Unified Chat.
@@ -331,7 +381,10 @@ class LyoAIViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .filter { !$0 }
             .sink { [weak self] _ in
-                guard let self, self.shouldAutoSpeakCurrentResponse else { return }
+                guard let self,
+                      self.shouldAutoSpeakCurrentResponse,
+                      !self.serverVoiceDeliveryActive
+                else { return }
                 guard let lastMsg = self.messages.last(where: { !$0.isFromUser }) else { return }
                 let remaining = String(lastMsg.content.dropFirst(self.lastSentToTTSText.count))
                 if !remaining.isEmpty {
@@ -500,6 +553,9 @@ class LyoAIViewModel: ObservableObject {
         userLiveAudioLevel = 0
         aiLiveAudioLevel = 0
         isAIThinking = false
+        voiceInterruptedPreviousTurn = false
+        serverVoiceDeliveryActive = false
+        deliveredVoiceSegments.removeAll()
     }
 
     func startListening() {
@@ -750,9 +806,15 @@ class LyoAIViewModel: ObservableObject {
         let shouldResumeListening = voiceLoopActive || isLiveMode || isVoiceActive
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         
-        // Reset TTS buffer for the new response
+        // Reset delivery state for the new canonical response. If the backend
+        // negotiates segmented voice, its first transport event takes ownership
+        // and disables the legacy whole-message TTS fallback.
         lastSentToTTSText = ""
+        serverVoiceDeliveryActive = false
+        deliveredVoiceSegments.removeAll()
         shouldAutoSpeakCurrentResponse = shouldSpeak
+        let interruptedPreviousTurn = voiceInterruptedPreviousTurn
+        voiceInterruptedPreviousTurn = false
 
         // Mark the conversational voice loop active BEFORE clearing isVoiceActive,
         // so onSpeechFinished re-arms the mic only after the spoken reply completes.
@@ -784,7 +846,8 @@ class LyoAIViewModel: ObservableObject {
             mode: mode ?? uiState?.currentAIMode ?? "chat",
             forcedIntent: selectedIntent,
             speakResponse: shouldSpeak,
-            voiceSession: shouldResumeListening
+            voiceSession: shouldResumeListening,
+            voiceInterruptedPreviousTurn: interruptedPreviousTurn
         )
 
         // Safety net: if we're in a voice loop but nothing is being spoken
@@ -866,7 +929,7 @@ class LyoAIViewModel: ObservableObject {
     }
 
     private func handleTTSStreaming(messages: [LyoMessage]) {
-        guard shouldAutoSpeakCurrentResponse else { return }
+        guard shouldAutoSpeakCurrentResponse, !serverVoiceDeliveryActive else { return }
         
         // Find the most recent assistant message
         guard let lastMessage = messages.last else { return }
