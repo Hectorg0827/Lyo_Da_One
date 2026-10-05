@@ -39,6 +39,7 @@ class Lyo2ChatService: ObservableObject {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -68,6 +69,7 @@ class Lyo2ChatService: ObservableObject {
             activeArtifact: activeArtifact,
             forcedIntent: forcedIntent,
             stateSummary: mergedStateSummary,
+            voiceSession: voiceSession,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -386,6 +388,30 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     didReceiveContentEvent = true
                     callback?(.clarification(text: text))
                 }
+
+            case "voice_text_segment":
+                if let text = json["text"] as? String {
+                    didReceiveContentEvent = true
+                    callback?(.voiceTextSegment(
+                        text: text,
+                        sequence: json["sequence"] as? Int ?? 0,
+                        messageId: json["message_id"] as? String
+                    ))
+                }
+
+            case "voice_ready":
+                if let text = json["text"] as? String {
+                    didReceiveContentEvent = true
+                    callback?(.voiceReady(
+                        text: text,
+                        segmentsDelivered: json["segments_delivered"] as? Int ?? 0,
+                        messageId: json["message_id"] as? String
+                    ))
+                }
+
+            case "voice_incomplete":
+                didReceiveContentEvent = true
+                callback?(.voiceIncomplete(messageId: json["message_id"] as? String))
                 
             case "answer":
                 Log.ai.info("Lyo2 SSE: processing answer event")
