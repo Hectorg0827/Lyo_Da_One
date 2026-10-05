@@ -57,6 +57,13 @@ final class UnifiedChatService: ObservableObject {
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
+    /// Voice delivery is still the canonical Chat turn. These callbacks expose
+    /// only transport events so the ViewModel can queue speech without creating
+    /// another AI workflow or another conversation.
+    var onVoiceTextSegment: ((VoiceTextSegmentEvent) -> Void)?
+    var onVoiceReady: ((VoiceReadyEvent) -> Void)?
+    var onVoiceIncomplete: ((VoiceIncompleteEvent) -> Void)?
+
     // MARK: - Private Properties
 
     /// Cancellable timeout task for the current stream.
@@ -118,7 +125,8 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -174,6 +182,7 @@ final class UnifiedChatService: ObservableObject {
             mode: mode,
             forcedIntent: forcedIntent,
             voiceSession: voiceSession,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
@@ -418,7 +427,8 @@ final class UnifiedChatService: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         speakResponse: Bool = false,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
         _ = await sendMessage(
@@ -427,7 +437,8 @@ final class UnifiedChatService: ObservableObject {
             context: context,
             mode: mode,
             forcedIntent: forcedIntent,
-            voiceSession: voiceSession || speakResponse
+            voiceSession: voiceSession || speakResponse,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn
         )
     }
 
@@ -485,9 +496,16 @@ final class UnifiedChatService: ObservableObject {
             text: trimmedText,
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
-            stateSummary: voiceSession
-                ? ["voice_session": AnyCodable(["active": true, "transport": "client_stt_tts"])]
-                : [:],
+            stateSummary: [:],
+            voiceSession: voiceSession ? Lyo2VoiceSessionContext(
+                active: true,
+                transport: "client_stt_tts",
+                locale: Locale.current.identifier,
+                turnId: userMessage.id,
+                interruptedPreviousTurn: false,
+                handsFree: true,
+                delivery: "segments"
+            ) : nil,
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id
@@ -527,6 +545,17 @@ final class UnifiedChatService: ObservableObject {
             // it into the next request's state_summary. Keep the UI layer
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
+
+        case .voiceTextSegment(let segment):
+            // Do not append this to message content. The canonical final answer
+            // owns screen/history state; segments are speech-delivery hints only.
+            onVoiceTextSegment?(segment)
+
+        case .voiceReady(let event):
+            onVoiceReady?(event)
+
+        case .voiceIncomplete(let event):
+            onVoiceIncomplete?(event)
 
         case .conversation(let id):
             if id != currentConversationId {
