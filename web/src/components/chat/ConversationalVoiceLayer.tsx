@@ -66,6 +66,7 @@ export default function ConversationalVoiceLayer() {
   const voicePlaybackChainRef = useRef<Promise<void>>(Promise.resolve());
   const seenVoiceSegmentsRef = useRef(new Set<string>());
   const voiceReadyRef = useRef(false);
+  const segmentControllersRef = useRef(new Set<AbortController>());
   const sendVoiceTurnRef = useRef<(raw: string) => void>(() => undefined);
 
   const changePhase = useCallback((next: VoicePhase) => {
@@ -87,6 +88,8 @@ export default function ConversationalVoiceLayer() {
     voicePlaybackChainRef.current = Promise.resolve();
     ttsAbortRef.current?.abort();
     ttsPrefetchAbortRef.current?.abort();
+    segmentControllersRef.current.forEach((controller) => controller.abort());
+    segmentControllersRef.current.clear();
     ttsAbortRef.current = null;
     ttsPrefetchAbortRef.current = null;
     if (audioRef.current) {
@@ -308,6 +311,7 @@ export default function ConversationalVoiceLayer() {
       // ordered through one promise chain, so later segments can synthesize
       // while the current phrase is already audible.
       const controller = new AbortController();
+      segmentControllersRef.current.add(controller);
       const audioPromise = api.tts.synthesizeStream(event.text, {
         language: navigator.language || 'auto',
         speed: 1.02,
@@ -327,6 +331,7 @@ export default function ConversationalVoiceLayer() {
             await browserSpeechFallback(event.text);
           }
         } finally {
+          segmentControllersRef.current.delete(controller);
           if (ttsAbortRef.current === controller) ttsAbortRef.current = null;
         }
       });
