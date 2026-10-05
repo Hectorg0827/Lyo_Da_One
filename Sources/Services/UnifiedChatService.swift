@@ -69,6 +69,10 @@ final class UnifiedChatService: ObservableObject {
     /// Cancellable timeout task for the current stream.
     /// Cancelled when real content (answer/done/error) arrives.
     private var streamTimeoutTask: Task<Void, Never>?
+    /// Monotonic identity for the active canonical Chat request. Barge-in can
+    /// race with already-queued SSE callbacks; stale callbacks must never
+    /// enqueue speech or mutate the replacement turn.
+    private var streamGeneration: UInt64 = 0
 
     private let backendAI = BackendAIService.shared
     private let lyo2ChatService = Lyo2ChatService.shared
@@ -91,6 +95,7 @@ final class UnifiedChatService: ObservableObject {
     /// This cancels transport only; the conversation, memory, learner state and
     /// next interaction contract stay on the same canonical Chat thread.
     func interruptCurrentResponse() {
+        streamGeneration &+= 1
         streamTimeoutTask?.cancel()
         streamTimeoutTask = nil
         lyo2ChatService.cancelActiveStream()
@@ -100,6 +105,7 @@ final class UnifiedChatService: ObservableObject {
     /// Start a completely new chat session
     /// Clears local state and generates a new session ID to ensure isolation
     func startNewChat(withId id: String? = nil) {
+        streamGeneration &+= 1
         // 1. Generate new session ID
         currentConversationId = id ?? UUID().uuidString
 
@@ -175,6 +181,8 @@ final class UnifiedChatService: ObservableObject {
         let media = mediaRefs(from: attachments)
 
         // 7. Route through ChatRouter (Two-Speed Engine)
+        streamGeneration &+= 1
+        let requestGeneration = streamGeneration
         let result = await chatRouter.route(
             message: trimmedText,
             media: media,
@@ -189,7 +197,10 @@ final class UnifiedChatService: ObservableObject {
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
                 Task { @MainActor [weak self] in
-                    self?.handleLyo2Event(event, aiMessageId: aiMessageId)
+                    guard let self, self.streamGeneration == requestGeneration else {
+                        return
+                    }
+                    self.handleLyo2Event(event, aiMessageId: aiMessageId)
                 }
             }
         )
