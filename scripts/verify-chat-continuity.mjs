@@ -12,6 +12,8 @@ const contracts = [
       'device_id',
       'media?: Array<{',
       'mime_type',
+      'voice_session',
+      "delivery: 'answer' | 'ready' | 'segments'",
     ],
   },
   {
@@ -75,6 +77,22 @@ const contracts = [
       "GenerationActivity = 'thinking' | 'response' | 'course'",
       "generationActivity: 'thinking'",
       "generationActivity: 'course'",
+      "chunk.type === 'voice_text_segment'",
+      "chunk.type === 'voice_ready'",
+      "chunk.type === 'voice_incomplete'",
+      "delivery: 'segments'",
+    ],
+  },
+  {
+    name: 'web real conversational voice',
+    path: 'web/src/components/chat/ConversationalVoiceLayer.tsx',
+    needles: [
+      'voiceInterruptedPreviousTurn',
+      'onVoiceSegment',
+      'onVoiceReady',
+      'onVoiceIncomplete',
+      'interruptGeneration()',
+      'voicePlaybackChainRef',
     ],
   },
   {
@@ -98,6 +116,11 @@ const contracts = [
       '"media"',
       '"mime_type"',
       '"size_bytes"',
+      '"voice_session"',
+      '"delivery" to "segments"',
+      'ChatStreamEvent.VoiceSegment',
+      'ChatStreamEvent.VoiceReady',
+      'ChatStreamEvent.VoiceIncomplete',
     ],
   },
   {
@@ -117,6 +140,10 @@ const contracts = [
       'parseChatContent',
       'ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f',
       'Modifier.fillMaxWidth(ASSISTANT_RESPONSE_WIDTH_FRACTION)',
+      'voiceInterruptedPreviousTurn',
+      'pendingVoiceUtterances',
+      'TextToSpeech.QUEUE_ADD',
+      'voiceProtocolSeen',
     ],
     forbidden: [
       'val bubbleModifier = Modifier\n            .widthIn(max = 320.dp)',
@@ -151,6 +178,11 @@ const contracts = [
       'client_message_id',
       'case conversation(id: String)',
       'case sizeBytes = "size_bytes"',
+      'case voiceSession = "voice_session"',
+      'case voiceTextSegment',
+      'case voiceReady',
+      'case voiceIncomplete',
+      'delivery: String = "segments"',
     ],
   },
   {
@@ -173,6 +205,10 @@ const contracts = [
       'media: media,',
       'modality = "IMAGE"',
       'modality = "DOCUMENT"',
+      'onVoiceTextSegment',
+      'onVoiceReady',
+      'onVoiceIncomplete',
+      'voiceInterruptedPreviousTurn',
     ],
   },
   {
@@ -215,4 +251,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, adaptive 99% AI response width, structured image/document uploads, and context-aware generation status.');
+console.log('Chat contract: Web, Android, and iOS share canonical history, idempotent turn IDs, multimodal uploads, interaction continuity, and one segmented conversational-voice delivery layer over canonical Chat.');

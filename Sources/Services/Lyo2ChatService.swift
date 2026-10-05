@@ -39,6 +39,7 @@ class Lyo2ChatService: ObservableObject {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -68,6 +69,7 @@ class Lyo2ChatService: ObservableObject {
             activeArtifact: activeArtifact,
             forcedIntent: forcedIntent,
             stateSummary: mergedStateSummary,
+            voiceSession: voiceSession,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -380,6 +382,37 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 } catch {
                     Log.ai.error("Lyo2 Decoding Error (teaching_policy): \(error)")
                 }
+
+            case "voice_text_segment":
+                guard let text = json["text"] as? String,
+                      let sequence = json["sequence"] as? Int,
+                      let messageId = json["message_id"] as? String
+                else { return }
+                didReceiveContentEvent = true
+                callback?(.voiceTextSegment(segment: VoiceTextSegmentEvent(
+                    text: text,
+                    sequence: sequence,
+                    messageId: messageId
+                )))
+
+            case "voice_ready":
+                guard let text = json["text"] as? String else { return }
+                didReceiveContentEvent = true
+                callback?(.voiceReady(event: VoiceReadyEvent(
+                    text: text,
+                    messageId: json["message_id"] as? String,
+                    speak: (json["speak"] as? Bool) ?? true,
+                    replayed: (json["replayed"] as? Bool) ?? false,
+                    sequence: json["sequence"] as? Int
+                )))
+
+            case "voice_incomplete":
+                didReceiveContentEvent = true
+                callback?(.voiceIncomplete(event: VoiceIncompleteEvent(
+                    messageId: json["message_id"] as? String,
+                    message: json["message"] as? String,
+                    replayed: (json["replayed"] as? Bool) ?? false
+                )))
                 
             case "clarification":
                 if let text = json["text"] as? String {

@@ -57,11 +57,22 @@ final class UnifiedChatService: ObservableObject {
     /// Callback triggered when an emotion brick is detected in the stream
     var onEmotionDetected: ((String) -> Void)?
 
+    /// Voice delivery is still the canonical Chat turn. These callbacks expose
+    /// only transport events so the ViewModel can queue speech without creating
+    /// another AI workflow or another conversation.
+    var onVoiceTextSegment: ((VoiceTextSegmentEvent) -> Void)?
+    var onVoiceReady: ((VoiceReadyEvent) -> Void)?
+    var onVoiceIncomplete: ((VoiceIncompleteEvent) -> Void)?
+
     // MARK: - Private Properties
 
     /// Cancellable timeout task for the current stream.
     /// Cancelled when real content (answer/done/error) arrives.
     private var streamTimeoutTask: Task<Void, Never>?
+    /// Monotonic identity for the active canonical Chat request. Barge-in can
+    /// race with already-queued SSE callbacks; stale callbacks must never
+    /// enqueue speech or mutate the replacement turn.
+    private var streamGeneration: UInt64 = 0
 
     private let backendAI = BackendAIService.shared
     private let lyo2ChatService = Lyo2ChatService.shared
@@ -84,6 +95,7 @@ final class UnifiedChatService: ObservableObject {
     /// This cancels transport only; the conversation, memory, learner state and
     /// next interaction contract stay on the same canonical Chat thread.
     func interruptCurrentResponse() {
+        streamGeneration &+= 1
         streamTimeoutTask?.cancel()
         streamTimeoutTask = nil
         lyo2ChatService.cancelActiveStream()
@@ -93,6 +105,7 @@ final class UnifiedChatService: ObservableObject {
     /// Start a completely new chat session
     /// Clears local state and generates a new session ID to ensure isolation
     func startNewChat(withId id: String? = nil) {
+        streamGeneration &+= 1
         // 1. Generate new session ID
         currentConversationId = id ?? UUID().uuidString
 
@@ -118,7 +131,8 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -167,6 +181,8 @@ final class UnifiedChatService: ObservableObject {
         let media = mediaRefs(from: attachments)
 
         // 7. Route through ChatRouter (Two-Speed Engine)
+        streamGeneration &+= 1
+        let requestGeneration = streamGeneration
         let result = await chatRouter.route(
             message: trimmedText,
             media: media,
@@ -174,13 +190,17 @@ final class UnifiedChatService: ObservableObject {
             mode: mode,
             forcedIntent: forcedIntent,
             voiceSession: voiceSession,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
             onAgentBlock: nil,
             onStreamEvent: { [weak self] event in
                 Task { @MainActor [weak self] in
-                    self?.handleLyo2Event(event, aiMessageId: aiMessageId)
+                    guard let self, self.streamGeneration == requestGeneration else {
+                        return
+                    }
+                    self.handleLyo2Event(event, aiMessageId: aiMessageId)
                 }
             }
         )
@@ -418,7 +438,8 @@ final class UnifiedChatService: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         speakResponse: Bool = false,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
         _ = await sendMessage(
@@ -427,7 +448,8 @@ final class UnifiedChatService: ObservableObject {
             context: context,
             mode: mode,
             forcedIntent: forcedIntent,
-            voiceSession: voiceSession || speakResponse
+            voiceSession: voiceSession || speakResponse,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn
         )
     }
 
@@ -485,9 +507,16 @@ final class UnifiedChatService: ObservableObject {
             text: trimmedText,
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
-            stateSummary: voiceSession
-                ? ["voice_session": AnyCodable(["active": true, "transport": "client_stt_tts"])]
-                : [:],
+            stateSummary: [:],
+            voiceSession: voiceSession ? Lyo2VoiceSessionContext(
+                active: true,
+                transport: "client_stt_tts",
+                locale: Locale.current.identifier,
+                turnId: userMessage.id,
+                interruptedPreviousTurn: false,
+                handsFree: true,
+                delivery: "segments"
+            ) : nil,
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id
@@ -527,6 +556,17 @@ final class UnifiedChatService: ObservableObject {
             // it into the next request's state_summary. Keep the UI layer
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
+
+        case .voiceTextSegment(let segment):
+            // Do not append this to message content. The canonical final answer
+            // owns screen/history state; segments are speech-delivery hints only.
+            onVoiceTextSegment?(segment)
+
+        case .voiceReady(let event):
+            onVoiceReady?(event)
+
+        case .voiceIncomplete(let event):
+            onVoiceIncomplete?(event)
 
         case .conversation(let id):
             if id != currentConversationId {

@@ -80,6 +80,7 @@ final class ChatRouter: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
         conversationHistory: [ConversationMessage] = [],
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -112,6 +113,7 @@ final class ChatRouter: ObservableObject {
                 intent: intent,
                 forcedIntent: forcedIntent,
                 voiceSession: true,
+                voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
                 conversationHistory: conversationHistory,
                 conversationId: conversationId,
                 clientMessageId: clientMessageId,
@@ -274,6 +276,7 @@ final class ChatRouter: ObservableObject {
         intent: ClassifiedIntent,
         forcedIntent: String? = nil,
         voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
         conversationHistory: [ConversationMessage],
         conversationId: String?,
         clientMessageId: String?,
@@ -295,7 +298,16 @@ final class ChatRouter: ObservableObject {
             media: media,
             attachmentIds: attachmentIds,
             forcedIntent: forcedIntent,
-            stateSummary: buildStateSummary(mode: mode, intent: intent, voiceSession: voiceSession),
+            stateSummary: buildStateSummary(mode: mode, intent: intent),
+            voiceSession: voiceSession ? Lyo2VoiceSessionContext(
+                active: true,
+                transport: "client_stt_tts",
+                locale: Locale.current.identifier,
+                turnId: clientMessageId,
+                interruptedPreviousTurn: voiceInterruptedPreviousTurn,
+                handsFree: true,
+                delivery: "segments"
+            ) : nil,
             conversationHistory: memoryWindow,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -340,8 +352,7 @@ final class ChatRouter: ObservableObject {
 
     private func buildStateSummary(
         mode: String,
-        intent: ClassifiedIntent,
-        voiceSession: Bool = false
+        intent: ClassifiedIntent
     ) -> [String: AnyCodable] {
         var summary: [String: AnyCodable] = [
             "requested_mode": AnyCodable(mode),
@@ -360,13 +371,6 @@ final class ChatRouter: ObservableObject {
 
         if let emotion = intent.emotionalContext {
             summary["emotional_context"] = AnyCodable(emotion.rawValue)
-        }
-
-        if voiceSession {
-            summary["voice_session"] = AnyCodable([
-                "active": true,
-                "transport": "client_stt_tts",
-            ])
         }
 
         return summary

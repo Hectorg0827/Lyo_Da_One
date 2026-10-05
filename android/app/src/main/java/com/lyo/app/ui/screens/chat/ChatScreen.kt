@@ -209,6 +209,11 @@ fun ChatScreen(nav: NavHostController) {
     var voiceListenNonce by remember { mutableStateOf(0) }
     var continuousRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     var streamJob by remember { mutableStateOf<Job?>(null) }
+    var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
+    var voiceProtocolSeen by remember { mutableStateOf(false) }
+    var voiceReadyForListening by remember { mutableStateOf(false) }
+    var pendingVoiceUtterances by remember { mutableStateOf(0) }
+    val seenVoiceSegments = remember { mutableSetOf<String>() }
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -228,16 +233,32 @@ fun ChatScreen(nav: NavHostController) {
 
             override fun onDone(utteranceId: String?) {
                 mainHandler.post {
-                    if (speakingMessageId == utteranceId) speakingMessageId = null
-                    if (voiceConversation) voiceListenNonce += 1
+                    if (utteranceId?.startsWith("voice:") == true) {
+                        pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
+                        if (pendingVoiceUtterances == 0 && voiceReadyForListening) {
+                            speakingMessageId = null
+                            if (voiceConversation) voiceListenNonce += 1
+                        }
+                    } else {
+                        if (speakingMessageId == utteranceId) speakingMessageId = null
+                        if (voiceConversation) voiceListenNonce += 1
+                    }
                 }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 mainHandler.post {
-                    if (speakingMessageId == utteranceId) speakingMessageId = null
-                    if (voiceConversation) voiceListenNonce += 1
+                    if (utteranceId?.startsWith("voice:") == true) {
+                        pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
+                        if (pendingVoiceUtterances == 0 && voiceReadyForListening) {
+                            speakingMessageId = null
+                            if (voiceConversation) voiceListenNonce += 1
+                        }
+                    } else {
+                        if (speakingMessageId == utteranceId) speakingMessageId = null
+                        if (voiceConversation) voiceListenNonce += 1
+                    }
                 }
             }
         })
@@ -339,6 +360,12 @@ fun ChatScreen(nav: NavHostController) {
         pendingAttachments.clear()
         inputError = null
         isStreaming = true
+        val interruptedPreviousTurn = voiceInterruptedPreviousTurn
+        voiceInterruptedPreviousTurn = false
+        voiceProtocolSeen = false
+        voiceReadyForListening = false
+        pendingVoiceUtterances = 0
+        seenVoiceSegments.clear()
 
         streamJob?.cancel()
         streamJob = scope.launch {
@@ -373,6 +400,7 @@ fun ChatScreen(nav: NavHostController) {
                         )
                     },
                     voiceSession = voiceConversation,
+                    voiceInterruptedPreviousTurn = interruptedPreviousTurn,
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -386,6 +414,70 @@ fun ChatScreen(nav: NavHostController) {
                             // rendered as whatever plain text also came through.
                             val last = messages.last()
                             messages[messages.lastIndex] = last.copy(blocks = event.blocks)
+                        }
+
+                        is ChatStreamEvent.VoiceSegment -> {
+                            voiceProtocolSeen = true
+                            val key = "${event.messageId}:${event.sequence}"
+                            if (voiceConversation && seenVoiceSegments.add(key)) {
+                                val engine = textToSpeech
+                                if (textToSpeechReady && engine != null) {
+                                    val queueMode = if (pendingVoiceUtterances == 0) {
+                                        TextToSpeech.QUEUE_FLUSH
+                                    } else {
+                                        TextToSpeech.QUEUE_ADD
+                                    }
+                                    pendingVoiceUtterances += 1
+                                    speakingMessageId = event.messageId
+                                    lastSpokenVoiceText = listOf(lastSpokenVoiceText, event.text)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(" ")
+                                    engine.speak(
+                                        event.text,
+                                        queueMode,
+                                        null,
+                                        "voice:${event.messageId}:${event.sequence}",
+                                    )
+                                }
+                            }
+                        }
+
+                        is ChatStreamEvent.VoiceReady -> {
+                            voiceProtocolSeen = true
+                            voiceReadyForListening = true
+                            if (
+                                voiceConversation &&
+                                event.speak &&
+                                seenVoiceSegments.isEmpty() &&
+                                event.text.isNotBlank()
+                            ) {
+                                val engine = textToSpeech
+                                if (textToSpeechReady && engine != null) {
+                                    pendingVoiceUtterances = 1
+                                    val messageId = event.messageId ?: "ready-${clientMessageId}"
+                                    speakingMessageId = messageId
+                                    lastSpokenVoiceText = event.text
+                                    engine.speak(
+                                        event.text,
+                                        TextToSpeech.QUEUE_FLUSH,
+                                        null,
+                                        "voice:${messageId}:ready",
+                                    )
+                                } else {
+                                    voiceListenNonce += 1
+                                }
+                            } else if (pendingVoiceUtterances == 0 && voiceConversation) {
+                                voiceListenNonce += 1
+                            }
+                        }
+
+                        is ChatStreamEvent.VoiceIncomplete -> {
+                            voiceProtocolSeen = true
+                            voiceReadyForListening = true
+                            textToSpeech?.stop()
+                            pendingVoiceUtterances = 0
+                            speakingMessageId = null
+                            if (voiceConversation) voiceListenNonce += 1
                         }
 
                         is ChatStreamEvent.Done -> responseCompleted = true
@@ -407,7 +499,10 @@ fun ChatScreen(nav: NavHostController) {
             isStreaming = false
             streamJob = null
 
-            if (voiceConversation && responseCompleted) {
+            if (voiceConversation && responseCompleted && !voiceProtocolSeen) {
+                // Compatibility fallback for a server that does not understand
+                // the segmented voice contract. Modern turns are already spoken
+                // from VoiceSegment/VoiceReady and must never be repeated here.
                 val assistant = messages.lastOrNull { it.role == "assistant" && it.content.isNotBlank() }
                 val spokenText = assistant?.let { parseChatContent(it.content).text }?.trim().orEmpty()
                 val engine = textToSpeech
@@ -419,9 +514,10 @@ fun ChatScreen(nav: NavHostController) {
                 } else {
                     voiceListenNonce += 1
                 }
-            } else if (voiceConversation) {
-                // Barge-in cancellation or an interrupted transport should
-                // return control to the microphone, never speak the old turn.
+            } else if (voiceConversation && !voiceProtocolSeen) {
+                // Barge-in cancellation or a legacy interrupted transport
+                // returns control to the microphone. Segmented delivery rearms
+                // only after VoiceReady plus the queued utterances have drained.
                 voiceListenNonce += 1
             }
         }
@@ -452,6 +548,11 @@ fun ChatScreen(nav: NavHostController) {
         runCatching { continuousRecognizer?.cancel() }
         textToSpeech?.stop()
         speakingMessageId = null
+        voiceInterruptedPreviousTurn = false
+        voiceProtocolSeen = false
+        voiceReadyForListening = false
+        pendingVoiceUtterances = 0
+        seenVoiceSegments.clear()
     }
 
     fun startVoiceRecognition() {
@@ -495,6 +596,7 @@ fun ChatScreen(nav: NavHostController) {
                     // actual speech can interrupt immediately. While Lyo is
                     // speaking we wait for partial text and reject likely echo.
                     if (speakingMessageId == null && isStreaming) {
+                        voiceInterruptedPreviousTurn = true
                         streamJob?.cancel()
                         streamJob = null
                         isStreaming = false
@@ -522,7 +624,12 @@ fun ChatScreen(nav: NavHostController) {
                     liveVoiceTranscript = transcript
 
                     if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
+                        if (speakingMessageId != null || isStreaming) {
+                            voiceInterruptedPreviousTurn = true
+                        }
                         textToSpeech?.stop()
+                        pendingVoiceUtterances = 0
+                        voiceReadyForListening = false
                         speakingMessageId = null
                         if (isStreaming) {
                             streamJob?.cancel()
@@ -549,7 +656,10 @@ fun ChatScreen(nav: NavHostController) {
                     ) {
                         // Confirmed non-echo speech: barge in now instead of
                         // waiting for the final recognition result.
+                        voiceInterruptedPreviousTurn = true
                         textToSpeech?.stop()
+                        pendingVoiceUtterances = 0
+                        voiceReadyForListening = false
                         speakingMessageId = null
                         if (isStreaming) {
                             streamJob?.cancel()
