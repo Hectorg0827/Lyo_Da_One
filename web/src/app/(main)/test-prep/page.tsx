@@ -26,6 +26,8 @@ import {
 import type { ReadinessPayload, StudySessionRow } from '@/types';
 import { PrepManagement } from '@/components/test-prep/PrepManagement';
 import type { PrepMaterial, PrepSnapshot } from '@/lib/test-prep-api';
+import type { CoachToday } from '@/lib/coach-api';
+import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
 
 /**
  * Test Prep — the face on a learner loop that had none.
@@ -73,6 +75,8 @@ export default function TestPrepPage() {
   const [sending, setSending] = useState(false);
   const [building, setBuilding] = useState(false);
   const [snapshot, setSnapshot] = useState<PrepSnapshot | null>(null);
+  const [coach, setCoach] = useState<CoachToday | null>(null);
+  const [coachFailed, setCoachFailed] = useState(false);
   const [materials, setMaterials] = useState<PrepMaterial[]>([]);
   const [uploading, setUploading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
@@ -97,10 +101,19 @@ export default function TestPrepPage() {
 
       // Settled rather than all: one failing must not blank the other, and
       // neither may be replaced by a placeholder.
-      const [readinessResult, sessionsResult] = await Promise.allSettled([
+      const [readinessResult, sessionsResult, coachResult] = await Promise.allSettled([
         api.testPrep.readiness(plan.id),
         api.testPrep.todaySessions(),
+        api.coach.today(),
       ]);
+      if (coachResult.status === 'fulfilled') {
+        setCoach(coachResult.value);
+        setCoachFailed(false);
+      } else {
+        // Supplementary orchestration must never erase the working Test Prep
+        // schedule. Keep the last valid mission and label it stale.
+        setCoachFailed(true);
+      }
       dispatch({
         type: 'details_loaded',
         readiness: readinessResult.status === 'fulfilled' ? readinessResult.value : undefined,
@@ -356,6 +369,14 @@ export default function TestPrepPage() {
   // overstate one failed call, and saying nothing understates it — badly, in
   // the moment right after finishing a session.
   const readinessStale = readinessNote(state);
+  const testGoal = coach?.active_goals.find(goal =>
+    goal.goal_type === 'test' &&
+    (!snapshot?.profile?.subject || goal.subject === snapshot.profile.subject)
+  ) ?? coach?.active_goals.find(goal => goal.goal_type === 'test') ?? null;
+  const coachReadiness = testGoal ? coach?.readiness[testGoal.id] : undefined;
+  const coachMission = testGoal
+    ? (coach?.mission ?? []).filter(item => item.goal_id === testGoal.id)
+    : [];
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
@@ -373,10 +394,64 @@ export default function TestPrepPage() {
 
       {snapshot && <PrepManagement snapshot={snapshot} onSaved={loadPlan} />}
 
+      {coachReadiness && (
+        <section className="mt-6 rounded-2xl border border-violet-400/20 bg-violet-400/[0.07] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-violet-200/70">Lyo Coach</p>
+              <h2 className="mt-1 text-2xl font-semibold text-white">{readinessLabel(coachReadiness)}</h2>
+            </div>
+            <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">
+              {coachMission.reduce((sum, item) => sum + item.estimated_minutes, 0)} min today
+            </div>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-white/70">{readinessExplanation(coachReadiness)}</p>
+          <p className="mt-2 text-xs text-white/45">
+            Readiness is based on demonstrated evidence, not a predicted exam grade.
+          </p>
+          {coachFailed && (
+            <p className="mt-3 text-xs text-amber-200">This mission may not include your latest evidence.</p>
+          )}
+          {coachMission.length > 0 && (
+            <div className="mt-5">
+              <p className="text-sm font-medium text-white/80">Today&apos;s mission</p>
+              <div className="mt-3 space-y-2">
+                {coachMission.map((item, index) => {
+                  const href = missionEntryHref(item);
+                  const content = (
+                    <>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white/70">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium text-white">{item.title}</span>
+                        <span className="block text-xs text-white/50">
+                          {actionLabel(item.action)} · {item.estimated_minutes} min
+                        </span>
+                      </span>
+                    </>
+                  );
+                  return href ? (
+                    <Link key={item.skill_id} href={href}
+                      className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 px-3 py-3 transition hover:bg-white/[0.06]">
+                      {content}
+                    </Link>
+                  ) : (
+                    <div key={item.skill_id} className="flex items-center gap-3 rounded-xl border border-white/10 px-3 py-3">
+                      {content}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
         <div className="flex items-center gap-2 text-sm text-white/60">
           <Target className="h-4 w-4" aria-hidden />
-          How ready you are
+          {coachReadiness ? 'Evidence by topic' : 'How ready you are'}
         </div>
         {readinessStale && (
           <p className="mt-2 text-sm text-white/50">{readinessStale}</p>
@@ -385,16 +460,16 @@ export default function TestPrepPage() {
         {/* Each branch is a different claim. A plan with nothing assessed has
             a readiness of 0, and rendering that as "0%" would tell a learner
             they failed something nobody ever asked them. */}
-        {headline.kind === 'measured' && (
+        {!coachReadiness && headline.kind === 'measured' && (
           <p className="mt-2 text-4xl font-semibold text-white">{headline.percent}%</p>
         )}
-        {headline.kind === 'unmeasured' && (
+        {!coachReadiness && headline.kind === 'unmeasured' && (
           <p className="mt-2 text-lg text-white/80">
-            You haven&apos;t been tested on any of this yet — start a session below and this
+            You haven&apos;t been assessed on any of this yet — start a session below and this
             will start filling in.
           </p>
         )}
-        {headline.kind === 'unknown' && (
+        {!coachReadiness && headline.kind === 'unknown' && (
           <p className="mt-2 text-lg text-white/80">
             {readiness
               ? 'This plan has no topics on it yet, so there is nothing to measure.'

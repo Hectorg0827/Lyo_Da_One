@@ -183,6 +183,7 @@ struct TestPrepView: View {
             if let stale = model.state.staleWarning {
                 noticeBox(stale)
             }
+            coachCard
             readinessCard
             focusCard
             todaySection
@@ -201,6 +202,95 @@ struct TestPrepView: View {
                     }.padding(.vertical, 6)
                 }
             }
+        }
+    }
+
+    private var activeTestGoal: CoachGoal? {
+        model.coachToday?.testGoal(subject: model.snapshot?.profile?.subject)
+    }
+
+    private var activeCoachReadiness: CoachReadiness? {
+        guard let goal = activeTestGoal else { return nil }
+        return model.coachToday?.readiness[goal.id]
+    }
+
+    private var testMission: [CoachMissionItem] {
+        guard let goal = activeTestGoal else { return [] }
+        return model.coachToday?.mission.filter { $0.goalId == goal.id } ?? []
+    }
+
+    @ViewBuilder
+    private var coachCard: some View {
+        if let readiness = activeCoachReadiness {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("LYO COACH")
+                            .font(DesignTokens.Typography.labelSmall)
+                            .foregroundColor(DesignTokens.Colors.accent)
+                        Text(readiness.label)
+                            .font(DesignTokens.Typography.displaySmall)
+                            .foregroundColor(DesignTokens.Colors.textPrimary)
+                    }
+                    Spacer()
+                    Text("\(testMission.reduce(0) { $0 + $1.estimatedMinutes }) min today")
+                        .font(DesignTokens.Typography.labelSmall)
+                        .foregroundColor(DesignTokens.Colors.textSecondary)
+                }
+
+                Text(readiness.explanation)
+                    .font(DesignTokens.Typography.bodyMedium)
+                    .foregroundColor(DesignTokens.Colors.textSecondary)
+
+                Text("Readiness is based on demonstrated evidence, not a predicted exam grade.")
+                    .font(DesignTokens.Typography.bodySmall)
+                    .foregroundColor(DesignTokens.Colors.textTertiary)
+
+                if model.coachFailed {
+                    Text("This mission may not include your latest evidence.")
+                        .font(DesignTokens.Typography.bodySmall)
+                        .foregroundColor(DesignTokens.Colors.textSecondary)
+                }
+
+                if !testMission.isEmpty {
+                    Text("Today's mission")
+                        .font(DesignTokens.Typography.titleSmall)
+                        .foregroundColor(DesignTokens.Colors.textPrimary)
+                        .padding(.top, 4)
+
+                    ForEach(testMission) { item in
+                        Button {
+                            classroomEntry = ClassroomEntry(
+                                id: item.skillId,
+                                courseId: "GENERATE:\(item.title)",
+                                title: item.title,
+                                durationMinutes: item.estimatedMinutes
+                            )
+                        } label: {
+                            HStack(spacing: DesignTokens.Spacing.sm) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title)
+                                        .font(DesignTokens.Typography.bodyLarge)
+                                        .foregroundColor(DesignTokens.Colors.textPrimary)
+                                    Text("\(item.actionLabel) · \(item.estimatedMinutes) min")
+                                        .font(DesignTokens.Typography.labelSmall)
+                                        .foregroundColor(DesignTokens.Colors.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .foregroundColor(DesignTokens.Colors.accent)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DesignTokens.Spacing.md)
+            .background(DesignTokens.Colors.surface)
+            .cornerRadius(DesignTokens.Radius.lg)
         }
     }
 
@@ -268,23 +358,28 @@ struct TestPrepView: View {
                     .foregroundColor(DesignTokens.Colors.textTertiary)
             }
 
-            switch TestPrepPresentation.readinessHeadline(model.state.readiness) {
-            case .measured(let percent):
-                Text("\(percent)% ready")
-                    .font(DesignTokens.Typography.displayMedium)
-                    .foregroundColor(DesignTokens.Colors.accent)
-            case .notStarted:
-                // Not "0% ready". Nothing has asked this learner anything yet.
-                Text("You haven't started yet")
-                    .font(DesignTokens.Typography.titleLarge)
-                    .foregroundColor(DesignTokens.Colors.textPrimary)
-                Text("Finish a session and this will start filling in.")
-                    .font(DesignTokens.Typography.bodySmall)
+            if activeCoachReadiness == nil {
+                switch TestPrepPresentation.readinessHeadline(model.state.readiness) {
+                case .measured(let percent):
+                    Text("\(percent)% ready")
+                        .font(DesignTokens.Typography.displayMedium)
+                        .foregroundColor(DesignTokens.Colors.accent)
+                case .notStarted:
+                    Text("You haven't started yet")
+                        .font(DesignTokens.Typography.titleLarge)
+                        .foregroundColor(DesignTokens.Colors.textPrimary)
+                    Text("Finish a session and this will start filling in.")
+                        .font(DesignTokens.Typography.bodySmall)
+                        .foregroundColor(DesignTokens.Colors.textSecondary)
+                case .unknown:
+                    Text("No readiness to report yet")
+                        .font(DesignTokens.Typography.titleLarge)
+                        .foregroundColor(DesignTokens.Colors.textPrimary)
+                }
+            } else {
+                Text("Evidence details")
+                    .font(DesignTokens.Typography.titleSmall)
                     .foregroundColor(DesignTokens.Colors.textSecondary)
-            case .unknown:
-                Text("No readiness to report yet")
-                    .font(DesignTokens.Typography.titleLarge)
-                    .foregroundColor(DesignTokens.Colors.textPrimary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

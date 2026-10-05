@@ -31,8 +31,30 @@ data class PrepEdit(val expected_revision: Int, val subject: String? = null, val
     val materials: List<PrepMaterial>? = null)
 data class PrepEdited(val needs_plan: Boolean)
 
+
+data class CoachReadiness(
+    val readiness_index: Double, val readiness_level: String, val calibrated: Boolean,
+    val assessed_skills: Int, val total_skills: Int, val critical_gaps: Int,
+)
+data class CoachGoal(
+    val id: String, val goal_type: String, val title: String, val subject: String?,
+    val status: String, val deadline: String?,
+)
+data class CoachMissionItem(
+    val goal_id: String, val goal_title: String, val skill_id: String, val concept_id: String,
+    val title: String, val action: String, val target_evidence_type: String?,
+    val recommended_surface: String, val estimated_minutes: Int, val priority_score: Double,
+    val reason: String,
+)
+data class CoachToday(
+    val primary_goal_id: String?, val active_goals: List<CoachGoal>,
+    val readiness: Map<String, CoachReadiness>, val mission: List<CoachMissionItem>,
+    val total_minutes: Int, val coach_note: String, val generated_at: String,
+)
+
 interface TestPrepApi {
     @GET("api/v1/me/study_plans/state") suspend fun state(): PrepSnapshot
+    @GET("api/v1/me/coach/today") suspend fun coachToday(): CoachToday
     @POST("api/v1/me/study_plans/intake/turn") suspend fun intake(@Body body: PrepIntake): PrepReply
     @POST("api/v1/me/study_plans/plans/generate") suspend fun generate(@Query("test_profile_id") id: String): Map<String, Any>
     @GET("api/v1/me/study_plans/plans/{id}/readiness") suspend fun readiness(@Path("id") id: String): PrepReadiness

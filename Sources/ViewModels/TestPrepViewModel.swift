@@ -216,6 +216,8 @@ final class TestPrepViewModel: ObservableObject {
     @Published private(set) var intakeBusy = false
     @Published private(set) var intakeError: String?
     @Published private(set) var snapshot: PrepSnapshot?
+    @Published private(set) var coachToday: CoachToday?
+    @Published private(set) var coachFailed = false
     @Published private(set) var pendingMaterials: [PrepMaterial] = []
     private var retryTurn: (text: String, id: String)?
 
@@ -259,8 +261,18 @@ final class TestPrepViewModel: ObservableObject {
         // today's sessions" is better than an error screen over both.
         async let readinessTask = service.readiness(planId: planId)
         async let sessionsTask = service.todaySessions()
+        async let coachTask = service.coachToday()
         let readiness = try? await readinessTask
         let sessions = try? await sessionsTask
+        let coach = try? await coachTask
+        if let coach {
+            coachToday = coach
+            coachFailed = false
+        } else {
+            // Coach is additive. A failed orchestration refresh must not erase
+            // a working Test Prep schedule or the last valid mission.
+            coachFailed = true
+        }
         state.detailsLoaded(readiness: readiness, sessions: sessions)
     }
 
