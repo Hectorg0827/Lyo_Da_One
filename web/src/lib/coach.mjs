@@ -7,8 +7,6 @@
 import {
   classroomEntryHref,
   defaultObjective,
-  practiceEntryHref,
-  reviewEntryHref,
 } from './entry-contract.mjs';
 
 export function readinessLabel(readiness) {
@@ -49,14 +47,35 @@ export function actionLabel(action) {
  */
 export function missionEntryHref(item) {
   if (!item?.title) return null;
+  const minutes = Number.isFinite(Number(item.estimated_minutes))
+    ? Number(item.estimated_minutes)
+    : undefined;
+
   if (item.action === 'review' || item.target_evidence_type === 'retention') {
-    return reviewEntryHref(item.title, item.concept_id);
+    return classroomEntryHref({
+      topic: item.title,
+      mode: 'review',
+      reviewConceptId: item.concept_id,
+      objective: `Retrieve and re-apply ${item.title}`,
+      minutes,
+    });
   }
-  if (item.action === 'diagnose' || item.action === 'check_application' || item.action === 'check_transfer') {
-    return practiceEntryHref(item.title);
+
+  if (
+    item.action === 'diagnose'
+    || item.action === 'check_application'
+    || item.action === 'check_transfer'
+  ) {
+    return classroomEntryHref({
+      topic: item.title,
+      objective: `Practise and apply ${item.title}`,
+      minutes,
+    });
   }
+
   return classroomEntryHref({
     topic: item.title,
     objective: defaultObjective(item.title),
+    minutes,
   });
 }
