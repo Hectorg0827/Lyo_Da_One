@@ -37,11 +37,6 @@ const navItems = [
   { href: '/profile', icon: User, label: 'Profile' },
 ] as { href: string; icon: typeof Home; label: string; isAI?: boolean }[];
 
-const recentChats = [
-  { id: '1', title: 'Introduction to Machine Learning fundamentals' },
-  { id: '2', title: 'React hooks deep dive and patterns' },
-  { id: '3', title: 'Building REST APIs with Node.js' },
-];
 
 /* ============================================================
    Sidebar Component
@@ -169,36 +164,13 @@ export function Sidebar() {
           );
         })}
 
-        {/* ---- Recent Chats ---- */}
-        {!collapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 pt-4 border-t border-[var(--border)]"
-          >
-            <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-              Recent Chats
-            </p>
-            {recentChats.map((chat) => (
-              <Link
-                key={chat.id}
-                href={`/chat?id=${chat.id}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors group"
-              >
-                <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
-                <span className="text-xs truncate">{chat.title}</span>
-              </Link>
-            ))}
-          </motion.div>
-        )}
       </nav>
 
       {/* ---- Bottom: User + Settings ---- */}
       <div className="px-2 py-3 border-t border-[var(--border)] shrink-0">
         <div
           className={cn(
-            'flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer',
+            'flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors',
             collapsed && 'justify-center',
           )}
         >

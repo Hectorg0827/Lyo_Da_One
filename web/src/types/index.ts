@@ -21,6 +21,7 @@ export interface User {
   followingCount: number;
   createdAt: string;
   isPremium: boolean;
+  isFollowing?: boolean;
 }
 
 export interface AuthState {
