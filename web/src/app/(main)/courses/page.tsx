@@ -80,13 +80,12 @@ function adaptCourse(raw: Record<string, unknown>): Course {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'inProgress' | 'completed' | 'bookmarked' | 'browse';
+type TabId = 'inProgress' | 'completed' | 'browse';
 type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'inProgress', label: 'In Progress' },
   { id: 'completed', label: 'Completed' },
-  { id: 'bookmarked', label: 'Bookmarked' },
   { id: 'browse', label: 'Browse' },
 ];
 
@@ -125,9 +124,6 @@ export default function CoursesPage() {
         return courses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100);
       case 'completed':
         return courses.filter((c) => c.progress === 100);
-      case 'bookmarked':
-        // TODO: wire to real bookmarks endpoint when available
-        return [];
       case 'browse':
       default:
         return courses;
