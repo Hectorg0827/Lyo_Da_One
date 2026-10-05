@@ -8,6 +8,46 @@ struct Lyo2ConversationTurn: Codable {
     let content: String
 }
 
+/// Transport metadata for conversational voice. The AI itself remains the
+/// canonical Chat interaction contract; this only controls spoken delivery.
+struct Lyo2VoiceSessionContext: Codable {
+    let active: Bool
+    let transport: String
+    let locale: String
+    let turnId: String?
+    let interruptedPreviousTurn: Bool
+    let handsFree: Bool
+    let delivery: String
+
+    enum CodingKeys: String, CodingKey {
+        case active
+        case transport
+        case locale
+        case turnId = "turn_id"
+        case interruptedPreviousTurn = "interrupted_previous_turn"
+        case handsFree = "hands_free"
+        case delivery
+    }
+
+    init(
+        active: Bool = true,
+        transport: String = "client_stt_tts",
+        locale: String = Locale.current.identifier,
+        turnId: String? = nil,
+        interruptedPreviousTurn: Bool = false,
+        handsFree: Bool = true,
+        delivery: String = "segments"
+    ) {
+        self.active = active
+        self.transport = transport
+        self.locale = locale
+        self.turnId = turnId
+        self.interruptedPreviousTurn = interruptedPreviousTurn
+        self.handsFree = handsFree
+        self.delivery = delivery
+    }
+}
+
 struct Lyo2RouterRequest: Codable {
     let userId: String
     let text: String?
@@ -16,6 +56,7 @@ struct Lyo2RouterRequest: Codable {
     let activeArtifact: Lyo2ActiveArtifactContext?
     let forcedIntent: String?
     let stateSummary: [String: AnyCodable]
+    let voiceSession: Lyo2VoiceSessionContext?
     /// Recent conversation history so the AI maintains context across turns.
     let conversationHistory: [Lyo2ConversationTurn]?
     let conversationId: String?
@@ -31,6 +72,7 @@ struct Lyo2RouterRequest: Codable {
         case activeArtifact = "active_artifact"
         case forcedIntent = "forced_intent"
         case stateSummary = "state_summary"
+        case voiceSession = "voice_session"
         case conversationHistory = "conversation_history"
         case conversationId = "conversation_id"
         case deviceId = "device_id"
@@ -46,6 +88,7 @@ struct Lyo2RouterRequest: Codable {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         deviceId: String = "ios",
@@ -58,6 +101,7 @@ struct Lyo2RouterRequest: Codable {
         self.activeArtifact = activeArtifact
         self.forcedIntent = forcedIntent
         self.stateSummary = stateSummary
+        self.voiceSession = voiceSession
         self.conversationHistory = conversationHistory
         self.conversationId = conversationId
         self.deviceId = deviceId
@@ -234,6 +278,26 @@ struct TeachingRuntimeClientState {
 
 // MARK: - Streaming Response Events
 
+struct VoiceTextSegmentEvent {
+    let text: String
+    let sequence: Int
+    let messageId: String
+}
+
+struct VoiceReadyEvent {
+    let text: String
+    let messageId: String?
+    let speak: Bool
+    let replayed: Bool
+    let sequence: Int?
+}
+
+struct VoiceIncompleteEvent {
+    let messageId: String?
+    let message: String?
+    let replayed: Bool
+}
+
 enum Lyo2StreamEvent {
     /// Shared events (no v1/v2 distinction)
     case skeleton(blocks: [String])
@@ -244,6 +308,9 @@ enum Lyo2StreamEvent {
     case done
     case conversation(id: String)
     case teachingPolicy(policy: TeachingPolicyEvent)
+    case voiceTextSegment(segment: VoiceTextSegmentEvent)
+    case voiceReady(event: VoiceReadyEvent)
+    case voiceIncomplete(event: VoiceIncompleteEvent)
     
     /// v1 backward-compat events (still emitted by deployed backend)
     case actions(blocks: [Lyo2UIBlock])
