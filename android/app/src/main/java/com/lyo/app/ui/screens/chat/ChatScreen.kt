@@ -204,6 +204,7 @@ fun ChatScreen(nav: NavHostController) {
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
+    var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
     var lastSpokenVoiceText by remember { mutableStateOf("") }
     var voiceListenNonce by remember { mutableStateOf(0) }
@@ -354,6 +355,8 @@ fun ChatScreen(nav: NavHostController) {
 
         val content = buildChatContent(trimmed, attachments)
         val clientMessageId = UUID.randomUUID().toString()
+        val interruptedPreviousTurn = voiceInterruptedPreviousTurn
+        voiceInterruptedPreviousTurn = false
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
         messages.add(ChatMsg(role = "assistant", content = ""))
         input = ""
@@ -400,6 +403,9 @@ fun ChatScreen(nav: NavHostController) {
                         )
                     },
                     voiceSession = voiceConversation,
+                    voiceInterruptedPreviousTurn = interruptedPreviousTurn,
+                    voiceTurnId = clientMessageId,
+                    voiceLocale = Locale.getDefault().toLanguageTag(),
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -586,6 +592,11 @@ fun ChatScreen(nav: NavHostController) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Favor natural conversational turn-taking: complete phrases end
+            // quickly, while a short hesitation does not immediately submit.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 800L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 250L)
         }
         liveVoiceTranscript = ""
         runCatching {
@@ -613,6 +624,7 @@ fun ChatScreen(nav: NavHostController) {
                     // actual speech can interrupt immediately. While Lyo is
                     // speaking we wait for partial text and reject likely echo.
                     if (speakingMessageId == null && isStreaming) {
+                        voiceInterruptedPreviousTurn = true
                         streamJob?.cancel()
                         streamJob = null
                         isStreaming = false
@@ -640,6 +652,9 @@ fun ChatScreen(nav: NavHostController) {
                     liveVoiceTranscript = transcript
 
                     if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
+                        if (speakingMessageId != null || isStreaming) {
+                            voiceInterruptedPreviousTurn = true
+                        }
                         textToSpeech?.stop()
                         speakingMessageId = null
                         if (isStreaming) {
@@ -667,6 +682,7 @@ fun ChatScreen(nav: NavHostController) {
                     ) {
                         // Confirmed non-echo speech: barge in now instead of
                         // waiting for the final recognition result.
+                        voiceInterruptedPreviousTurn = true
                         textToSpeech?.stop()
                         speakingMessageId = null
                         if (isStreaming) {
