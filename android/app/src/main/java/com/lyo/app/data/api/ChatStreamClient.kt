@@ -25,6 +25,23 @@ sealed class ChatStreamEvent {
      * iOS decode this same `smart_blocks` event; see chat-contract.mjs.
      */
     data class SmartBlocks(val blocks: List<SmartBlock>) : ChatStreamEvent()
+    data class VoiceSegment(
+        val text: String,
+        val sequence: Int,
+        val messageId: String,
+    ) : ChatStreamEvent()
+    data class VoiceReady(
+        val text: String,
+        val messageId: String?,
+        val speak: Boolean,
+        val replayed: Boolean,
+        val sequence: Int?,
+    ) : ChatStreamEvent()
+    data class VoiceIncomplete(
+        val messageId: String?,
+        val message: String?,
+        val replayed: Boolean,
+    ) : ChatStreamEvent()
     data object Done : ChatStreamEvent()
     data class Error(val message: String) : ChatStreamEvent()
 }
@@ -88,6 +105,7 @@ object ChatStreamClient {
         clientMessageId: String,
         media: List<ChatMediaRef> = emptyList(),
         voiceSession: Boolean = false,
+        voiceInterruptedPreviousTurn: Boolean = false,
     ): Flow<ChatStreamEvent> = callbackFlow {
         val requestFields = mutableMapOf<String, Any?>(
             "text" to text,
@@ -106,14 +124,19 @@ object ChatStreamClient {
                 )
             }
         }
-        if (voiceSession) {
-            stateSummary["voice_session"] = mapOf(
-                "active" to true,
-                "transport" to "client_stt_tts",
-            )
-        }
         if (stateSummary.isNotEmpty()) {
             requestFields["state_summary"] = stateSummary
+        }
+        if (voiceSession) {
+            requestFields["voice_session"] = mapOf(
+                "active" to true,
+                "transport" to "client_stt_tts",
+                "locale" to java.util.Locale.getDefault().toLanguageTag(),
+                "turn_id" to clientMessageId,
+                "interrupted_previous_turn" to voiceInterruptedPreviousTurn,
+                "hands_free" to true,
+                "delivery" to "segments",
+            )
         }
         if (media.isNotEmpty()) {
             requestFields["media"] = media.map { item ->
@@ -191,6 +214,30 @@ object ChatStreamClient {
                 }
                 null
             }
+            obj.get("type")?.asString == "voice_text_segment" -> {
+                val text = obj.get("text")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                val sequence = obj.get("sequence")?.takeIf { it.isJsonPrimitive }?.asInt ?: 0
+                val messageId = obj.get("message_id")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                if (text.isNotBlank() && sequence > 0 && messageId.isNotBlank()) {
+                    ChatStreamEvent.VoiceSegment(text, sequence, messageId)
+                } else null
+            }
+            obj.get("type")?.asString == "voice_ready" -> {
+                val text = obj.get("text")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                if (text.isBlank()) null else ChatStreamEvent.VoiceReady(
+                    text = text,
+                    messageId = obj.get("message_id")?.takeIf { it.isJsonPrimitive }?.asString,
+                    speak = obj.get("speak")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: true,
+                    replayed = obj.get("replayed")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false,
+                    sequence = obj.get("sequence")?.takeIf { it.isJsonPrimitive }?.asInt,
+                )
+            }
+            obj.get("type")?.asString == "voice_incomplete" ->
+                ChatStreamEvent.VoiceIncomplete(
+                    messageId = obj.get("message_id")?.takeIf { it.isJsonPrimitive }?.asString,
+                    message = obj.get("message")?.takeIf { it.isJsonPrimitive }?.asString,
+                    replayed = obj.get("replayed")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false,
+                )
             obj.get("type")?.asString == "error" ->
                 ChatStreamEvent.Error(
                     obj.get("message")?.asString ?: "The response could not be generated.",
