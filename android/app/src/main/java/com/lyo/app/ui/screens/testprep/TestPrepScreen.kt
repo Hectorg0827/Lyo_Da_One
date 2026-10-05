@@ -30,6 +30,8 @@ fun TestPrepScreen(nav: NavHostController) {
     val context = LocalContext.current
     var saved by remember { mutableStateOf<PrepSnapshot?>(null) }
     var readiness by remember { mutableStateOf<PrepReadiness?>(null) }
+    var coach by remember { mutableStateOf<CoachToday?>(null) }
+    var coachFailed by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -50,6 +52,16 @@ fun TestPrepScreen(nav: NavHostController) {
             loaded = true
             val plan = saved?.plan
             readiness = if (plan != null) ApiClient.testPrep.readiness(plan.id) else null
+            if (plan != null) {
+                try {
+                    coach = ApiClient.testPrep.coachToday()
+                    coachFailed = false
+                } catch (_: Exception) {
+                    // Coach is additive. Preserve the last valid mission and
+                    // the working schedule if orchestration alone is unavailable.
+                    coachFailed = true
+                }
+            }
         } catch (_: Exception) { error = "Could not refresh your saved test prep. Please retry." }
     }
     LaunchedEffect(Unit) { load() }
@@ -173,8 +185,82 @@ fun TestPrepScreen(nav: NavHostController) {
         }
         if (saved?.plan != null) {
             item {
+                val profileSubject = saved?.profile?.subject
+                val goal = coach?.active_goals?.firstOrNull { it.goal_type == "test" && it.subject == profileSubject }
+                    ?: coach?.active_goals?.firstOrNull { it.goal_type == "test" }
+                val coachReadiness = goal?.let { coach?.readiness?.get(it.id) }
+                val mission = goal?.let { g -> coach?.mission?.filter { it.goal_id == g.id } }.orEmpty()
+
+                if (coachReadiness != null) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("LYO COACH", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                when (coachReadiness.readiness_level) {
+                                    "ready" -> "Ready"
+                                    "getting_there" -> "Getting there"
+                                    "not_ready" -> "Not ready yet"
+                                    else -> "Readiness unavailable"
+                                },
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
+                            Text(
+                                when {
+                                    coachReadiness.total_skills <= 0 -> "Add the skills for this goal to measure readiness."
+                                    coachReadiness.assessed_skills <= 0 -> "No skill has been assessed yet. Start the first check below."
+                                    coachReadiness.critical_gaps > 0 ->
+                                        "${coachReadiness.critical_gaps} " +
+                                            if (coachReadiness.critical_gaps == 1) "skill still needs application evidence."
+                                            else "skills still need application evidence."
+                                    else -> "Your required skills have strong evidence. Keep retrieval light and current."
+                                }
+                            )
+                            Text("Readiness is based on demonstrated evidence, not a predicted exam grade.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (coachFailed) Text("This mission may not include your latest evidence.",
+                                style = MaterialTheme.typography.bodySmall)
+
+                            if (mission.isNotEmpty()) {
+                                Text("Today's mission", style = MaterialTheme.typography.titleMedium)
+                                mission.forEachIndexed { index, item ->
+                                    OutlinedButton(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = {
+                                            val mode = if (item.action == "review" || item.target_evidence_type == "retention")
+                                                "review" else "solo"
+                                            if (mode == "review") {
+                                                nav.navigate(com.lyo.app.ui.navigation.Routes.reviewClassroom(item.concept_id, item.title))
+                                            } else {
+                                                val sessionId = android.net.Uri.encode("coach-${item.skill_id}")
+                                                nav.navigate("test-prep/classroom/$sessionId?topic=${Uri.encode(item.title)}&mode=solo")
+                                            }
+                                        },
+                                    ) {
+                                        val label = when (item.action) {
+                                            "diagnose" -> "Quick check"
+                                            "remediate" -> "Repair the gap"
+                                            "guide" -> "Guided practice"
+                                            "check_application" -> "Apply it"
+                                            "check_transfer" -> "Challenge"
+                                            "review" -> "Retrieve it"
+                                            "advance" -> "Light review"
+                                            else -> "Study"
+                                        }
+                                        Text("${index + 1}. ${item.title} · $label · ${item.estimated_minutes} min")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
                 val ready = readiness
+                val hasCoachReadiness = coach?.active_goals
+                    ?.firstOrNull { it.goal_type == "test" && it.subject == saved?.profile?.subject }
+                    ?.let { coach?.readiness?.get(it.id) } != null
                 Text(when {
+                    hasCoachReadiness -> "Evidence details"
                     ready == null -> "Readiness unavailable"
                     ready.topics_assessed == 0 -> "Not assessed yet"
                     ready.readiness == null -> "No readiness to report yet"
