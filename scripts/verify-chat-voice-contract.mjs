@@ -20,6 +20,8 @@ const contracts = [
       'api.tts.synthesizeStream',
       'createSpeechRecognition',
       'bargeIn',
+      'subscribeVoiceStreamEvents',
+      'voiceSegmentQueueRef',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -27,9 +29,32 @@ const contracts = [
     name: 'Web transport marks voice session',
     path: 'web/src/stores/chat-store.ts',
     needles: [
-      "voice_session: { active: true, transport: 'client_stt_tts' }",
+      "transport: 'client_stt_tts'",
+      "delivery: 'segments'",
+      "chunk.type === 'voice_text_segment'",
+      'publishVoiceStreamEvent',
       'interruptGeneration',
       'activeStreamController?.abort()',
+    ],
+  },
+  {
+    name: 'iOS parses canonical voice delivery events',
+    path: 'Sources/Services/Lyo2ChatService.swift',
+    needles: [
+      'case "voice_text_segment"',
+      '.voiceTextSegment',
+      'case "voice_ready"',
+      '.voiceReady',
+      'case "voice_incomplete"',
+    ],
+  },
+  {
+    name: 'iOS stream model carries canonical voice events',
+    path: 'Sources/Models/Lyo2Models.swift',
+    needles: [
+      'case voiceTextSegment',
+      'case voiceReady',
+      'case voiceIncomplete',
     ],
   },
   {
@@ -40,6 +65,7 @@ const contracts = [
       'if voiceSession',
       '"voice_session"',
       '"client_stt_tts"',
+      '"delivery": "segments"',
       'handleDeepPath',
     ],
     forbidden: ['AudioStreamManager.shared.startLiveMode'],
@@ -53,6 +79,8 @@ const contracts = [
       'startListening()',
       'voiceSession: shouldResumeListening',
       'unifiedChat.interruptCurrentResponse()',
+      'onVoiceTextSegment',
+      'voiceSegmentStreamOpen',
     ],
     forbidden: [
       'await AudioStreamManager.shared.startLiveMode',
@@ -73,6 +101,8 @@ const contracts = [
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
       'engine.speak',
+      'ChatStreamEvent.VoiceSegment',
+      'pendingVoiceUtterances',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -83,6 +113,9 @@ const contracts = [
       'voiceSession: Boolean = false',
       '"voice_session"',
       '"client_stt_tts"',
+      '"delivery" to "segments"',
+      '"voice_text_segment"',
+      'ChatStreamEvent.VoiceSegment',
       '"api/v1/lyo2/chat/stream"',
     ],
   },
@@ -118,5 +151,5 @@ if (failures.length) {
 
 console.log(
   'Conversational voice contract: Web, iOS and Android use canonical Chat ' +
-  'with STT/TTS transport, voice_session delivery metadata and barge-in; no separate voice AI path.'
+  'with canonical segment streaming, STT/TTS transport, voice_session delivery metadata and barge-in; no separate voice AI path.'
 );
