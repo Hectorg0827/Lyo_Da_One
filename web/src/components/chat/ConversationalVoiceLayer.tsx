@@ -292,6 +292,24 @@ export default function ConversationalVoiceLayer() {
 
     if (event.type === 'voice_ready') {
       voiceTurnClosedRef.current = true;
+      if (
+        !voiceSegmentsReceivedRef.current
+        && event.speak
+        && event.text.trim()
+      ) {
+        voiceSegmentsReceivedRef.current = true;
+        const fallbackKey = event.messageId + ':ready';
+        if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
+          spokenVoiceSegmentKeysRef.current.add(fallbackKey);
+          voiceSegmentQueueRef.current.push({
+            text: event.text,
+            sequence: Number.MAX_SAFE_INTEGER,
+            messageId: event.messageId,
+          });
+          void drainVoiceSegments();
+          return;
+        }
+      }
       finishSegmentTurnIfReady();
       return;
     }
@@ -363,12 +381,13 @@ export default function ConversationalVoiceLayer() {
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
     stopSpeech();
+    if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
     finalTranscriptRef.current = '';
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
