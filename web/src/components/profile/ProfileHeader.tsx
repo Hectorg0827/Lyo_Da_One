@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Flame, Zap, Edit3, UserPlus, UserCheck, Star, Crown } from 'lucide-react';
 import { User } from '@/types';
@@ -129,131 +130,7 @@ export default function ProfileHeader({ user, isOwnProfile, onFollow }: ProfileH
                 )}
               </div>
             </div>
-            {/* Online indicator */}
-            <div
-              className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2"
-              style={{ background: '#22c55e', borderColor: 'var(--surface)' }}
-            />
           </motion.div>
-
-          {/* Action button */}
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            {isOwnProfile ? (
-              <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border border-white/15 bg-white/5 text-primary hover:bg-white/10 hover:border-white/25 transition-all duration-200">
-                <Edit3 size={14} />
-                Edit Profile
-              </button>
-            ) : (
-              <button
-                onClick={handleFollow}
-                className={cn(
-                  'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95',
-                  isFollowing
-                    ? 'border border-white/15 bg-white/5 text-primary hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400'
-                    : 'text-white hover:opacity-90'
-                )}
-                style={
-                  !isFollowing
-                    ? { background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 20px rgba(99,102,241,0.4)' }
-                    : {}
-                }
-              >
-                {isFollowing ? (
-                  <>
-                    <UserCheck size={14} />
-                    Following
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={14} />
-                    Follow
-                  </>
-                )}
-              </button>
-            )}
-          </motion.div>
-        </div>
-
-        {/* Name, username, bio */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="mb-4"
-        >
-          <h1 className="text-2xl font-black leading-tight gradient-text">{user.displayName}</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>@{user.username}</p>
-          {user.bio && (
-            <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {user.bio}
-            </p>
-          )}
-        </motion.div>
-
-        {/* Level badge */}
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex items-center gap-2 mb-4"
-        >
-          <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
-            style={{
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.15))',
-              border: '1px solid rgba(99,102,241,0.35)',
-              color: '#a78bfa',
-            }}
-          >
-            <Zap size={12} fill="#a78bfa" />
-            Level {user.level}
-          </div>
-          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{user.xp.toLocaleString()} total XP</span>
-        </motion.div>
-
-        {/* Stats row */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="flex items-center rounded-2xl overflow-hidden mb-4"
-          style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}
-        >
-          {stats.map((stat, i) => (
-            <button
-              key={stat.label}
-              className="flex-1 py-3.5 flex flex-col items-center hover:bg-white/5 transition-colors duration-200"
-              style={{ borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
-            >
-              <span className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>{stat.value}</span>
-              <span className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>{stat.label}</span>
-            </button>
-          ))}
-        </motion.div>
-
-        {/* XP progress bar */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mb-4 space-y-1.5"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Progress to Level {user.level + 1}</span>
-            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-              {xpInLevel.toLocaleString()} / {XP_PER_LEVEL.toLocaleString()} XP
-            </span>
-          </div>
-          <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: 'linear-gradient(90deg, #6366f1, #a78bfa)' }}
-              initial={{ width: 0 }}
-              animate={{ width: `${xpProgress}%` }}
-              transition={{ duration: 1, ease: 'easeOut', delay: 0.5 }}
-            />
-          </div>
-        </motion.div>
 
         {/* Streak banner */}
         <motion.div
