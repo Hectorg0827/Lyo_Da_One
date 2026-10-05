@@ -104,6 +104,10 @@ export default function ConversationalVoiceLayer() {
     stopSpeech();
     stopRecognition();
     if (useChatStore.getState().isGenerating) interruptGeneration();
+    // Echo suppression is turn-local. Once a genuine learner utterance is
+    // accepted, forget prior assistant speech before collecting the next reply.
+    lastSpokenTextRef.current = '';
+    lastSpokenMessageIdRef.current = null;
     awaitingAssistantRef.current = true;
     voiceSegmentQueueRef.current = [];
     voiceSegmentDrainActiveRef.current = false;
