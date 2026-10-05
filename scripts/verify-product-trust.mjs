@@ -70,6 +70,14 @@ const learningProgress = readCode('web/src/lib/learning-progress.ts');
 const classroomStore = readCode('web/src/stores/classroom-store.ts');
 const evidenceRecord = readCode('web/src/components/classroom/EvidenceRecord.tsx');
 const chatStore = readCode('web/src/stores/chat-store.ts');
+const topBar = readCode('web/src/components/layout/TopBar.tsx');
+const signup = readCode('web/src/app/auth/signup/page.tsx');
+const coursesPage = readCode('web/src/app/(main)/courses/page.tsx');
+const clipsPage = readCode('web/src/app/(main)/clips/page.tsx');
+const storiesPage = readCode('web/src/app/(main)/stories/page.tsx');
+const settingsPage = readCode('web/src/app/(main)/settings/page.tsx');
+const profilePage = readCode('web/src/app/(main)/profile/page.tsx');
+const publicProfilePage = readCode('web/src/app/(main)/profile/[userId]/page.tsx');
 
 // ── 1. No fabricated learner activity ────────────────────────────────────────
 
@@ -97,6 +105,39 @@ for (const [source, label] of [
 ]) {
   rejectPattern(source, /Math\.random\(\)/, `${label} generated learner data`);
 }
+
+
+// ── 1b. Visible controls must be real ───────────────────────────────────────
+//
+// A polished control that cannot perform the action it advertises is a trust
+// failure, not a cosmetic issue. These checks deliberately prefer omission to
+// fake capability until a backend contract exists.
+
+rejectText(sidebar, 'const recentChats', 'Sidebar fabricated recent chats');
+rejectText(sidebar, 'online={true}', 'Sidebar fabricated online presence');
+
+requireText(topBar, 'handleSearch', 'Global search has a submit action');
+requireText(topBar, "router.push(query ? `/discover?q=", 'Global search reaches discover');
+rejectText(topBar, 'Search courses, clips, topics', 'Global search overclaims its current scope');
+
+rejectText(signup, 'OAuth coming soon', 'Signup exposes fake OAuth');
+rejectText(signup, 'OAuthButton', 'Signup renders unavailable social auth');
+
+rejectText(coursesPage, "'bookmarked'", 'Courses exposes unsupported bookmarks');
+rejectText(clipsPage, "const tabs = ['For You', 'Following', 'Trending']", 'Clips exposes cosmetic feed tabs');
+rejectText(storiesPage, 'Reply to story', 'Stories exposes inert reply UI');
+
+rejectText(settingsPage, 'Delete Account', 'Settings exposes false account deletion');
+rejectText(settingsPage, 'onSave={() => {}}', 'Settings exposes inert editable fields');
+rejectText(settingsPage, 'setDarkMode', 'Settings exposes non-persisted appearance controls');
+
+rejectText(profilePage, 'xpEarned: 500', 'Profile fabricates course XP');
+rejectText(profilePage, 'topTopics: []', 'Profile fabricates empty learning topics');
+rejectText(profilePage, 'api.courses.list(', 'Profile shows generic courses as user-owned');
+rejectText(profilePage, 'api.clips.list(', 'Profile shows generic clips as user-owned');
+rejectText(publicProfilePage, 'api.gamification.overview(', 'Public profile borrows viewer gamification');
+rejectText(publicProfilePage, 'api.courses.list(', 'Public profile shows generic courses as another user');
+rejectText(publicProfilePage, 'api.clips.list(', 'Public profile shows generic clips as another user');
 
 // ── 2. The front door ────────────────────────────────────────────────────────
 
