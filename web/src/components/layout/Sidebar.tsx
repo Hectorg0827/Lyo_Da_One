@@ -37,11 +37,6 @@ const navItems = [
   { href: '/profile', icon: User, label: 'Profile' },
 ] as { href: string; icon: typeof Home; label: string; isAI?: boolean }[];
 
-const recentChats = [
-  { id: '1', title: 'Introduction to Machine Learning fundamentals' },
-  { id: '2', title: 'React hooks deep dive and patterns' },
-  { id: '3', title: 'Building REST APIs with Node.js' },
-];
 
 /* ============================================================
    Sidebar Component
@@ -202,7 +197,7 @@ export function Sidebar() {
             collapsed && 'justify-center',
           )}
         >
-          <Avatar name={user?.displayName ?? 'User'} size="sm" online={true} className="shrink-0" />
+          <Avatar name={user?.displayName ?? 'User'} size="sm" className="shrink-0" />
 
           <AnimatePresence>
             {!collapsed && (
