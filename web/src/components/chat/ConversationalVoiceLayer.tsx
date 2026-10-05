@@ -47,6 +47,7 @@ export default function ConversationalVoiceLayer() {
   const awaitingAssistantRef = useRef(false);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCancelRef = useRef<(() => void) | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
   const ttsPrefetchAbortRef = useRef<AbortController | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -98,6 +99,8 @@ export default function ConversationalVoiceLayer() {
     segmentQueueRef.current = [];
     segmentControllersRef.current.forEach((controller) => controller.abort());
     segmentControllersRef.current.clear();
+    audioCancelRef.current?.();
+    audioCancelRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
@@ -197,7 +200,16 @@ export default function ConversationalVoiceLayer() {
     const cleanup = () => {
       URL.revokeObjectURL(url);
       if (audioRef.current === audio) audioRef.current = null;
+      if (audioCancelRef.current === cancelPlayback) audioCancelRef.current = null;
     };
+    const cancelPlayback = () => {
+      if (settled) return;
+      settled = true;
+      audio.pause();
+      cleanup();
+      resolve();
+    };
+    audioCancelRef.current = cancelPlayback;
     audioRef.current = audio;
     audio.onended = () => {
       if (settled) return;
