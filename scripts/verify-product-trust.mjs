@@ -729,15 +729,28 @@ requireText(entryContract, 'SESSION_LENGTHS', 'The session-length question lost 
 requireText(entryContract, 'CLASSROOM_LANGUAGES', 'The language question lost its shared options');
 requireText(frontDoor, 'CLASSROOM_LEVELS', 'The front door stopped asking what the learner knows');
 requireText(frontDoor, 'SESSION_LENGTHS', 'The front door stopped asking how long they have');
-// The Classroom must parse duration through the same list it is offered from.
-// A length offered but not honoured becomes 10 minutes with nothing saying so.
-// Match the CALL, not the identifier: the import line alone satisfies a bare
-// text check, so a rule written that way passes while the parse below it does
-// something else entirely.
+// Front-door answers stay on the shared preset list, but a server-owned
+// Coach mission may intentionally be more precise (for example seven minutes).
+// The entry contract keeps those two trust domains separate:
+//   learner answer -> normalizeSessionMinutes (strict presets)
+//   canonical mission -> normalizeServerSessionMinutes (bounded 3..60)
+// The Classroom must preserve the latter rather than silently falling back to
+// ten minutes, and its Settings menu must surface a temporary option when the
+// exact mission length is not a standard front-door preset.
+requireText(
+  entryContract,
+  'function normalizeSessionMinutes',
+  'The Classroom accepts session lengths the front door does not offer'
+);
 requirePattern(
   classroomPage,
-  /normalizeSessionMinutes\(\s*params\.get\('duration'\)\s*\)/,
-  'The Classroom accepts session lengths the front door does not offer'
+  /normalizeServerSessionMinutes\(\s*params\.get\('duration'\)\s*\)/,
+  'The Classroom drops a precise server-owned mission duration'
+);
+requirePattern(
+  classroomPage,
+  /!SESSION_LENGTHS\.includes\(durationMinutes\)/,
+  'The Classroom hides a precise server-owned duration from Settings'
 );
 requirePattern(
   classroomPage,
@@ -841,6 +854,8 @@ const REQUIRED_RULES = [
   'The front door stopped asking what the learner knows',
   'The front door stopped asking how long they have',
   'The Classroom accepts session lengths the front door does not offer',
+  'The Classroom drops a precise server-owned mission duration',
+  'The Classroom hides a precise server-owned duration from Settings',
   'The Classroom session-length menu drifted from the shared list',
   'An unrecognised level is passed through unchecked',
   'An unrecognised language is passed through unchecked',
