@@ -70,6 +70,10 @@ const learningProgress = readCode('web/src/lib/learning-progress.ts');
 const classroomStore = readCode('web/src/stores/classroom-store.ts');
 const evidenceRecord = readCode('web/src/components/classroom/EvidenceRecord.tsx');
 const chatStore = readCode('web/src/stores/chat-store.ts');
+const surfaceLoading = readCode('web/src/components/ui/SurfaceLoading.tsx');
+const courseCard = readCode('web/src/components/courses/CourseCard.tsx');
+const communityPage = readCode('web/src/app/(main)/community/page.tsx');
+const nodePreview = readCode('web/src/components/community/NodePreview.tsx');
 
 // ── 1. No fabricated learner activity ────────────────────────────────────────
 
@@ -97,6 +101,15 @@ for (const [source, label] of [
 ]) {
   rejectPattern(source, /Math\.random\(\)/, `${label} generated learner data`);
 }
+
+
+// ── 1c. Polish must preserve identity and accessibility ──────────────────────
+requireText(surfaceLoading, 'idle={!reduceMotion}', 'Loading surface honors reduced motion');
+rejectText(surfaceLoading, '<MascotAvatar idle size=', 'Loading mascot ignores reduced motion');
+requireText(courseCard, 'title={course.title}', 'Course artwork uses the canonical title seed');
+rejectText(courseCard, 'course.category} ${course.title}', 'Course artwork drifts from the canonical title seed');
+requireText(communityPage, 'key={selectedNode.key}', 'Community preview is keyed at the call site');
+rejectText(nodePreview, 'key={node.key}', 'Community preview key is trapped inside the component');
 
 // ── 2. The front door ────────────────────────────────────────────────────────
 
