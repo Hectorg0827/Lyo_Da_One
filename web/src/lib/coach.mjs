@@ -57,7 +57,7 @@ export function missionEntryHref(item) {
       mode: 'review',
       reviewConceptId: item.concept_id,
       objective: `Retrieve and re-apply ${item.title}`,
-      minutes,
+      serverMinutes: minutes,
     });
   }
 
@@ -69,13 +69,13 @@ export function missionEntryHref(item) {
     return classroomEntryHref({
       topic: item.title,
       objective: `Practise and apply ${item.title}`,
-      minutes,
+      serverMinutes: minutes,
     });
   }
 
   return classroomEntryHref({
     topic: item.title,
     objective: defaultObjective(item.title),
-    minutes,
+    serverMinutes: minutes,
   });
 }
