@@ -51,8 +51,9 @@ export default function UserProfilePage({ params }: { params: { userId: string }
       <ProfileHeader
         user={user}
         isOwnProfile={false}
-        onFollow={() => {
-          void api.users.follow(params.userId).catch(() => undefined);
+        onFollow={(next) => {
+          const request = next ? api.users.follow(params.userId) : api.users.unfollow(params.userId);
+          void request.catch(() => undefined);
         }}
       />
 
