@@ -4,8 +4,9 @@
  *
  * This contract intentionally forbids a second voice AI path. Every platform
  * must send voice turns through the same Lyo2 Chat stream and mark
- * state_summary.voice_session.active=true so the backend interaction contract
- * changes delivery style without changing intent, memory, tools or pedagogy.
+ * a typed top-level voice_session capability so the backend interaction
+ * contract changes delivery style without changing intent, memory, tools or
+ * pedagogy. Segment events are delivery hints over the same canonical answer.
  */
 import fs from 'node:fs';
 
@@ -15,10 +16,16 @@ const contracts = [
     name: 'Web voice uses canonical Chat store',
     path: 'web/src/components/chat/ConversationalVoiceLayer.tsx',
     needles: [
-      'sendMessage(transcript, [], { voiceSession: true })',
+      'sendMessage(transcript, [], {',
+      'voiceSession: true',
+      'voiceInterruptedPreviousTurn: wasInterrupted',
+      'onVoiceSegment',
+      'onVoiceReady',
+      'onVoiceIncomplete',
       'interruptGeneration()',
       'api.tts.synthesizeStream',
       'createSpeechRecognition',
+      'voicePlaybackChainRef',
       'bargeIn',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
@@ -27,7 +34,11 @@ const contracts = [
     name: 'Web transport marks voice session',
     path: 'web/src/stores/chat-store.ts',
     needles: [
-      "voice_session: { active: true, transport: 'client_stt_tts' }",
+      "chunk.type === 'voice_text_segment'",
+      "chunk.type === 'voice_ready'",
+      "chunk.type === 'voice_incomplete'",
+      "delivery: 'segments'",
+      'voiceInterruptedPreviousTurn',
       'interruptGeneration',
       'activeStreamController?.abort()',
     ],
@@ -38,8 +49,10 @@ const contracts = [
     needles: [
       'voiceSession: Bool = false',
       'if voiceSession',
-      '"voice_session"',
-      '"client_stt_tts"',
+      'voiceSession: voiceSession ? Lyo2VoiceSessionContext(',
+      'transport: "client_stt_tts"',
+      'delivery: "segments"',
+      'voiceInterruptedPreviousTurn',
       'handleDeepPath',
     ],
     forbidden: ['AudioStreamManager.shared.startLiveMode'],
@@ -52,6 +65,10 @@ const contracts = [
       'voiceLoopActive = true',
       'startListening()',
       'voiceSession: shouldResumeListening',
+      'voiceInterruptedPreviousTurn: interruptedPreviousTurn',
+      'onVoiceTextSegment',
+      'onVoiceReady',
+      'onVoiceIncomplete',
       'unifiedChat.interruptCurrentResponse()',
     ],
     forbidden: [
@@ -73,6 +90,10 @@ const contracts = [
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
       'engine.speak',
+      'ChatStreamEvent.VoiceSegment',
+      'ChatStreamEvent.VoiceReady',
+      'TextToSpeech.QUEUE_ADD',
+      'voiceInterruptedPreviousTurn',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -83,6 +104,10 @@ const contracts = [
       'voiceSession: Boolean = false',
       '"voice_session"',
       '"client_stt_tts"',
+      '"delivery" to "segments"',
+      'ChatStreamEvent.VoiceSegment',
+      'ChatStreamEvent.VoiceReady',
+      'ChatStreamEvent.VoiceIncomplete',
       '"api/v1/lyo2/chat/stream"',
     ],
   },
