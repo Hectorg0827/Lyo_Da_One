@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
@@ -9,6 +10,7 @@ import {
   Accessibility, Gauge, Settings2, Timer, Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CALL_TO_ACTION, invitation } from '@/lib/teach-it.mjs';
 import {
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
@@ -501,6 +503,25 @@ function ClassroomStage() {
                   ? 'The class session ended.'
                   : 'Something went wrong.')}{' '}
                 <button className="underline" onClick={() => connect(connection)}>Retry</button>
+              </div>
+            )}
+
+            {/* A session that ended on its own is a finish, not a fault — and
+                it is the moment a learner has something specific to say and
+                feels good enough to say it. Discover's hardest problem is
+                supply; this is where supply comes from. The topic is already
+                known, so the ask names it and the composer opens with the
+                title written. Not shown after an error, where nothing was
+                finished to teach. */}
+            {status === 'ended' && !error && (
+              <div className="rounded-xl border border-[#8B5CF6]/30 bg-[#8B5CF6]/10 px-4 py-3">
+                <p className="text-sm text-white/85">{invitation(topic)}</p>
+                <Link
+                  href={`/discover?compose=clip&topic=${encodeURIComponent(topic ?? '')}`}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 font-rounded text-[13px] font-bold text-[#0A0D16]"
+                >
+                  {CALL_TO_ACTION}
+                </Link>
               </div>
             )}
             {shownBoard.length === 0 && !prompt && status !== 'error' && status !== 'ended' && (

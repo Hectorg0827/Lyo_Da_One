@@ -15,6 +15,12 @@ import AVFoundation
 struct ClipsRecordingView: View {
     @StateObject private var viewModel = ClipsViewModel()
     @ObservedObject var cameraManager: EnhancedCameraManager
+
+    /// What the learner just finished, when they arrived here from a finish
+    /// screen. Fills the title in so the one thing standing between them and
+    /// recording is pressing record. Nil elsewhere, and nothing is invented
+    /// from it — see `ClipPrompt.draftTitle`.
+    var topic: String? = nil
     @Environment(\.dismiss) private var dismiss
     
     @State private var currentZoomScale: CGFloat = 1.0
@@ -125,6 +131,8 @@ struct ClipsRecordingView: View {
         .onAppear {
             // Safety net: ensure the camera session is alive when this view appears
             cameraManager.ensureSessionRunning()
+            // Arrived from a finish screen that knows the subject.
+            viewModel.prefill(topic: topic)
         }
         .onDisappear {
             viewModel.stopMusic()

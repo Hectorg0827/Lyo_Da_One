@@ -6,6 +6,13 @@ import SwiftUI
 /// The recap card renders to an image (ImageRenderer) so it can be shared to
 /// any app — every finished lesson becomes lightweight, branded, learner-made
 /// marketing.
+///
+/// It also asks for a clip. This screen described itself as the clips ↔
+/// classroom flywheel and offered no way to reach clips at all: share an
+/// image, keep learning, challenge a friend, done. Discover's hardest problem
+/// is supply, and this is the moment a learner has something specific to say
+/// and feels good enough to say it — with the topic already known, so the ask
+/// can name it.
 struct LessonCompletionOverlay: View {
     let topic: String
     let points: [String]
@@ -13,6 +20,10 @@ struct LessonCompletionOverlay: View {
     var quizQuestions: [ChallengeQuestion] = []
     let onKeepGoing: () -> Void
     let onDone: () -> Void
+    /// Opens the clip composer for this topic. Absent where no composer can
+    /// be reached, in which case the invitation is not shown rather than
+    /// offered and then refused.
+    var onTeachIt: (() -> Void)?
 
     @State private var appeared = false
     @State private var challenge: FriendChallenge?
@@ -26,6 +37,29 @@ struct LessonCompletionOverlay: View {
                 LessonRecapCard(topic: topic, points: points)
                     .scaleEffect(appeared ? 1 : 0.85)
                     .opacity(appeared ? 1 : 0)
+
+                if let onTeachIt {
+                    Button(action: onTeachIt) {
+                        VStack(spacing: 4) {
+                            Label(ClipPrompt.callToAction, systemImage: "video.fill")
+                                .font(.subheadline.bold())
+                            Text(ClipPrompt.invitation(topic: topic))
+                                .font(.caption)
+                                .opacity(0.85)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(
+                            Capsule().fill(
+                                LinearGradient(
+                                    colors: [Color(hexString: "EC4899"), Color(hexString: "8B5CF6")],
+                                    startPoint: .leading, endPoint: .trailing
+                                ))
+                        )
+                        .foregroundColor(.white)
+                    }
+                }
 
                 HStack(spacing: 12) {
                     ShareLink(

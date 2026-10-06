@@ -64,6 +64,9 @@ jobs:
       - name: Verify Focus deck parity
         run: node scripts/verify-focus-deck-parity.mjs
 
+      - name: Verify teach-it prompt parity
+        run: node scripts/verify-teach-it-parity.mjs
+
       - name: Verify Android Profile integrity
         run: node scripts/verify-android-profile-honesty.mjs
 
@@ -259,8 +262,39 @@ jobs:
           push: true
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.lyoai.app
+            GIT_COMMIT=${{ github.sha }}
           tags: |
             ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-check:
+    name: Verify production deploy
+    # Nothing in this workflow deploys the web app. Production is a Railway
+    # service wired straight to this repository (WEB_PRODUCTION_DEPLOYMENT.md):
+    # Railway sees the push, builds web/Dockerfile itself and swaps the running
+    # instance. The image published above goes to GHCR and that service does
+    # not consume it.
+    #
+    # So a green pipeline has never meant the site changed, and there was no
+    # way to tell from outside — which is exactly how a merged change sat
+    # unnoticed while lyoai.app kept serving the build before it. This job
+    # waits for the live site to report the released commit and fails when it
+    # never does. It asserts; it does not deploy.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: web-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Wait for lyoai.app to serve this commit
+        env:
+          DEPLOY_HEALTH_URL: https://lyoai.app/api/health
+          DEPLOY_EXPECTED_COMMIT: ${{ github.sha }}
+        run: node scripts/verify-production-deploy.mjs

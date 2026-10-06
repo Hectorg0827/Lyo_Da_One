@@ -31,6 +31,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -80,6 +82,13 @@ object Routes {
     const val CLIPS = "clips"
     const val CREATE = "create"
     const val CREATE_CLIP = "create/clip"
+
+    /** The same screen, arriving with the subject already known. */
+    const val CREATE_CLIP_WITH_TOPIC = "create/clip?topic={topic}"
+
+    fun createClip(topic: String?): String =
+        if (topic.isNullOrBlank()) CREATE_CLIP
+        else "create/clip?topic=${android.net.Uri.encode(topic)}"
     const val CREATE_POST = "create/post"
     const val CREATE_GROUP = "create/group"
     const val CREATE_EVENT = "create/event"
@@ -97,6 +106,11 @@ object Routes {
     // needs, with no further special-casing required.
     const val CLASSROOM = "classroom/{courseId}"
     const val DISCOVER = "discover"
+
+    // The places/events browser that used to answer "discover". It is not in
+    // the bottom bar and nothing navigates to it, but it is a real screen, so
+    // it keeps a route of its own rather than being deleted on the way past.
+    const val PLACES = "places"
     const val PROFILE = "profile"
     const val USER_PROFILE = "profile/{userId}"
     const val MESSAGES = "messages"
@@ -121,12 +135,19 @@ object Routes {
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
 /**
- * Mirrors the iOS product hierarchy: Focus, Clips, Create, Community, Profile.
+ * Mirrors the iOS product hierarchy: Focus, Discover, Create, Community, Profile.
  * Chat remains a contextual destination opened from Create and other learning surfaces.
+ *
+ * "Discover" is the clip reel. The two were one surface under two names: this
+ * bar said Clips and opened [ClipsScreen], while "discover" opened an unrelated
+ * places-and-events browser nothing linked to. iOS shows the same reel and web
+ * serves it at /discover, so Discover is the name on all three now; the old
+ * browser moved to [Routes.PLACES] and the "clips" route still reaches the reel
+ * so existing deep links keep working.
  */
 private val bottomItems = listOf(
     BottomItem(Routes.HOME, "Focus", Icons.Filled.Home),
-    BottomItem(Routes.CLIPS, "Clips", Icons.Filled.PlayCircle),
+    BottomItem(Routes.DISCOVER, "Discover", Icons.Filled.PlayCircle),
     BottomItem(Routes.CREATE, "Create", Icons.Filled.Add),
     BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
     BottomItem(Routes.PROFILE, "Profile", Icons.Filled.Person),
@@ -254,9 +275,22 @@ private fun LyoNavHost() {
                 ReliablePostDetailScreen(nav, entry.arguments?.getString("postId") ?: "")
             }
             composable(Routes.GROUPS) { GroupsScreen(nav) }
+            // One reel, two routes: "discover" is the name in the bar, and
+            // "clips" stays so links already shared keep landing on it.
+            composable(Routes.DISCOVER) { ClipsScreen(nav) }
             composable(Routes.CLIPS) { ClipsScreen(nav) }
             composable(Routes.CREATE) { CreateScreen(nav) }
             composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }
+            composable(
+                route = Routes.CREATE_CLIP_WITH_TOPIC,
+                arguments = listOf(
+                    navArgument("topic") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry -> CreateClipScreen(nav, topic = entry.arguments?.getString("topic")) }
             composable(Routes.CREATE_POST) { CreatePostScreen(nav) }
             composable(Routes.CREATE_GROUP) {
                 CreateCommunityItemScreen(nav = nav, createGroup = true)
@@ -294,7 +328,7 @@ private fun LyoNavHost() {
                     courseId = entry.arguments?.getString("courseId") ?: "",
                 )
             }
-            composable(Routes.DISCOVER) { DiscoverScreen(nav) }
+            composable(Routes.PLACES) { DiscoverScreen(nav) }
             composable(Routes.PROFILE) { ProfileScreen(nav, userId = null) }
             composable(Routes.USER_PROFILE) { entry ->
                 ProfileScreen(nav, userId = entry.arguments?.getString("userId"))

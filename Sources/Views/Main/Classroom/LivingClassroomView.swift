@@ -205,6 +205,14 @@ struct LivingClassroomView: View {
     @State private var quizSelections: [String: String] = [:]
     @State private var userInput: String = ""
     @State private var recapDismissed = false
+
+    // "Teach it" on the lesson recap: a learner who has just finished
+    // something is the best source of a clip this app will ever get, and the
+    // recorder is presented here rather than across a tab switch so the
+    // invitation and the camera are one tap apart.
+    @State private var isRecordingTeachClip = false
+    @State private var teachClipTopic: String?
+    @StateObject private var teachClipCamera = EnhancedCameraManager()
     @StateObject private var tts = TextToSpeechService.shared
     @StateObject private var voiceInput = VoiceInputService.shared
     @State private var isBottomExpanded: Bool = false
@@ -327,7 +335,11 @@ struct LivingClassroomView: View {
                             ]
                         )
                     },
-                    onDone: { dismiss() }
+                    onDone: { dismiss() },
+                    onTeachIt: {
+                        teachClipTopic = recap.topic.isEmpty ? courseTitle : recap.topic
+                        isRecordingTeachClip = true
+                    }
                 )
                 .transition(.opacity)
                 .zIndex(104)
@@ -423,6 +435,13 @@ struct LivingClassroomView: View {
                         "narration_was_active": narrationText != nil
                     ])
             }
+        }
+        // The recorder, opened straight from the recap so the gap between
+        // "I just learned this" and pressing record is one tap. It starts on
+        // the single-take path with the title already written; the guided
+        // four-chapter studio is still a choice inside it.
+        .fullScreenCover(isPresented: $isRecordingTeachClip) {
+            ClipsRecordingView(cameraManager: teachClipCamera, topic: teachClipTopic)
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(

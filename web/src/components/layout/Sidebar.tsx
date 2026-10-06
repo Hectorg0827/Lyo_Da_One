@@ -7,7 +7,6 @@ import {
   Home,
   MessageSquare,
   BookOpen,
-  Play,
   Users,
   Compass,
   Target,
@@ -31,7 +30,6 @@ const navItems = [
   // Test prep is a distinct job from browsing courses: a learner with a date
   // in mind needs their readiness and today's sessions, not the catalogue.
   { href: '/test-prep', icon: Target, label: 'Test Prep' },
-  { href: '/clips', icon: Play, label: 'Clips' },
   { href: '/community', icon: Users, label: 'Community' },
   { href: '/discover', icon: Compass, label: 'Discover' },
   { href: '/profile', icon: User, label: 'Profile' },

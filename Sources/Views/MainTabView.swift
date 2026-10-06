@@ -61,7 +61,10 @@ struct MainTabView: View {
     
     enum Tab {
         case focus
-        case clips // Renamed from discover
+        // The clip reel. Named `clips` for the things in it; the surface is
+        // called Discover everywhere a learner can read it, on all three
+        // platforms. Deep links accept either word (see the handler below).
+        case clips
         case create // New creation tab
         case community // Was post/campus
         case profile // Kept for state but not in bottom bar
@@ -92,7 +95,10 @@ struct MainTabView: View {
                 FocusView()
                     .tag(Tab.focus)
                 
-                DiscoverView() // Will rename to ClipsView later
+                // Discover is the clip reel. There is no second clips screen
+                // to rename this into: this tab has always been the one feed,
+                // and web (/discover) and Android now carry the same name.
+                DiscoverView()
                     .tag(Tab.clips)
                 
                 // Create Tab - Placeholder, will present sheet
@@ -525,9 +531,9 @@ struct CustomNavBar: View {
                 }
                 .frame(maxWidth: .infinity)
                 
-                // 2. Clips (was Discover)
+                // 2. Discover — the clip reel
                 NavButton(
-                    icon: "play.rectangle.fill", // Video icon for Clips
+                    icon: "play.rectangle.fill", // It is a video feed
                     isSelected: selectedTab == .clips
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {

@@ -48,9 +48,31 @@ The production split is intentional:
 5. Optionally attach `www.lyoai.app` to the web service and redirect it to the
    root domain at the DNS or application layer.
 
+## How a release reaches production
+
+Nothing in `.github/workflows/ci.yml` deploys the web app. This service is
+connected to the GitHub repository directly, so **Railway** is what notices a
+push to `main`, builds `web/Dockerfile` and swaps the running instance. CI's
+`Publish production web image` job pushes a parallel image to GHCR that this
+service does not consume.
+
+A green pipeline therefore does not mean the site changed. The `deploy-check`
+job closes that gap: it polls `https://lyoai.app/api/health` until the
+`commit` field matches the commit being released, and fails with a diagnosis
+when it never does. It asserts; it does not deploy. If it fails, look at
+Railway, not at CI.
+
+`/api/health` reports `commit` from `LYO_GIT_COMMIT`, then
+`RAILWAY_GIT_COMMIT_SHA`, then `GIT_COMMIT`, and `null` when none is set —
+never a guess, because a health endpoint that invents a commit makes a stale
+deploy look current. If it reports `null` on a current deploy, add a service
+variable `LYO_GIT_COMMIT` set to the **reference** `${{RAILWAY_GIT_COMMIT_SHA}}`
+so it changes per deploy; a literal commit pasted there would freeze the field.
+
 ## Release gate
 
 - `https://lyoai.app/api/health` returns HTTP 200 from `lyo-web`.
+- `https://lyoai.app/api/health` reports the `commit` that was released.
 - `https://api.lyoai.app/health` returns HTTP 200 from `LyoBackendJune`.
 - A real user can sign in on web.
 - The same conversation appears after refresh and on a second device.

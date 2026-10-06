@@ -23,7 +23,19 @@ struct ChapterSegment: Identifiable {
     var videoURL: URL?
     var duration: TimeInterval = 0
     
-    /// Default 4-chapter template for educational clips.
+    /// A single take, for the one-tap path.
+    ///
+    /// The four-chapter template below is a production tool: intro, point,
+    /// action, summary, each re-recordable, with a teleprompter over the top.
+    /// It makes a good clip and it is a wall in front of a learner who just
+    /// wants to say one thing — and a feed with no clips in it has no
+    /// creators to polish. So this is the default, and the studio is a
+    /// choice.
+    static let quickTake: [ChapterSegment] = [
+        ChapterSegment(title: "Your take", color: Color(hex: "8B5CF6"))
+    ]
+
+    /// Guided 4-chapter template for a more produced clip.
     static let defaultChapters: [ChapterSegment] = [
         ChapterSegment(title: "Intro",      color: Color(hex: "42A5F5")),
         ChapterSegment(title: "Key Point",  color: Color(hex: "AB47BC")),
@@ -112,7 +124,8 @@ final class ClipsViewModel: ObservableObject {
     @Published var teleprompterOpacity: Double = 0.75
     
     // MARK: - Chapter State
-    @Published var chapters: [ChapterSegment] = ChapterSegment.defaultChapters
+    /// Starts as one take. `useGuidedChapters()` opens the studio.
+    @Published var chapters: [ChapterSegment] = ChapterSegment.quickTake
     @Published var activeChapterIndex: Int = 0
     @Published var isRecordingChapter: Bool = false
     @Published var chapterElapsed: TimeInterval = 0
@@ -176,8 +189,18 @@ final class ClipsViewModel: ObservableObject {
         chapters.filter(\.isRecorded).count
     }
     
-    /// Maximum clip length per-chapter (22.5s × 4 = 90s total)
-    let maxChapterDuration: TimeInterval = 22.5
+    /// Whether the recorder is on the one-take path rather than the studio.
+    var isQuickTake: Bool { chapters.count <= 1 }
+
+    /// Maximum length of the segment being recorded.
+    ///
+    /// A single take runs to `ClipPrompt.quickTakeSeconds`, the same number
+    /// the finish-screen invitation promises, so the camera cannot cut a
+    /// learner off mid-sentence after the app asked for exactly that long.
+    /// The guided studio keeps 22.5s per chapter (× 4 = 90s total).
+    var maxChapterDuration: TimeInterval {
+        isQuickTake ? TimeInterval(ClipPrompt.quickTakeSeconds) : 22.5
+    }
     
     /// Remaining time for the current chapter while recording
     var chapterTimeRemaining: TimeInterval {
@@ -189,6 +212,48 @@ final class ClipsViewModel: ObservableObject {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
     
+    // MARK: - Recording shape
+
+    /// Switch to one continuous take, discarding anything already recorded.
+    ///
+    /// Recorded segments are dropped rather than carried over, because a take
+    /// filmed as a 22.5s "Intro" is not the same thing as the opening of a
+    /// 60s talk, and silently keeping it would publish a clip the learner did
+    /// not compose.
+    func useQuickTake() {
+        guard !isQuickTake else { return }
+        discardRecordedChapters()
+        chapters = ChapterSegment.quickTake
+        activeChapterIndex = 0
+    }
+
+    /// Switch to the guided four-chapter studio, discarding anything recorded.
+    func useGuidedChapters() {
+        guard isQuickTake else { return }
+        discardRecordedChapters()
+        chapters = ChapterSegment.defaultChapters
+        activeChapterIndex = 0
+    }
+
+    /// Open the composer already knowing what the learner just finished.
+    ///
+    /// Used by the finish screen, which knows the topic. Nothing is invented
+    /// when it does not: `ClipPrompt` returns nil and the fields stay empty
+    /// rather than publishing a title the learner never wrote.
+    func prefill(topic: String?) {
+        if let title = ClipPrompt.draftTitle(topic: topic), clipTitle.isEmpty {
+            clipTitle = title
+        }
+    }
+
+    private func discardRecordedChapters() {
+        for chapter in chapters {
+            if let url = chapter.videoURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
     // MARK: - Chapter Actions
     
     func selectChapter(at index: Int) {

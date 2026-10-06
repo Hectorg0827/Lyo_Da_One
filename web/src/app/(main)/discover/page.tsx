@@ -1,13 +1,19 @@
 'use client';
 
 /**
- * Discover — the immersive learning reel.
+ * Discover — the learning reel, and the only one.
  *
  * Mirrors iOS `Sources/Views/Main/DiscoverView.swift`: a full-bleed,
  * vertically paged video feed with a floating search overlay, top/bottom
  * scrims, an info overlay on the left and an action strip on the right.
  * Client-side search filters title + subtitle + tags, same as the iOS
  * DiscoverViewModel.
+ *
+ * There used to be a second reel at `/clips`, on the same clips API. Discover
+ * was what everything pointed at — the mobile nav, the search bar, the empty
+ * course stack — while commenting and posting lived only on the page almost
+ * nothing linked. So on a phone you could watch clips and never reach a way
+ * to comment on one or make one. Both now live here, and `/clips` redirects.
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,11 +28,16 @@ import {
   Users,
   ArrowRight,
   Play,
+  MessageCircle,
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
+import CreateClipModal from '@/components/clips/CreateClipModal';
+import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 
 interface Reel {
   id: string;
@@ -39,6 +50,7 @@ interface Reel {
   relatedGroup: string | null;
   tags: string[];
   likes: number;
+  comments: number;
   isLiked: boolean;
   isSaved: boolean;
 }
@@ -84,6 +96,7 @@ function adaptReel(raw: Record<string, unknown>): Reel {
     relatedGroup: (metadata.related_group as string) || null,
     tags: ((metadata.tags as string[]) || (raw.tags as string[]) || []).filter(Boolean),
     likes: (raw.likeCount as number) || (raw.like_count as number) || 0,
+    comments: (raw.commentCount as number) || (raw.comment_count as number) || 0,
     isLiked: (raw.isLiked as boolean) || (raw.is_liked as boolean) || false,
     isSaved: (raw.isSaved as boolean) || (raw.is_saved as boolean) || false,
   };
@@ -118,6 +131,7 @@ function ActionStrip({
   reel,
   onAsk,
   onCourse,
+  onComment,
   onLike,
   onSave,
   onShare,
@@ -125,6 +139,7 @@ function ActionStrip({
   reel: Reel;
   onAsk: () => void;
   onCourse: () => void;
+  onComment: () => void;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -160,6 +175,10 @@ function ActionStrip({
           style={{ color: reel.isLiked ? '#ff3b30' : '#ffffff' }}
           fill={reel.isLiked ? '#ff3b30' : 'none'}
         />
+      </ActionButton>
+
+      <ActionButton label={formatNumber(reel.comments)} onClick={onComment}>
+        <MessageCircle className="w-[26px] h-[26px] text-white" />
       </ActionButton>
 
       <ActionButton label="Share" onClick={onShare}>
@@ -247,6 +266,7 @@ function ReelSlide({
   isActive,
   onAsk,
   onCourse,
+  onComment,
   onLike,
   onSave,
   onShare,
@@ -255,6 +275,7 @@ function ReelSlide({
   isActive: boolean;
   onAsk: () => void;
   onCourse: () => void;
+  onComment: () => void;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -332,6 +353,7 @@ function ReelSlide({
           reel={reel}
           onAsk={onAsk}
           onCourse={onCourse}
+          onComment={onComment}
           onLike={onLike}
           onSave={onSave}
           onShare={onShare}
@@ -366,6 +388,18 @@ function DiscoverContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryParam = searchParams.get('q')?.trim() ?? '';
+  // `?compose=clip` opens the composer, and `topic` fills it in. The finish
+  // screen in the classroom links here that way: a learner who just finished
+  // something is the best source of a clip this app will ever get, and the
+  // composer has to be addressable for that link to exist at all.
+  const composeParam = searchParams.get('compose');
+  const topicParam = searchParams.get('topic');
+  // `?clip=<id>` names the clip to open. Both the Share button here and the
+  // redirect from the old /clips route produce links shaped that way, and
+  // neither worked: the parameter was carried across and then ignored, so a
+  // shared clip opened whatever happened to be first in the feed.
+  const clipParam = searchParams.get('clip');
+  const [composing, setComposing] = useState(composeParam === 'clip');
   const [query, setQuery] = useState(queryParam);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -373,15 +407,50 @@ function DiscoverContent() {
     setQuery(queryParam);
     setActiveIndex(0);
   }, [queryParam]);
+
+  useEffect(() => {
+    setComposing(composeParam === 'clip');
+  }, [composeParam]);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
+  const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const viewed = useRef<Set<string>>(new Set());
 
   const { data, isLoading } = useApi(() => api.clips.discover(), []);
 
+  // A named clip need not be on the first page of Discover. When it is not,
+  // it is fetched by id and put at the front, so the link lands on the clip
+  // it named rather than silently on something else.
+  const [namedReel, setNamedReel] = useState<Reel | null>(null);
+  useEffect(() => {
+    if (!clipParam) {
+      setNamedReel(null);
+      return;
+    }
+    let live = true;
+    api.clips
+      .get(clipParam)
+      .then((result) => {
+        if (live && result?.clip) setNamedReel(adaptReel(result.clip));
+      })
+      .catch(() => {
+        // The clip is gone or private. The feed still works, so the learner
+        // sees Discover rather than an error page for a dead link.
+        if (live) setNamedReel(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [clipParam]);
+
   const reels = useMemo(() => {
     const list = ((data?.clips as Record<string, unknown>[]) || []).map(adaptReel);
-    return list.map((r) => ({ ...r, ...overrides[r.id] }));
-  }, [data, overrides]);
+    // The named clip leads, and is not repeated further down the feed.
+    const ordered = namedReel
+      ? [namedReel, ...list.filter((r) => r.id !== namedReel.id)]
+      : list;
+    return ordered.map((r) => ({ ...r, ...overrides[r.id] }));
+  }, [data, overrides, namedReel]);
 
   // Client-side filter over title + subtitle + tags (iOS DiscoverViewModel)
   const filtered = useMemo(() => {
@@ -406,6 +475,15 @@ function DiscoverContent() {
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
   }, []);
+
+  // The named clip is put at the front, so the feed has to be looking at the
+  // front for that to mean anything — it can arrive after the first page has
+  // already rendered and been scrolled.
+  useEffect(() => {
+    if (!namedReel) return;
+    setActiveIndex(0);
+    scrollerRef.current?.scrollTo({ top: 0 });
+  }, [namedReel]);
 
   const patch = useCallback((id: string, next: Partial<Reel>) => {
     setOverrides((o) => ({ ...o, [id]: { ...o[id], ...next } }));
@@ -446,10 +524,23 @@ function DiscoverContent() {
       } else {
         await navigator.clipboard.writeText(url);
       }
+      // Count it. The old handler copied a link and told the server nothing,
+      // so a creator's share count never moved for anyone sharing from here.
+      api.clips.share(reel.id).catch(() => {});
     } catch {
       /* dismissed */
     }
   }, []);
+
+  // A view is recorded once per clip per visit, when its slide is the one in
+  // front of the viewer. Creators cannot be shown a view count the feed never
+  // reported, and the old Discover reported none at all.
+  useEffect(() => {
+    const reel = filtered[activeIndex];
+    if (!reel || viewed.current.has(reel.id)) return;
+    viewed.current.add(reel.id);
+    api.clips.view(reel.id).catch(() => {});
+  }, [filtered, activeIndex]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black">
@@ -484,6 +575,7 @@ function DiscoverContent() {
               isActive={i === activeIndex}
               onAsk={() => handleAsk(reel)}
               onCourse={() => handleCourse(reel)}
+              onComment={() => setCommentsFor(reel.id)}
               onLike={() => handleLike(reel)}
               onSave={() => handleSave(reel)}
               onShare={() => handleShare(reel)}
@@ -510,6 +602,32 @@ function DiscoverContent() {
           />
         </label>
       </div>
+
+      {composing && (
+        <CreateClipModal
+          initialTitle={draftTitle(topicParam) ?? ''}
+          initialSubject={draftSubject(topicParam) ?? ''}
+          onClose={() => {
+            setComposing(false);
+            // Drop the params so a refresh does not reopen the composer over
+            // a clip the learner has already published.
+            router.replace('/discover');
+          }}
+          onCreated={() => router.replace('/discover')}
+        />
+      )}
+
+      <AnimatePresence>
+        {commentsFor && (
+          <ClipCommentsDrawer
+            key={commentsFor}
+            clipId={commentsFor}
+            onClose={() => setCommentsFor(null)}
+            onCountChange={(count) => patch(commentsFor, { comments: count })}
+          />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
