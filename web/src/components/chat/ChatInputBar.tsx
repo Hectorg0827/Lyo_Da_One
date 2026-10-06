@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle } from 'lucide-react';
+import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle, AudioLines } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
 import type { ChatAttachment } from '@/types';
+import { chatVoiceController, type ChatVoiceState } from '@/lib/chat-voice';
 
 const MAX_CHARS = 4000;
 const MAX_ROWS = 6;
@@ -67,11 +68,19 @@ function attachmentMimeType(file: File): string {
 }
 
 export default function ChatInputBar() {
-  const { sendMessage, isGenerating, generationActivity, reviseActiveCourse } = useChatStore();
+  const {
+    sendMessage,
+    cancelActiveResponse,
+    isGenerating,
+    generationActivity,
+    reviseActiveCourse,
+  } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [voiceState, setVoiceState] = useState<ChatVoiceState>(() => chatVoiceController.snapshot());
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
@@ -82,7 +91,13 @@ export default function ChatInputBar() {
 
   useEffect(() => {
     setSpeechSupported(getSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
+    setVoiceSupported(chatVoiceController.supported());
+    const unsubscribe = chatVoiceController.subscribe(setVoiceState);
+    return () => {
+      recognitionRef.current?.stop();
+      chatVoiceController.deactivate();
+      unsubscribe();
+    };
   }, []);
 
   const adjustHeight = useCallback(() => {
@@ -133,6 +148,48 @@ export default function ChatInputBar() {
       toast.error('Voice input is unavailable');
     }
   };
+
+  const toggleConversationVoice = async () => {
+    if (voiceState.active) {
+      chatVoiceController.deactivate();
+      return;
+    }
+    // Voice owns the conversational floor. If a text response is already in
+    // flight, explicitly interrupt it before opening the microphone so two
+    // streams can never race against the same conversation.
+    if (isGenerating) {
+      cancelActiveResponse();
+    }
+    recognitionRef.current?.stop();
+    setListening(false);
+    const started = await chatVoiceController.activate({
+      locale: navigator.language || 'auto',
+      cancelTurn: cancelActiveResponse,
+      sendTurn: async (text, meta) => {
+        await sendMessage(text, [], {
+          voiceSession: {
+            active: true,
+            locale: meta.locale,
+            turn_id: meta.turnId,
+            interrupted_previous_turn: meta.interruptedPreviousTurn,
+            hands_free: meta.handsFree,
+          },
+        });
+      },
+    });
+    if (!started) toast.error('Conversational voice is unavailable in this browser');
+  };
+
+  const voiceStatus = (() => {
+    switch (voiceState.phase) {
+      case 'listening': return 'Listening…';
+      case 'thinking': return 'Thinking…';
+      case 'speaking': return 'Lyo is speaking';
+      case 'interrupted': return 'Listening…';
+      case 'error': return voiceState.error || 'Voice needs attention';
+      default: return 'Voice conversation';
+    }
+  })();
 
   // ── Attachments (shared consumer media API) ───────────────────────────────
 
@@ -214,7 +271,22 @@ export default function ChatInputBar() {
     if (isCourseAdjustable) {
       await reviseActiveCourse(trimmed);
     } else {
-      await sendMessage(trimmed, sentAttachments);
+      await sendMessage(
+        trimmed,
+        sentAttachments,
+        voiceState.active
+          ? {
+              voiceSession: {
+                active: true,
+                locale: navigator.language || 'auto',
+                turn_id: crypto.randomUUID(),
+                interrupted_previous_turn: false,
+                hands_free: true,
+              },
+            }
+          : undefined
+      );
+      if (voiceState.active) chatVoiceController.markThinking();
     }
   };
 
@@ -273,6 +345,67 @@ export default function ChatInputBar() {
           isGenerating && 'input-island--thinking'
         )}
       >
+        <AnimatePresence initial={false}>
+          {voiceState.active && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              className="mb-3 rounded-2xl border border-lyo-400/20 bg-lyo-500/8 px-3 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (voiceState.phase === 'speaking' || voiceState.phase === 'thinking') {
+                      chatVoiceController.interruptAndListen();
+                    }
+                  }}
+                  className={cn(
+                    'relative w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all',
+                    voiceState.phase === 'listening' || voiceState.phase === 'interrupted'
+                      ? 'bg-accent-orange/15 text-accent-orange'
+                      : voiceState.phase === 'speaking'
+                      ? 'bg-lyo-500/20 text-lyo-200'
+                      : 'bg-white/10 text-white/80'
+                  )}
+                  title={
+                    voiceState.phase === 'speaking' || voiceState.phase === 'thinking'
+                      ? 'Interrupt Lyo'
+                      : 'Voice is listening'
+                  }
+                >
+                  <AudioLines
+                    className={cn(
+                      'w-5 h-5',
+                      (voiceState.phase === 'listening' || voiceState.phase === 'speaking') && 'animate-pulse'
+                    )}
+                  />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-white/90">{voiceStatus}</div>
+                  <div className="text-xs text-white/45 truncate mt-0.5">
+                    {voiceState.interimTranscript
+                      || voiceState.lastTranscript
+                      || 'Speak naturally. Lyo will answer aloud and keep listening.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => chatVoiceController.deactivate()}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/55 hover:text-white flex items-center justify-center"
+                  title="End voice conversation"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="mt-2 text-[11px] text-white/35">
+                You can interrupt while Lyo is speaking. Your spoken turns use the same Chat interaction contract.
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -322,9 +455,30 @@ export default function ChatInputBar() {
 
           {/* Mode pill */}
           <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold select-none">
-            <MessageCircle className="w-3.5 h-3.5 fill-current" />
-            Chat
+            {voiceState.active ? (
+              <AudioLines className="w-3.5 h-3.5" />
+            ) : (
+              <MessageCircle className="w-3.5 h-3.5 fill-current" />
+            )}
+            {voiceState.active ? 'Voice' : 'Chat'}
           </span>
+
+          {voiceSupported && (
+            <button
+              type="button"
+              onClick={toggleConversationVoice}
+              className={cn(
+                'h-8 px-2.5 rounded-full flex items-center gap-1.5 text-xs font-semibold transition-all duration-200',
+                voiceState.active
+                  ? 'bg-lyo-500/20 text-lyo-200 border border-lyo-400/20'
+                  : 'bg-white/5 text-white/65 hover:bg-white/10 hover:text-white'
+              )}
+              title={voiceState.active ? 'End voice conversation' : 'Start voice conversation'}
+            >
+              <AudioLines className="w-3.5 h-3.5" />
+              {voiceState.active ? 'Live' : 'Voice'}
+            </button>
+          )}
 
           <div className="flex-1" />
 
@@ -346,7 +500,7 @@ export default function ChatInputBar() {
           </AnimatePresence>
 
           {/* Voice dictation — hidden entirely when the browser can't do it */}
-          {speechSupported && (
+          {speechSupported && !voiceState.active && (
             <button
               type="button"
               onClick={toggleDictation}

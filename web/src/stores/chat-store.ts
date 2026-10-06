@@ -17,6 +17,7 @@ import {
   reduceTeachingPolicy,
   teachingStateSummary,
 } from '@/lib/teaching-runtime.mjs';
+import { chatVoiceController } from '@/lib/chat-voice';
 
 export type GenerationActivity = 'thinking' | 'response' | 'course';
 
@@ -40,6 +41,13 @@ export interface CourseRevisionInput {
 interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
+  voiceSession?: {
+    active: boolean;
+    locale?: string;
+    turn_id?: string;
+    interrupted_previous_turn?: boolean;
+    hands_free?: boolean;
+  };
 }
 
 /**
@@ -165,6 +173,7 @@ interface ChatStore {
     attachments?: ChatAttachment[],
     options?: SendMessageOptions
   ) => Promise<void>;
+  cancelActiveResponse: () => void;
   reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
   undoCourseRevision: () => Promise<void>;
   answerCheck: (
@@ -657,9 +666,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               || (chunk.payload as Record<string, unknown>)?.text as string
               || (chunk.content as string)
               || '';
-            if (text) appendToAiMessage(text);
+            if (text) {
+              appendToAiMessage(text);
+              if (options.voiceSession?.active) chatVoiceController.enqueueAssistantText(text);
+            }
           } else if (chunk.type === 'clarification' && typeof chunk.text === 'string') {
             appendToAiMessage(chunk.text);
+            if (options.voiceSession?.active) chatVoiceController.enqueueAssistantText(chunk.text);
           } else if (chunk.type === 'open_classroom') {
             receivedContent = true;
             const isPreview = chunk.preview === true;
@@ -768,6 +781,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         () => {
           if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
+          if (options.voiceSession?.active) chatVoiceController.finishAssistantTurn();
           if (!receivedContent) {
             recoverCanonicalConversation(convoId!);
           } else {
@@ -793,6 +807,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         () => {
           if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
+          if (options.voiceSession?.active) chatVoiceController.failAssistantTurn();
           recoverCanonicalConversation(convoId!);
         },
         convoId,
@@ -808,7 +823,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         teachingStateSummary(
           teachingRuntimeFor(convoId),
           options.courseContext
-        ) as Record<string, unknown> | undefined
+        ) as Record<string, unknown> | undefined,
+        options.voiceSession
       );
     } catch {
       if (streamToken === activeStreamToken) {
@@ -834,6 +850,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
     }
+  },
+
+  cancelActiveResponse: () => {
+    activeStreamToken += 1;
+    activeStreamController?.abort();
+    activeStreamController = null;
+    set({
+      isGenerating: false,
+      generationProgress: 0,
+      generationActivity: 'thinking',
+      courseGenerationState: null,
+    });
   },
 
   reviseActiveCourse: async (adjustment) => {

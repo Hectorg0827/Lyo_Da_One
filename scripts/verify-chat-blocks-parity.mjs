@@ -30,6 +30,92 @@ const contracts = [
     needles: [...CHAT_BLOCK_TYPES.map((t) => `'${t}'`), 'ChatBlock', 'CheckAnswerResult'],
   },
   {
+    name: 'iOS conversational voice stays on canonical Chat transport',
+    path: 'Sources/ViewModels/LyoAIViewModel.swift',
+    needles: [
+      'Lyo2VoiceSessionContext',
+      'voiceInterruptedPreviousTurn',
+      'unifiedChat.cancelActiveResponse()',
+      'voiceSession: voiceSession',
+      'stopListening(submitTranscript: false)',
+      'sendMessage(resumeVoiceLoop: resumeVoiceLoop)',
+      'resumeVoiceLoop.map { $0 && voiceLoopActive }',
+    ],
+    forbidden: ['startLiveMode(sessionId:'],
+  },
+  {
+    name: 'iOS canonical request carries voice session metadata',
+    path: 'Sources/Models/Lyo2Models.swift',
+    needles: ['Lyo2VoiceSessionContext', 'voiceSession = "voice_session"'],
+  },
+  {
+    name: 'Android conversational voice stays on canonical Chat transport',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatVoiceController.kt',
+    needles: ['ChatVoiceController', 'onTranscript', 'ClassroomVoicePlayer'],
+    forbidden: ['/voice-ai', 'WebSocket'],
+  },
+  {
+    name: 'Android speech recognition and TTS services are package-visible',
+    path: 'android/app/src/main/AndroidManifest.xml',
+    needles: ['<queries>', 'android.speech.RecognitionService', 'android.intent.action.TTS_SERVICE'],
+  },
+  {
+    name: 'Android intentional Chat cancellation is propagated before failure delivery',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatRequestResult.kt',
+    needles: ['catch (cancellation: CancellationException)', 'throw cancellation', 'Result.failure(error)'],
+  },
+  {
+    name: 'Android conversation creation and streaming use cancellation-safe requests',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
+    needles: [
+      'activeConversationId ?: runChatRequest {',
+      'runChatRequest {\n                ChatStreamClient.stream(',
+    ],
+    forbidden: ['runCatching {\n                ChatStreamClient.stream('],
+  },
+  {
+    name: 'Android canonical Chat stream carries voice session metadata',
+    path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
+    needles: ['ChatVoiceSession', '"voice_session"', 'POST /api/v1/lyo2/chat/stream'],
+  },
+  {
+    name: 'Web conversational voice uses canonical Chat transport',
+    path: 'web/src/lib/chat-voice.ts',
+    needles: [
+      'chatVoiceController',
+      'api.tts.stream',
+      'playSpeechResponse',
+      'interruptAndListen',
+      'interruptedPreviousTurn',
+      'sendTurn',
+    ],
+    forbidden: [
+      '/api/v1/ai/chat',
+      '/voice-ai',
+      'new WebSocket(',
+    ],
+  },
+  {
+    name: 'Web voice turn is sent through the canonical interaction contract',
+    path: 'web/src/stores/chat-store.ts',
+    needles: [
+      'options.voiceSession',
+      'chatVoiceController.enqueueAssistantText',
+      'chatVoiceController.finishAssistantTurn',
+      'cancelActiveResponse',
+    ],
+  },
+  {
+    name: 'Web chat request carries voice transport metadata, not a second AI request',
+    path: 'web/src/lib/api.ts',
+    needles: ['voice_session: voiceSession', '/api/v1/lyo2/chat/stream', '/api/v1/tts/synthesize/stream'],
+  },
+  {
+    name: 'Chat composer exposes live voice conversation',
+    path: 'web/src/components/chat/ChatInputBar.tsx',
+    needles: ['toggleConversationVoice', 'interruptAndListen', 'Voice conversation', 'voiceSession'],
+  },
+  {
     name: 'Web consumes the smart_blocks event',
     path: 'web/src/stores/chat-store.ts',
     needles: [

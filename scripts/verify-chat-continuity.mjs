@@ -20,7 +20,8 @@ const contracts = [
     needles: [
       "api.media.upload(normalizedFile, 'chat')",
       'multiple',
-      'sendMessage(trimmed, sentAttachments)',
+      'sentAttachments,',
+      'voiceSession:',
       'application/pdf',
       'MAX_ATTACHMENTS = 4',
     ],

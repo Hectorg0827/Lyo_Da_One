@@ -29,6 +29,7 @@ class Lyo2ChatService: ObservableObject {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -58,6 +59,7 @@ class Lyo2ChatService: ObservableObject {
             activeArtifact: activeArtifact,
             forcedIntent: forcedIntent,
             stateSummary: mergedStateSummary,
+            voiceSession: voiceSession,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
             clientMessageId: clientMessageId
@@ -109,6 +111,16 @@ class Lyo2ChatService: ObservableObject {
                 self?.activeStreamManager = nil
             }
         }
+    }
+
+    /// Give the learner the conversational floor immediately.
+    /// Cancellation only stops transport; the next recognized utterance still
+    /// travels through the same canonical interaction contract.
+    func cancelActiveStream() {
+        safetyTimeoutTask?.cancel()
+        safetyTimeoutTask = nil
+        activeStreamManager?.cancel()
+        activeStreamManager = nil
     }
 
     /// Grade an in-chat check against the block the server itself emitted.
