@@ -113,7 +113,9 @@ object ChatStreamClient {
             "client_message_id" to clientMessageId,
             "timezone" to java.time.ZoneId.systemDefault().id,
         )
-        val stateSummary = mutableMapOf<String, Any?>()
+        val stateSummary = mutableMapOf<String, Any?>(
+            "stream_capabilities" to mapOf("text_delta" to true),
+        )
         teachingRuntimeByConversation[conversationId]?.let { runtime ->
             runtime.lastAction?.let {
                 stateSummary["teaching_runtime"] = mapOf(
