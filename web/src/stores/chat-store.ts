@@ -889,10 +889,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        teachingStateSummary(
-          teachingRuntimeFor(convoId),
-          options.courseContext
-        ) as Record<string, unknown> | undefined,
+        {
+          ...(
+            teachingStateSummary(
+              teachingRuntimeFor(convoId),
+              options.courseContext
+            ) as Record<string, unknown> | undefined
+          ),
+          stream_capabilities: { text_delta: true },
+        },
         options.voiceSession || get().voiceSessionActive
           ? {
               active: true,
