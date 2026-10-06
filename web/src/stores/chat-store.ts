@@ -19,7 +19,7 @@ import {
   teachingStateSummary,
 } from '@/lib/teaching-runtime.mjs';
 
-export type GenerationActivity = 'thinking' | 'response' | 'course';
+export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
 export interface CourseGenerationState {
   phase: 'intent' | 'planning' | 'lessons' | 'practice' | 'finalizing' | 'ready' | string;
@@ -597,6 +597,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     };
 
     const streamToken = ++activeStreamToken;
+    const streamStartedAt =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    let firstVisibleChunkRecorded = false;
+    let receivedTextDelta = false;
 
     try {
       activeStreamController = api.chat.stream(
@@ -702,12 +706,48 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 outline: outline ?? state.courseGenerationState?.outline,
               },
             }));
-          } else if (chunk.type === 'answer' || chunk.type === 'text') {
+          } else if (
+            chunk.type === 'answer'
+            || chunk.type === 'text'
+            || chunk.type === 'text_delta'
+          ) {
             const text = blockContent?.text as string
               || (chunk.payload as Record<string, unknown>)?.text as string
               || (chunk.content as string)
               || '';
-            if (text) appendToAiMessage(text);
+            if (text) {
+              if (!firstVisibleChunkRecorded) {
+                firstVisibleChunkRecorded = true;
+                const now =
+                  typeof performance !== 'undefined' ? performance.now() : Date.now();
+                patchAiMessage({
+                  metadata: { clientTtftMs: Math.round(now - streamStartedAt) },
+                });
+              }
+
+              if (chunk.type === 'text_delta') {
+                receivedTextDelta = true;
+                appendToAiMessage(text);
+              } else if (!(chunk.type === 'answer' && receivedTextDelta)) {
+                // The backend preserves a final answer snapshot for old clients.
+                // After deltas have rendered, appending it would duplicate text.
+                appendToAiMessage(text);
+              }
+            }
+          } else if (chunk.type === 'latency') {
+            const metrics =
+              chunk.metrics && typeof chunk.metrics === 'object'
+                ? chunk.metrics as Record<string, unknown>
+                : undefined;
+            if (metrics) patchAiMessage({ metadata: { latency: metrics } });
+          } else if (chunk.type === 'search_status') {
+            set({ generationActivity: 'searching' });
+            patchAiMessage({
+              metadata: {
+                liveSearchStatus:
+                  typeof chunk.status === 'string' ? chunk.status : 'searching',
+              },
+            });
           } else if (chunk.type === 'clarification' && typeof chunk.text === 'string') {
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
@@ -855,10 +895,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        teachingStateSummary(
-          teachingRuntimeFor(convoId),
-          options.courseContext
-        ) as Record<string, unknown> | undefined,
+        {
+          ...(
+            (
+              teachingStateSummary(
+                teachingRuntimeFor(convoId),
+                options.courseContext
+              ) as Record<string, unknown> | undefined
+            ) ?? {}
+          ),
+          stream_capabilities: { text_delta: true },
+        },
         options.voiceSession || get().voiceSessionActive
           ? {
               active: true,
