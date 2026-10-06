@@ -5,6 +5,7 @@ import type {
   ChatConversation,
   ChatAttachment,
   ChatBlock,
+  ChatSource,
   CheckAnswerResult,
   SessionSummary,
   DueReviewItem,
@@ -79,6 +80,19 @@ function extractActionLabels(chunk: Record<string, unknown>): string[] {
     }
   }
   return labels;
+}
+
+function extractSources(chunk: Record<string, unknown>): ChatSource[] {
+  if (!Array.isArray(chunk.sources)) return [];
+  return chunk.sources
+    .filter((source): source is Record<string, unknown> => Boolean(source) && typeof source === 'object')
+    .map((source) => ({
+      name: typeof source.name === 'string' ? source.name : undefined,
+      label: typeof source.label === 'string' ? source.label : undefined,
+      title: typeof source.title === 'string' ? source.title : undefined,
+      url: typeof source.url === 'string' ? source.url : undefined,
+    }))
+    .filter((source) => Boolean(source.name || source.title || source.label || source.url));
 }
 
 function normalizeCourseDuration(course?: Record<string, unknown>): number | undefined {
@@ -802,6 +816,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             // and was silently dropped, so lessons rendered as plain prose.
             const blocks = Array.isArray(chunk.blocks) ? (chunk.blocks as ChatBlock[]) : [];
             if (blocks.length) attachBlocksToAiMessage(blocks);
+          } else if (chunk.type === 'sources') {
+            const sources = extractSources(chunk);
+            if (sources.length) {
+              receivedContent = true;
+              patchAiMessage({ sources });
+            }
           } else if (chunk.type === 'actions') {
             const labels = extractActionLabels(chunk);
             if (labels.length) attachActionsToAiMessage(labels);
