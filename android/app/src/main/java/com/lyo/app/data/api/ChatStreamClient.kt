@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
 /** One streamed chunk from the AI, or a terminal signal. */
 sealed class ChatStreamEvent {
     data class Chunk(val text: String) : ChatStreamEvent()
+    data class FinalAnswer(val text: String) : ChatStreamEvent()
     data class Conversation(val id: String) : ChatStreamEvent()
     data class VoiceSegment(
         val text: String,
@@ -113,7 +114,9 @@ object ChatStreamClient {
             "client_message_id" to clientMessageId,
             "timezone" to java.time.ZoneId.systemDefault().id,
         )
-        val stateSummary = mutableMapOf<String, Any?>()
+        val stateSummary = mutableMapOf<String, Any?>(
+            "stream_capabilities" to mapOf("text_delta" to true),
+        )
         teachingRuntimeByConversation[conversationId]?.let { runtime ->
             runtime.lastAction?.let {
                 stateSummary["teaching_runtime"] = mapOf(
@@ -219,6 +222,8 @@ object ChatStreamClient {
                 )
             obj.get("type")?.asString == "conversation" && obj.has("conversation_id") ->
                 ChatStreamEvent.Conversation(obj.get("conversation_id").asString)
+            obj.get("type")?.asString == "text_delta" && obj.has("content") ->
+                ChatStreamEvent.Chunk(obj.get("content").asString)
             obj.get("type")?.asString == "voice_text_segment" &&
                 obj.has("text") && obj.has("sequence") && obj.has("message_id") ->
                 ChatStreamEvent.VoiceSegment(
@@ -244,7 +249,7 @@ object ChatStreamClient {
                     ?.getAsJsonObject("content")
                     ?.get("text")
                     ?.asString
-                text?.let { ChatStreamEvent.Chunk(it) }
+                text?.let { ChatStreamEvent.FinalAnswer(it) }
             }
             obj.get("type")?.asString == "clarification" && obj.has("text") ->
                 ChatStreamEvent.Chunk(obj.get("text").asString)

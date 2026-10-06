@@ -131,6 +131,7 @@ data class ProgressBlockPayload(
 data class InteractiveItem(
     val label: String,
     val detail: String,
+    val url: String? = null,
 )
 
 data class InteractiveBlockPayload(
