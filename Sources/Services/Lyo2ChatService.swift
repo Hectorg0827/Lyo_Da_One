@@ -39,6 +39,7 @@ class Lyo2ChatService: ObservableObject {
         activeArtifact: Lyo2ActiveArtifactContext? = nil,
         forcedIntent: String? = nil,
         stateSummary: [String: AnyCodable] = [:],
+        voiceSession: Lyo2VoiceSessionContext? = nil,
         conversationHistory: [Lyo2ConversationTurn]? = nil,
         conversationId: String? = nil,
         clientMessageId: String? = nil,
@@ -68,6 +69,7 @@ class Lyo2ChatService: ObservableObject {
             activeArtifact: activeArtifact,
             forcedIntent: forcedIntent,
             stateSummary: mergedStateSummary,
+            voiceSession: voiceSession,
             conversationHistory: conversationHistory,
             conversationId: conversationId,
             clientMessageId: clientMessageId

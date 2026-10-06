@@ -3,9 +3,9 @@
  * Conversational voice must remain a transport/delivery layer over canonical Chat.
  *
  * This contract intentionally forbids a second voice AI path. Every platform
- * must send voice turns through the same Lyo2 Chat stream and mark
- * state_summary.voice_session.active=true so the backend interaction contract
- * changes delivery style without changing intent, memory, tools or pedagogy.
+ * must send voice turns through the same Lyo2 Chat stream and use the typed
+ * top-level voice_session metadata so the backend interaction contract changes
+ * delivery style without changing intent, memory, tools or pedagogy.
  */
 import fs from 'node:fs';
 
@@ -15,7 +15,9 @@ const contracts = [
     name: 'Web voice uses canonical Chat store',
     path: 'web/src/components/chat/ConversationalVoiceLayer.tsx',
     needles: [
-      'sendMessage(transcript, [], { voiceSession: true })',
+      'voiceSession: true',
+      'voiceInterruptedPreviousTurn:',
+      'voiceEndOfTurnDelayMs',
       'interruptGeneration()',
       'api.tts.synthesizeStream',
       'createSpeechRecognition',
@@ -31,6 +33,9 @@ const contracts = [
     needles: [
       "transport: 'client_stt_tts'",
       "delivery: 'segments'",
+      'interrupted_previous_turn:',
+      'turn_id:',
+      'voiceLocale',
       "chunk.type === 'voice_text_segment'",
       'publishVoiceStreamEvent',
       'interruptGeneration',
@@ -62,10 +67,9 @@ const contracts = [
     path: 'Sources/Services/ChatRouter.swift',
     needles: [
       'voiceSession: Bool = false',
-      'if voiceSession',
-      '"voice_session"',
-      '"client_stt_tts"',
-      '"delivery": "segments"',
+      'voiceInterruptedPreviousTurn: Bool = false',
+      'voiceTurnId: String? = nil',
+      'Lyo2VoiceSessionContext',
       'handleDeepPath',
     ],
     forbidden: ['AudioStreamManager.shared.startLiveMode'],
@@ -78,6 +82,8 @@ const contracts = [
       'voiceLoopActive = true',
       'startListening()',
       'voiceSession: shouldResumeListening',
+      'voiceInterruptedPreviousTurn: interruptedPreviousTurn',
+      'voiceEndOfTurnDelayNanoseconds(for:',
       'unifiedChat.interruptCurrentResponse()',
       'onVoiceTextSegment',
       'voiceSegmentStreamOpen',
@@ -98,6 +104,9 @@ const contracts = [
     needles: [
       'SpeechRecognizer.createSpeechRecognizer',
       'voiceSession = voiceConversation',
+      'voiceInterruptedPreviousTurn = interruptedPreviousTurn',
+      'voiceTurnId = clientMessageId',
+      'EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS',
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
       'engine.speak',
@@ -111,7 +120,10 @@ const contracts = [
     path: 'android/app/src/main/java/com/lyo/app/data/api/ChatStreamClient.kt',
     needles: [
       'voiceSession: Boolean = false',
+      'voiceInterruptedPreviousTurn: Boolean = false',
       '"voice_session"',
+      '"interrupted_previous_turn"',
+      '"turn_id"',
       '"client_stt_tts"',
       '"delivery" to "segments"',
       '"voice_text_segment"',
@@ -132,6 +144,19 @@ for (const contract of contracts) {
   }
   for (const forbidden of contract.forbidden ?? []) {
     if (source.includes(forbidden)) failures.push(`${contract.name}: forbidden separate voice path ${forbidden}`);
+  }
+}
+
+const iosModels = 'Sources/Models/Lyo2Models.swift';
+if (fs.existsSync(iosModels)) {
+  const source = fs.readFileSync(iosModels, 'utf8');
+  for (const needle of [
+    'struct Lyo2VoiceSessionContext',
+    'case voiceSession = "voice_session"',
+    'case interruptedPreviousTurn = "interrupted_previous_turn"',
+    'case turnId = "turn_id"',
+  ]) {
+    if (!source.includes(needle)) failures.push(`iOS typed voice contract missing ${needle}`);
   }
 }
 

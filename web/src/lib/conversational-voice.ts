@@ -66,6 +66,31 @@ export function stripForSpeech(text: string): string {
     .trim();
 }
 
+const SHORT_COMPLETE_UTTERANCE_RE = /^(?:yes|yeah|yep|no|nope|okay|ok|sure|right|thanks|thank you|got it|exactly|correct|sí|si|no|vale|gracias)$/i;
+const INCOMPLETE_ENDING_RE = /(?:[,;:]|\.\.\.)\s*$/;
+const OPEN_ENDED_LAST_WORD_RE = /\b(?:and|but|or|because|so|if|when|while|that|to|with|for|from|about|y|pero|porque|si|cuando|con|para|de)\s*$/i;
+
+/**
+ * Semantic endpointing for conversational voice.
+ *
+ * A fixed silence timeout feels either sluggish after a complete sentence or
+ * too aggressive in the middle of a thought. This bounded heuristic adapts
+ * only the transport timing; it never changes the canonical Chat intent.
+ */
+export function voiceEndOfTurnDelayMs(text: string): number {
+  const normalized = text.trim();
+  if (!normalized) return 900;
+  if (SHORT_COMPLETE_UTTERANCE_RE.test(normalized)) return 420;
+  if (/[.!?]\s*$/.test(normalized)) return 430;
+  if (INCOMPLETE_ENDING_RE.test(normalized) || OPEN_ENDED_LAST_WORD_RE.test(normalized)) {
+    return 1100;
+  }
+  const words = normalized.split(/\s+/).filter(Boolean).length;
+  if (words <= 2) return 900;
+  if (words <= 5) return 700;
+  return 620;
+}
+
 export function splitSpeechChunks(text: string, maxChars = 260): string[] {
   const spoken = stripForSpeech(text);
   if (!spoken) return [];

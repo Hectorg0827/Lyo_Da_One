@@ -125,7 +125,10 @@ final class UnifiedChatService: ObservableObject {
         context: ChatContext? = nil,
         mode: String = "chat",
         forcedIntent: String? = nil,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
+        voiceTurnId: String? = nil,
+        voiceLocale: String = Locale.current.identifier
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return nil }
@@ -181,6 +184,9 @@ final class UnifiedChatService: ObservableObject {
             mode: mode,
             forcedIntent: forcedIntent,
             voiceSession: voiceSession,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
+            voiceTurnId: voiceTurnId ?? userMessage.id,
+            voiceLocale: voiceLocale,
             conversationHistory: conversationHistory,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id,
@@ -425,7 +431,10 @@ final class UnifiedChatService: ObservableObject {
         mode: String = "chat",
         forcedIntent: String? = nil,
         speakResponse: Bool = false,
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
+        voiceTurnId: String? = nil,
+        voiceLocale: String = Locale.current.identifier
     ) async {
         // Re-route through sendMessage which now uses ChatRouter for two-speed routing
         _ = await sendMessage(
@@ -434,7 +443,10 @@ final class UnifiedChatService: ObservableObject {
             context: context,
             mode: mode,
             forcedIntent: forcedIntent,
-            voiceSession: voiceSession || speakResponse
+            voiceSession: voiceSession || speakResponse,
+            voiceInterruptedPreviousTurn: voiceInterruptedPreviousTurn,
+            voiceTurnId: voiceTurnId,
+            voiceLocale: voiceLocale
         )
     }
 
@@ -456,7 +468,10 @@ final class UnifiedChatService: ObservableObject {
     func sendMessageLyo2(
         text: String,
         attachments: [MessageAttachment] = [],
-        voiceSession: Bool = false
+        voiceSession: Bool = false,
+        voiceInterruptedPreviousTurn: Bool = false,
+        voiceTurnId: String? = nil,
+        voiceLocale: String = Locale.current.identifier
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
@@ -492,14 +507,14 @@ final class UnifiedChatService: ObservableObject {
             text: trimmedText,
             media: mediaRefs(from: attachments),
             attachmentIds: attachments.map { $0.id },
-            stateSummary: voiceSession
-                ? ["voice_session": AnyCodable([
-                    "active": true,
-                    "transport": "client_stt_tts",
-                    "delivery": "segments",
-                    "hands_free": true,
-                ])]
-                : [:],
+            stateSummary: [:],
+            voiceSession: voiceSession
+                ? Lyo2VoiceSessionContext(
+                    locale: voiceLocale,
+                    turnId: voiceTurnId ?? userMessage.id,
+                    interruptedPreviousTurn: voiceInterruptedPreviousTurn
+                )
+                : nil,
             conversationHistory: memoryWindow,
             conversationId: currentConversationId,
             clientMessageId: userMessage.id

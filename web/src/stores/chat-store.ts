@@ -42,6 +42,9 @@ interface SendMessageOptions {
   forcedIntent?: 'COURSE';
   courseContext?: CourseRevisionInput;
   voiceSession?: boolean;
+  voiceInterruptedPreviousTurn?: boolean;
+  voiceTurnId?: string;
+  voiceLocale?: string;
 }
 
 /**
@@ -852,24 +855,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           size_bytes: attachment.size,
         })),
         options.forcedIntent,
-        {
-          ...(
-            teachingStateSummary(
-              teachingRuntimeFor(convoId),
-              options.courseContext
-            ) as Record<string, unknown> | undefined
-          ),
-          ...(options.voiceSession || get().voiceSessionActive
-            ? {
-                voice_session: {
-                  active: true,
-                  transport: 'client_stt_tts',
-                  delivery: 'segments',
-                  hands_free: true,
-                },
-              }
-            : {}),
-        }
+        teachingStateSummary(
+          teachingRuntimeFor(convoId),
+          options.courseContext
+        ) as Record<string, unknown> | undefined,
+        options.voiceSession || get().voiceSessionActive
+          ? {
+              active: true,
+              transport: 'client_stt_tts',
+              locale: options.voiceLocale || (
+                typeof navigator !== 'undefined' ? navigator.language : 'auto'
+              ),
+              turn_id: options.voiceTurnId || userMessage.id,
+              interrupted_previous_turn: Boolean(options.voiceInterruptedPreviousTurn),
+              delivery: 'segments',
+              hands_free: true,
+            }
+          : undefined
       );
     } catch {
       if (streamToken === activeStreamToken) {

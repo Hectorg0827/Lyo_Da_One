@@ -10,13 +10,21 @@ import {
   isLikelyPlaybackEcho,
   splitSpeechChunks,
   subscribeVoiceStreamEvents,
+  voiceEndOfTurnDelayMs,
   type SpeechRecognitionLike,
   type VoiceStreamEvent,
 } from '@/lib/conversational-voice';
 
 type VoicePhase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
-const END_OF_TURN_SILENCE_MS = 650;
+type QueuedVoiceSegment = {
+  text: string;
+  sequence: number;
+  messageId: string;
+  controller: AbortController;
+  audio: Promise<Blob | null>;
+};
+
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
@@ -57,11 +65,12 @@ export default function ConversationalVoiceLayer() {
   const animationFrameRef = useRef<number | null>(null);
   const speakingStartedAtRef = useRef(0);
   const loudFramesRef = useRef(0);
-  const voiceSegmentQueueRef = useRef<Array<{ text: string; sequence: number; messageId: string }>>([]);
+  const voiceSegmentQueueRef = useRef<QueuedVoiceSegment[]>([]);
   const voiceSegmentDrainActiveRef = useRef(false);
   const voiceTurnClosedRef = useRef(false);
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
+  const interruptedPreviousTurnRef = useRef(false);
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
@@ -88,6 +97,7 @@ export default function ConversationalVoiceLayer() {
       audioRef.current = null;
     }
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
+    voiceSegmentQueueRef.current.forEach((segment) => segment.controller.abort());
     voiceSegmentQueueRef.current = [];
     voiceSegmentDrainActiveRef.current = false;
   }, []);
@@ -103,6 +113,9 @@ export default function ConversationalVoiceLayer() {
     }
     stopSpeech();
     stopRecognition();
+    const interruptedPreviousTurn = interruptedPreviousTurnRef.current
+      || phaseRef.current === 'speaking'
+      || useChatStore.getState().isGenerating;
     if (useChatStore.getState().isGenerating) interruptGeneration();
     // Echo suppression is turn-local. Once a genuine learner utterance is
     // accepted, forget prior assistant speech before collecting the next reply.
@@ -115,11 +128,17 @@ export default function ConversationalVoiceLayer() {
     voiceSegmentsReceivedRef.current = false;
     spokenVoiceSegmentKeysRef.current.clear();
     changePhase('thinking');
-    await sendMessage(transcript, [], { voiceSession: true });
+    interruptedPreviousTurnRef.current = false;
+    await sendMessage(transcript, [], {
+      voiceSession: true,
+      voiceInterruptedPreviousTurn: interruptedPreviousTurn,
+      voiceTurnId: crypto.randomUUID(),
+      voiceLocale: navigator.language || 'auto',
+    });
   }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
 
-  const startRecognition = useCallback(() => {
-    if (!activeRef.current || phaseRef.current === 'speaking') return;
+  const startRecognition = useCallback((allowWhileSpeaking = false) => {
+    if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
     stopRecognition();
     const recognition = createSpeechRecognition();
     if (!recognition) {
@@ -131,6 +150,10 @@ export default function ConversationalVoiceLayer() {
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.onresult = (event) => {
+      // A stopped recognizer may still dispatch queued callbacks after a new
+      // shadow recognizer has already taken ownership. Ignore those stale
+      // callbacks so two recognition sessions can never contribute to one turn.
+      if (recognitionRef.current !== recognition) return;
       let finalText = finalTranscriptRef.current;
       let interimText = '';
       const start = event.resultIndex ?? 0;
@@ -141,33 +164,52 @@ export default function ConversationalVoiceLayer() {
         if (result.isFinal) finalText = `${finalText} ${transcript}`.trim();
         else interimText = `${interimText} ${transcript}`.trim();
       }
-      finalTranscriptRef.current = finalText;
       const combined = `${finalText} ${interimText}`.trim();
+      if (!combined) return;
+
+      // During playback, keep a shadow recognizer armed. Acoustic echo
+      // cancellation handles most speaker bleed; semantic echo rejection is
+      // the second line of defence. A non-echo utterance owns the floor
+      // immediately, so the first word is not lost while a new recognizer is
+      // being started after RMS barge-in.
+      if (phaseRef.current === 'speaking') {
+        // Do not commit a final playback echo into finalTranscriptRef. Otherwise
+        // the next genuine barge-in would be concatenated with Lyo's own words.
+        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) return;
+        interruptedPreviousTurnRef.current = true;
+        stopSpeech();
+        if (useChatStore.getState().isGenerating) interruptGeneration();
+        changePhase('listening');
+      }
+
+      finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (combined) {
-        // Browser engines disagree about when an utterance becomes "final".
-        // Our own silence endpointing keeps turn-taking fast and works from
-        // stable interim text instead of waiting for the browser to decide.
-        silenceTimerRef.current = setTimeout(() => {
-          void sendVoiceTurn(combined);
-        }, END_OF_TURN_SILENCE_MS);
-      }
+      silenceTimerRef.current = setTimeout(() => {
+        void sendVoiceTurn(combined);
+      }, voiceEndOfTurnDelayMs(combined));
     };
     recognition.onerror = (event) => {
-      if (!activeRef.current) return;
+      if (recognitionRef.current !== recognition || !activeRef.current) return;
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
       changePhase('error');
     };
     recognition.onend = () => {
+      // stopRecognition() deliberately clears ownership before starting the
+      // shadow recognizer. The old recognizer's delayed onend must not clear or
+      // restart the new one.
+      if (recognitionRef.current !== recognition) return;
       recognitionRef.current = null;
-      if (activeRef.current && phaseRef.current === 'listening') {
-        window.setTimeout(() => startRecognition(), 120);
+      if (!activeRef.current) return;
+      if (phaseRef.current === 'speaking') {
+        window.setTimeout(() => startRecognition(true), 80);
+      } else if (phaseRef.current === 'listening') {
+        window.setTimeout(() => startRecognition(false), 120);
       }
     };
     try {
       recognition.start();
-      changePhase('listening');
+      if (!allowWhileSpeaking) changePhase('listening');
     } catch {
       changePhase('error');
     }
@@ -231,6 +273,7 @@ export default function ConversationalVoiceLayer() {
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
+    startRecognition(true);
 
     try {
       while (activeRef.current && voiceSegmentQueueRef.current.length > 0) {
@@ -243,13 +286,9 @@ export default function ConversationalVoiceLayer() {
         lastSpokenMessageIdRef.current = segment.messageId;
 
         try {
-          const controller = new AbortController();
-          ttsAbortRef.current = controller;
-          const blob = await api.tts.synthesizeStream(spoken, {
-            language: navigator.language || 'auto',
-            speed: 1.02,
-            signal: controller.signal,
-          });
+          ttsAbortRef.current = segment.controller;
+          const blob = await segment.audio;
+          if (!blob) throw new Error('Segment synthesis failed');
           await playBlob(blob);
         } catch {
           if (!activeRef.current || phaseRef.current !== 'speaking') break;
@@ -284,10 +323,18 @@ export default function ConversationalVoiceLayer() {
         )
       ) return;
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
+      const controller = new AbortController();
+      const audio = api.tts.synthesizeStream(event.text, {
+        language: navigator.language || 'auto',
+        speed: 1.02,
+        signal: controller.signal,
+      }).catch(() => null);
       voiceSegmentQueueRef.current.push({
         text: event.text,
         sequence: event.sequence,
         messageId: event.messageId,
+        controller,
+        audio,
       });
       voiceSegmentQueueRef.current.sort((a, b) => a.sequence - b.sequence);
       void drainVoiceSegments();
@@ -305,10 +352,18 @@ export default function ConversationalVoiceLayer() {
         const fallbackKey = event.messageId + ':ready';
         if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
+          const controller = new AbortController();
+          const audio = api.tts.synthesizeStream(event.text, {
+            language: navigator.language || 'auto',
+            speed: 1.02,
+            signal: controller.signal,
+          }).catch(() => null);
           voiceSegmentQueueRef.current.push({
             text: event.text,
             sequence: Number.MAX_SAFE_INTEGER,
             messageId: event.messageId,
+            controller,
+            audio,
           });
           void drainVoiceSegments();
           return;
@@ -331,6 +386,7 @@ export default function ConversationalVoiceLayer() {
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
+    startRecognition(true);
     lastSpokenTextRef.current = text;
     lastSpokenMessageIdRef.current = messageId;
 
@@ -384,6 +440,7 @@ export default function ConversationalVoiceLayer() {
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    interruptedPreviousTurnRef.current = true;
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
