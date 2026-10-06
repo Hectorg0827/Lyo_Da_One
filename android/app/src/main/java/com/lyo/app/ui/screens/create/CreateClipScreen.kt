@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavHostController
+import com.lyo.app.ui.screens.clips.ClipPrompt
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ClipCreateRequest
 import com.lyo.app.ui.navigation.Routes
@@ -62,10 +63,15 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateClipScreen(nav: NavHostController) {
+fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
     var videoUri by remember { mutableStateOf<Uri?>(null) }
-    var title by remember { mutableStateOf("") }
-    var subject by remember { mutableStateOf("") }
+    // Arrived from a finish screen that knows the subject: the title and
+    // subject open already written, so the only thing left is the video.
+    // Nothing is invented when the topic is unknown — ClipPrompt returns null
+    // and the fields stay empty rather than publishing words the learner
+    // never chose.
+    var title by remember { mutableStateOf(ClipPrompt.draftTitle(topic) ?: "") }
+    var subject by remember { mutableStateOf(ClipPrompt.draftSubject(topic) ?: "") }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var pickerOpened by remember { mutableStateOf(false) }

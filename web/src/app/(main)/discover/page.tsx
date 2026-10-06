@@ -36,6 +36,8 @@ import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
 import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
+import CreateClipModal from '@/components/clips/CreateClipModal';
+import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 
 interface Reel {
   id: string;
@@ -386,6 +388,13 @@ function DiscoverContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryParam = searchParams.get('q')?.trim() ?? '';
+  // `?compose=clip` opens the composer, and `topic` fills it in. The finish
+  // screen in the classroom links here that way: a learner who just finished
+  // something is the best source of a clip this app will ever get, and the
+  // composer has to be addressable for that link to exist at all.
+  const composeParam = searchParams.get('compose');
+  const topicParam = searchParams.get('topic');
+  const [composing, setComposing] = useState(composeParam === 'clip');
   const [query, setQuery] = useState(queryParam);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -393,6 +402,10 @@ function DiscoverContent() {
     setQuery(queryParam);
     setActiveIndex(0);
   }, [queryParam]);
+
+  useEffect(() => {
+    setComposing(composeParam === 'clip');
+  }, [composeParam]);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -546,6 +559,20 @@ function DiscoverContent() {
           />
         </label>
       </div>
+
+      {composing && (
+        <CreateClipModal
+          initialTitle={draftTitle(topicParam) ?? ''}
+          initialSubject={draftSubject(topicParam) ?? ''}
+          onClose={() => {
+            setComposing(false);
+            // Drop the params so a refresh does not reopen the composer over
+            // a clip the learner has already published.
+            router.replace('/discover');
+          }}
+          onCreated={() => router.replace('/discover')}
+        />
+      )}
 
       <AnimatePresence>
         {commentsFor && (

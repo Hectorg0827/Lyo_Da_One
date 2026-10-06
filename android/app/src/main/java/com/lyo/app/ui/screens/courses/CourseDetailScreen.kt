@@ -63,6 +63,7 @@ import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
 import com.lyo.app.ui.navigation.Routes
+import com.lyo.app.ui.screens.clips.ClipPrompt
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
@@ -247,6 +248,19 @@ fun CourseDetailScreen(nav: NavHostController, courseId: String) {
                                 message = notice,
                                 actionLabel = "Dismiss",
                                 onAction = { completionNotice = null },
+                            )
+                        }
+                        // Ask for a clip while they are still here. Discover's
+                        // hardest problem is supply, and this is the moment a
+                        // learner has something specific to say and feels good
+                        // enough to say it — with the subject already known,
+                        // so the ask can name it and the composer opens with
+                        // the title written.
+                        item {
+                            StatusCard(
+                                message = ClipPrompt.invitation(course?.title),
+                                actionLabel = ClipPrompt.CALL_TO_ACTION,
+                                onAction = { nav.navigate(Routes.createClip(course?.title)) },
                             )
                         }
                     }

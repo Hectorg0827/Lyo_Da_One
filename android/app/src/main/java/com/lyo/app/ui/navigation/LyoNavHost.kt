@@ -31,6 +31,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -80,6 +82,13 @@ object Routes {
     const val CLIPS = "clips"
     const val CREATE = "create"
     const val CREATE_CLIP = "create/clip"
+
+    /** The same screen, arriving with the subject already known. */
+    const val CREATE_CLIP_WITH_TOPIC = "create/clip?topic={topic}"
+
+    fun createClip(topic: String?): String =
+        if (topic.isNullOrBlank()) CREATE_CLIP
+        else "create/clip?topic=${android.net.Uri.encode(topic)}"
     const val CREATE_POST = "create/post"
     const val CREATE_GROUP = "create/group"
     const val CREATE_EVENT = "create/event"
@@ -272,6 +281,16 @@ private fun LyoNavHost() {
             composable(Routes.CLIPS) { ClipsScreen(nav) }
             composable(Routes.CREATE) { CreateScreen(nav) }
             composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }
+            composable(
+                route = Routes.CREATE_CLIP_WITH_TOPIC,
+                arguments = listOf(
+                    navArgument("topic") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry -> CreateClipScreen(nav, topic = entry.arguments?.getString("topic")) }
             composable(Routes.CREATE_POST) { CreatePostScreen(nav) }
             composable(Routes.CREATE_GROUP) {
                 CreateCommunityItemScreen(nav = nav, createGroup = true)

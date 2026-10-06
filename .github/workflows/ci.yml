@@ -64,6 +64,9 @@ jobs:
       - name: Verify Focus deck parity
         run: node scripts/verify-focus-deck-parity.mjs
 
+      - name: Verify teach-it prompt parity
+        run: node scripts/verify-teach-it-parity.mjs
+
       - name: Verify Android Profile integrity
         run: node scripts/verify-android-profile-honesty.mjs
 
