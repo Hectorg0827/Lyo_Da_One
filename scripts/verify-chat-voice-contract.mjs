@@ -51,6 +51,7 @@ const contracts = [
       'case "voice_ready"',
       '.voiceReady',
       'case "voice_incomplete"',
+      'json["spoken_text"]',
     ],
   },
   {
@@ -60,6 +61,7 @@ const contracts = [
       'case voiceTextSegment',
       'case voiceReady',
       'case voiceIncomplete',
+      'spokenText: String?',
     ],
   },
   {
@@ -109,9 +111,25 @@ const contracts = [
       'EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS',
       'onBeginningOfSpeech',
       'streamJob?.cancel()',
-      'engine.speak',
+      'chatVoicePlayer.enqueue',
+      'chatVoicePlayer.speak',
       'ChatStreamEvent.VoiceSegment',
+      'event.spokenText',
       'pendingVoiceUtterances',
+    ],
+    forbidden: ['/voice/chat', '/realtime/voice'],
+  },
+  {
+    name: 'Android Chat uses shared neural voice with device fallback only',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatVoicePlayer.kt',
+    needles: [
+      '/api/v1/tts/synthesize/stream',
+      'ApiClient.okHttp',
+      'MediaPlayer',
+      'TextToSpeech',
+      'fetchSharedVoice',
+      'playDeviceFallback',
+      'audio = scope.async',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -127,6 +145,7 @@ const contracts = [
       '"client_stt_tts"',
       '"delivery" to "segments"',
       '"voice_text_segment"',
+      '"spoken_text"',
       'ChatStreamEvent.VoiceSegment',
       '"api/v1/lyo2/chat/stream"',
     ],
@@ -176,5 +195,5 @@ if (failures.length) {
 
 console.log(
   'Conversational voice contract: Web, iOS and Android use canonical Chat ' +
-  'with canonical segment streaming, STT/TTS transport, voice_session delivery metadata and barge-in; no separate voice AI path.'
+  'with canonical segment streaming, shared neural TTS, STT transport, voice_session delivery metadata and barge-in; no separate voice AI path.'
 );
