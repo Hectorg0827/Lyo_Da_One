@@ -51,6 +51,12 @@ export default function ClipCommentsDrawer({
 }) {
   const currentUser = useAuthStore((state) => state.user);
   const [comments, setComments] = useState<ClipComment[]>([]);
+  // The server's own total, which is not the same as the number of comments
+  // loaded: the endpoint returns one page (50 by default). Reporting the
+  // page size back to the feed would turn a clip with 137 comments into one
+  // with 50 the moment someone opened the drawer, and every later add or
+  // delete would count on from that wrong number.
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -65,7 +71,10 @@ export default function ClipCommentsDrawer({
         if (!live) return;
         const next = (result.items ?? []).map(adaptComment);
         setComments(next);
-        onCountChange?.(next.length);
+        const serverTotal =
+          typeof result.total_count === 'number' ? result.total_count : next.length;
+        setTotal(serverTotal);
+        onCountChange?.(serverTotal);
       })
       .catch(() => live && setError('Unable to load comments.'))
       .finally(() => live && setLoading(false));
@@ -84,9 +93,11 @@ export default function ClipCommentsDrawer({
     setError(null);
     try {
       const created = await api.clips.createComment(clipId, content);
-      setComments((prev) => {
-        const next = [adaptComment(created), ...prev];
-        onCountChange?.(next.length);
+      setComments((prev) => [adaptComment(created), ...prev]);
+      // A delta on the server's total, not a recount of what is loaded.
+      setTotal((prev) => {
+        const next = (prev ?? comments.length) + 1;
+        onCountChange?.(next);
         return next;
       });
       setText('');
@@ -100,9 +111,10 @@ export default function ClipCommentsDrawer({
   const remove = async (commentId: string) => {
     try {
       await api.clips.deleteComment(clipId, commentId);
-      setComments((prev) => {
-        const next = prev.filter((c) => c.id !== commentId);
-        onCountChange?.(next.length);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      setTotal((prev) => {
+        const next = Math.max(0, (prev ?? comments.length) - 1);
+        onCountChange?.(next);
         return next;
       });
     } catch {
@@ -120,7 +132,7 @@ export default function ClipCommentsDrawer({
       onClick={(event) => event.stopPropagation()}
     >
       <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h2 className="text-sm font-semibold text-white">Comments ({comments.length})</h2>
+        <h2 className="text-sm font-semibold text-white">Comments ({total ?? comments.length})</h2>
         <button
           onClick={onClose}
           aria-label="Close comments"

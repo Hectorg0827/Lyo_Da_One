@@ -138,7 +138,10 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
                     ),
                 )
             }.onSuccess {
-                nav.navigate(Routes.CLIPS) {
+                // Discover, not the legacy "clips" alias: the bottom bar only
+                // renders for routes it lists, so landing on the alias would
+                // drop the learner onto their new clip with no navigation out.
+                nav.navigate(Routes.DISCOVER) {
                     popUpTo(Routes.CREATE) { inclusive = false }
                     launchSingleTop = true
                 }

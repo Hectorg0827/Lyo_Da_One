@@ -394,6 +394,11 @@ function DiscoverContent() {
   // composer has to be addressable for that link to exist at all.
   const composeParam = searchParams.get('compose');
   const topicParam = searchParams.get('topic');
+  // `?clip=<id>` names the clip to open. Both the Share button here and the
+  // redirect from the old /clips route produce links shaped that way, and
+  // neither worked: the parameter was carried across and then ignored, so a
+  // shared clip opened whatever happened to be first in the feed.
+  const clipParam = searchParams.get('clip');
   const [composing, setComposing] = useState(composeParam === 'clip');
   const [query, setQuery] = useState(queryParam);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -413,10 +418,39 @@ function DiscoverContent() {
 
   const { data, isLoading } = useApi(() => api.clips.discover(), []);
 
+  // A named clip need not be on the first page of Discover. When it is not,
+  // it is fetched by id and put at the front, so the link lands on the clip
+  // it named rather than silently on something else.
+  const [namedReel, setNamedReel] = useState<Reel | null>(null);
+  useEffect(() => {
+    if (!clipParam) {
+      setNamedReel(null);
+      return;
+    }
+    let live = true;
+    api.clips
+      .get(clipParam)
+      .then((result) => {
+        if (live && result?.clip) setNamedReel(adaptReel(result.clip));
+      })
+      .catch(() => {
+        // The clip is gone or private. The feed still works, so the learner
+        // sees Discover rather than an error page for a dead link.
+        if (live) setNamedReel(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [clipParam]);
+
   const reels = useMemo(() => {
     const list = ((data?.clips as Record<string, unknown>[]) || []).map(adaptReel);
-    return list.map((r) => ({ ...r, ...overrides[r.id] }));
-  }, [data, overrides]);
+    // The named clip leads, and is not repeated further down the feed.
+    const ordered = namedReel
+      ? [namedReel, ...list.filter((r) => r.id !== namedReel.id)]
+      : list;
+    return ordered.map((r) => ({ ...r, ...overrides[r.id] }));
+  }, [data, overrides, namedReel]);
 
   // Client-side filter over title + subtitle + tags (iOS DiscoverViewModel)
   const filtered = useMemo(() => {
@@ -441,6 +475,15 @@ function DiscoverContent() {
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
   }, []);
+
+  // The named clip is put at the front, so the feed has to be looking at the
+  // front for that to mean anything — it can arrive after the first page has
+  // already rendered and been scrolled.
+  useEffect(() => {
+    if (!namedReel) return;
+    setActiveIndex(0);
+    scrollerRef.current?.scrollTo({ top: 0 });
+  }, [namedReel]);
 
   const patch = useCallback((id: string, next: Partial<Reel>) => {
     setOverrides((o) => ({ ...o, [id]: { ...o[id], ...next } }));
