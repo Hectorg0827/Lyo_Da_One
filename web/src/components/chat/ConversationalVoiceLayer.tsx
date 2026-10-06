@@ -323,14 +323,16 @@ export default function ConversationalVoiceLayer() {
         )
       ) return;
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
+      const spokenText = (event.spokenText || event.text).trim();
+      if (!spokenText) return;
       const controller = new AbortController();
-      const audio = api.tts.synthesizeStream(event.text, {
+      const audio = api.tts.synthesizeStream(spokenText, {
         language: navigator.language || 'auto',
         speed: 1.02,
         signal: controller.signal,
       }).catch(() => null);
       voiceSegmentQueueRef.current.push({
-        text: event.text,
+        text: spokenText,
         sequence: event.sequence,
         messageId: event.messageId,
         controller,
@@ -352,14 +354,19 @@ export default function ConversationalVoiceLayer() {
         const fallbackKey = event.messageId + ':ready';
         if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
+          const spokenText = (event.spokenText || event.text).trim();
+          if (!spokenText) {
+            finishSegmentTurnIfReady();
+            return;
+          }
           const controller = new AbortController();
-          const audio = api.tts.synthesizeStream(event.text, {
+          const audio = api.tts.synthesizeStream(spokenText, {
             language: navigator.language || 'auto',
             speed: 1.02,
             signal: controller.signal,
           }).catch(() => null);
           voiceSegmentQueueRef.current.push({
-            text: event.text,
+            text: spokenText,
             sequence: Number.MAX_SAFE_INTEGER,
             messageId: event.messageId,
             controller,

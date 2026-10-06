@@ -555,11 +555,11 @@ final class UnifiedChatService: ObservableObject {
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
 
-        case .voiceTextSegment(let text, let sequence, let messageId):
-            onVoiceTextSegment?(text, sequence, messageId)
+        case .voiceTextSegment(let text, let spokenText, let sequence, let messageId):
+            onVoiceTextSegment?(spokenText ?? text, sequence, messageId)
 
-        case .voiceReady(let text, let messageId, let speak):
-            onVoiceReady?(text, messageId, speak)
+        case .voiceReady(let text, let spokenText, let messageId, let speak):
+            onVoiceReady?(spokenText ?? text, messageId, speak)
 
         case .voiceIncomplete(let text, let messageId):
             onVoiceIncomplete?(text, messageId)

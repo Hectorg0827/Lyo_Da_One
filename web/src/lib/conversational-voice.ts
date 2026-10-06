@@ -120,12 +120,14 @@ export type VoiceStreamEvent =
   | {
       type: 'voice_text_segment';
       text: string;
+      spokenText?: string;
       sequence: number;
       messageId: string;
     }
   | {
       type: 'voice_ready';
       text: string;
+      spokenText?: string;
       messageId: string;
       speak: boolean;
     }

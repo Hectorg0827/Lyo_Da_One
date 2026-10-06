@@ -22,11 +22,13 @@ sealed class ChatStreamEvent {
     data class Conversation(val id: String) : ChatStreamEvent()
     data class VoiceSegment(
         val text: String,
+        val spokenText: String?,
         val sequence: Int,
         val messageId: String,
     ) : ChatStreamEvent()
     data class VoiceReady(
         val text: String,
+        val spokenText: String?,
         val messageId: String,
         val speak: Boolean,
     ) : ChatStreamEvent()
@@ -228,6 +230,9 @@ object ChatStreamClient {
                 obj.has("text") && obj.has("sequence") && obj.has("message_id") ->
                 ChatStreamEvent.VoiceSegment(
                     text = obj.get("text").asString,
+                    spokenText = obj.get("spoken_text")
+                        ?.takeIf { it.isJsonPrimitive }
+                        ?.asString,
                     sequence = obj.get("sequence").asInt,
                     messageId = obj.get("message_id").asString,
                 )
@@ -235,6 +240,9 @@ object ChatStreamClient {
                 obj.has("text") && obj.has("message_id") ->
                 ChatStreamEvent.VoiceReady(
                     text = obj.get("text").asString,
+                    spokenText = obj.get("spoken_text")
+                        ?.takeIf { it.isJsonPrimitive }
+                        ?.asString,
                     messageId = obj.get("message_id").asString,
                     speak = !obj.has("speak") || obj.get("speak").asBoolean,
                 )
