@@ -3,10 +3,16 @@
 /**
  * Create sheet — the web counterpart to iOS `CreateHubView`.
  *
- * iOS presents a full-screen creation studio with six modes; the camera-only
- * ones (Clip, Story) have no web equivalent, so this ships the three the web
- * can actually complete: Post, Course and Event/Group. Mode pills and editor
- * cards follow the iOS CreateModePicker / createEditorCard styling.
+ * iOS presents a full-screen creation studio with six modes. This ships the
+ * four the web can actually complete: Post, Clip, Course and Event/Group.
+ * Mode pills and editor cards follow the iOS CreateModePicker /
+ * createEditorCard styling.
+ *
+ * Clip used to be left out here as "camera-only, no web equivalent". That was
+ * not true — the web could upload and publish a clip, but only from the old
+ * `/clips` page, which the mobile nav never linked. So on a phone the feed
+ * built for clips had no reachable way to add one. The composer lives in
+ * `components/clips/CreateClipModal` now and Discover and this sheet share it.
  */
 
 import { useEffect, useState } from 'react';
@@ -17,12 +23,14 @@ import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import CreateClipModal from '@/components/clips/CreateClipModal';
 
-type Mode = 'post' | 'course' | 'event';
+type Mode = 'post' | 'clip' | 'course' | 'event';
 
 // Colors and copy from iOS CreateViewModel
 const MODES: { id: Mode; emoji: string; label: string; color: string; description: string }[] = [
   { id: 'post', emoji: '✏️', label: 'Post', color: '#3b82f6', description: 'Share to your feed' },
+  { id: 'clip', emoji: '🎬', label: 'Clip', color: '#8b5cf6', description: 'Teach something in a short video' },
   { id: 'course', emoji: '📚', label: 'Course', color: '#10b981', description: 'AI-generated course' },
   { id: 'event', emoji: '🎉', label: 'Event/Group', color: '#ec4899', description: 'Create event or group' },
 ];
@@ -85,6 +93,7 @@ export default function CreateSheet({
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('post');
+  const [composingClip, setComposingClip] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -226,9 +235,35 @@ export default function CreateSheet({
             <span className="w-[42px] h-[42px]" />
           </div>
 
+          {composingClip && (
+            <CreateClipModal
+              onClose={() => setComposingClip(false)}
+              onCreated={() => {
+                setComposingClip(false);
+                onClose();
+                router.push('/discover');
+              }}
+            />
+          )}
+
           {/* Editor */}
           <div className="relative flex-1 overflow-y-auto px-[18px] py-3">
             <div className="max-w-xl mx-auto">
+              {mode === 'clip' && (
+                <EditorCard>
+                  <EditorTitle
+                    title="Teach something in a short video"
+                    subtitle="Your clip goes to Discover, where people can watch it, comment, and turn it into a course."
+                  />
+                  <button
+                    onClick={() => setComposingClip(true)}
+                    className="w-full rounded-2xl bg-white px-4 py-3 font-rounded text-[15px] font-bold text-[#0A0D16] transition-transform active:scale-[0.98]"
+                  >
+                    Choose a video
+                  </button>
+                </EditorCard>
+              )}
+
               {mode === 'post' && (
                 <EditorCard>
                   <EditorTitle

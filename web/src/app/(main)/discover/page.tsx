@@ -1,13 +1,19 @@
 'use client';
 
 /**
- * Discover — the immersive learning reel.
+ * Discover — the learning reel, and the only one.
  *
  * Mirrors iOS `Sources/Views/Main/DiscoverView.swift`: a full-bleed,
  * vertically paged video feed with a floating search overlay, top/bottom
  * scrims, an info overlay on the left and an action strip on the right.
  * Client-side search filters title + subtitle + tags, same as the iOS
  * DiscoverViewModel.
+ *
+ * There used to be a second reel at `/clips`, on the same clips API. Discover
+ * was what everything pointed at — the mobile nav, the search bar, the empty
+ * course stack — while commenting and posting lived only on the page almost
+ * nothing linked. So on a phone you could watch clips and never reach a way
+ * to comment on one or make one. Both now live here, and `/clips` redirects.
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,11 +28,14 @@ import {
   Users,
   ArrowRight,
   Play,
+  MessageCircle,
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
 
 interface Reel {
   id: string;
@@ -39,6 +48,7 @@ interface Reel {
   relatedGroup: string | null;
   tags: string[];
   likes: number;
+  comments: number;
   isLiked: boolean;
   isSaved: boolean;
 }
@@ -84,6 +94,7 @@ function adaptReel(raw: Record<string, unknown>): Reel {
     relatedGroup: (metadata.related_group as string) || null,
     tags: ((metadata.tags as string[]) || (raw.tags as string[]) || []).filter(Boolean),
     likes: (raw.likeCount as number) || (raw.like_count as number) || 0,
+    comments: (raw.commentCount as number) || (raw.comment_count as number) || 0,
     isLiked: (raw.isLiked as boolean) || (raw.is_liked as boolean) || false,
     isSaved: (raw.isSaved as boolean) || (raw.is_saved as boolean) || false,
   };
@@ -118,6 +129,7 @@ function ActionStrip({
   reel,
   onAsk,
   onCourse,
+  onComment,
   onLike,
   onSave,
   onShare,
@@ -125,6 +137,7 @@ function ActionStrip({
   reel: Reel;
   onAsk: () => void;
   onCourse: () => void;
+  onComment: () => void;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -160,6 +173,10 @@ function ActionStrip({
           style={{ color: reel.isLiked ? '#ff3b30' : '#ffffff' }}
           fill={reel.isLiked ? '#ff3b30' : 'none'}
         />
+      </ActionButton>
+
+      <ActionButton label={formatNumber(reel.comments)} onClick={onComment}>
+        <MessageCircle className="w-[26px] h-[26px] text-white" />
       </ActionButton>
 
       <ActionButton label="Share" onClick={onShare}>
@@ -247,6 +264,7 @@ function ReelSlide({
   isActive,
   onAsk,
   onCourse,
+  onComment,
   onLike,
   onSave,
   onShare,
@@ -255,6 +273,7 @@ function ReelSlide({
   isActive: boolean;
   onAsk: () => void;
   onCourse: () => void;
+  onComment: () => void;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -332,6 +351,7 @@ function ReelSlide({
           reel={reel}
           onAsk={onAsk}
           onCourse={onCourse}
+          onComment={onComment}
           onLike={onLike}
           onSave={onSave}
           onShare={onShare}
@@ -374,7 +394,9 @@ function DiscoverContent() {
     setActiveIndex(0);
   }, [queryParam]);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
+  const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const viewed = useRef<Set<string>>(new Set());
 
   const { data, isLoading } = useApi(() => api.clips.discover(), []);
 
@@ -446,10 +468,23 @@ function DiscoverContent() {
       } else {
         await navigator.clipboard.writeText(url);
       }
+      // Count it. The old handler copied a link and told the server nothing,
+      // so a creator's share count never moved for anyone sharing from here.
+      api.clips.share(reel.id).catch(() => {});
     } catch {
       /* dismissed */
     }
   }, []);
+
+  // A view is recorded once per clip per visit, when its slide is the one in
+  // front of the viewer. Creators cannot be shown a view count the feed never
+  // reported, and the old Discover reported none at all.
+  useEffect(() => {
+    const reel = filtered[activeIndex];
+    if (!reel || viewed.current.has(reel.id)) return;
+    viewed.current.add(reel.id);
+    api.clips.view(reel.id).catch(() => {});
+  }, [filtered, activeIndex]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black">
@@ -484,6 +519,7 @@ function DiscoverContent() {
               isActive={i === activeIndex}
               onAsk={() => handleAsk(reel)}
               onCourse={() => handleCourse(reel)}
+              onComment={() => setCommentsFor(reel.id)}
               onLike={() => handleLike(reel)}
               onSave={() => handleSave(reel)}
               onShare={() => handleShare(reel)}
@@ -510,6 +546,18 @@ function DiscoverContent() {
           />
         </label>
       </div>
+
+      <AnimatePresence>
+        {commentsFor && (
+          <ClipCommentsDrawer
+            key={commentsFor}
+            clipId={commentsFor}
+            onClose={() => setCommentsFor(null)}
+            onCountChange={(count) => patch(commentsFor, { comments: count })}
+          />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

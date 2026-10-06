@@ -23,9 +23,14 @@ const createPost = read('android/app/src/main/java/com/lyo/app/ui/screens/create
 const createCommunity = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreateCommunityItemScreen.kt');
 const communityViewModel = read('android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityMapViewModel.kt');
 
+// The second tab is the clip reel. It used to be labelled "Clips" while
+// "discover" opened an unrelated places-and-events browser nothing linked to,
+// so the same feed had two names and one of them pointed somewhere else. It
+// is Discover on all three platforms now — iOS shows the same reel, web
+// serves it at /discover — and the reel is what this tab opens.
 const expectedOrder = [
   'BottomItem(Routes.HOME, "Focus"',
-  'BottomItem(Routes.CLIPS, "Clips"',
+  'BottomItem(Routes.DISCOVER, "Discover"',
   'BottomItem(Routes.CREATE, "Create"',
   'BottomItem(Routes.COMMUNITY, "Community"',
   'BottomItem(Routes.PROFILE, "Profile"',
@@ -40,6 +45,14 @@ for (const marker of expectedOrder) {
 }
 
 rejectText(nav, 'BottomItem(Routes.CHAT', 'Android primary navigation');
+
+// Both names reach the one reel. "clips" stays registered because links to it
+// have already been shared, and a shared clip that opens nothing is worse than
+// an extra route. The places browser keeps its own route rather than sitting
+// on "discover", where it answered to a name that belongs to the feed.
+requireText(nav, 'composable(Routes.DISCOVER) { ClipsScreen(nav) }', 'Android Discover reel route');
+requireText(nav, 'composable(Routes.CLIPS) { ClipsScreen(nav) }', 'Android legacy clips route');
+requireText(nav, 'composable(Routes.PLACES) { DiscoverScreen(nav) }', 'Android places browser route');
 requireText(nav, 'composable(Routes.CREATE) { CreateScreen(nav) }', 'Android Create route');
 requireText(nav, 'composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }', 'Android clip creator route');
 requireText(nav, 'composable(Routes.CREATE_POST) { CreatePostScreen(nav) }', 'Android post creator route');
