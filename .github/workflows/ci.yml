@@ -67,6 +67,9 @@ jobs:
       - name: Verify teach-it prompt parity
         run: node scripts/verify-teach-it-parity.mjs
 
+      - name: Verify creator stats parity
+        run: node scripts/verify-creator-stats-parity.mjs
+
       - name: Verify Android Profile integrity
         run: node scripts/verify-android-profile-honesty.mjs
 
