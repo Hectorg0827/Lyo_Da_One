@@ -618,6 +618,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               publishVoiceStreamEvent({
                 type: 'voice_text_segment',
                 text: chunk.text,
+                spokenText: typeof chunk.spoken_text === 'string' ? chunk.spoken_text : undefined,
                 sequence: chunk.sequence,
                 messageId: chunk.message_id,
               });
@@ -627,6 +628,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               publishVoiceStreamEvent({
                 type: 'voice_ready',
                 text: chunk.text,
+                spokenText: typeof chunk.spoken_text === 'string' ? chunk.spoken_text : undefined,
                 messageId: chunk.message_id,
                 speak: chunk.speak !== false,
               });
