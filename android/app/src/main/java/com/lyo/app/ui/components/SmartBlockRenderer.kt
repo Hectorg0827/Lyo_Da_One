@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -105,7 +106,7 @@ private fun SmartBlockView(
         is SmartBlockContent.DataViz -> DataVizBlockView(content.payload, color)
         is SmartBlockContent.Media -> MediaBlockView(content.payload)
         is SmartBlockContent.Progress -> ProgressBlockView(content.payload)
-        is SmartBlockContent.Interactive -> InteractiveBlockView(content.payload, color)
+        is SmartBlockContent.Interactive -> InteractiveBlockView(content.payload, block.subtype, color)
         is SmartBlockContent.MasteryMap -> MasteryMapBlockView(content.payload, color)
         is SmartBlockContent.Unknown -> UnknownBlockView()
     }
@@ -387,7 +388,8 @@ private fun ProgressBlockView(payload: ProgressBlockPayload) {
 }
 
 @Composable
-private fun InteractiveBlockView(payload: InteractiveBlockPayload, color: Color) {
+private fun InteractiveBlockView(payload: InteractiveBlockPayload, subtype: String?, color: Color) {
+    val uriHandler = LocalUriHandler.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -397,10 +399,14 @@ private fun InteractiveBlockView(payload: InteractiveBlockPayload, color: Color)
     ) {
         payload.title?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = TextSecondary) }
         payload.items.forEach { item ->
+            val sourceUrl = item.url?.takeIf { subtype == "sourceNavigator" && it.isNotBlank() }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                    .clickable(enabled = sourceUrl != null) {
+                        sourceUrl?.let(uriHandler::openUri)
+                    }
                     .padding(8.dp),
             ) {
                 Text(item.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)

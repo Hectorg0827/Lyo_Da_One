@@ -280,6 +280,7 @@ enum Lyo2StreamEvent {
     /// Shared events (no v1/v2 distinction)
     case skeleton(blocks: [String])
     case clarification(text: String)
+    case textDelta(text: String)
     case answer(block: Lyo2UIBlock)
     case artifact(block: Lyo2UIBlock)
     case error(message: String)
