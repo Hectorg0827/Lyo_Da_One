@@ -37,6 +37,9 @@ const contracts = [
       'voiceInterruptedPreviousTurn',
       'unifiedChat.cancelActiveResponse()',
       'voiceSession: voiceSession',
+      'stopListening(submitTranscript: false)',
+      'sendMessage(resumeVoiceLoop: resumeVoiceLoop)',
+      'resumeVoiceLoop.map { $0 && voiceLoopActive }',
     ],
     forbidden: ['startLiveMode(sessionId:'],
   },
@@ -50,6 +53,25 @@ const contracts = [
     path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatVoiceController.kt',
     needles: ['ChatVoiceController', 'onTranscript', 'ClassroomVoicePlayer'],
     forbidden: ['/voice-ai', 'WebSocket'],
+  },
+  {
+    name: 'Android speech recognition and TTS services are package-visible',
+    path: 'android/app/src/main/AndroidManifest.xml',
+    needles: ['<queries>', 'android.speech.RecognitionService', 'android.intent.action.TTS_SERVICE'],
+  },
+  {
+    name: 'Android intentional Chat cancellation is propagated before failure delivery',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatRequestResult.kt',
+    needles: ['catch (cancellation: CancellationException)', 'throw cancellation', 'Result.failure(error)'],
+  },
+  {
+    name: 'Android conversation creation and streaming use cancellation-safe requests',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
+    needles: [
+      'activeConversationId ?: runChatRequest {',
+      'runChatRequest {\n                ChatStreamClient.stream(',
+    ],
+    forbidden: ['runCatching {\n                ChatStreamClient.stream('],
   },
   {
     name: 'Android canonical Chat stream carries voice session metadata',

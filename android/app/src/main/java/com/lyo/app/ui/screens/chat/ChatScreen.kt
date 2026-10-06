@@ -347,7 +347,7 @@ fun ChatScreen(nav: NavHostController) {
 
         activeStreamJob?.cancel()
         activeStreamJob = scope.launch {
-            val conversationId = activeConversationId ?: runCatching {
+            val conversationId = activeConversationId ?: runChatRequest {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
                         title = trimmed.ifBlank { attachments.firstOrNull()?.name.orEmpty() }.take(80),
@@ -362,7 +362,7 @@ fun ChatScreen(nav: NavHostController) {
             }
             activeConversationId = conversationId
 
-            runCatching {
+            runChatRequest {
                 ChatStreamClient.stream(
                     text = trimmed,
                     conversationId = conversationId,

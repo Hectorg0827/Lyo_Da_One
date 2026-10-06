@@ -6,9 +6,9 @@ permissions:
 
 on:
   push:
-    # Branch pushes with an open PR already build via pull_request;
-    # listing them here too ran every job twice per push.
-    branches: [main]
+    # Validate the voice delivery head even while main has merge conflicts
+    # (GitHub does not run pull_request workflows for a conflicting PR).
+    branches: [main, feat/conversational-voice-v1]
   pull_request:
     branches: [main, chat-course-builder-ux-20261001, feat/chat-companion-v2]
 

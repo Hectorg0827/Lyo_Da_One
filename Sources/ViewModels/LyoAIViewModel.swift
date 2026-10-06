@@ -450,8 +450,7 @@ class LyoAIViewModel: ObservableObject {
 
     func stopLiveMode() {
         AudioStreamManager.shared.stopLiveMode()
-        isLiveMode = false
-        stopListening()
+        stopListening(submitTranscript: false)
     }
 
     func startListening() {
@@ -487,17 +486,24 @@ class LyoAIViewModel: ObservableObject {
         }
     }
 
-    func stopListening() {
+    func stopListening(submitTranscript: Bool = true) {
+        // Stopping the mic submits a spoken turn; ending live mode is a
+        // separate action. Capture delivery before stopping the recognizer,
+        // since the send runs asynchronously after isVoiceActive is cleared.
+        let shouldSubmit = submitTranscript
+            && !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let resumeVoiceLoop = shouldSubmit && (isVoiceActive || voiceLoopActive || isLiveMode)
+
         sttService.stopRecording()
         isVoiceActive = false
-        voiceLoopActive = false  // Manual stop ends the conversational loop
-        isLiveMode = false
-        stopSpeaking()  // Also stop TTS if we are fully stopping voice mode
+        voiceLoopActive = resumeVoiceLoop
+        isLiveMode = resumeVoiceLoop
+        if !resumeVoiceLoop { shouldAutoSpeakCurrentResponse = false }
+        stopSpeaking()
 
-        // If we have text, send it automatically in conversational mode
-        if !inputText.isEmpty {
+        if shouldSubmit {
             Task {
-                await sendMessage()
+                await sendMessage(resumeVoiceLoop: resumeVoiceLoop)
             }
         }
     }
@@ -694,7 +700,7 @@ class LyoAIViewModel: ObservableObject {
 
     // MARK: - Message Handling (Unified Flow)
 
-    func sendMessage(mode: String? = nil) async {
+    func sendMessage(mode: String? = nil, resumeVoiceLoop: Bool? = nil) async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return }
 
@@ -704,7 +710,10 @@ class LyoAIViewModel: ObservableObject {
         attachments = []
 
         // Capture voice state before the microphone is stopped for this turn.
-        let shouldResumeListening = isVoiceActive || voiceLoopActive || isLiveMode
+        // A queued voice submission keeps its captured delivery, unless the
+        // learner explicitly ended the loop before the send started.
+        let shouldResumeListening = resumeVoiceLoop.map { $0 && voiceLoopActive }
+            ?? (isVoiceActive || voiceLoopActive || isLiveMode)
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         let voiceSession = shouldResumeListening
             ? Lyo2VoiceSessionContext(
