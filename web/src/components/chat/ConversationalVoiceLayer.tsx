@@ -150,6 +150,10 @@ export default function ConversationalVoiceLayer() {
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.onresult = (event) => {
+      // A stopped recognizer may still dispatch queued callbacks after a new
+      // shadow recognizer has already taken ownership. Ignore those stale
+      // callbacks so two recognition sessions can never contribute to one turn.
+      if (recognitionRef.current !== recognition) return;
       let finalText = finalTranscriptRef.current;
       let interimText = '';
       const start = event.resultIndex ?? 0;
@@ -160,7 +164,6 @@ export default function ConversationalVoiceLayer() {
         if (result.isFinal) finalText = `${finalText} ${transcript}`.trim();
         else interimText = `${interimText} ${transcript}`.trim();
       }
-      finalTranscriptRef.current = finalText;
       const combined = `${finalText} ${interimText}`.trim();
       if (!combined) return;
 
@@ -170,6 +173,8 @@ export default function ConversationalVoiceLayer() {
       // immediately, so the first word is not lost while a new recognizer is
       // being started after RMS barge-in.
       if (phaseRef.current === 'speaking') {
+        // Do not commit a final playback echo into finalTranscriptRef. Otherwise
+        // the next genuine barge-in would be concatenated with Lyo's own words.
         if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) return;
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
@@ -177,6 +182,7 @@ export default function ConversationalVoiceLayer() {
         changePhase('listening');
       }
 
+      finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
@@ -184,11 +190,15 @@ export default function ConversationalVoiceLayer() {
       }, voiceEndOfTurnDelayMs(combined));
     };
     recognition.onerror = (event) => {
-      if (!activeRef.current) return;
+      if (recognitionRef.current !== recognition || !activeRef.current) return;
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
       changePhase('error');
     };
     recognition.onend = () => {
+      // stopRecognition() deliberately clears ownership before starting the
+      // shadow recognizer. The old recognizer's delayed onend must not clear or
+      // restart the new one.
+      if (recognitionRef.current !== recognition) return;
       recognitionRef.current = null;
       if (!activeRef.current) return;
       if (phaseRef.current === 'speaking') {
