@@ -721,10 +721,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               if (chunk.type === 'text_delta') {
                 receivedTextDelta = true;
                 appendToAiMessage(text);
-              } else if (!(chunk.type === 'answer' && receivedTextDelta)) {
-                // The backend emits a final answer snapshot for legacy clients.
-                // Once deltas have been consumed, appending that snapshot would
-                // duplicate the complete answer.
+              } else if (chunk.type === 'answer' && receivedTextDelta) {
+                // The final answer is the canonical server snapshot. Reconcile
+                // streamed text to it rather than appending (duplication) or
+                // ignoring it (stale/incomplete text if a delta was missed or
+                // the server post-processed the completed response).
+                accumulated = text;
+                receivedContent = true;
+                patchAiMessage({ content: text });
+              } else {
                 appendToAiMessage(text);
               }
             }
