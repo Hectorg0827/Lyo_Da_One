@@ -22,10 +22,17 @@ struct Clip: Identifiable, Codable, Hashable {
     // AI-extractable metadata for course generation
     var metadata: ClipMetadata
     
-    // Social stats
-    var viewCount: Int
-    var likeCount: Int
-    var shareCount: Int
+    // Social stats.
+    //
+    // Optional, and nil is not zero. These are the figures a creator reads to
+    // decide whether this is worth their time, so a count the backend did not
+    // send has to stay distinguishable from one it sent as 0 — see
+    // `CreatorStats`. As non-optional Ints they also made the whole clips
+    // list fail to decode whenever the backend omitted one.
+    var viewCount: Int?
+    var likeCount: Int?
+    var commentCount: Int?
+    var shareCount: Int?
     var isLiked: Bool
     var isSaved: Bool
     
@@ -46,9 +53,10 @@ struct Clip: Identifiable, Codable, Hashable {
         thumbnailURL: URL? = nil,
         durationSeconds: Double = 0,
         metadata: ClipMetadata = ClipMetadata(),
-        viewCount: Int = 0,
-        likeCount: Int = 0,
-        shareCount: Int = 0,
+        viewCount: Int? = nil,
+        likeCount: Int? = nil,
+        commentCount: Int? = nil,
+        shareCount: Int? = nil,
         isLiked: Bool = false,
         isSaved: Bool = false,
         authorName: String? = nil,
@@ -66,6 +74,7 @@ struct Clip: Identifiable, Codable, Hashable {
         self.metadata = metadata
         self.viewCount = viewCount
         self.likeCount = likeCount
+        self.commentCount = commentCount
         self.shareCount = shareCount
         self.isLiked = isLiked
         self.isSaved = isSaved

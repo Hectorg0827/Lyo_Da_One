@@ -42,6 +42,7 @@ import com.google.gson.JsonObject
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.FollowRequest
+import com.lyo.app.data.api.ClipDto
 import com.lyo.app.data.api.PostDto
 import com.lyo.app.data.api.UserDto
 import com.lyo.app.ui.components.EmptyState
@@ -51,6 +52,7 @@ import com.lyo.app.ui.components.LyoAvatar
 import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.components.formatTimeAgo
 import com.lyo.app.ui.navigation.Routes
+import com.lyo.app.ui.screens.clips.CreatorStats
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoAmber
 import com.lyo.app.ui.theme.LyoPurple
@@ -61,7 +63,7 @@ import java.io.IOException
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
-private val OwnProfileTabs = listOf("Activity", "Achievements", "Stats")
+private val OwnProfileTabs = listOf("Activity", "Clips", "Achievements", "Stats")
 private val PublicProfileTabs = listOf("Activity")
 
 private data class AchievementUi(
@@ -92,6 +94,16 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
     var achievementsLoading by remember(userId) { mutableStateOf(false) }
     var achievementsLoaded by remember(userId) { mutableStateOf(false) }
     var achievementsError by remember(userId) { mutableStateOf<String?>(null) }
+
+    // The creator's own clips, and what they add up to. Nobody keeps making
+    // videos for a feed that never tells them whether anyone watched.
+    var myClips by remember(userId) { mutableStateOf<List<ClipDto>>(emptyList()) }
+    // How many clips the creator has, which is not how many arrived: the
+    // endpoint is paged, so a page is not a library. See CreatorStats.
+    var myClipsTotal by remember(userId) { mutableStateOf<Int?>(null) }
+    var clipsLoading by remember(userId) { mutableStateOf(false) }
+    var clipsLoaded by remember(userId) { mutableStateOf(false) }
+    var clipsError by remember(userId) { mutableStateOf<String?>(null) }
 
     var overview by remember(userId) { mutableStateOf<JsonObject?>(null) }
     var statsLoading by remember(userId) { mutableStateOf(false) }
@@ -133,6 +145,21 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             .onSuccess { posts = it.posts ?: emptyList() }
             .onFailure { activityError = contentLoadMessage(it, "activity") }
         activityLoading = false
+
+        if (isOwn) {
+            clipsLoading = true
+            clipsLoaded = false
+            clipsError = null
+            myClips = emptyList()
+            runCatching { ApiClient.api.clips(1, 50) }
+                .onSuccess {
+                    myClips = it.clips.orEmpty()
+                    myClipsTotal = it.total
+                    clipsLoaded = true
+                }
+                .onFailure { clipsError = contentLoadMessage(it, "clips") }
+            clipsLoading = false
+        }
         activityLoaded = true
 
         if (isOwn) {
@@ -420,6 +447,102 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                 }
             }
 
+            "Clips" -> {
+                when {
+                    !isOwn -> item {
+                        InlineErrorCard(
+                            title = "Private section",
+                            message = "Clip statistics are shown only on your own profile.",
+                            onRetry = null,
+                        )
+                    }
+                    clipsLoading -> item { LoadingCard("Loading your clips…") }
+                    clipsError != null -> item {
+                        InlineErrorCard(
+                            title = "Clips unavailable",
+                            message = clipsError ?: "Your clips could not be loaded.",
+                            onRetry = { contentReload += 1 },
+                        )
+                    }
+                    clipsLoaded && myClips.isEmpty() -> item {
+                        InlineErrorCard(
+                            title = "No clips yet",
+                            message = "Teach something in 60 seconds and it shows up here — " +
+                                "with how many people watched it.",
+                            onRetry = null,
+                        )
+                    }
+                    clipsLoaded -> {
+                        item {
+                            val totals = CreatorStats.totals(myClips, myClipsTotal)
+                            // A metric no clip reported reads "Not reported",
+                            // never 0: a creator whose views are not being
+                            // counted needs to know that, not be told nobody
+                            // watched. Each partial total carries its own
+                            // qualifier inside its tile, so two metrics with
+                            // different coverage cannot be read off the wrong
+                            // note.
+                            val library = maxOf(myClipsTotal ?: myClips.size, myClips.size)
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                CreatorStats.Metric.entries.chunked(2).forEach { pair ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        pair.forEach { metric ->
+                                            val total = totals[metric]
+                                            StatTile(
+                                                label = metric.label,
+                                                value = if (total?.isReported == true) {
+                                                    "${total.value}"
+                                                } else {
+                                                    "Not reported"
+                                                },
+                                                note = total?.coverageNote,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                    }
+                                }
+                                Text(
+                                    text = buildString {
+                                        append(if (library == 1) "1 clip" else "$library clips")
+                                        if (myClips.size < library) {
+                                            append(" · showing the latest ${myClips.size}")
+                                        }
+                                    },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = TextSecondary,
+                                )
+                            }
+                        }
+                        items(myClips) { clip ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { nav.navigate(Routes.DISCOVER) }
+                                    .padding(vertical = 10.dp),
+                            ) {
+                                Text(
+                                    text = clip.title ?: "Untitled clip",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    // Null views is not zero views.
+                                    text = clip.viewCount?.let { "$it views" } ?: "Views not reported",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             "Stats" -> {
                 when {
                     !isOwn -> item {
@@ -627,7 +750,15 @@ private fun StatChip(label: String) {
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    // A qualifier belonging to this figure, such as the share of the library
+    // a partial total covers. Inside the tile so it cannot be read against
+    // the wrong number.
+    note: String? = null,
+) {
     GlassCard(modifier = modifier) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
@@ -641,6 +772,14 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
+            if (note != null) {
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }

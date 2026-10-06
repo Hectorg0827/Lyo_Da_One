@@ -133,6 +133,11 @@ struct ProfileView: View {
                         }
                     }
 
+                    // What this learner's own clips have added up to. People
+                    // need to see their numbers moving before they will
+                    // believe there is anything to build here.
+                    CreatorClipsSection()
+
                     // Achievements Section
                     AchievementsSectionView(achievements: viewModel.recentAchievements)
 

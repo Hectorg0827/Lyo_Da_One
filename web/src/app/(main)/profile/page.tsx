@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, MessageCircle, Trophy, Lock } from 'lucide-react';
+import { Activity, MessageCircle, Trophy, Lock, Film } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
 import ProfileHeader from '@/components/profile/ProfileHeader';
+import CreatorStatsPanel from '@/components/profile/CreatorStatsPanel';
 import { formatTimeAgo } from '@/lib/utils';
 
 type ActivityItem = {
@@ -27,6 +28,9 @@ type AchievementItem = {
 
 const tabs = [
   { id: 'activity', label: 'Activity', icon: Activity },
+  // A creator's own clips and what they have added up to. Nobody keeps
+  // making videos for a feed that never tells them whether anyone watched.
+  { id: 'clips', label: 'Clips', icon: Film },
   { id: 'achievements', label: 'Achievements', icon: Trophy },
 ] as const;
 
@@ -110,6 +114,8 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      {activeTab === 'clips' && <CreatorStatsPanel />}
 
       {activeTab === 'achievements' && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
