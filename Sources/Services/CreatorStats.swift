@@ -15,6 +15,11 @@ import Foundation
 // silently understate a creator's reach and look exactly like a real total,
 // so each total carries how many clips actually reported it.
 //
+// `libraryTotal` is the same idea one level up. The clips endpoint is paged,
+// so a creator with 120 clips is handed 50 and the sum over them is not their
+// total — it is the total of one page, and without this it would be labelled
+// complete.
+//
 // Mirrors web `creator-stats.mjs` and Android `CreatorStats`.
 
 /// The metrics a clip can report, in the order they are shown.
@@ -62,16 +67,25 @@ struct CreatorTotal: Equatable {
 
 enum CreatorStats {
 
-    /// Every total, plus the clip count — which is always known.
-    static func totals(for clips: [Clip]) -> [CreatorMetric: CreatorTotal] {
+    /// Every total across the clips that arrived, measured against the library.
+    ///
+    /// `libraryTotal` is how many clips the creator has, which is not how many
+    /// arrived: the endpoint is paged. When it is larger than the page, the
+    /// totals are over the page and say so. When it is missing or smaller,
+    /// the page is all there is.
+    static func totals(for clips: [Clip], libraryTotal: Int? = nil) -> [CreatorMetric: CreatorTotal] {
         var result: [CreatorMetric: CreatorTotal] = [:]
         for metric in CreatorMetric.allCases {
-            result[metric] = total(for: metric, in: clips)
+            result[metric] = total(for: metric, in: clips, libraryTotal: libraryTotal)
         }
         return result
     }
 
-    static func total(for metric: CreatorMetric, in clips: [Clip]) -> CreatorTotal {
+    static func total(
+        for metric: CreatorMetric,
+        in clips: [Clip],
+        libraryTotal: Int? = nil
+    ) -> CreatorTotal {
         var value = 0
         var reporting = 0
         for clip in clips {
@@ -79,7 +93,8 @@ enum CreatorStats {
             value += count
             reporting += 1
         }
-        return CreatorTotal(metric: metric, value: value, reporting: reporting, clips: clips.count)
+        let library = max(libraryTotal ?? clips.count, clips.count)
+        return CreatorTotal(metric: metric, value: value, reporting: reporting, clips: library)
     }
 
     /// A count on one clip, or nil when the clip did not report it.

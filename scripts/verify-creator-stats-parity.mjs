@@ -40,6 +40,16 @@ for (const [label, source] of platforms) {
   }
 }
 
+// A page is not a library. The clips endpoint is paged, so every platform has
+// to measure its totals against the count the server reports, or a creator
+// with more clips than one page is shown the sum over that page and told it
+// is complete.
+for (const [label, source] of platforms) {
+  if (!/libraryTotal|library_total/.test(source)) {
+    throw new Error(`${label} creator stats: totals must be measured against the library size`);
+  }
+}
+
 // The counts a clip carries have to stay optional at the source, or the rule
 // above cannot tell a missing figure from a real zero however careful it is.
 const clipModel = read('Sources/Models/ClipModels.swift');

@@ -16,6 +16,11 @@ import com.lyo.app.data.api.ClipDto
  * silently understate a creator's reach and look exactly like a real total,
  * so each total carries how many clips actually reported it.
  *
+ * `libraryTotal` is the same idea one level up. The clips endpoint is paged,
+ * so a creator with 120 clips is handed 50 and the sum over them is not their
+ * total — it is the total of one page, and without this it would be labelled
+ * complete.
+ *
  * Mirrors iOS `CreatorStats` and web `creator-stats.mjs`.
  */
 object CreatorStats {
@@ -57,11 +62,18 @@ object CreatorStats {
             get() = if (!isReported || isComplete) null else "from $reporting of $clips clips"
     }
 
-    /** Every total, plus the clip count — which is always known. */
-    fun totals(clips: List<ClipDto>): Map<Metric, Total> =
-        Metric.entries.associateWith { total(it, clips) }
+    /**
+     * Every total across the clips that arrived, measured against the library.
+     *
+     * [libraryTotal] is how many clips the creator has, which is not how many
+     * arrived: the endpoint is paged. When it is larger than the page, the
+     * totals are over the page and say so. When it is missing or smaller, the
+     * page is all there is.
+     */
+    fun totals(clips: List<ClipDto>, libraryTotal: Int? = null): Map<Metric, Total> =
+        Metric.entries.associateWith { total(it, clips, libraryTotal) }
 
-    fun total(metric: Metric, clips: List<ClipDto>): Total {
+    fun total(metric: Metric, clips: List<ClipDto>, libraryTotal: Int? = null): Total {
         var value = 0
         var reporting = 0
         for (clip in clips) {
@@ -69,7 +81,8 @@ object CreatorStats {
             value += count
             reporting += 1
         }
-        return Total(metric = metric, value = value, reporting = reporting, clips = clips.size)
+        val library = maxOf(libraryTotal ?: clips.size, clips.size)
+        return Total(metric = metric, value = value, reporting = reporting, clips = library)
     }
 
     /** A count on one clip, or null when the clip did not report it. */

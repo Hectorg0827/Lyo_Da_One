@@ -14,10 +14,15 @@ import SwiftUI
 /// branching lives in `CreatorStats`, which is unit-tested.
 struct CreatorClipsSection: View {
     @State private var clips: [Clip] = []
+    /// How many clips the creator has, which is not how many arrived: the
+    /// endpoint is paged, so a page is not a library. See `CreatorStats`.
+    @State private var libraryTotal: Int?
     @State private var isLoading = true
     @State private var loadFailed = false
 
-    private var totals: [CreatorMetric: CreatorTotal] { CreatorStats.totals(for: clips) }
+    private var totals: [CreatorMetric: CreatorTotal] {
+        CreatorStats.totals(for: clips, libraryTotal: libraryTotal)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -36,7 +41,7 @@ struct CreatorClipsSection: View {
                 notice("Teach something in 60 seconds and it shows up here — with how many people watched it.")
             } else {
                 statGrid
-                Text(clips.count == 1 ? "1 clip" : "\(clips.count) clips")
+                Text(clipCountLabel)
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.45))
@@ -44,6 +49,13 @@ struct CreatorClipsSection: View {
             }
         }
         .task { await load() }
+    }
+
+    private var clipCountLabel: String {
+        let library = max(libraryTotal ?? clips.count, clips.count)
+        let base = library == 1 ? "1 clip" : "\(library) clips"
+        guard clips.count < library else { return base }
+        return base + " · showing the latest \(clips.count)"
     }
 
     private var statGrid: some View {
@@ -114,7 +126,9 @@ struct CreatorClipsSection: View {
         isLoading = true
         loadFailed = false
         do {
-            clips = try await ClipService.shared.getMyClips(page: 1, perPage: 50)
+            let page = try await ClipService.shared.getMyClipsPage(page: 1, perPage: 50)
+            clips = page.clips
+            libraryTotal = page.total
         } catch {
             loadFailed = true
         }

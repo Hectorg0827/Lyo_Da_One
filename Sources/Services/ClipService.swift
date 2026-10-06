@@ -115,10 +115,19 @@ final class ClipService {
     
     /// Fetch clips created by the current user
     func getMyClips(page: Int = 1, perPage: Int = 20) async throws -> [Clip] {
+        try await getMyClipsPage(page: page, perPage: perPage).clips
+    }
+
+    /// The same page, with the library size the server reports alongside it.
+    ///
+    /// A caller totalling these counts needs to know the page is a page: a
+    /// creator with 120 clips handed 50 has a sum over one page, and
+    /// `CreatorStats` can only say so if it is told the real number.
+    func getMyClipsPage(page: Int = 1, perPage: Int = 20) async throws -> (clips: [Clip], total: Int) {
         let endpoint = Endpoints.Clips.list(page: page, perPage: perPage)
-        
+
         let response: ClipsListResponse = try await network.request(endpoint)
-        return response.clips
+        return (response.clips, response.total)
     }
     
     // MARK: - Get Discover Clips

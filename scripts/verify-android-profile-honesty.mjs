@@ -28,7 +28,10 @@ requireText(
 
 // A figure the backend did not send is never drawn as a zero: a creator whose
 // views are not being counted needs to know that, not be told nobody watched.
-requireText('CreatorStats.totals(myClips)', 'owner clip totals from the shared rule');
+// The library size goes in with the page: the clips endpoint is paged, so
+// totalling one page and calling it the creator's total is the same mistake
+// as summing a missing count as zero.
+requireText('CreatorStats.totals(myClips, myClipsTotal)', 'owner clip totals measured against the library');
 requireText('"Not reported"', 'unreported clip metric is not a zero');
 requireText('clipsError', 'clips loading failure state');
 requireText('private val PublicProfileTabs = listOf("Activity")', 'public profile tabs');

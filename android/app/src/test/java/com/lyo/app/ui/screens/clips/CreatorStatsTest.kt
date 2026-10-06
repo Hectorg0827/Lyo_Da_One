@@ -98,4 +98,39 @@ class CreatorStatsTest {
         assertFalse(total.isReported)
         assertFalse(total.isComplete)
     }
+
+    @Test
+    fun `a page of clips is not the whole library`() {
+        // The clips endpoint is paged. A creator with 120 clips handed 50 of
+        // them has a sum over one page, and labelling that complete is the
+        // same mistake as summing a missing count as zero, one level up.
+        val page = List(50) { clip(views = 10) }
+        val total = CreatorStats.total(CreatorStats.Metric.Views, page, libraryTotal = 120)
+        assertEquals(500, total.value)
+        assertEquals(50, total.reporting)
+        assertEquals(120, total.clips)
+        assertFalse(total.isComplete)
+        assertEquals("from 50 of 120 clips", total.coverageNote)
+    }
+
+    @Test
+    fun `a library total that matches the page is complete`() {
+        val total = CreatorStats.total(
+            CreatorStats.Metric.Views,
+            listOf(clip(views = 4), clip(views = 6)),
+            libraryTotal = 2,
+        )
+        assertEquals(10, total.value)
+        assertTrue(total.isComplete)
+        assertNull(total.coverageNote)
+    }
+
+    @Test
+    fun `a missing or undersized library total falls back to the page`() {
+        // A server that sends no total cannot be used to claim the page is short.
+        val page = listOf(clip(views = 4))
+        assertEquals(1, CreatorStats.total(CreatorStats.Metric.Views, page).clips)
+        assertEquals(1, CreatorStats.total(CreatorStats.Metric.Views, page, null).clips)
+        assertEquals(1, CreatorStats.total(CreatorStats.Metric.Views, page, 0).clips)
+    }
 }

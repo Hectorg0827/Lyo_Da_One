@@ -81,3 +81,33 @@ test('a non-numeric count is treated as unreported', () => {
   assert.equal(totals.views.value, 5);
   assert.equal(totals.views.reporting, 1);
 });
+
+test('a page of clips is not the whole library', () => {
+  // The clips endpoint is paged. A creator with 120 clips handed 50 of them
+  // has a sum over one page, and labelling that complete is the same mistake
+  // as summing a missing count as zero, one level up.
+  const page = Array.from({ length: 50 }, () => clip({ viewCount: 10 }));
+  const { clipCount, loadedCount, totals } = creatorStats(page, 120);
+  assert.equal(clipCount, 120);
+  assert.equal(loadedCount, 50);
+  assert.equal(totals.views.value, 500);
+  assert.equal(totals.views.reporting, 50);
+  assert.equal(isComplete(totals.views), false);
+  assert.equal(coverageNote(totals.views), 'from 50 of 120 clips');
+});
+
+test('a library total that matches the page is complete', () => {
+  const page = [clip({ viewCount: 4 }), clip({ viewCount: 6 })];
+  const { totals } = creatorStats(page, 2);
+  assert.equal(totals.views.value, 10);
+  assert.equal(isComplete(totals.views), true);
+  assert.equal(coverageNote(totals.views), null);
+});
+
+test('a missing or undersized library total falls back to the page', () => {
+  // A server that sends no total cannot be used to claim the page is short.
+  const page = [clip({ viewCount: 4 })];
+  assert.equal(creatorStats(page).clipCount, 1);
+  assert.equal(creatorStats(page, undefined).clipCount, 1);
+  assert.equal(creatorStats(page, 0).clipCount, 1);
+});

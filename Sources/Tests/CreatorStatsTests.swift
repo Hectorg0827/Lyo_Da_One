@@ -84,4 +84,31 @@ final class CreatorStatsTests: XCTestCase {
         XCTAssertFalse(total.isReported)
         XCTAssertFalse(total.isComplete)
     }
+
+    /// The clips endpoint is paged. A creator with 120 clips handed 50 of
+    /// them has a sum over one page, and labelling that complete is the same
+    /// mistake as summing a missing count as zero, one level up.
+    func testAPageOfClipsIsNotTheWholeLibrary() {
+        let page = (0..<50).map { _ in clip(views: 10) }
+        let total = CreatorStats.total(for: .views, in: page, libraryTotal: 120)
+        XCTAssertEqual(total.value, 500)
+        XCTAssertEqual(total.reporting, 50)
+        XCTAssertEqual(total.clips, 120)
+        XCTAssertFalse(total.isComplete)
+        XCTAssertEqual(total.coverageNote, "from 50 of 120 clips")
+    }
+
+    func testALibraryTotalThatMatchesThePageIsComplete() {
+        let total = CreatorStats.total(for: .views, in: [clip(views: 4), clip(views: 6)], libraryTotal: 2)
+        XCTAssertEqual(total.value, 10)
+        XCTAssertTrue(total.isComplete)
+        XCTAssertNil(total.coverageNote)
+    }
+
+    /// A server that sends no total cannot be used to claim the page is short.
+    func testAMissingOrUndersizedLibraryTotalFallsBackToThePage() {
+        XCTAssertEqual(CreatorStats.total(for: .views, in: [clip(views: 4)]).clips, 1)
+        XCTAssertEqual(CreatorStats.total(for: .views, in: [clip(views: 4)], libraryTotal: nil).clips, 1)
+        XCTAssertEqual(CreatorStats.total(for: .views, in: [clip(views: 4)], libraryTotal: 0).clips, 1)
+    }
 }

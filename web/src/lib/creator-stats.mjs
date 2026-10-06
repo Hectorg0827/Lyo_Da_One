@@ -14,6 +14,12 @@
  * how many clips actually reported it. A total covering 7 of 10 clips says
  * so; one covering none is not a zero.
  *
+ * `libraryTotal` is the same idea one level up. The clips endpoint is paged,
+ * so a creator with 120 clips is handed 50 and the sum over them is not their
+ * total — it is the total of one page, and without this it would be labelled
+ * complete. Pass the server's own count and a partial page reads "from 50 of
+ * 120 clips", which is what it is.
+ *
  * Mirrors iOS `CreatorStats` and Android `CreatorStats`.
  */
 
@@ -49,7 +55,7 @@ function countOf(clip, metric) {
  * `reporting` is the honest part: `value` is the sum of what was reported,
  * and `reporting` says how much of the library that covers.
  */
-function total(clips, metric) {
+function total(clips, metric, libraryTotal) {
   let value = 0;
   let reporting = 0;
   for (const clip of clips) {
@@ -58,15 +64,26 @@ function total(clips, metric) {
     value += count;
     reporting += 1;
   }
-  return { metric, value, reporting, clips: clips.length };
+  return { metric, value, reporting, clips: libraryTotal };
 }
 
-/** Every total, plus the clip count — which is always known. */
-export function creatorStats(clips) {
+/**
+ * Every total, plus the clip count.
+ *
+ * `libraryTotal` is how many clips the creator has, which is not how many
+ * arrived: the endpoint is paged. When it is larger than the page, the
+ * totals are over the page and say so. When it is missing or smaller, the
+ * page is all there is.
+ */
+export function creatorStats(clips, libraryTotal) {
   const list = Array.isArray(clips) ? clips : [];
+  const library =
+    typeof libraryTotal === 'number' && Number.isFinite(libraryTotal)
+      ? Math.max(libraryTotal, list.length)
+      : list.length;
   const totals = {};
-  for (const metric of METRICS) totals[metric] = total(list, metric);
-  return { clipCount: list.length, totals };
+  for (const metric of METRICS) totals[metric] = total(list, metric, library);
+  return { clipCount: library, loadedCount: list.length, totals };
 }
 
 /**

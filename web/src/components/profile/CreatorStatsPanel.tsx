@@ -31,11 +31,14 @@ import {
 type Metric = 'views' | 'likes' | 'comments' | 'shares';
 type Total = { metric: Metric; value: number; reporting: number; clips: number };
 
+/** One page of clips. The library can be larger; see `libraryTotal`. */
+const PAGE_SIZE = 50;
+
 const metrics = METRICS as readonly Metric[];
 const labels = METRIC_LABELS as Record<Metric, string>;
 
 export default function CreatorStatsPanel() {
-  const { data, isLoading } = useApi(() => api.clips.list(1, 50), []);
+  const { data, isLoading, error, refetch } = useApi(() => api.clips.list(1, PAGE_SIZE), []);
 
   if (isLoading) {
     return (
@@ -45,9 +48,33 @@ export default function CreatorStatsPanel() {
     );
   }
 
+  // A failed request leaves `data` null, which is not an empty library.
+  // Telling a creator who has clips that they have none — with a prompt to
+  // make their first — is worse than saying the request failed.
+  if (error) {
+    return (
+      <div className="glass-card px-5 py-10 text-center">
+        <p className="text-sm font-medium text-white/70">Your clips could not be loaded</p>
+        <p className="mt-1 text-xs text-white/40">{error}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-4 rounded-full border border-white/15 px-4 py-2 text-[13px] font-semibold text-white/80 hover:bg-white/10"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   const clips = (data?.clips as Record<string, unknown>[]) || [];
-  const { clipCount, totals } = creatorStats(clips) as {
+  // The endpoint is paged: `total` is the library, `clips` is this page.
+  // Without the library size a creator with 120 clips would be shown the sum
+  // over 50 of them, labelled complete.
+  const libraryTotal = typeof data?.total === 'number' ? data.total : undefined;
+  const { clipCount, loadedCount, totals } = creatorStats(clips, libraryTotal) as {
     clipCount: number;
+    loadedCount: number;
     totals: Record<Metric, Total>;
   };
 
@@ -97,6 +124,7 @@ export default function CreatorStatsPanel() {
 
       <p className="px-1 text-xs text-white/45 tabular-nums">
         {clipCount === 1 ? '1 clip' : `${clipCount} clips`}
+        {loadedCount < clipCount && ` · showing the latest ${loadedCount}`}
       </p>
 
       <div className="space-y-2">

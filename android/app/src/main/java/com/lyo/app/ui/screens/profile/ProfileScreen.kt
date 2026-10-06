@@ -98,6 +98,9 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
     // The creator's own clips, and what they add up to. Nobody keeps making
     // videos for a feed that never tells them whether anyone watched.
     var myClips by remember(userId) { mutableStateOf<List<ClipDto>>(emptyList()) }
+    // How many clips the creator has, which is not how many arrived: the
+    // endpoint is paged, so a page is not a library. See CreatorStats.
+    var myClipsTotal by remember(userId) { mutableStateOf<Int?>(null) }
     var clipsLoading by remember(userId) { mutableStateOf(false) }
     var clipsLoaded by remember(userId) { mutableStateOf(false) }
     var clipsError by remember(userId) { mutableStateOf<String?>(null) }
@@ -149,7 +152,11 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             clipsError = null
             myClips = emptyList()
             runCatching { ApiClient.api.clips(1, 50) }
-                .onSuccess { myClips = it.clips.orEmpty(); clipsLoaded = true }
+                .onSuccess {
+                    myClips = it.clips.orEmpty()
+                    myClipsTotal = it.total
+                    clipsLoaded = true
+                }
                 .onFailure { clipsError = contentLoadMessage(it, "clips") }
             clipsLoading = false
         }
@@ -467,11 +474,15 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                     }
                     clipsLoaded -> {
                         item {
-                            val totals = CreatorStats.totals(myClips)
+                            val totals = CreatorStats.totals(myClips, myClipsTotal)
                             // A metric no clip reported reads "Not reported",
                             // never 0: a creator whose views are not being
                             // counted needs to know that, not be told nobody
-                            // watched. A partial total says what it covers.
+                            // watched. Each partial total carries its own
+                            // qualifier inside its tile, so two metrics with
+                            // different coverage cannot be read off the wrong
+                            // note.
+                            val library = maxOf(myClipsTotal ?: myClips.size, myClips.size)
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 CreatorStats.Metric.entries.chunked(2).forEach { pair ->
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -484,21 +495,20 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                                                 } else {
                                                     "Not reported"
                                                 },
+                                                note = total?.coverageNote,
                                                 modifier = Modifier.weight(1f),
                                             )
                                         }
                                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                                     }
-                                    pair.mapNotNull { totals[it]?.coverageNote }.distinct().forEach { note ->
-                                        Text(
-                                            text = note,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary,
-                                        )
-                                    }
                                 }
                                 Text(
-                                    text = if (myClips.size == 1) "1 clip" else "${myClips.size} clips",
+                                    text = buildString {
+                                        append(if (library == 1) "1 clip" else "$library clips")
+                                        if (myClips.size < library) {
+                                            append(" · showing the latest ${myClips.size}")
+                                        }
+                                    },
                                     style = MaterialTheme.typography.labelMedium,
                                     color = TextSecondary,
                                 )
@@ -740,7 +750,15 @@ private fun StatChip(label: String) {
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    // A qualifier belonging to this figure, such as the share of the library
+    // a partial total covers. Inside the tile so it cannot be read against
+    // the wrong number.
+    note: String? = null,
+) {
     GlassCard(modifier = modifier) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
@@ -754,6 +772,14 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
+            if (note != null) {
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }
