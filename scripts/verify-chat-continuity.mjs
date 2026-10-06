@@ -79,6 +79,8 @@ const contracts = [
       "clientTtftMs",
       "stream_capabilities: { text_delta: true }",
       "receivedTextDelta",
+      "accumulated = text",
+      "patchAiMessage({ content: text })",
     ],
   },
   {
