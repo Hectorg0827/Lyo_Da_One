@@ -602,6 +602,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       typeof performance !== 'undefined' ? performance.now() : Date.now();
     let firstVisibleChunkRecorded = false;
     let receivedTextDelta = false;
+    let voiceHandoffTarget: string | null = null;
+    let voiceHandoffReadyReported = false;
 
     try {
       activeStreamController = api.chat.stream(
@@ -632,6 +634,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 messageId: chunk.message_id,
                 speak: chunk.speak !== false,
               });
+              if (
+                voiceHandoffTarget
+                && !voiceHandoffReadyReported
+                && voiceHandoffTarget !== 'course'
+              ) {
+                voiceHandoffReadyReported = true;
+                reportActiveVoiceQuality('voice_handoff_ready', {
+                  target: voiceHandoffTarget,
+                  stream_elapsed_ms: Math.max(
+                    0,
+                    Math.round(voiceQualityNow() - streamStartedAt),
+                  ),
+                }, { conversationId: convoId! });
+              }
             }
           } else if (chunk.type === 'voice_incomplete') {
             publishVoiceStreamEvent({
@@ -655,8 +671,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 ? chunk.workflow_intent
                 : '';
               if (workflow) {
+                voiceHandoffTarget = workflow.toLowerCase();
                 reportActiveVoiceQuality('voice_handoff_requested', {
-                  target: workflow.toLowerCase(),
+                  target: voiceHandoffTarget,
                   contract_mode: typeof chunk.mode === 'string' ? chunk.mode : 'unknown',
                 }, { conversationId: convoId! });
               }
@@ -765,14 +782,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           } else if (chunk.type === 'open_classroom') {
             receivedContent = true;
             if (options.voiceSession || get().voiceSessionActive) {
-              reportActiveVoiceQuality('voice_handoff_ready', {
-                target: 'classroom',
-                preview: chunk.preview === true,
-                stream_elapsed_ms: Math.max(
-                  0,
-                  Math.round(voiceQualityNow() - streamStartedAt),
-                ),
-              }, { conversationId: convoId! });
+              if (!voiceHandoffReadyReported) {
+                voiceHandoffReadyReported = true;
+                reportActiveVoiceQuality('voice_handoff_ready', {
+                  target: 'classroom',
+                  preview: chunk.preview === true,
+                  stream_elapsed_ms: Math.max(
+                    0,
+                    Math.round(voiceQualityNow() - streamStartedAt),
+                  ),
+                }, { conversationId: convoId! });
+              }
             }
             const isPreview = chunk.preview === true;
             const classroomBlock = chunk.block as { content?: Record<string, any> } | undefined;
