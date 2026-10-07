@@ -54,12 +54,12 @@ const contracts = [
   {
     name: 'iOS renders structured tables and diagrams',
     path: 'Sources/Views/Common/UnifiedBlockRenderer.swift',
-    needles: ['SmartMarkdownTableView', 'MermaidWebView', 'case "table"', 'case "mermaid", "diagram"'],
+    needles: ['SmartMarkdownTableView', 'MermaidWebView', 'case "table"', 'case "mermaid", "diagram"', 'omittingEmptySubsequences: false', 'lyoRender', 'diagramRendered'],
   },
   {
     name: 'Android renders structured diagrams and math',
     path: 'android/app/src/main/java/com/lyo/app/ui/components/SmartBlockRenderer.kt',
-    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX', '"table", "text", "chart", "graph"'],
+    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX', '"table", "text", "chart", "graph"', 'onRendered', 'if (!rendered)'],
   },
   {
     name: 'Web keeps grounded answer prose beside supplemental sources',
