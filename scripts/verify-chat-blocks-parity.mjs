@@ -59,7 +59,12 @@ const contracts = [
   {
     name: 'Android renders structured diagrams and math',
     path: 'android/app/src/main/java/com/lyo/app/ui/components/SmartBlockRenderer.kt',
-    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX', '"table", "text", "chart", "graph"', 'onRendered', 'if (!rendered)'],
+    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX', '"table", "text", "chart", "graph"'],
+  },
+  {
+    name: 'Android data-viz WebView is lossless on renderer failure',
+    path: 'android/app/src/main/java/com/lyo/app/ui/classroom/catalog/WebViewBlock.kt',
+    needles: ['onRendered', 'if (!rendered)', 'LyoBridge', 'mermaid.run'],
   },
   {
     name: 'Web keeps grounded answer prose beside supplemental sources',
