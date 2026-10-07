@@ -60,6 +60,8 @@ const contracts = [
       'turn_id:',
       'voiceLocale',
       "chunk.type === 'voice_text_segment'",
+      'server_elapsed_ms',
+      'voiceServerFirstSegmentMs',
       'publishVoiceStreamEvent',
       'interruptGeneration',
       'activeStreamController?.abort()',
