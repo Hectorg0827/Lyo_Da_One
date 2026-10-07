@@ -6,6 +6,13 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import {
+  createVoiceQualitySessionId,
+  detectLanguageFamily,
+  reportVoiceQuality,
+  setActiveVoiceQualityContext,
+  voiceQualityNow,
+} from '@/lib/voice-quality';
+import {
   createSpeechRecognition,
   isLikelyPlaybackEcho,
   splitSpeechChunks,
@@ -71,6 +78,30 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
+
+  // Live quality instrumentation. These refs never hold transcript/audio in
+  // telemetry; only local timestamps and coarse labels leave the device.
+  const voiceQualitySessionIdRef = useRef(createVoiceQualitySessionId());
+  const sessionStartedAtRef = useRef(0);
+  const currentTurnIdRef = useRef<string | null>(null);
+  const micSpeechStartedAtRef = useRef(0);
+  const lastRecognitionActivityAtRef = useRef(0);
+  const turnSubmittedAtRef = useRef(0);
+  const firstVoiceSegmentAtRef = useRef(0);
+  const firstAudioReportedRef = useRef(false);
+  const lastAssistantAudioEndedAtRef = useRef(0);
+  const lastLanguageFamilyRef = useRef<'en' | 'es' | 'mixed' | 'unknown'>('unknown');
+  const pendingRmsBargeAtRef = useRef(0);
+  const pendingRmsBargeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognizerRestartCountRef = useRef(0);
+
+  const qualityContext = useCallback((turnId?: string) => ({
+    sessionId: voiceQualitySessionIdRef.current,
+    turnId: turnId ?? currentTurnIdRef.current ?? undefined,
+    conversationId: activeConversationId ?? undefined,
+    locale: typeof navigator !== 'undefined' ? (navigator.language || 'auto') : 'auto',
+    scenario: 'live_conversation',
+  }), [activeConversationId]);
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
