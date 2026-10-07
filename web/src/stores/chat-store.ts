@@ -13,6 +13,7 @@ import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { parseCanonicalChatContent } from '@/lib/chat-attachments';
 import { publishVoiceStreamEvent } from '@/lib/conversational-voice';
+import { reportActiveVoiceQuality, voiceQualityNow } from '@/lib/voice-quality';
 import {
   emptyTeachingRuntimeState,
   reduceTeachingPolicy,
@@ -649,6 +650,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 },
               },
             });
+            if (options.voiceSession || get().voiceSessionActive) {
+              const workflow = typeof chunk.workflow_intent === 'string'
+                ? chunk.workflow_intent
+                : '';
+              if (workflow) {
+                reportActiveVoiceQuality('voice_handoff_requested', {
+                  target: workflow.toLowerCase(),
+                  contract_mode: typeof chunk.mode === 'string' ? chunk.mode : 'unknown',
+                }, { conversationId: convoId! });
+              }
+            }
           } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
@@ -752,6 +764,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
             receivedContent = true;
+            if (options.voiceSession || get().voiceSessionActive) {
+              reportActiveVoiceQuality('voice_handoff_ready', {
+                target: 'classroom',
+                preview: chunk.preview === true,
+                stream_elapsed_ms: Math.max(
+                  0,
+                  Math.round(voiceQualityNow() - streamStartedAt),
+                ),
+              }, { conversationId: convoId! });
+            }
             const isPreview = chunk.preview === true;
             const classroomBlock = chunk.block as { content?: Record<string, any> } | undefined;
             const courseData = (classroomBlock?.content?.course || classroomBlock?.content) as
@@ -883,6 +905,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         () => {
           if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
+          if (options.voiceSession || get().voiceSessionActive) {
+            reportActiveVoiceQuality('stream_disconnected', {
+              stream_elapsed_ms: Math.max(
+                0,
+                Math.round(voiceQualityNow() - streamStartedAt),
+              ),
+            }, { conversationId: convoId! });
+          }
           recoverCanonicalConversation(convoId!);
         },
         convoId,
@@ -934,12 +964,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         generationActivity: 'thinking',
         courseGenerationState: null,
       });
+      const recoveryStartedAt = voiceQualityNow();
       try {
         // A broken SSE connection does not imply the server failed. Reload the
         // canonical thread so a completed answer is recovered without creating
         // a second, device-only response.
         await get().loadConversation(cId);
+        if (options.voiceSession || get().voiceSessionActive) {
+          reportActiveVoiceQuality('stream_recovered', {
+            recovery_ms: Math.max(
+              0,
+              Math.round(voiceQualityNow() - recoveryStartedAt),
+            ),
+            canonical_reload: true,
+          }, { conversationId: cId });
+        }
       } catch {
+        if (options.voiceSession || get().voiceSessionActive) {
+          reportActiveVoiceQuality('stream_recovery_failed', {
+            recovery_ms: Math.max(
+              0,
+              Math.round(voiceQualityNow() - recoveryStartedAt),
+            ),
+          }, { conversationId: cId });
+        }
         // Preserve the optimistic user turn until the next successful hydrate.
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
