@@ -13,6 +13,12 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <intent>
+            <!-- Android 11+ package visibility: SpeechRecognizer may return
+                 unavailable even when a recognition service is installed unless
+                 the app declares that service query explicitly. -->
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <application
