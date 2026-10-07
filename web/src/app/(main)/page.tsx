@@ -487,40 +487,84 @@ export default function HomePage() {
 
   return (
     <motion.div
-      className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-8"
+      className="max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-6 sm:py-6 sm:space-y-8"
       variants={containerVariants}
       initial="hidden"
       animate={mounted ? 'visible' : 'hidden'}
     >
+      {/* ── Who this is, and where they left off ───────────────────
+          A returning learner opens this page to get back into something they
+          already started. That is what the top of the screen is for now:
+          their name, the one line that says what finishing a lesson is worth
+          today, and then their courses — newest first, so the card under the
+          greeting is the one they were last in.
+
+          The front door follows, because "start something new" is the second
+          question for someone who already has courses and the first question
+          only for someone who has none. A learner with no activity does not
+          reach this block at all (see shouldShowLearnerDashboard), so for
+          them the front door still leads the page. ── */}
+      {showLearnerDashboard && (
+        <>
+          {/* ── Greeting (matches iOS FocusView greetingSection) ──── */}
+          <motion.div variants={itemVariants}>
+            <h1 className="font-rounded text-[26px] sm:text-[34px] font-bold leading-tight drop-shadow-[0_4px_12px_rgba(168,85,247,0.25)]">
+              <span className="text-white/70">{getGreeting()}, </span>
+              <span className="headline-gradient-text">{firstName}</span>
+            </h1>
+            <p className="text-[13px] sm:text-sm font-medium text-white/65 mt-1">
+              You&apos;re one lesson away from {currentStreak > 0 ? `a ${currentStreak + 1}-day streak` : 'starting a streak'}.
+            </p>
+          </motion.div>
+
+          {/* ── Your courses — every course this learner has started, synced
+              via the real backend so it shows up the same way on any device
+              or platform they're signed into (see lib/stack.ts).
+
+              One list, once. This section and a hero card above it were once
+              the same array: the newest course rendered large, then all of
+              them rendered small, which made one collection look like two
+              features. This is the whole stack, newest first — so the top
+              card is the course they were last in — with chips to narrow it
+              and a card that turns over for the description the backend
+              already sends and this page used to drop. ── */}
+          <motion.div variants={itemVariants}>
+            <SectionHeader title="Your courses" href="/courses" icon={Layers} />
+            <CourseStack
+              items={stackItems || []}
+              renderMenu={(item) => (
+                <ShareOrPostMenu
+                  courseId={item.content_id || String(item.id)}
+                  title={item.title}
+                  progressPercent={Math.round((item.progress || 0) * 100)}
+                />
+              )}
+            />
+          </motion.div>
+        </>
+      )}
+
       {/* ── Front door — the question the product exists to answer.
           Shown to everyone so the Classroom and "I have a test" entries are
-          always one action away; it leads the page for a learner with no
-          activity yet, and sits under Continue Learning for one who has. */}
+          always one action away. It leads the page for a learner with no
+          activity yet, and renders compact under the courses of one who has
+          (see FrontDoor's `compact`). */}
       <FrontDoor knownLearner={showLearnerDashboard} />
 
       {showLearnerDashboard && (
-        <>
-      {/* ── Greeting (matches iOS FocusView greetingSection) ──── */}
-      <motion.div variants={itemVariants}>
-        <p className="font-rounded text-sm font-medium text-white/75">{getGreeting()}</p>
-        <h1 className="font-rounded text-4xl font-bold leading-tight drop-shadow-[0_4px_12px_rgba(168,85,247,0.25)]">
-          <span className="headline-gradient-text">{firstName}</span>
-        </h1>
-        <p className="text-sm font-medium text-white/65 mt-1.5">
-          You&apos;re one lesson away from {currentStreak > 0 ? `a ${currentStreak + 1}-day streak` : 'starting a streak'}.
-        </p>
-      </motion.div>
+        /* ── The test you have coming up ────────────────────────────
+            Answered in place: readiness, days remaining and the next session,
+            instead of a CTA that said nothing about this learner's own plan.
+            Every figure comes from lib/test-prep.mjs, so "nothing assessed
+            yet" stays distinct from "0% ready".
 
-      {/* ── The test you have coming up ────────────────────────────
-          Answered in place: readiness, days remaining and the next session,
-          instead of a CTA that said nothing about this learner's own plan.
-          Collapses to one line when there is no plan. Every figure comes
-          from lib/test-prep.mjs, so "nothing assessed yet" stays distinct
-          from "0% ready". ── */}
-      <motion.div variants={itemVariants}>
-        <HomeTestPrepCard enabled={isAuthenticated && !authLoading} />
-      </motion.div>
-        </>
+            It renders nothing when there is no plan. The front door directly
+            above it now carries a full "I have a test" tile, and two
+            invitations to the same page, stacked, is one invitation and one
+            piece of clutter. ── */
+        <motion.div variants={itemVariants}>
+          <HomeTestPrepCard enabled={isAuthenticated && !authLoading} promptWhenEmpty={false} />
+        </motion.div>
       )}
 
       {/* ── Quick Actions ─────────────────────────────────────── */}
@@ -560,30 +604,6 @@ export default function HomePage() {
             </div>
           </Link>
         </div>
-      </motion.div>
-
-      {/* ── Your courses — every course this learner has started, synced
-          via the real backend so it shows up the same way on any device or
-          platform they're signed into (see lib/stack.ts).
-
-          One list, once. This section and the hero card above it were the
-          same array: the newest course rendered large, then all of them
-          rendered small, which made one collection look like two features.
-          The hero is gone and this is the whole stack, newest first, with
-          chips to narrow it and a card that turns over for the description
-          the backend already sends and this page used to drop. ── */}
-      <motion.div variants={itemVariants}>
-        <SectionHeader title="Your courses" href="/courses" icon={Layers} />
-        <CourseStack
-          items={stackItems || []}
-          renderMenu={(item) => (
-            <ShareOrPostMenu
-              courseId={item.content_id || String(item.id)}
-              title={item.title}
-              progressPercent={Math.round((item.progress || 0) * 100)}
-            />
-          )}
-        />
       </motion.div>
 
       {/* ── Learning Stats — only once there is something to count ─ */}

@@ -32,7 +32,20 @@ type Loaded = {
   stale: boolean;
 };
 
-export default function HomeTestPrepCard({ enabled = true }: { enabled?: boolean }) {
+export default function HomeTestPrepCard({
+  enabled = true,
+  promptWhenEmpty = true,
+}: {
+  enabled?: boolean;
+  /**
+   * Whether to fall back to "Have a test coming up?" when this learner has no
+   * plan. Home passes false: the front door directly above it carries a full
+   * "I have a test" tile, and the same invitation twice in a row is one
+   * invitation and one piece of clutter. A surface without its own test-prep
+   * entry leaves this at the default and keeps the prompt.
+   */
+  promptWhenEmpty?: boolean;
+}) {
   const [state, setState] = useState<'loading' | 'none' | 'loaded'>('loading');
   const [plan, setPlan] = useState<Loaded | null>(null);
 
@@ -98,10 +111,13 @@ export default function HomeTestPrepCard({ enabled = true }: { enabled?: boolean
   }, [enabled]);
 
   if (state === 'loading') {
+    // Nothing is promised while loading when the empty result renders nothing:
+    // a skeleton that resolves to blank space is a card that was never there.
+    if (!promptWhenEmpty) return null;
     return <div className="h-[104px] animate-pulse rounded-[17px] bg-white/[0.045]" />;
   }
 
-  if (state === 'none' || !plan) return <TestPrepPrompt />;
+  if (state === 'none' || !plan) return promptWhenEmpty ? <TestPrepPrompt /> : null;
 
   const { headline } = plan;
   const measured = headline.kind === 'measured' && typeof headline.percent === 'number';
