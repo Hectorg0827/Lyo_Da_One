@@ -792,6 +792,36 @@ export default function ConversationalVoiceLayer() {
 
   useEffect(() => {
     if (!active) return;
+    const enabled =
+      typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('voiceqa') === '1';
+    setQaEnabled(enabled);
+    if (!enabled) {
+      qaSessionIdRef.current = '';
+      return;
+    }
+    qaSessionIdRef.current = crypto.randomUUID();
+    setQaSnapshot({
+      bargeIns: 0,
+      possibleFalseBargeIns: 0,
+      echoRejects: 0,
+      reconnects: 0,
+    });
+    reportVoiceQuality('session_started', {
+      echo_cancellation_requested: true,
+      noise_suppression_requested: true,
+      auto_gain_control_requested: true,
+      recognizer_locale: navigator.language || 'auto',
+    });
+
+    return () => {
+      reportVoiceQuality('session_ended');
+      qaSessionIdRef.current = '';
+    };
+  }, [active, reportVoiceQuality]);
+
+  useEffect(() => {
+    if (!active) return;
     activeRef.current = true;
     if (!createSpeechRecognition() || !navigator.mediaDevices?.getUserMedia) {
       changePhase('error');
@@ -814,12 +844,23 @@ export default function ConversationalVoiceLayer() {
         audioContextRef.current = context;
         analyserRef.current = analyser;
       }
+      resetUserTurnTiming();
+      reportVoiceQuality('microphone_ready', {
+        track_count: stream.getAudioTracks().length,
+      });
       startRecognition();
     }).catch(() => {
+      reportVoiceQuality('microphone_error');
       changePhase('error');
     });
     return () => { cancelled = true; };
-  }, [active, changePhase, startRecognition]);
+  }, [
+    active,
+    changePhase,
+    reportVoiceQuality,
+    resetUserTurnTiming,
+    startRecognition,
+  ]);
 
   useEffect(() => {
     activeRef.current = active;
@@ -834,6 +875,10 @@ export default function ConversationalVoiceLayer() {
     analyserRef.current = null;
     if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
+    if (possibleFalseBargeTimerRef.current) {
+      clearTimeout(possibleFalseBargeTimerRef.current);
+      possibleFalseBargeTimerRef.current = null;
+    }
     changePhase('idle');
     setLiveTranscript('');
   }, [active, changePhase, stopRecognition, stopSpeech]);
@@ -842,7 +887,7 @@ export default function ConversationalVoiceLayer() {
     if (!active) return;
     const tick = () => {
       const analyser = analyserRef.current;
-      if (analyser && phaseRef.current === 'speaking' && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS) {
+      if (analyser) {
         const samples = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
@@ -851,9 +896,37 @@ export default function ConversationalVoiceLayer() {
           sum += normalized * normalized;
         }
         const rms = Math.sqrt(sum / samples.length);
-        loudFramesRef.current = rms > BARGE_IN_RMS_THRESHOLD ? loudFramesRef.current + 1 : 0;
-        if (loudFramesRef.current >= BARGE_IN_FRAMES) bargeIn();
-      } else loudFramesRef.current = 0;
+
+        if (phaseRef.current === 'listening') {
+          micActivityFramesRef.current =
+            rms > MIC_ACTIVITY_RMS_THRESHOLD ? micActivityFramesRef.current + 1 : 0;
+          if (
+            micActivityFramesRef.current >= MIC_ACTIVITY_FRAMES
+            && firstMicActivityAtRef.current == null
+          ) {
+            firstMicActivityAtRef.current = performance.now();
+            reportVoiceQuality('microphone_activity', {
+              rms_milli: Math.round(rms * 1000),
+            });
+          }
+        } else {
+          micActivityFramesRef.current = 0;
+        }
+
+        if (
+          phaseRef.current === 'speaking'
+          && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS
+        ) {
+          loudFramesRef.current =
+            rms > BARGE_IN_RMS_THRESHOLD ? loudFramesRef.current + 1 : 0;
+          if (loudFramesRef.current >= BARGE_IN_FRAMES) bargeIn();
+        } else {
+          loudFramesRef.current = 0;
+        }
+      } else {
+        loudFramesRef.current = 0;
+        micActivityFramesRef.current = 0;
+      }
       animationFrameRef.current = requestAnimationFrame(tick);
     };
     animationFrameRef.current = requestAnimationFrame(tick);
@@ -861,7 +934,7 @@ export default function ConversationalVoiceLayer() {
       if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     };
-  }, [active, bargeIn]);
+  }, [active, bargeIn, reportVoiceQuality]);
 
   useEffect(() => {
     if (!active || isGenerating || !awaitingAssistantRef.current) return;
