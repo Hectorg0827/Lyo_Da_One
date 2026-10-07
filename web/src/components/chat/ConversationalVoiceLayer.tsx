@@ -389,15 +389,24 @@ export default function ConversationalVoiceLayer() {
     }
   }, [changePhase, sendVoiceTurn, stopRecognition]);
 
-  const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
+  const playBlob = useCallback((
+    blob: Blob,
+    onStarted?: () => void,
+  ) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     let settled = false;
+    let started = false;
     const cleanup = () => {
       URL.revokeObjectURL(url);
       if (audioRef.current === audio) audioRef.current = null;
     };
     audioRef.current = audio;
+    audio.onplaying = () => {
+      if (started) return;
+      started = true;
+      onStarted?.();
+    };
     audio.onended = () => {
       if (settled) return;
       settled = true;
@@ -418,11 +427,15 @@ export default function ConversationalVoiceLayer() {
     });
   }), []);
 
-  const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
+  const browserSpeechFallback = useCallback((
+    text: string,
+    onStarted?: () => void,
+  ) => new Promise<void>((resolve) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = navigator.language || 'en-US';
     utterance.rate = 1.02;
+    utterance.onstart = () => onStarted?.();
     utterance.onend = () => resolve();
     utterance.onerror = () => resolve();
     window.speechSynthesis.cancel();
@@ -437,9 +450,11 @@ export default function ConversationalVoiceLayer() {
       || voiceSegmentQueueRef.current.length > 0
     ) return;
     awaitingAssistantRef.current = false;
+    reportVoiceQuality('assistant_turn_complete');
+    resetUserTurnTiming();
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition]);
+  }, [changePhase, reportVoiceQuality, resetUserTurnTiming, startRecognition]);
 
   const drainVoiceSegments = useCallback(async () => {
     if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
@@ -463,10 +478,10 @@ export default function ConversationalVoiceLayer() {
           ttsAbortRef.current = segment.controller;
           const blob = await segment.audio;
           if (!blob) throw new Error('Segment synthesis failed');
-          await playBlob(blob);
+          await playBlob(blob, markFirstAudioStarted);
         } catch {
           if (!activeRef.current || phaseRef.current !== 'speaking') break;
-          await browserSpeechFallback(spoken);
+          await browserSpeechFallback(spoken, markFirstAudioStarted);
         } finally {
           ttsAbortRef.current = null;
         }
@@ -479,6 +494,7 @@ export default function ConversationalVoiceLayer() {
     browserSpeechFallback,
     changePhase,
     finishSegmentTurnIfReady,
+    markFirstAudioStarted,
     playBlob,
     stopRecognition,
   ]);
