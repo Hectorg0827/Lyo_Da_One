@@ -18,8 +18,9 @@ export type SpeechRecognitionLike = {
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onend: (() => void) | null;
   onerror: ((event?: { error?: string }) => void) | null;
-  // Reported by the engine but not needed to run a turn; used to tell a
-  // microphone that never reaches us from one we are simply not speaking into.
+  // Reported by the engine but not needed to run a turn; used for turn-taking
+  // telemetry, and to tell a microphone that never reaches us from one we are
+  // simply not speaking into.
   onstart?: (() => void) | null;
   onaudiostart?: (() => void) | null;
   onspeechstart?: (() => void) | null;
