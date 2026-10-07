@@ -17,6 +17,17 @@ import {
 
 type VoicePhase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
+type VoiceQaSnapshot = {
+  submitToAudioMs?: number;
+  micToAudioMs?: number;
+  segmentArrivalMs?: number;
+  bargeIns: number;
+  possibleFalseBargeIns: number;
+  echoRejects: number;
+  reconnects: number;
+  lastHandoff?: 'classroom' | 'test_prep';
+};
+
 type QueuedVoiceSegment = {
   text: string;
   sequence: number;
@@ -28,6 +39,9 @@ type QueuedVoiceSegment = {
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
+const MIC_ACTIVITY_RMS_THRESHOLD = 0.04;
+const MIC_ACTIVITY_FRAMES = 3;
+const POSSIBLE_FALSE_BARGE_WINDOW_MS = 1600;
 
 function latestAssistantMessage() {
   const state = useChatStore.getState();
@@ -47,6 +61,13 @@ export default function ConversationalVoiceLayer() {
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [qaEnabled, setQaEnabled] = useState(false);
+  const [qaSnapshot, setQaSnapshot] = useState<VoiceQaSnapshot>({
+    bargeIns: 0,
+    possibleFalseBargeIns: 0,
+    echoRejects: 0,
+    reconnects: 0,
+  });
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
@@ -71,11 +92,87 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
+  const qaSessionIdRef = useRef('');
+  const currentTurnIdRef = useRef<string | null>(null);
+  const firstMicActivityAtRef = useRef<number | null>(null);
+  const firstRecognitionAtRef = useRef<number | null>(null);
+  const lastRecognitionAtRef = useRef<number | null>(null);
+  const selectedEndpointDelayRef = useRef<number | null>(null);
+  const turnSubmittedAtRef = useRef<number | null>(null);
+  const firstSegmentAtRef = useRef<number | null>(null);
+  const firstAudioAtRef = useRef<number | null>(null);
+  const listeningStartedAtRef = useRef<number | null>(null);
+  const bargeInAtRef = useRef<number | null>(null);
+  const possibleFalseBargeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micActivityFramesRef = useRef(0);
+  const transportErrorAtRef = useRef<number | null>(null);
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
     setPhase(next);
   }, []);
+
+  const reportVoiceQuality = useCallback((
+    event: string,
+    metrics: Record<string, string | number | boolean> = {},
+    turnId: string | null = currentTurnIdRef.current,
+  ) => {
+    if (!qaSessionIdRef.current) return;
+    void api.chat.reportVoiceQuality({
+      session_id: qaSessionIdRef.current,
+      turn_id: turnId ?? undefined,
+      conversation_id: useChatStore.getState().activeConversationId ?? undefined,
+      platform: 'web',
+      event,
+      locale: typeof navigator !== 'undefined' ? navigator.language || 'auto' : 'auto',
+      scenario: 'live_conversation',
+      metrics,
+    }).catch(() => undefined);
+  }, []);
+
+  const resetUserTurnTiming = useCallback(() => {
+    currentTurnIdRef.current = null;
+    firstMicActivityAtRef.current = null;
+    firstRecognitionAtRef.current = null;
+    lastRecognitionAtRef.current = null;
+    selectedEndpointDelayRef.current = null;
+    turnSubmittedAtRef.current = null;
+    firstSegmentAtRef.current = null;
+    firstAudioAtRef.current = null;
+    bargeInAtRef.current = null;
+    micActivityFramesRef.current = 0;
+    listeningStartedAtRef.current = performance.now();
+  }, []);
+
+  const markFirstAudioStarted = useCallback(() => {
+    if (firstAudioAtRef.current != null) return;
+    const now = performance.now();
+    firstAudioAtRef.current = now;
+    const submitToAudioMs = turnSubmittedAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - turnSubmittedAtRef.current));
+    const micToAudioMs = firstMicActivityAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstMicActivityAtRef.current));
+    const recognitionToAudioMs = firstRecognitionAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstRecognitionAtRef.current));
+    const segmentToAudioMs = firstSegmentAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstSegmentAtRef.current));
+
+    setQaSnapshot((previous) => ({
+      ...previous,
+      submitToAudioMs,
+      micToAudioMs,
+    }));
+    reportVoiceQuality('first_audio', {
+      ...(submitToAudioMs == null ? {} : { submit_to_audio_ms: submitToAudioMs }),
+      ...(micToAudioMs == null ? {} : { mic_to_audio_ms: micToAudioMs }),
+      ...(recognitionToAudioMs == null ? {} : { recognition_to_audio_ms: recognitionToAudioMs }),
+      ...(segmentToAudioMs == null ? {} : { segment_to_audio_ms: segmentToAudioMs }),
+    });
+  }, [reportVoiceQuality]);
 
   const stopRecognition = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -108,9 +205,45 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     if (!transcript || !activeRef.current) return;
     if (isLikelyPlaybackEcho(transcript, lastSpokenTextRef.current)) {
+      setQaSnapshot((previous) => ({ ...previous, echoRejects: previous.echoRejects + 1 }));
+      reportVoiceQuality('semantic_echo_rejected', {
+        phase: phaseRef.current,
+      });
       changePhase('listening');
       return;
     }
+
+    if (possibleFalseBargeTimerRef.current) {
+      clearTimeout(possibleFalseBargeTimerRef.current);
+      possibleFalseBargeTimerRef.current = null;
+    }
+
+    const now = performance.now();
+    const turnId = crypto.randomUUID();
+    currentTurnIdRef.current = turnId;
+    turnSubmittedAtRef.current = now;
+    firstSegmentAtRef.current = null;
+    firstAudioAtRef.current = null;
+
+    const endpointingMs = lastRecognitionAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - lastRecognitionAtRef.current));
+    const utteranceMs = firstRecognitionAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstRecognitionAtRef.current));
+    reportVoiceQuality('turn_submitted', {
+      ...(endpointingMs == null ? {} : { endpointing_ms: endpointingMs }),
+      ...(utteranceMs == null ? {} : { recognized_utterance_ms: utteranceMs }),
+      ...(selectedEndpointDelayRef.current == null
+        ? {}
+        : { selected_endpoint_delay_ms: selectedEndpointDelayRef.current }),
+      interrupted_previous_turn: Boolean(
+        interruptedPreviousTurnRef.current
+        || phaseRef.current === 'speaking'
+        || useChatStore.getState().isGenerating
+      ),
+    }, turnId);
+
     stopSpeech();
     stopRecognition();
     const interruptedPreviousTurn = interruptedPreviousTurnRef.current
@@ -132,10 +265,17 @@ export default function ConversationalVoiceLayer() {
     await sendMessage(transcript, [], {
       voiceSession: true,
       voiceInterruptedPreviousTurn: interruptedPreviousTurn,
-      voiceTurnId: crypto.randomUUID(),
+      voiceTurnId: turnId,
       voiceLocale: navigator.language || 'auto',
     });
-  }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
+  }, [
+    changePhase,
+    interruptGeneration,
+    reportVoiceQuality,
+    sendMessage,
+    stopRecognition,
+    stopSpeech,
+  ]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
     if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
@@ -167,6 +307,38 @@ export default function ConversationalVoiceLayer() {
       const combined = `${finalText} ${interimText}`.trim();
       if (!combined) return;
 
+      const recognitionNow = performance.now();
+      if (firstRecognitionAtRef.current == null) {
+        firstRecognitionAtRef.current = recognitionNow;
+        const listenGapMs = listeningStartedAtRef.current == null
+          ? undefined
+          : Math.max(0, Math.round(recognitionNow - listeningStartedAtRef.current));
+        reportVoiceQuality('first_recognition_result', {
+          ...(listenGapMs == null ? {} : { listening_to_recognition_ms: listenGapMs }),
+          recognizer_locale: recognition.lang || 'auto',
+        });
+      }
+      lastRecognitionAtRef.current = recognitionNow;
+
+      // If RMS already yielded the floor, the recognizer confirms whether that
+      // interruption was a real learner utterance rather than speaker echo.
+      if (bargeInAtRef.current != null && phaseRef.current === 'listening') {
+        if (possibleFalseBargeTimerRef.current) {
+          clearTimeout(possibleFalseBargeTimerRef.current);
+          possibleFalseBargeTimerRef.current = null;
+        }
+        const rmsToRecognitionMs = Math.max(
+          0,
+          Math.round(recognitionNow - bargeInAtRef.current),
+        );
+        setQaSnapshot((previous) => ({ ...previous, bargeIns: previous.bargeIns + 1 }));
+        reportVoiceQuality('barge_in_confirmed', {
+          source: 'rms_plus_semantic',
+          rms_to_recognition_ms: rmsToRecognitionMs,
+        });
+        bargeInAtRef.current = null;
+      }
+
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
       // the second line of defence. A non-echo utterance owns the floor
@@ -175,7 +347,26 @@ export default function ConversationalVoiceLayer() {
       if (phaseRef.current === 'speaking') {
         // Do not commit a final playback echo into finalTranscriptRef. Otherwise
         // the next genuine barge-in would be concatenated with Lyo's own words.
-        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) return;
+        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) {
+          setQaSnapshot((previous) => ({ ...previous, echoRejects: previous.echoRejects + 1 }));
+          reportVoiceQuality('semantic_echo_rejected', {
+            phase: 'speaking',
+          });
+          return;
+        }
+        if (possibleFalseBargeTimerRef.current) {
+          clearTimeout(possibleFalseBargeTimerRef.current);
+          possibleFalseBargeTimerRef.current = null;
+        }
+        const confirmedAt = performance.now();
+        const bargeRecognitionMs = bargeInAtRef.current == null
+          ? undefined
+          : Math.max(0, Math.round(confirmedAt - bargeInAtRef.current));
+        setQaSnapshot((previous) => ({ ...previous, bargeIns: previous.bargeIns + 1 }));
+        reportVoiceQuality('barge_in_confirmed', {
+          source: bargeInAtRef.current == null ? 'semantic' : 'rms_plus_semantic',
+          ...(bargeRecognitionMs == null ? {} : { rms_to_recognition_ms: bargeRecognitionMs }),
+        });
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
         if (useChatStore.getState().isGenerating) interruptGeneration();
@@ -185,9 +376,11 @@ export default function ConversationalVoiceLayer() {
       finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      const endpointDelay = voiceEndOfTurnDelayMs(combined);
+      selectedEndpointDelayRef.current = endpointDelay;
       silenceTimerRef.current = setTimeout(() => {
         void sendVoiceTurn(combined);
-      }, voiceEndOfTurnDelayMs(combined));
+      }, endpointDelay);
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
@@ -215,15 +408,24 @@ export default function ConversationalVoiceLayer() {
     }
   }, [changePhase, sendVoiceTurn, stopRecognition]);
 
-  const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
+  const playBlob = useCallback((
+    blob: Blob,
+    onStarted?: () => void,
+  ) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     let settled = false;
+    let started = false;
     const cleanup = () => {
       URL.revokeObjectURL(url);
       if (audioRef.current === audio) audioRef.current = null;
     };
     audioRef.current = audio;
+    audio.onplaying = () => {
+      if (started) return;
+      started = true;
+      onStarted?.();
+    };
     audio.onended = () => {
       if (settled) return;
       settled = true;
@@ -244,11 +446,15 @@ export default function ConversationalVoiceLayer() {
     });
   }), []);
 
-  const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
+  const browserSpeechFallback = useCallback((
+    text: string,
+    onStarted?: () => void,
+  ) => new Promise<void>((resolve) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = navigator.language || 'en-US';
     utterance.rate = 1.02;
+    utterance.onstart = () => onStarted?.();
     utterance.onend = () => resolve();
     utterance.onerror = () => resolve();
     window.speechSynthesis.cancel();
@@ -263,9 +469,11 @@ export default function ConversationalVoiceLayer() {
       || voiceSegmentQueueRef.current.length > 0
     ) return;
     awaitingAssistantRef.current = false;
+    reportVoiceQuality('assistant_turn_complete');
+    resetUserTurnTiming();
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition]);
+  }, [changePhase, reportVoiceQuality, resetUserTurnTiming, startRecognition]);
 
   const drainVoiceSegments = useCallback(async () => {
     if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
@@ -289,10 +497,10 @@ export default function ConversationalVoiceLayer() {
           ttsAbortRef.current = segment.controller;
           const blob = await segment.audio;
           if (!blob) throw new Error('Segment synthesis failed');
-          await playBlob(blob);
+          await playBlob(blob, markFirstAudioStarted);
         } catch {
           if (!activeRef.current || phaseRef.current !== 'speaking') break;
-          await browserSpeechFallback(spoken);
+          await browserSpeechFallback(spoken, markFirstAudioStarted);
         } finally {
           ttsAbortRef.current = null;
         }
@@ -305,6 +513,7 @@ export default function ConversationalVoiceLayer() {
     browserSpeechFallback,
     changePhase,
     finishSegmentTurnIfReady,
+    markFirstAudioStarted,
     playBlob,
     stopRecognition,
   ]);
@@ -315,6 +524,22 @@ export default function ConversationalVoiceLayer() {
     if (event.type === 'voice_text_segment') {
       voiceSegmentsReceivedRef.current = true;
       awaitingAssistantRef.current = true;
+      const segmentNow = performance.now();
+      const isFirstSegment = firstSegmentAtRef.current == null;
+      if (isFirstSegment) {
+        firstSegmentAtRef.current = segmentNow;
+        const submitToSegmentMs = turnSubmittedAtRef.current == null
+          ? undefined
+          : Math.max(0, Math.round(segmentNow - turnSubmittedAtRef.current));
+        setQaSnapshot((previous) => ({
+          ...previous,
+          segmentArrivalMs: submitToSegmentMs,
+        }));
+        reportVoiceQuality('first_voice_segment', {
+          ...(submitToSegmentMs == null ? {} : { submit_to_segment_ms: submitToSegmentMs }),
+          sequence: event.sequence,
+        });
+      }
       const segmentKey = event.messageId + ':' + event.sequence;
       if (spokenVoiceSegmentKeysRef.current.has(segmentKey)) return;
       if (
@@ -324,10 +549,18 @@ export default function ConversationalVoiceLayer() {
       ) return;
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
       const controller = new AbortController();
+      const ttsStartedAt = performance.now();
       const audio = api.tts.synthesizeStream(event.text, {
         language: navigator.language || 'auto',
         speed: 1.02,
         signal: controller.signal,
+      }).then((blob) => {
+        if (isFirstSegment) {
+          reportVoiceQuality('first_tts_ready', {
+            tts_ms: Math.max(0, Math.round(performance.now() - ttsStartedAt)),
+          });
+        }
+        return blob;
       }).catch(() => null);
       voiceSegmentQueueRef.current.push({
         text: event.text,
@@ -353,10 +586,29 @@ export default function ConversationalVoiceLayer() {
         if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
           const controller = new AbortController();
+          if (firstSegmentAtRef.current == null) {
+            firstSegmentAtRef.current = performance.now();
+            const submitToReadyMs = turnSubmittedAtRef.current == null
+              ? undefined
+              : Math.max(0, Math.round(firstSegmentAtRef.current - turnSubmittedAtRef.current));
+            setQaSnapshot((previous) => ({
+              ...previous,
+              segmentArrivalMs: submitToReadyMs,
+            }));
+            reportVoiceQuality('voice_ready_fallback', {
+              ...(submitToReadyMs == null ? {} : { submit_to_ready_ms: submitToReadyMs }),
+            });
+          }
+          const ttsStartedAt = performance.now();
           const audio = api.tts.synthesizeStream(event.text, {
             language: navigator.language || 'auto',
             speed: 1.02,
             signal: controller.signal,
+          }).then((blob) => {
+            reportVoiceQuality('fallback_tts_ready', {
+              tts_ms: Math.max(0, Math.round(performance.now() - ttsStartedAt)),
+            });
+            return blob;
           }).catch(() => null);
           voiceSegmentQueueRef.current.push({
             text: event.text,
@@ -375,9 +627,44 @@ export default function ConversationalVoiceLayer() {
 
     if (event.type === 'voice_incomplete') {
       voiceTurnClosedRef.current = true;
+      reportVoiceQuality('voice_incomplete');
       finishSegmentTurnIfReady();
+      return;
     }
-  }, [drainVoiceSegments, finishSegmentTurnIfReady]);
+
+    if (event.type === 'voice_transport_error') {
+      transportErrorAtRef.current = performance.now();
+      reportVoiceQuality('transport_error');
+      return;
+    }
+
+    if (event.type === 'voice_transport_recovered') {
+      const recoveredAt = performance.now();
+      const recoveryMs = transportErrorAtRef.current == null
+        ? undefined
+        : Math.max(0, Math.round(recoveredAt - transportErrorAtRef.current));
+      transportErrorAtRef.current = null;
+      setQaSnapshot((previous) => ({
+        ...previous,
+        reconnects: previous.reconnects + 1,
+      }));
+      reportVoiceQuality('transport_recovered', {
+        ...(recoveryMs == null ? {} : { recovery_ms: recoveryMs }),
+      });
+      return;
+    }
+
+    if (event.type === 'voice_handoff') {
+      setQaSnapshot((previous) => ({
+        ...previous,
+        lastHandoff: event.target,
+      }));
+      reportVoiceQuality('learning_handoff', {
+        target: event.target,
+        voice_session_active: activeRef.current,
+      });
+    }
+  }, [drainVoiceSegments, finishSegmentTurnIfReady, reportVoiceQuality]);
 
   useEffect(() => subscribeVoiceStreamEvents(handleVoiceStreamEvent), [handleVoiceStreamEvent]);
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
@@ -386,6 +673,19 @@ export default function ConversationalVoiceLayer() {
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
+    if (firstSegmentAtRef.current == null) {
+      firstSegmentAtRef.current = speakingStartedAtRef.current;
+      const submitToFallbackMs = turnSubmittedAtRef.current == null
+        ? undefined
+        : Math.max(0, Math.round(speakingStartedAtRef.current - turnSubmittedAtRef.current));
+      setQaSnapshot((previous) => ({
+        ...previous,
+        segmentArrivalMs: submitToFallbackMs,
+      }));
+      reportVoiceQuality('fallback_answer_ready', {
+        ...(submitToFallbackMs == null ? {} : { submit_to_answer_ms: submitToFallbackMs }),
+      });
+    }
     startRecognition(true);
     lastSpokenTextRef.current = text;
     lastSpokenMessageIdRef.current = messageId;
@@ -422,25 +722,43 @@ export default function ConversationalVoiceLayer() {
           next = null;
         }
 
-        await playBlob(await current.promise);
+        await playBlob(await current.promise, markFirstAudioStarted);
       }
     } catch {
       if (activeRef.current && phaseRef.current === 'speaking') {
-        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '));
+        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '), markFirstAudioStarted);
       }
     } finally {
       ttsAbortRef.current = null;
       ttsPrefetchAbortRef.current = null;
       if (activeRef.current && phaseRef.current === 'speaking') {
+        reportVoiceQuality('assistant_turn_complete');
+        resetUserTurnTiming();
         changePhase('listening');
         startRecognition();
       }
     }
-  }, [browserSpeechFallback, changePhase, playBlob, startRecognition, stopRecognition]);
+  }, [
+    browserSpeechFallback,
+    changePhase,
+    markFirstAudioStarted,
+    playBlob,
+    reportVoiceQuality,
+    resetUserTurnTiming,
+    startRecognition,
+    stopRecognition,
+  ]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    const now = performance.now();
+    bargeInAtRef.current = now;
+    if (firstMicActivityAtRef.current == null) firstMicActivityAtRef.current = now;
     interruptedPreviousTurnRef.current = true;
+    reportVoiceQuality('barge_in_candidate', {
+      source: 'rms',
+      assistant_speaking_ms: Math.max(0, Math.round(now - speakingStartedAtRef.current)),
+    });
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
@@ -448,7 +766,59 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
+
+    if (possibleFalseBargeTimerRef.current) {
+      clearTimeout(possibleFalseBargeTimerRef.current);
+    }
+    possibleFalseBargeTimerRef.current = setTimeout(() => {
+      if (bargeInAtRef.current == null) return;
+      setQaSnapshot((previous) => ({
+        ...previous,
+        possibleFalseBargeIns: previous.possibleFalseBargeIns + 1,
+      }));
+      reportVoiceQuality('possible_false_barge_in', {
+        no_recognized_utterance_ms: POSSIBLE_FALSE_BARGE_WINDOW_MS,
+      });
+      bargeInAtRef.current = null;
+      possibleFalseBargeTimerRef.current = null;
+    }, POSSIBLE_FALSE_BARGE_WINDOW_MS);
+  }, [
+    changePhase,
+    interruptGeneration,
+    reportVoiceQuality,
+    startRecognition,
+    stopSpeech,
+  ]);
+
+  useEffect(() => {
+    if (!active) return;
+    const enabled =
+      typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('voiceqa') === '1';
+    setQaEnabled(enabled);
+    if (!enabled) {
+      qaSessionIdRef.current = '';
+      return;
+    }
+    qaSessionIdRef.current = crypto.randomUUID();
+    setQaSnapshot({
+      bargeIns: 0,
+      possibleFalseBargeIns: 0,
+      echoRejects: 0,
+      reconnects: 0,
+    });
+    reportVoiceQuality('session_started', {
+      echo_cancellation_requested: true,
+      noise_suppression_requested: true,
+      auto_gain_control_requested: true,
+      recognizer_locale: navigator.language || 'auto',
+    });
+
+    return () => {
+      reportVoiceQuality('session_ended');
+      qaSessionIdRef.current = '';
+    };
+  }, [active, reportVoiceQuality]);
 
   useEffect(() => {
     if (!active) return;
@@ -474,12 +844,23 @@ export default function ConversationalVoiceLayer() {
         audioContextRef.current = context;
         analyserRef.current = analyser;
       }
+      resetUserTurnTiming();
+      reportVoiceQuality('microphone_ready', {
+        track_count: stream.getAudioTracks().length,
+      });
       startRecognition();
     }).catch(() => {
+      reportVoiceQuality('microphone_error');
       changePhase('error');
     });
     return () => { cancelled = true; };
-  }, [active, changePhase, startRecognition]);
+  }, [
+    active,
+    changePhase,
+    reportVoiceQuality,
+    resetUserTurnTiming,
+    startRecognition,
+  ]);
 
   useEffect(() => {
     activeRef.current = active;
@@ -494,6 +875,10 @@ export default function ConversationalVoiceLayer() {
     analyserRef.current = null;
     if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
+    if (possibleFalseBargeTimerRef.current) {
+      clearTimeout(possibleFalseBargeTimerRef.current);
+      possibleFalseBargeTimerRef.current = null;
+    }
     changePhase('idle');
     setLiveTranscript('');
   }, [active, changePhase, stopRecognition, stopSpeech]);
@@ -502,7 +887,7 @@ export default function ConversationalVoiceLayer() {
     if (!active) return;
     const tick = () => {
       const analyser = analyserRef.current;
-      if (analyser && phaseRef.current === 'speaking' && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS) {
+      if (analyser) {
         const samples = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
@@ -511,9 +896,37 @@ export default function ConversationalVoiceLayer() {
           sum += normalized * normalized;
         }
         const rms = Math.sqrt(sum / samples.length);
-        loudFramesRef.current = rms > BARGE_IN_RMS_THRESHOLD ? loudFramesRef.current + 1 : 0;
-        if (loudFramesRef.current >= BARGE_IN_FRAMES) bargeIn();
-      } else loudFramesRef.current = 0;
+
+        if (phaseRef.current === 'listening') {
+          micActivityFramesRef.current =
+            rms > MIC_ACTIVITY_RMS_THRESHOLD ? micActivityFramesRef.current + 1 : 0;
+          if (
+            micActivityFramesRef.current >= MIC_ACTIVITY_FRAMES
+            && firstMicActivityAtRef.current == null
+          ) {
+            firstMicActivityAtRef.current = performance.now();
+            reportVoiceQuality('microphone_activity', {
+              rms_milli: Math.round(rms * 1000),
+            });
+          }
+        } else {
+          micActivityFramesRef.current = 0;
+        }
+
+        if (
+          phaseRef.current === 'speaking'
+          && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS
+        ) {
+          loudFramesRef.current =
+            rms > BARGE_IN_RMS_THRESHOLD ? loudFramesRef.current + 1 : 0;
+          if (loudFramesRef.current >= BARGE_IN_FRAMES) bargeIn();
+        } else {
+          loudFramesRef.current = 0;
+        }
+      } else {
+        loudFramesRef.current = 0;
+        micActivityFramesRef.current = 0;
+      }
       animationFrameRef.current = requestAnimationFrame(tick);
     };
     animationFrameRef.current = requestAnimationFrame(tick);
@@ -521,7 +934,7 @@ export default function ConversationalVoiceLayer() {
       if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     };
-  }, [active, bargeIn]);
+  }, [active, bargeIn, reportVoiceQuality]);
 
   useEffect(() => {
     if (!active || isGenerating || !awaitingAssistantRef.current) return;
@@ -560,8 +973,28 @@ export default function ConversationalVoiceLayer() {
         {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-white/85">Live conversation</div>
+        <div className="text-xs font-semibold text-white/85">
+          Live conversation{qaEnabled ? ' · QA' : ''}
+        </div>
         <div className="text-xs text-white/55 truncate">{label}</div>
+        {qaEnabled && (
+          <div className="text-[10px] text-white/40 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            <span>
+              submit→audio {qaSnapshot.submitToAudioMs == null ? '—' : `${qaSnapshot.submitToAudioMs}ms`}
+            </span>
+            <span>
+              mic→audio {qaSnapshot.micToAudioMs == null ? '—' : `${qaSnapshot.micToAudioMs}ms`}
+            </span>
+            <span>
+              segment {qaSnapshot.segmentArrivalMs == null ? '—' : `${qaSnapshot.segmentArrivalMs}ms`}
+            </span>
+            <span>barge {qaSnapshot.bargeIns}</span>
+            <span>false? {qaSnapshot.possibleFalseBargeIns}</span>
+            <span>echo {qaSnapshot.echoRejects}</span>
+            <span>reconnect {qaSnapshot.reconnects}</span>
+            {qaSnapshot.lastHandoff && <span>handoff {qaSnapshot.lastHandoff}</span>}
+          </div>
+        )}
       </div>
       <button
         type="button"

@@ -649,6 +649,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 },
               },
             });
+            if (
+              (options.voiceSession || get().voiceSessionActive)
+              && chunk.workflow_intent === 'TEST_PREP'
+            ) {
+              publishVoiceStreamEvent({
+                type: 'voice_handoff',
+                target: 'test_prep',
+                messageId: aiMessageId,
+              });
+            }
           } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
@@ -752,6 +762,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
             receivedContent = true;
+            if (options.voiceSession || get().voiceSessionActive) {
+              publishVoiceStreamEvent({
+                type: 'voice_handoff',
+                target: 'classroom',
+                messageId: aiMessageId,
+              });
+            }
             const isPreview = chunk.preview === true;
             const classroomBlock = chunk.block as { content?: Record<string, any> } | undefined;
             const courseData = (classroomBlock?.content?.course || classroomBlock?.content) as
@@ -883,6 +900,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         () => {
           if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
+          if (options.voiceSession || get().voiceSessionActive) {
+            publishVoiceStreamEvent({
+              type: 'voice_transport_error',
+              messageId: aiMessageId,
+            });
+          }
           recoverCanonicalConversation(convoId!);
         },
         convoId,
@@ -939,6 +962,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // canonical thread so a completed answer is recovered without creating
         // a second, device-only response.
         await get().loadConversation(cId);
+        if (options.voiceSession || get().voiceSessionActive) {
+          publishVoiceStreamEvent({
+            type: 'voice_transport_recovered',
+            messageId: aiMessageId,
+          });
+        }
       } catch {
         // Preserve the optimistic user turn until the next successful hydrate.
       }
