@@ -395,10 +395,12 @@ struct SmartDataVizBlockView: View {
             }
             
             switch payload.format {
-            case "mermaid":
+            case "mermaid", "diagram":
                 MermaidWebView(source: payload.source)
                     .frame(minHeight: 200, maxHeight: 400)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+            case "table":
+                SmartMarkdownTableView(source: payload.source)
             case "math":
                 Text(payload.source)
                     .font(.system(.body, design: .serif))
@@ -406,13 +408,52 @@ struct SmartDataVizBlockView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
             default:
-                // chart, table, graph — plain text fallback
-                Text(payload.source)
-                    .font(.system(.caption, design: .monospaced))
+                Text(try! AttributedString(markdown: payload.source))
+                    .font(.caption)
                     .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
             }
         }
+    }
+}
+
+struct SmartMarkdownTableView: View {
+    let source: String
+
+    private var rows: [[String]] {
+        source
+            .split(separator: "\n")
+            .map { line in
+                line.split(separator: "|", omittingEmptySubsequences: true)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            }
+            .filter { row in
+                !row.isEmpty && !row.allSatisfy { cell in
+                    let stripped = cell.replacingOccurrences(of: ":", with: "")
+                    return !stripped.isEmpty && stripped.allSatisfy { $0 == "-" }
+                }
+            }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                        Text(cell)
+                            .font(rowIndex == 0 ? .caption.bold() : .caption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                    }
+                }
+                .background(rowIndex == 0 ? Color(.systemGray5) : Color(.systemGray6))
+                if rowIndex < rows.count - 1 {
+                    Divider()
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
