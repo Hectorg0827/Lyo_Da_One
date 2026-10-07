@@ -530,7 +530,7 @@ struct SmartInteractiveBlockView: View {
             }
             
             ForEach(Array(payload.items.enumerated()), id: \.offset) { _, item in
-                VStack(alignment: .leading, spacing: 2) {
+                let card = VStack(alignment: .leading, spacing: 2) {
                     Text(item.label)
                         .font(.caption.bold())
                     Text(item.detail)
@@ -540,6 +540,17 @@ struct SmartInteractiveBlockView: View {
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
+
+                if subtype == "sourceNavigator",
+                   let rawURL = item.url,
+                   let url = URL(string: rawURL) {
+                    Link(destination: url) {
+                        card
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    card
+                }
             }
         }
         .padding()
