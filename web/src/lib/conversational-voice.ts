@@ -133,6 +133,19 @@ export type VoiceStreamEvent =
       type: 'voice_incomplete';
       text: string;
       messageId: string;
+    }
+  | {
+      type: 'voice_transport_error';
+      messageId: string;
+    }
+  | {
+      type: 'voice_transport_recovered';
+      messageId: string;
+    }
+  | {
+      type: 'voice_handoff';
+      target: 'classroom' | 'test_prep';
+      messageId: string;
     };
 
 const voiceStreamTarget =
