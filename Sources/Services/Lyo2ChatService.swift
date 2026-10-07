@@ -55,6 +55,7 @@ class Lyo2ChatService: ObservableObject {
             : AuthService.shared.currentUserEmail
         
         var mergedStateSummary = stateSummary
+        mergedStateSummary["stream_capabilities"] = AnyCodable(["text_delta": true])
         if let conversationId,
            let runtime = teachingRuntimeByConversation[conversationId],
            runtime.lastAction != nil {
@@ -416,6 +417,12 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                 if let text = json["text"] as? String {
                     didReceiveContentEvent = true
                     callback?(.clarification(text: text))
+                }
+
+            case "text_delta":
+                if let text = json["content"] as? String, !text.isEmpty {
+                    didReceiveContentEvent = true
+                    callback?(.textDelta(text: text))
                 }
                 
             case "answer":

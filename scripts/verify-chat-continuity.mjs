@@ -72,9 +72,15 @@ const contracts = [
     name: 'web response-aware generation activity',
     path: 'web/src/stores/chat-store.ts',
     needles: [
-      "GenerationActivity = 'thinking' | 'response' | 'course'",
+      "GenerationActivity = 'thinking' | 'searching' | 'response' | 'course'",
       "generationActivity: 'thinking'",
       "generationActivity: 'course'",
+      "chunk.type === 'answer'",
+      "chunk.type === 'text'",
+      "chunk.type === 'text_delta'",
+      "clientTtftMs",
+      "stream_capabilities: { text_delta: true }",
+      "receivedTextDelta",
     ],
   },
   {
@@ -98,6 +104,11 @@ const contracts = [
       '"media"',
       '"mime_type"',
       '"size_bytes"',
+      'obj.has("content")',
+      'ChatStreamEvent.Chunk',
+      'data class FinalAnswer',
+      '"stream_capabilities" to mapOf("text_delta" to true)',
+      'obj.get("type")?.asString == "text_delta"',
     ],
   },
   {
@@ -117,6 +128,8 @@ const contracts = [
       'parseChatContent',
       'ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f',
       'Modifier.fillMaxWidth(ASSISTANT_RESPONSE_WIDTH_FRACTION)',
+      'is ChatStreamEvent.FinalAnswer',
+      'content = event.text',
     ],
     forbidden: [
       'val bubbleModifier = Modifier\n            .widthIn(max = 320.dp)',
@@ -150,7 +163,26 @@ const contracts = [
       'conversation_id',
       'client_message_id',
       'case conversation(id: String)',
+      'case textDelta(text: String)',
       'case sizeBytes = "size_bytes"',
+    ],
+  },
+  {
+    name: 'iOS incremental stream parser',
+    path: 'Sources/Services/Lyo2ChatService.swift',
+    needles: [
+      'case "text_delta":',
+      'callback?(.textDelta(text: text))',
+      'mergedStateSummary["stream_capabilities"]',
+    ],
+  },
+  {
+    name: 'iOS incremental stream consumer',
+    path: 'Sources/Services/UnifiedChatService.swift',
+    needles: [
+      'case .textDelta(let text):',
+      'content: messages[idx].content + text',
+      'shouldAnimate: !hadStreamedText',
     ],
   },
   {

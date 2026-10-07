@@ -296,6 +296,8 @@ final class ChatRouter: ObservableObject {
             Lyo2ConversationTurn(role: $0.role, content: $0.content)
         }
 
+        var didRecordFirstVisibleToken = false
+
         // Start streaming via Lyo2 pipeline
         // NOTE: The Lyo2StreamingManager now fires callbacks on OperationQueue.main,
         // so this closure runs on the main thread — safe to access @MainActor state directly.
@@ -318,8 +320,16 @@ final class ChatRouter: ObservableObject {
         ) { event in
             onStreamEvent?(event)
 
-            // Record first-token latency
-            if case .answer = event {
+            // Record only the first visible token/snapshot for this request.
+            let isFirstVisibleToken: Bool
+            switch event {
+            case .answer, .textDelta:
+                isFirstVisibleToken = true
+            default:
+                isFirstVisibleToken = false
+            }
+            if isFirstVisibleToken && !didRecordFirstVisibleToken {
+                didRecordFirstVisibleToken = true
                 let latency = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
                 self.recordLatency(latency, for: self.currentTier)
                 Log.ai.info("🧠 Deep path first token in \(String(format: "%.0f", latency))ms")
