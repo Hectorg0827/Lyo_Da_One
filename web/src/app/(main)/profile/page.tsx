@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
 import ProfileHeader from '@/components/profile/ProfileHeader';
+import LearnerStats from '@/components/stats/LearnerStats';
 import CreatorStatsPanel from '@/components/profile/CreatorStatsPanel';
 import { formatTimeAgo } from '@/lib/utils';
 
@@ -39,6 +40,12 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('activity');
 
   const { data: achievementsRaw } = useApi(() => api.gamification.achievements(), []);
+  // What this learner knows, in full. Focus shows the same four numbers as a
+  // one-line strip and taps through to here, so this page has to be the place
+  // the words are actually explained — "Mastered" is only worth anything
+  // alongside "applied, transferred, retained".
+  const { data: gamification } = useApi(() => api.gamification.overview(), []);
+  const { data: conceptSummary } = useApi(() => api.personalization.conceptSummary(), []);
   const { data: feedData } = useApi(user ? () => api.users.posts(user.id) : null, [user?.id]);
 
   if (!user) return null;
@@ -70,6 +77,13 @@ export default function ProfilePage() {
       className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6"
     >
       <ProfileHeader user={user} isOwnProfile />
+
+      <LearnerStats
+        variant="grid"
+        conceptSummary={conceptSummary}
+        gamification={gamification}
+        user={user}
+      />
 
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
         {tabs.map(({ id, label, icon: Icon }) => (
