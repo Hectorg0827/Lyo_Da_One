@@ -1,17 +1,17 @@
-export type SpeechRecognitionResultLike = {
-  isFinal?: boolean;
-  [index: number]: { transcript: string };
-};
+import type {
+  SpeechResultEventLike,
+  SpeechResultLike,
+} from './speech-transcript.mjs';
 
-export type SpeechRecognitionEventLike = {
-  resultIndex?: number;
-  results: ArrayLike<SpeechRecognitionResultLike>;
-};
+export type SpeechRecognitionResultLike = SpeechResultLike;
+
+export type SpeechRecognitionEventLike = SpeechResultEventLike;
 
 export type SpeechRecognitionLike = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
+  maxAlternatives?: number;
   start: () => void;
   stop: () => void;
   abort?: () => void;

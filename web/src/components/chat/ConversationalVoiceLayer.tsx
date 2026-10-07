@@ -6,6 +6,11 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import {
+  createTranscriptAccumulator,
+  normalizeSpeechLang,
+  tidyTranscript,
+} from '@/lib/speech-transcript.mjs';
+import {
   createSpeechRecognition,
   isLikelyPlaybackEcho,
   splitSpeechChunks,
@@ -52,7 +57,7 @@ export default function ConversationalVoiceLayer() {
   const activeRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finalTranscriptRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
   const lastSpokenTextRef = useRef('');
   const awaitingAssistantRef = useRef(false);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
@@ -104,7 +109,7 @@ export default function ConversationalVoiceLayer() {
 
   const sendVoiceTurn = useCallback(async (raw: string) => {
     const transcript = raw.trim();
-    finalTranscriptRef.current = '';
+    transcriptRef.current.reset();
     setLiveTranscript('');
     if (!transcript || !activeRef.current) return;
     if (isLikelyPlaybackEcho(transcript, lastSpokenTextRef.current)) {
@@ -146,25 +151,19 @@ export default function ConversationalVoiceLayer() {
       return;
     }
     recognitionRef.current = recognition;
-    recognition.lang = navigator.language || 'en-US';
+    recognition.lang = normalizeSpeechLang(navigator.language);
     recognition.interimResults = true;
     recognition.continuous = true;
+    recognition.maxAlternatives = 3;
+    // This recognizer continues the turn the previous one was collecting, so
+    // the transcript keeps its words but forgets its result positions.
+    transcriptRef.current.carryOver();
     recognition.onresult = (event) => {
       // A stopped recognizer may still dispatch queued callbacks after a new
       // shadow recognizer has already taken ownership. Ignore those stale
       // callbacks so two recognition sessions can never contribute to one turn.
       if (recognitionRef.current !== recognition) return;
-      let finalText = finalTranscriptRef.current;
-      let interimText = '';
-      const start = event.resultIndex ?? 0;
-      for (let i = start; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result?.[0]?.transcript?.trim() ?? '';
-        if (!transcript) continue;
-        if (result.isFinal) finalText = `${finalText} ${transcript}`.trim();
-        else interimText = `${interimText} ${transcript}`.trim();
-      }
-      const combined = `${finalText} ${interimText}`.trim();
+      const combined = tidyTranscript(transcriptRef.current.push(event).combined);
       if (!combined) return;
 
       // During playback, keep a shadow recognizer armed. Acoustic echo
@@ -173,16 +172,18 @@ export default function ConversationalVoiceLayer() {
       // immediately, so the first word is not lost while a new recognizer is
       // being started after RMS barge-in.
       if (phaseRef.current === 'speaking') {
-        // Do not commit a final playback echo into finalTranscriptRef. Otherwise
-        // the next genuine barge-in would be concatenated with Lyo's own words.
-        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) return;
+        // Do not keep a playback echo. Otherwise the next genuine barge-in
+        // would be concatenated with Lyo's own words.
+        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) {
+          transcriptRef.current.reset();
+          return;
+        }
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
         if (useChatStore.getState().isGenerating) interruptGeneration();
         changePhase('listening');
       }
 
-      finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
@@ -444,7 +445,7 @@ export default function ConversationalVoiceLayer() {
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
-    finalTranscriptRef.current = '';
+    transcriptRef.current.reset();
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();

@@ -12,9 +12,11 @@ import {
 import { cn } from '@/lib/utils';
 import { CALL_TO_ACTION, invitation } from '@/lib/teach-it.mjs';
 import {
+  configureDictation,
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
+import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
 import {
   useClassroomStore,
   type ClassroomConnection,
@@ -133,6 +135,8 @@ function ClassroomStage() {
   const boardScrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
+  const dictatingRef = useRef(false);
 
   useEffect(() => {
     connect(connection);
@@ -142,7 +146,10 @@ function ClassroomStage() {
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
+    return () => {
+      dictatingRef.current = false;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -278,40 +285,75 @@ function ClassroomStage() {
     }
   };
 
+  // A dictated question may outlast one recognizer — each ends itself after a
+  // pause — so the transcript lives here and is carried across every restart.
+  const startDictation = (target: 'question' | 'prompt', continuing = false): boolean => {
+    const recognition = createBrowserSpeechRecognition();
+    if (!recognition) return false;
+    recognitionRef.current = recognition;
+    configureDictation(recognition, language === 'auto' ? null : language);
+    if (continuing) transcriptRef.current.carryOver();
+
+    recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      const { combined } = transcriptRef.current.push(event);
+      const base = dictationBaseRef.current;
+      const text = (base + tidyTranscript(combined, { capitalize: !base })).slice(0, 1000);
+      if (target === 'prompt') setPromptResponse(text);
+      else setQuestion(text);
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
+      if (!dictatingRef.current) {
+        setListeningTarget(null);
+        return;
+      }
+      window.setTimeout(() => {
+        if (!dictatingRef.current) return;
+        if (!startDictation(target, true)) {
+          dictatingRef.current = false;
+          setListeningTarget(null);
+        }
+      }, 120);
+    };
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      recognitionRef.current = null;
+      dictatingRef.current = false;
+      setListeningTarget(null);
+    };
+
+    try {
+      recognition.start();
+      return true;
+    } catch {
+      recognitionRef.current = null;
+      return false;
+    }
+  };
+
   const toggleDictation = (target: 'question' | 'prompt') => {
     if (listeningTarget) {
-      recognitionRef.current?.stop();
+      // Clear the indicator here as well as in onend: a tap that lands in the
+      // gap between two recognizers has no live recognizer left to end.
+      dictatingRef.current = false;
+      setListeningTarget(null);
+      try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
       return;
     }
-    const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return;
+    if (!createBrowserSpeechRecognition()) return;
     if (target === 'prompt' && prompt) {
       setEngagedPromptId(prompt.id);
       interruptPrompt();
     } else takeFloor();
-    recognitionRef.current = recognition;
+    transcriptRef.current.reset();
     const currentValue = target === 'prompt' ? promptResponse : question;
     dictationBaseRef.current = currentValue ? currentValue.replace(/\s*$/, ' ') : '';
-    recognition.lang = language === 'auto' ? navigator.language || 'en-US' : language;
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0].transcript;
-      }
-      const text = (dictationBaseRef.current + transcript).slice(0, 1000);
-      if (target === 'prompt') setPromptResponse(text);
-      else setQuestion(text);
-    };
-    recognition.onend = () => setListeningTarget(null);
-    recognition.onerror = () => setListeningTarget(null);
-    try {
-      recognition.start();
-      setListeningTarget(target);
-    } catch {
-      setListeningTarget(null);
-    }
+    dictatingRef.current = true;
+    if (startDictation(target)) setListeningTarget(target);
+    else dictatingRef.current = false;
   };
 
   return (
