@@ -16,6 +16,8 @@ export type SpeechRecognitionLike = {
   stop: () => void;
   abort?: () => void;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onspeechstart?: (() => void) | null;
+  onspeechend?: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((event?: { error?: string }) => void) | null;
 };
