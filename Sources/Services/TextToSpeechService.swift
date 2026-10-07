@@ -95,8 +95,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     func stop() {
         playbackGeneration += 1
         speechQueue.removeAll()
-        prefetchedSpeech?.task.cancel()
-        prefetchedSpeech = nil
+        discardPrefetchedSpeech()
         playbackTask?.cancel()
         playbackTask = nil
         cancelActivePlayback()
@@ -187,11 +186,29 @@ class TextToSpeechService: NSObject, ObservableObject {
         )
     }
 
+    private func discardPrefetchedSpeech() {
+        guard let prefetched = prefetchedSpeech else { return }
+        prefetchedSpeech = nil
+        prefetched.task.cancel()
+
+        // DefaultTTSRepository materializes generated audio into a temp file.
+        // If barge-in happens after prefetch completed but before playback
+        // consumes it, delete that orphan rather than leaking one file per
+        // interrupted turn.
+        Task {
+            guard let result = try? await prefetched.task.value,
+                  let url = URL(string: result.audioURL),
+                  url.isFileURL
+            else { return }
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     private func prefetchNextIfNeeded() {
         guard let next = speechQueue.first else { return }
         if prefetchedSpeech?.itemID == next.id { return }
 
-        prefetchedSpeech?.task.cancel()
+        discardPrefetchedSpeech()
         let task = Task<TTSResult, Error> { [repository] in
             try Task.checkCancellation()
             return try await repository.generate(
