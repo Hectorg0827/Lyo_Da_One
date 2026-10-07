@@ -616,12 +616,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               && typeof chunk.sequence === 'number'
               && typeof chunk.message_id === 'string'
             ) {
+              const serverElapsedMs =
+                typeof chunk.server_elapsed_ms === 'number'
+                  ? chunk.server_elapsed_ms
+                  : undefined;
               publishVoiceStreamEvent({
                 type: 'voice_text_segment',
                 text: chunk.text,
                 sequence: chunk.sequence,
                 messageId: chunk.message_id,
+                turnId: typeof chunk.turn_id === 'string' ? chunk.turn_id : undefined,
+                serverElapsedMs,
               });
+              if (chunk.sequence === 1 && serverElapsedMs != null) {
+                patchAiMessage({
+                  metadata: { voiceServerFirstSegmentMs: serverElapsedMs },
+                });
+              }
             }
           } else if (chunk.type === 'voice_ready') {
             if (typeof chunk.text === 'string' && typeof chunk.message_id === 'string') {
