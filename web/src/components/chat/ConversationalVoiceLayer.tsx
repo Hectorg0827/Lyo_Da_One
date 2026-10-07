@@ -505,6 +505,22 @@ export default function ConversationalVoiceLayer() {
     if (event.type === 'voice_text_segment') {
       voiceSegmentsReceivedRef.current = true;
       awaitingAssistantRef.current = true;
+      const segmentNow = performance.now();
+      const isFirstSegment = firstSegmentAtRef.current == null;
+      if (isFirstSegment) {
+        firstSegmentAtRef.current = segmentNow;
+        const submitToSegmentMs = turnSubmittedAtRef.current == null
+          ? undefined
+          : Math.max(0, Math.round(segmentNow - turnSubmittedAtRef.current));
+        setQaSnapshot((previous) => ({
+          ...previous,
+          segmentArrivalMs: submitToSegmentMs,
+        }));
+        reportVoiceQuality('first_voice_segment', {
+          ...(submitToSegmentMs == null ? {} : { submit_to_segment_ms: submitToSegmentMs }),
+          sequence: event.sequence,
+        });
+      }
       const segmentKey = event.messageId + ':' + event.sequence;
       if (spokenVoiceSegmentKeysRef.current.has(segmentKey)) return;
       if (
@@ -514,10 +530,18 @@ export default function ConversationalVoiceLayer() {
       ) return;
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
       const controller = new AbortController();
+      const ttsStartedAt = performance.now();
       const audio = api.tts.synthesizeStream(event.text, {
         language: navigator.language || 'auto',
         speed: 1.02,
         signal: controller.signal,
+      }).then((blob) => {
+        if (isFirstSegment) {
+          reportVoiceQuality('first_tts_ready', {
+            tts_ms: Math.max(0, Math.round(performance.now() - ttsStartedAt)),
+          });
+        }
+        return blob;
       }).catch(() => null);
       voiceSegmentQueueRef.current.push({
         text: event.text,
@@ -543,10 +567,29 @@ export default function ConversationalVoiceLayer() {
         if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
           const controller = new AbortController();
+          if (firstSegmentAtRef.current == null) {
+            firstSegmentAtRef.current = performance.now();
+            const submitToReadyMs = turnSubmittedAtRef.current == null
+              ? undefined
+              : Math.max(0, Math.round(firstSegmentAtRef.current - turnSubmittedAtRef.current));
+            setQaSnapshot((previous) => ({
+              ...previous,
+              segmentArrivalMs: submitToReadyMs,
+            }));
+            reportVoiceQuality('voice_ready_fallback', {
+              ...(submitToReadyMs == null ? {} : { submit_to_ready_ms: submitToReadyMs }),
+            });
+          }
+          const ttsStartedAt = performance.now();
           const audio = api.tts.synthesizeStream(event.text, {
             language: navigator.language || 'auto',
             speed: 1.02,
             signal: controller.signal,
+          }).then((blob) => {
+            reportVoiceQuality('fallback_tts_ready', {
+              tts_ms: Math.max(0, Math.round(performance.now() - ttsStartedAt)),
+            });
+            return blob;
           }).catch(() => null);
           voiceSegmentQueueRef.current.push({
             text: event.text,
@@ -565,9 +608,44 @@ export default function ConversationalVoiceLayer() {
 
     if (event.type === 'voice_incomplete') {
       voiceTurnClosedRef.current = true;
+      reportVoiceQuality('voice_incomplete');
       finishSegmentTurnIfReady();
+      return;
     }
-  }, [drainVoiceSegments, finishSegmentTurnIfReady]);
+
+    if (event.type === 'voice_transport_error') {
+      transportErrorAtRef.current = performance.now();
+      reportVoiceQuality('transport_error');
+      return;
+    }
+
+    if (event.type === 'voice_transport_recovered') {
+      const recoveredAt = performance.now();
+      const recoveryMs = transportErrorAtRef.current == null
+        ? undefined
+        : Math.max(0, Math.round(recoveredAt - transportErrorAtRef.current));
+      transportErrorAtRef.current = null;
+      setQaSnapshot((previous) => ({
+        ...previous,
+        reconnects: previous.reconnects + 1,
+      }));
+      reportVoiceQuality('transport_recovered', {
+        ...(recoveryMs == null ? {} : { recovery_ms: recoveryMs }),
+      });
+      return;
+    }
+
+    if (event.type === 'voice_handoff') {
+      setQaSnapshot((previous) => ({
+        ...previous,
+        lastHandoff: event.target,
+      }));
+      reportVoiceQuality('learning_handoff', {
+        target: event.target,
+        voice_session_active: activeRef.current,
+      });
+    }
+  }, [drainVoiceSegments, finishSegmentTurnIfReady, reportVoiceQuality]);
 
   useEffect(() => subscribeVoiceStreamEvents(handleVoiceStreamEvent), [handleVoiceStreamEvent]);
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
