@@ -95,6 +95,7 @@ export default function ConversationalVoiceLayer() {
   const pendingRmsBargeAtRef = useRef(0);
   const pendingRmsBargeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognizerRestartCountRef = useRef(0);
+  const echoReportedForPlaybackRef = useRef(false);
 
   const qualityContext = useCallback((turnId?: string) => ({
     sessionId: voiceQualitySessionIdRef.current,
@@ -147,13 +148,17 @@ export default function ConversationalVoiceLayer() {
     const now = voiceQualityNow();
     const turnId = currentTurnIdRef.current || crypto.randomUUID();
     currentTurnIdRef.current = turnId;
+    setActiveVoiceQualityContext(qualityContext(turnId));
 
     if (isLikelyPlaybackEcho(transcript, lastSpokenTextRef.current)) {
-      reportVoiceQuality(qualityContext(turnId), 'echo_rejected', {
-        phase: phaseRef.current,
-        heard_chars: Math.min(500, transcript.length),
-        method: 'semantic_final',
-      });
+      if (!echoReportedForPlaybackRef.current) {
+        echoReportedForPlaybackRef.current = true;
+        reportVoiceQuality(qualityContext(turnId), 'echo_rejected', {
+          phase: phaseRef.current,
+          heard_chars: Math.min(500, transcript.length),
+          method: 'semantic_final',
+        });
+      }
       changePhase('listening');
       return;
     }
@@ -249,11 +254,17 @@ export default function ConversationalVoiceLayer() {
     recognition.onspeechstart = () => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
       const now = voiceQualityNow();
-      if (!currentTurnIdRef.current || turnSubmittedAtRef.current > 0) {
+      // Do not rotate a submitted assistant turn merely because the
+      // microphone heard something: speaker echo can fire speech-start before
+      // semantic recognition rejects it. A new ID is created here only for an
+      // idle/listening turn; genuine barge-in rotates after non-echo text is
+      // confirmed below.
+      if (!currentTurnIdRef.current) {
         currentTurnIdRef.current = crypto.randomUUID();
         turnSubmittedAtRef.current = 0;
         firstVoiceSegmentAtRef.current = 0;
         firstAudioReportedRef.current = false;
+        setActiveVoiceQualityContext(qualityContext());
       }
       micSpeechStartedAtRef.current = now;
       lastRecognitionActivityAtRef.current = now;
@@ -316,11 +327,14 @@ export default function ConversationalVoiceLayer() {
         // Do not commit a final playback echo into finalTranscriptRef. Otherwise
         // the next genuine barge-in would be concatenated with Lyo's own words.
         if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) {
-          reportVoiceQuality(qualityContext(), 'echo_rejected', {
-            phase: 'speaking',
-            heard_chars: Math.min(500, combined.length),
-            method: 'semantic_partial',
-          });
+          if (!echoReportedForPlaybackRef.current) {
+            echoReportedForPlaybackRef.current = true;
+            reportVoiceQuality(qualityContext(), 'echo_rejected', {
+              phase: 'speaking',
+              heard_chars: Math.min(500, combined.length),
+              method: 'semantic_partial',
+            });
+          }
           return;
         }
         const detectedAt = voiceQualityNow();
@@ -336,6 +350,17 @@ export default function ConversationalVoiceLayer() {
             : -1,
           generation_active: useChatStore.getState().isGenerating,
         });
+        reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
+          method: 'semantic',
+        });
+
+        // The interruption belongs to the assistant turn that was cut off;
+        // the recognized learner utterance starts a new canonical turn.
+        currentTurnIdRef.current = crypto.randomUUID();
+        turnSubmittedAtRef.current = 0;
+        firstVoiceSegmentAtRef.current = 0;
+        firstAudioReportedRef.current = false;
+        setActiveVoiceQualityContext(qualityContext());
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
         if (useChatStore.getState().isGenerating) interruptGeneration();
@@ -457,6 +482,7 @@ export default function ConversationalVoiceLayer() {
     }
     lastAssistantAudioEndedAtRef.current = now;
     currentTurnIdRef.current = null;
+    setActiveVoiceQualityContext(qualityContext(undefined));
     micSpeechStartedAtRef.current = 0;
     lastRecognitionActivityAtRef.current = 0;
     turnSubmittedAtRef.current = 0;
@@ -480,6 +506,8 @@ export default function ConversationalVoiceLayer() {
   const drainVoiceSegments = useCallback(async () => {
     if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
     voiceSegmentDrainActiveRef.current = true;
+    echoReportedForPlaybackRef.current = false;
+    echoReportedForPlaybackRef.current = false;
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
@@ -718,7 +746,11 @@ export default function ConversationalVoiceLayer() {
     }
     sessionStartedAtRef.current = 0;
     setActiveVoiceQualityContext(null);
-  }, [active, qualityContext]);
+  // Session identity changes only when Live Conversation is toggled. The
+  // conversation ID may be promoted local -> server mid-session and must not
+  // split quality telemetry into a second session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   useEffect(() => {
     if (active) setActiveVoiceQualityContext(qualityContext());
