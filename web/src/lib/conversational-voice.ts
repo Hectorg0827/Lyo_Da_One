@@ -312,6 +312,8 @@ export type VoiceStreamEvent =
       text: string;
       sequence: number;
       messageId: string;
+      turnId?: string;
+      serverElapsedMs?: number;
     }
   | {
       type: 'voice_ready';
