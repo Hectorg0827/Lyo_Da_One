@@ -205,9 +205,45 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     if (!transcript || !activeRef.current) return;
     if (isLikelyPlaybackEcho(transcript, lastSpokenTextRef.current)) {
+      setQaSnapshot((previous) => ({ ...previous, echoRejects: previous.echoRejects + 1 }));
+      reportVoiceQuality('semantic_echo_rejected', {
+        phase: phaseRef.current,
+      });
       changePhase('listening');
       return;
     }
+
+    if (possibleFalseBargeTimerRef.current) {
+      clearTimeout(possibleFalseBargeTimerRef.current);
+      possibleFalseBargeTimerRef.current = null;
+    }
+
+    const now = performance.now();
+    const turnId = crypto.randomUUID();
+    currentTurnIdRef.current = turnId;
+    turnSubmittedAtRef.current = now;
+    firstSegmentAtRef.current = null;
+    firstAudioAtRef.current = null;
+
+    const endpointingMs = lastRecognitionAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - lastRecognitionAtRef.current));
+    const utteranceMs = firstRecognitionAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstRecognitionAtRef.current));
+    reportVoiceQuality('turn_submitted', {
+      ...(endpointingMs == null ? {} : { endpointing_ms: endpointingMs }),
+      ...(utteranceMs == null ? {} : { recognized_utterance_ms: utteranceMs }),
+      ...(selectedEndpointDelayRef.current == null
+        ? {}
+        : { selected_endpoint_delay_ms: selectedEndpointDelayRef.current }),
+      interrupted_previous_turn: Boolean(
+        interruptedPreviousTurnRef.current
+        || phaseRef.current === 'speaking'
+        || useChatStore.getState().isGenerating
+      ),
+    }, turnId);
+
     stopSpeech();
     stopRecognition();
     const interruptedPreviousTurn = interruptedPreviousTurnRef.current
@@ -229,10 +265,17 @@ export default function ConversationalVoiceLayer() {
     await sendMessage(transcript, [], {
       voiceSession: true,
       voiceInterruptedPreviousTurn: interruptedPreviousTurn,
-      voiceTurnId: crypto.randomUUID(),
+      voiceTurnId: turnId,
       voiceLocale: navigator.language || 'auto',
     });
-  }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
+  }, [
+    changePhase,
+    interruptGeneration,
+    reportVoiceQuality,
+    sendMessage,
+    stopRecognition,
+    stopSpeech,
+  ]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
     if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
@@ -264,6 +307,19 @@ export default function ConversationalVoiceLayer() {
       const combined = `${finalText} ${interimText}`.trim();
       if (!combined) return;
 
+      const recognitionNow = performance.now();
+      if (firstRecognitionAtRef.current == null) {
+        firstRecognitionAtRef.current = recognitionNow;
+        const listenGapMs = listeningStartedAtRef.current == null
+          ? undefined
+          : Math.max(0, Math.round(recognitionNow - listeningStartedAtRef.current));
+        reportVoiceQuality('first_recognition_result', {
+          ...(listenGapMs == null ? {} : { listening_to_recognition_ms: listenGapMs }),
+          recognizer_locale: recognition.lang || 'auto',
+        });
+      }
+      lastRecognitionAtRef.current = recognitionNow;
+
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
       // the second line of defence. A non-echo utterance owns the floor
@@ -272,7 +328,26 @@ export default function ConversationalVoiceLayer() {
       if (phaseRef.current === 'speaking') {
         // Do not commit a final playback echo into finalTranscriptRef. Otherwise
         // the next genuine barge-in would be concatenated with Lyo's own words.
-        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) return;
+        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) {
+          setQaSnapshot((previous) => ({ ...previous, echoRejects: previous.echoRejects + 1 }));
+          reportVoiceQuality('semantic_echo_rejected', {
+            phase: 'speaking',
+          });
+          return;
+        }
+        if (possibleFalseBargeTimerRef.current) {
+          clearTimeout(possibleFalseBargeTimerRef.current);
+          possibleFalseBargeTimerRef.current = null;
+        }
+        const confirmedAt = performance.now();
+        const bargeRecognitionMs = bargeInAtRef.current == null
+          ? undefined
+          : Math.max(0, Math.round(confirmedAt - bargeInAtRef.current));
+        setQaSnapshot((previous) => ({ ...previous, bargeIns: previous.bargeIns + 1 }));
+        reportVoiceQuality('barge_in_confirmed', {
+          source: bargeInAtRef.current == null ? 'semantic' : 'rms_plus_semantic',
+          ...(bargeRecognitionMs == null ? {} : { rms_to_recognition_ms: bargeRecognitionMs }),
+        });
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
         if (useChatStore.getState().isGenerating) interruptGeneration();
@@ -282,9 +357,11 @@ export default function ConversationalVoiceLayer() {
       finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      const endpointDelay = voiceEndOfTurnDelayMs(combined);
+      selectedEndpointDelayRef.current = endpointDelay;
       silenceTimerRef.current = setTimeout(() => {
         void sendVoiceTurn(combined);
-      }, voiceEndOfTurnDelayMs(combined));
+      }, endpointDelay);
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
