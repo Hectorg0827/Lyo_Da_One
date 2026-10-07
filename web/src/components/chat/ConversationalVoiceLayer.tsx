@@ -281,6 +281,27 @@ export default function ConversationalVoiceLayer() {
       lastRecognitionActivityAtRef.current = voiceQualityNow();
       if (!currentTurnIdRef.current) currentTurnIdRef.current = crypto.randomUUID();
 
+      // An RMS-triggered interruption is only considered real once speech
+      // recognition produces a non-echo utterance. This separates genuine
+      // barge-in from speaker bleed/noise in live-device telemetry.
+      if (
+        pendingRmsBargeAtRef.current > 0
+        && !isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)
+      ) {
+        if (pendingRmsBargeTimerRef.current) {
+          clearTimeout(pendingRmsBargeTimerRef.current);
+          pendingRmsBargeTimerRef.current = null;
+        }
+        reportVoiceQuality(qualityContext(), 'barge_in_confirmed', {
+          confirm_ms: Math.max(
+            0,
+            Math.round(voiceQualityNow() - pendingRmsBargeAtRef.current),
+          ),
+          method: 'rms_then_recognition',
+        });
+        pendingRmsBargeAtRef.current = 0;
+      }
+
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
       // the second line of defence. A non-echo utterance owns the floor
@@ -638,6 +659,26 @@ export default function ConversationalVoiceLayer() {
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    const detectedAt = voiceQualityNow();
+    reportVoiceQuality(qualityContext(), 'barge_in', {
+      method: 'rms',
+      speaking_elapsed_ms: speakingStartedAtRef.current > 0
+        ? Math.max(0, Math.round(detectedAt - speakingStartedAtRef.current))
+        : -1,
+      generation_active: useChatStore.getState().isGenerating,
+    });
+    pendingRmsBargeAtRef.current = detectedAt;
+    if (pendingRmsBargeTimerRef.current) clearTimeout(pendingRmsBargeTimerRef.current);
+    pendingRmsBargeTimerRef.current = setTimeout(() => {
+      if (!pendingRmsBargeAtRef.current) return;
+      reportVoiceQuality(qualityContext(), 'false_barge_in', {
+        method: 'rms_without_non_echo_speech',
+        confirm_window_ms: 1800,
+      });
+      pendingRmsBargeAtRef.current = 0;
+      pendingRmsBargeTimerRef.current = null;
+    }, 1800);
+
     interruptedPreviousTurnRef.current = true;
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
@@ -646,7 +687,37 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, qualityContext, startRecognition, stopSpeech]);
+
+  useEffect(() => {
+    if (active) {
+      voiceQualitySessionIdRef.current = createVoiceQualitySessionId();
+      sessionStartedAtRef.current = voiceQualityNow();
+      recognizerRestartCountRef.current = 0;
+      lastLanguageFamilyRef.current = 'unknown';
+      setActiveVoiceQualityContext(qualityContext());
+      reportVoiceQuality(qualityContext(), 'session_started', {
+        user_agent_mobile: typeof navigator !== 'undefined'
+          ? /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)
+          : false,
+      });
+      return;
+    }
+
+    if (sessionStartedAtRef.current > 0) {
+      const now = voiceQualityNow();
+      reportVoiceQuality(qualityContext(), 'session_ended', {
+        duration_ms: Math.max(0, Math.round(now - sessionStartedAtRef.current)),
+        recognizer_restarts: recognizerRestartCountRef.current,
+      });
+    }
+    sessionStartedAtRef.current = 0;
+    setActiveVoiceQualityContext(null);
+  }, [active, qualityContext]);
+
+  useEffect(() => {
+    if (active) setActiveVoiceQualityContext(qualityContext());
+  }, [active, activeConversationId, qualityContext]);
 
   useEffect(() => {
     if (!active) return;
@@ -692,6 +763,11 @@ export default function ConversationalVoiceLayer() {
     analyserRef.current = null;
     if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
+    if (pendingRmsBargeTimerRef.current) {
+      clearTimeout(pendingRmsBargeTimerRef.current);
+      pendingRmsBargeTimerRef.current = null;
+    }
+    pendingRmsBargeAtRef.current = 0;
     changePhase('idle');
     setLiveTranscript('');
   }, [active, changePhase, stopRecognition, stopSpeech]);
