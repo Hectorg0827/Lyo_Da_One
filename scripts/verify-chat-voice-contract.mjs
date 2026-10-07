@@ -19,13 +19,36 @@ const contracts = [
       'voiceInterruptedPreviousTurn:',
       'voiceEndOfTurnDelayMs',
       'interruptGeneration()',
-      'api.tts.synthesizeStream',
+      'api.tts.openSynthesisStream',
+      'playSpeechResponse',
       'createSpeechRecognition',
       'bargeIn',
       'subscribeVoiceStreamEvents',
       'voiceSegmentQueueRef',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
+  },
+  {
+    name: 'Web neural TTS starts from streaming bytes',
+    path: 'web/src/lib/conversational-voice.ts',
+    needles: [
+      'supportsProgressiveMp3Playback',
+      'MediaSource.isTypeSupported',
+      "addSourceBuffer('audio/mpeg')",
+      'response.body.getReader()',
+      'appendMediaChunk',
+      'await audio.play()',
+    ],
+  },
+  {
+    name: 'Web TTS exposes the raw streaming response',
+    path: 'web/src/lib/api.ts',
+    needles: [
+      'openSynthesisStream',
+      'openTtsSynthesisStream',
+      '/api/v1/tts/synthesize/stream',
+      'Promise<Response>',
+    ],
   },
   {
     name: 'Web transport marks voice session',
@@ -99,6 +122,17 @@ const contracts = [
     needles: ['.playAndRecord', '.voiceChat', '.defaultToSpeaker'],
   },
   {
+    name: 'iOS neural voice prefetches exactly one canonical segment ahead',
+    path: 'Sources/Services/TextToSpeechService.swift',
+    needles: [
+      'struct PrefetchedSpeech',
+      'prefetchNextIfNeeded()',
+      'Task<TTSResult, Error>',
+      'prefetchedSpeech?.task.cancel()',
+      'generatedResult(for:',
+    ],
+  },
+  {
     name: 'Android voice uses canonical ChatStream',
     path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
     needles: [
@@ -114,6 +148,11 @@ const contracts = [
       'pendingVoiceUtterances',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
+  },
+  {
+    name: 'Android can discover the system recognition service',
+    path: 'android/app/src/main/AndroidManifest.xml',
+    needles: ['android.speech.RecognitionService'],
   },
   {
     name: 'Android transport marks voice session',
