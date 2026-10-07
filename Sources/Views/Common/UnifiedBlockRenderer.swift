@@ -387,6 +387,7 @@ struct SmartFlashcardBlockView: View {
 struct SmartDataVizBlockView: View {
     let payload: DataVizBlockPayload
     let subtype: String?
+    @State private var diagramRendered = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -396,9 +397,24 @@ struct SmartDataVizBlockView: View {
             
             switch payload.format {
             case "mermaid", "diagram":
-                MermaidWebView(source: payload.source)
+                VStack(alignment: .leading, spacing: 6) {
+                    MermaidWebView(source: payload.source) { success in
+                        diagramRendered = success
+                    }
                     .frame(minHeight: 200, maxHeight: 400)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    if !diagramRendered {
+                        Text(payload.source)
+                            .font(.system(.caption, design: .monospaced))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .onChange(of: payload.source) { _ in
+                    diagramRendered = false
+                }
             case "table":
                 SmartMarkdownTableView(source: payload.source)
             case "math":
@@ -423,10 +439,19 @@ struct SmartMarkdownTableView: View {
 
     private var rows: [[String]] {
         source
-            .split(separator: "\n")
-            .map { line in
-                line.split(separator: "|", omittingEmptySubsequences: true)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { rawLine in
+                let line = String(rawLine)
+                var cells = line
+                    .split(separator: "|", omittingEmptySubsequences: false)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                if line.trimmingCharacters(in: .whitespaces).hasPrefix("|"), !cells.isEmpty {
+                    cells.removeFirst()
+                }
+                if line.trimmingCharacters(in: .whitespaces).hasSuffix("|"), !cells.isEmpty {
+                    cells.removeLast()
+                }
+                return cells
             }
             .filter { row in
                 !row.isEmpty && !row.allSatisfy { cell in
@@ -461,21 +486,45 @@ struct SmartMarkdownTableView: View {
 
 struct MermaidWebView: UIViewRepresentable {
     let source: String
-    
+    var onRenderResult: ((Bool) -> Void)? = nil
+
+    final class Coordinator: NSObject, WKScriptMessageHandler {
+        let onRenderResult: ((Bool) -> Void)?
+
+        init(onRenderResult: ((Bool) -> Void)?) {
+            self.onRenderResult = onRenderResult
+        }
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == "lyoRender" else { return }
+            onRenderResult?(String(describing: message.body) == "success")
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onRenderResult: onRenderResult)
+    }
+
     func makeUIView(context: Context) -> WKWebView {
+        let controller = WKUserContentController()
+        controller.add(context.coordinator, name: "lyoRender")
         let config = WKWebViewConfiguration()
+        config.userContentController = controller
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
         webView.scrollView.isScrollEnabled = false
         return webView
     }
-    
+
     func updateUIView(_ webView: WKWebView, context: Context) {
         let escapedSource = source
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "`", with: "\\`")
-            .replacingOccurrences(of: "\n", with: "\\n")
-        
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+
         let html = """
         <!DOCTYPE html>
         <html>
@@ -489,13 +538,23 @@ struct MermaidWebView: UIViewRepresentable {
         </head>
         <body>
         <pre class="mermaid">\(escapedSource)</pre>
-        <script>mermaid.initialize({startOnLoad: true, theme: 'neutral'});</script>
+        <script>
+          try {
+            mermaid.initialize({startOnLoad: false, theme: 'neutral', securityLevel: 'strict'});
+            mermaid.run({querySelector: '.mermaid'})
+              .then(() => window.webkit.messageHandlers.lyoRender.postMessage('success'))
+              .catch(() => window.webkit.messageHandlers.lyoRender.postMessage('failure'));
+          } catch (_) {
+            window.webkit.messageHandlers.lyoRender.postMessage('failure');
+          }
+        </script>
         </body>
         </html>
         """
         webView.loadHTMLString(html, baseURL: nil)
     }
 }
+
 
 // MARK: - Media Block
 
