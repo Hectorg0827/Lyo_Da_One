@@ -391,6 +391,7 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     didReceiveContentEvent = true
                     callback?(.voiceTextSegment(
                         text: text,
+                        spokenText: json["spoken_text"] as? String,
                         sequence: sequence,
                         messageId: messageId
                     ))
@@ -402,6 +403,7 @@ class Lyo2StreamingManager: NSObject, URLSessionDataDelegate {
                     didReceiveContentEvent = true
                     callback?(.voiceReady(
                         text: text,
+                        spokenText: json["spoken_text"] as? String,
                         messageId: messageId,
                         speak: (json["speak"] as? Bool) ?? true
                     ))

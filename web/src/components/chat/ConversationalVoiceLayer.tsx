@@ -8,6 +8,7 @@ import { useChatStore } from '@/stores/chat-store';
 import {
   createSpeechRecognition,
   isLikelyPlaybackEcho,
+  playSpeechResponse,
   splitSpeechChunks,
   subscribeVoiceStreamEvents,
   voiceEndOfTurnDelayMs,
@@ -22,7 +23,7 @@ type QueuedVoiceSegment = {
   sequence: number;
   messageId: string;
   controller: AbortController;
-  audio: Promise<Blob | null>;
+  audio: Promise<Response | null>;
 };
 
 const BARGE_IN_GRACE_MS = 350;
@@ -215,35 +216,6 @@ export default function ConversationalVoiceLayer() {
     }
   }, [changePhase, sendVoiceTurn, stopRecognition]);
 
-  const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    let settled = false;
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      if (audioRef.current === audio) audioRef.current = null;
-    };
-    audioRef.current = audio;
-    audio.onended = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-    audio.onerror = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error('Audio playback failed'));
-    };
-    void audio.play().catch((error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    });
-  }), []);
-
   const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
     const utterance = new SpeechSynthesisUtterance(text);
@@ -287,9 +259,17 @@ export default function ConversationalVoiceLayer() {
 
         try {
           ttsAbortRef.current = segment.controller;
-          const blob = await segment.audio;
-          if (!blob) throw new Error('Segment synthesis failed');
-          await playBlob(blob);
+          const response = await segment.audio;
+          if (!response) throw new Error('Segment synthesis failed');
+          let currentAudio: HTMLAudioElement | null = null;
+          await playSpeechResponse(response, {
+            signal: segment.controller.signal,
+            onAudio: (audio) => {
+              currentAudio = audio;
+              audioRef.current = audio;
+            },
+          });
+          if (audioRef.current === currentAudio) audioRef.current = null;
         } catch {
           if (!activeRef.current || phaseRef.current !== 'speaking') break;
           await browserSpeechFallback(spoken);
@@ -305,7 +285,6 @@ export default function ConversationalVoiceLayer() {
     browserSpeechFallback,
     changePhase,
     finishSegmentTurnIfReady,
-    playBlob,
     stopRecognition,
   ]);
 
@@ -323,14 +302,16 @@ export default function ConversationalVoiceLayer() {
         )
       ) return;
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
+      const speechText = event.spokenText ?? event.text;
+      if (!speechText.trim()) return;
       const controller = new AbortController();
-      const audio = api.tts.synthesizeStream(event.text, {
+      const audio = api.tts.openSynthesisStream(speechText, {
         language: navigator.language || 'auto',
         speed: 1.02,
         signal: controller.signal,
       }).catch(() => null);
       voiceSegmentQueueRef.current.push({
-        text: event.text,
+        text: speechText,
         sequence: event.sequence,
         messageId: event.messageId,
         controller,
@@ -346,20 +327,21 @@ export default function ConversationalVoiceLayer() {
       if (
         !voiceSegmentsReceivedRef.current
         && event.speak
-        && event.text.trim()
+        && (event.spokenText ?? event.text).trim()
       ) {
         voiceSegmentsReceivedRef.current = true;
         const fallbackKey = event.messageId + ':ready';
         if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
+          const speechText = event.spokenText ?? event.text;
           const controller = new AbortController();
-          const audio = api.tts.synthesizeStream(event.text, {
+          const audio = api.tts.openSynthesisStream(speechText, {
             language: navigator.language || 'auto',
             speed: 1.02,
             signal: controller.signal,
           }).catch(() => null);
           voiceSegmentQueueRef.current.push({
-            text: event.text,
+            text: speechText,
             sequence: Number.MAX_SAFE_INTEGER,
             messageId: event.messageId,
             controller,
@@ -391,13 +373,13 @@ export default function ConversationalVoiceLayer() {
     lastSpokenMessageIdRef.current = messageId;
 
     try {
-      let next: { promise: Promise<Blob>; controller: AbortController } | null = null;
+      let next: { promise: Promise<Response>; controller: AbortController } | null = null;
       for (let index = 0; index < chunks.length && activeRef.current; index++) {
         const current = next ?? (() => {
           const controller = new AbortController();
           return {
             controller,
-            promise: api.tts.synthesizeStream(chunks[index], {
+            promise: api.tts.openSynthesisStream(chunks[index], {
               language: navigator.language || 'auto',
               speed: 1.02,
               signal: controller.signal,
@@ -411,7 +393,7 @@ export default function ConversationalVoiceLayer() {
           const controller = new AbortController();
           next = {
             controller,
-            promise: api.tts.synthesizeStream(chunks[index + 1], {
+            promise: api.tts.openSynthesisStream(chunks[index + 1], {
               language: navigator.language || 'auto',
               speed: 1.02,
               signal: controller.signal,
@@ -422,7 +404,16 @@ export default function ConversationalVoiceLayer() {
           next = null;
         }
 
-        await playBlob(await current.promise);
+        const response = await current.promise;
+        let currentAudio: HTMLAudioElement | null = null;
+        await playSpeechResponse(response, {
+          signal: current.controller.signal,
+          onAudio: (audio) => {
+            currentAudio = audio;
+            audioRef.current = audio;
+          },
+        });
+        if (audioRef.current === currentAudio) audioRef.current = null;
       }
     } catch {
       if (activeRef.current && phaseRef.current === 'speaking') {
@@ -436,7 +427,7 @@ export default function ConversationalVoiceLayer() {
         startRecognition();
       }
     }
-  }, [browserSpeechFallback, changePhase, playBlob, startRecognition, stopRecognition]);
+  }, [browserSpeechFallback, changePhase, startRecognition, stopRecognition]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;

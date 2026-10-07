@@ -270,8 +270,10 @@ class LyoAIViewModel: ObservableObject {
             self.ttsService.setEmotion(emotion)
         }
 
-        unifiedChat.onVoiceTextSegment = { [weak self] text, sequence, messageId in
+        unifiedChat.onVoiceTextSegment = { [weak self] text, spokenText, sequence, messageId in
             guard let self, self.voiceLoopActive || self.isAudioOutputEnabled else { return }
+            let speechText = spokenText ?? text
+            guard !speechText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             let key = "\(messageId):\(sequence)"
             guard !self.streamedVoiceSegmentKeys.contains(key) else { return }
             self.streamedVoiceSegmentKeys.insert(key)
@@ -282,14 +284,15 @@ class LyoAIViewModel: ObservableObject {
             // path so the same sentence can never be spoken twice.
             self.shouldAutoSpeakCurrentResponse = false
             self.lastSentToTTSText = (
-                self.lastSentToTTSText + " " + text
+                self.lastSentToTTSText + " " + speechText
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             self.currentlyPlayingMessageId = messageId
-            self.ttsService.enqueue(text)
+            self.ttsService.enqueue(speechText)
         }
 
-        unifiedChat.onVoiceReady = { [weak self] text, messageId, speak in
+        unifiedChat.onVoiceReady = { [weak self] text, spokenText, messageId, speak in
             guard let self else { return }
+            let speechText = spokenText ?? text
             let deliveredSegments = self.streamedVoiceSegmentKeys.contains {
                 $0.hasPrefix("\(messageId):")
             }
@@ -298,14 +301,14 @@ class LyoAIViewModel: ObservableObject {
             if (self.voiceLoopActive || self.isAudioOutputEnabled)
                 && speak
                 && !deliveredSegments
-                && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !speechText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
                 // Compatibility fallback: a voice-ready turn can still carry
                 // one complete canonical answer if no early segment was emitted.
                 self.shouldAutoSpeakCurrentResponse = false
                 self.currentlyPlayingMessageId = messageId
-                self.lastSentToTTSText = text
-                self.ttsService.enqueue(text)
+                self.lastSentToTTSText = speechText
+                self.ttsService.enqueue(speechText)
             } else if self.voiceLoopActive
                 && !self.isAISpeaking
                 && !self.sttService.isRecording

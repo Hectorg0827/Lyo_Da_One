@@ -253,6 +253,54 @@ export function adaptUser(raw: Record<string, unknown>): User {
   };
 }
 
+// ── Shared neural voice transport ────────────────────────────────────────────
+
+type TTSStreamOptions = {
+  language?: string;
+  speed?: number;
+  signal?: AbortSignal;
+};
+
+async function openTtsSynthesisStream(
+  text: string,
+  options: TTSStreamOptions = {}
+): Promise<Response> {
+  const doFetch = () => {
+    const token = getAccessToken();
+    return fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        text,
+        language: options.language ?? 'auto',
+        speed: options.speed ?? 1.0,
+        format: 'mp3',
+      }),
+      signal: options.signal,
+    });
+  };
+
+  let res = await doFetch();
+  if (res.status === 401 && !options.signal?.aborted) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) res = await doFetch();
+  }
+
+  if (!res.ok) {
+    let message = `Voice synthesis failed (HTTP ${res.status})`;
+    try {
+      message = errorMessageFrom(await res.json(), res.status);
+    } catch {
+      // Keep the transport error when the provider returns non-JSON.
+    }
+    throw new ApiError(message, res.status);
+  }
+  return res;
+}
+
 // ── API methods ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -1422,34 +1470,27 @@ export const api = {
 
   // ── Shared neural voice ──
   tts: {
+    /**
+     * Open the real backend audio stream. Conversational voice consumes this
+     * response progressively so playback can begin before the segment has
+     * finished downloading.
+     */
+    async openSynthesisStream(
+      text: string,
+      options: TTSStreamOptions = {}
+    ): Promise<Response> {
+      return openTtsSynthesisStream(text, options);
+    },
+
+    /**
+     * Compatibility helper for surfaces that still need a complete recording.
+     * Live Chat must prefer openSynthesisStream().
+     */
     async synthesizeStream(
       text: string,
-      options: { language?: string; speed?: number; signal?: AbortSignal } = {}
+      options: TTSStreamOptions = {}
     ): Promise<Blob> {
-      const token = getAccessToken();
-      const res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          text,
-          language: options.language ?? 'auto',
-          speed: options.speed ?? 1.0,
-          format: 'mp3',
-        }),
-        signal: options.signal,
-      });
-      if (!res.ok) {
-        let message = `Voice synthesis failed (HTTP ${res.status})`;
-        try {
-          message = errorMessageFrom(await res.json(), res.status);
-        } catch {
-          // Keep the transport error when the provider returns non-JSON.
-        }
-        throw new ApiError(message, res.status);
-      }
+      const res = await openTtsSynthesisStream(text, options);
       return res.blob();
     },
   },

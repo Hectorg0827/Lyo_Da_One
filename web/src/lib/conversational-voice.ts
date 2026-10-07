@@ -116,16 +116,227 @@ export function splitSpeechChunks(text: string, maxChars = 260): string[] {
 }
 
 
+export function supportsProgressiveMp3Playback(): boolean {
+  return (
+    typeof window !== 'undefined'
+    && typeof MediaSource !== 'undefined'
+    && typeof MediaSource.isTypeSupported === 'function'
+    && MediaSource.isTypeSupported('audio/mpeg')
+  );
+}
+
+function voiceAbortError(): Error {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException('Voice playback aborted', 'AbortError');
+  }
+  const error = new Error('Voice playback aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function waitForMediaSourceOpen(
+  mediaSource: MediaSource,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(voiceAbortError());
+      return;
+    }
+    const cleanup = () => {
+      mediaSource.removeEventListener('sourceopen', onOpen);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onOpen = () => {
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(voiceAbortError());
+    };
+    mediaSource.addEventListener('sourceopen', onOpen, { once: true });
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function appendMediaChunk(
+  sourceBuffer: SourceBuffer,
+  chunk: Uint8Array,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(voiceAbortError());
+      return;
+    }
+    const cleanup = () => {
+      sourceBuffer.removeEventListener('updateend', onDone);
+      sourceBuffer.removeEventListener('error', onError);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onDone = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Progressive voice buffer failed'));
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(voiceAbortError());
+    };
+    sourceBuffer.addEventListener('updateend', onDone, { once: true });
+    sourceBuffer.addEventListener('error', onError, { once: true });
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    // Copy the exact byte window into its own ArrayBuffer. This avoids a
+    // SharedArrayBuffer/offset ambiguity across browser implementations.
+    const bytes = chunk.slice().buffer;
+    sourceBuffer.appendBuffer(bytes);
+  });
+}
+
+function waitForAudioEnd(
+  audio: HTMLAudioElement,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(voiceAbortError());
+      return;
+    }
+    const cleanup = () => {
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onEnded = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Voice audio playback failed'));
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(voiceAbortError());
+    };
+    audio.addEventListener('ended', onEnded, { once: true });
+    audio.addEventListener('error', onError, { once: true });
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Play one canonical Chat speech segment as bytes arrive.
+ *
+ * The backend already returns a true StreamingResponse. Previously Web called
+ * response.blob(), which buffered the entire segment before the first sound.
+ * MediaSource-capable browsers now start after the first MP3 bytes append.
+ * Browsers without MP3 MediaSource support keep the safe Blob fallback.
+ */
+export async function playSpeechResponse(
+  response: Response,
+  options: {
+    signal?: AbortSignal;
+    onAudio?: (audio: HTMLAudioElement) => void;
+  } = {},
+): Promise<void> {
+  const { signal, onAudio } = options;
+  if (signal?.aborted) throw voiceAbortError();
+
+  if (!response.body || !supportsProgressiveMp3Playback()) {
+    const blob = await response.blob();
+    if (signal?.aborted) throw voiceAbortError();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    onAudio?.(audio);
+    const ended: Promise<Error | null> = waitForAudioEnd(audio, signal).then(
+    (): Error | null => null,
+    (error): Error | null => error instanceof Error ? error : new Error(String(error)),
+  );
+    try {
+      await audio.play();
+      const endError = await ended;
+      if (endError) throw endError;
+    } finally {
+      audio.pause();
+      audio.removeAttribute('src');
+      URL.revokeObjectURL(url);
+    }
+    return;
+  }
+
+  const mediaSource = new MediaSource();
+  const url = URL.createObjectURL(mediaSource);
+  const audio = new Audio();
+  const reader = response.body.getReader();
+  audio.preload = 'auto';
+  audio.src = url;
+  onAudio?.(audio);
+  const ended: Promise<Error | null> = waitForAudioEnd(audio, signal).then(
+    (): Error | null => null,
+    (error): Error | null => error instanceof Error ? error : new Error(String(error)),
+  );
+
+  try {
+    await waitForMediaSourceOpen(mediaSource, signal);
+    const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+    let started = false;
+    let playError: unknown = null;
+    let playPromise: Promise<void> | null = null;
+
+    while (true) {
+      if (signal?.aborted) throw voiceAbortError();
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      await appendMediaChunk(sourceBuffer, value, signal);
+      if (!started) {
+        started = true;
+        // Do not await play() here. Some decoders need more than the first
+        // MP3 chunk before the play promise resolves; blocking the reader would
+        // prevent those bytes from ever reaching MediaSource.
+        playPromise = audio.play().catch((error) => {
+          playError = error;
+        });
+      }
+    }
+
+    if (!started) throw new Error('Voice provider returned empty audio');
+    if (mediaSource.readyState === 'open' && !sourceBuffer.updating) {
+      mediaSource.endOfStream();
+    }
+    await playPromise;
+    if (playError) throw playError;
+    const endError = await ended;
+    if (endError) throw endError;
+  } finally {
+    try { await reader.cancel(); } catch { /* stream already closed */ }
+    audio.pause();
+    audio.removeAttribute('src');
+    URL.revokeObjectURL(url);
+  }
+}
+
+
 export type VoiceStreamEvent =
   | {
       type: 'voice_text_segment';
       text: string;
+      spokenText?: string;
       sequence: number;
       messageId: string;
+      turnId?: string;
+      serverElapsedMs?: number;
     }
   | {
       type: 'voice_ready';
       text: string;
+      spokenText?: string;
       messageId: string;
       speak: boolean;
     }

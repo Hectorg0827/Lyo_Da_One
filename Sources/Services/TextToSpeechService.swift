@@ -10,8 +10,25 @@ class TextToSpeechService: NSObject, ObservableObject {
     @Published var isSpeaking: Bool = false
     var onSpeechFinished: (() -> Void)?
 
+    private struct SpeechQueueItem {
+        let id = UUID()
+        let text: String
+        let language: String
+        let voice: TTSVoice
+        let speed: Double
+    }
+
+    private struct PrefetchedSpeech {
+        let itemID: UUID
+        let task: Task<TTSResult, Error>
+    }
+
     private let repository: TTSRepository = DefaultTTSRepository()
-    private var speechQueue: [(text: String, language: String)] = []
+    private var speechQueue: [SpeechQueueItem] = []
+    /// Exactly one queued segment is rendered ahead while the current segment
+    /// is playing. This overlaps network/TTS latency with speech without
+    /// creating an unbounded burst against the shared provider.
+    private var prefetchedSpeech: PrefetchedSpeech?
     private var playbackGeneration = 0
     private var playbackTask: Task<Void, Never>?
     private var player: AVPlayer?
@@ -61,13 +78,24 @@ class TextToSpeechService: NSObject, ObservableObject {
         let cleanText = prepareSpeechText(text)
         guard !cleanText.isEmpty else { return }
 
-        speechQueue.append((cleanText, language))
+        speechQueue.append(
+            SpeechQueueItem(
+                text: cleanText,
+                language: language,
+                voice: currentVoice,
+                speed: currentSpeed
+            )
+        )
+        if isSpeaking {
+            prefetchNextIfNeeded()
+        }
         startPlaybackIfNeeded()
     }
 
     func stop() {
         playbackGeneration += 1
         speechQueue.removeAll()
+        discardPrefetchedSpeech()
         playbackTask?.cancel()
         playbackTask = nil
         cancelActivePlayback()
@@ -104,7 +132,16 @@ class TextToSpeechService: NSObject, ObservableObject {
             isSpeaking = true
 
             do {
-                try await playGeneratedSpeech(for: item.text, language: item.language)
+                let result = try await generatedResult(for: item)
+                guard !Task.isCancelled, generation == playbackGeneration else {
+                    throw CancellationError()
+                }
+
+                // Render the following phrase while this one is audibly
+                // playing. In normal conversation the next canonical segment
+                // is therefore ready before AVPlayer reaches the boundary.
+                prefetchNextIfNeeded()
+                try await playGeneratedSpeech(result)
             } catch is CancellationError {
                 break
             } catch {
@@ -113,7 +150,8 @@ class TextToSpeechService: NSObject, ObservableObject {
                 do {
                     try await playLocalizedDeviceFallback(
                         text: item.text,
-                        language: item.language
+                        language: item.language,
+                        speed: item.speed
                     )
                 } catch {
                     Log.audio.error("Localized device TTS fallback failed: \(error)")
@@ -133,15 +171,59 @@ class TextToSpeechService: NSObject, ObservableObject {
         }
     }
 
-    private func playGeneratedSpeech(for text: String, language: String) async throws {
-        let result = try await repository.generate(
-            text: text,
-            voice: currentVoice,
-            speed: currentSpeed,
-            withTimings: false,
-            language: language
-        )
+    private func generatedResult(for item: SpeechQueueItem) async throws -> TTSResult {
+        if let prefetched = prefetchedSpeech, prefetched.itemID == item.id {
+            prefetchedSpeech = nil
+            return try await prefetched.task.value
+        }
 
+        return try await repository.generate(
+            text: item.text,
+            voice: item.voice,
+            speed: item.speed,
+            withTimings: false,
+            language: item.language
+        )
+    }
+
+    private func discardPrefetchedSpeech() {
+        guard let prefetched = prefetchedSpeech else { return }
+        prefetchedSpeech = nil
+        let task = prefetched.task
+
+        // Always observe the task result, even when stop() races with the last
+        // network byte. A completed prefetch owns a temp file until somebody
+        // explicitly removes it; cancellation by itself cannot reclaim that.
+        Task {
+            let result = await task.result
+            guard case .success(let speech) = result,
+                  let url = URL(string: speech.audioURL),
+                  url.isFileURL
+            else { return }
+            try? FileManager.default.removeItem(at: url)
+        }
+        task.cancel()
+    }
+
+    private func prefetchNextIfNeeded() {
+        guard let next = speechQueue.first else { return }
+        if prefetchedSpeech?.itemID == next.id { return }
+
+        discardPrefetchedSpeech()
+        let task = Task<TTSResult, Error> { [repository] in
+            try Task.checkCancellation()
+            return try await repository.generate(
+                text: next.text,
+                voice: next.voice,
+                speed: next.speed,
+                withTimings: false,
+                language: next.language
+            )
+        }
+        prefetchedSpeech = PrefetchedSpeech(itemID: next.id, task: task)
+    }
+
+    private func playGeneratedSpeech(_ result: TTSResult) async throws {
         guard !Task.isCancelled else { throw CancellationError() }
         guard let url = URL(string: result.audioURL) else {
             throw LyoError.network(.invalidURL)
@@ -193,7 +275,8 @@ class TextToSpeechService: NSObject, ObservableObject {
 
     private func playLocalizedDeviceFallback(
         text: String,
-        language: String
+        language: String,
+        speed: Double
     ) async throws {
         let generation = playbackGeneration
         let detectedFamily = NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue
@@ -210,7 +293,7 @@ class TextToSpeechService: NSObject, ObservableObject {
         let resolvedLanguage = localeByFamily[family ?? "en"] ?? language
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: resolvedLanguage)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(currentSpeed)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(speed)
         utterance.pitchMultiplier = 1.0
         try Task.checkCancellation()
         deviceFallbackSynthesizer.speak(utterance)

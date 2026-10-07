@@ -60,8 +60,8 @@ final class UnifiedChatService: ObservableObject {
     /// Voice is a delivery layer over this same canonical Chat turn. These
     /// callbacks expose early speakable text without creating a second model
     /// session or changing the persisted assistant answer.
-    var onVoiceTextSegment: ((String, Int, String) -> Void)?
-    var onVoiceReady: ((String, String, Bool) -> Void)?
+    var onVoiceTextSegment: ((String, String?, Int, String) -> Void)?
+    var onVoiceReady: ((String, String?, String, Bool) -> Void)?
     var onVoiceIncomplete: ((String, String) -> Void)?
 
     // MARK: - Private Properties
@@ -555,11 +555,11 @@ final class UnifiedChatService: ObservableObject {
             // observational so it cannot mutate pedagogical control state.
             Log.ai.debug("Teaching policy: \(policy.action)")
 
-        case .voiceTextSegment(let text, let sequence, let messageId):
-            onVoiceTextSegment?(text, sequence, messageId)
+        case .voiceTextSegment(let text, let spokenText, let sequence, let messageId):
+            onVoiceTextSegment?(text, spokenText, sequence, messageId)
 
-        case .voiceReady(let text, let messageId, let speak):
-            onVoiceReady?(text, messageId, speak)
+        case .voiceReady(let text, let spokenText, let messageId, let speak):
+            onVoiceReady?(text, spokenText, messageId, speak)
 
         case .voiceIncomplete(let text, let messageId):
             onVoiceIncomplete?(text, messageId)
