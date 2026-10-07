@@ -279,6 +279,8 @@ export async function playSpeechResponse(
     await waitForMediaSourceOpen(mediaSource, signal);
     const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
     let started = false;
+    let playError: unknown = null;
+    let playPromise: Promise<void> | null = null;
 
     while (true) {
       if (signal?.aborted) throw voiceAbortError();
@@ -288,7 +290,12 @@ export async function playSpeechResponse(
       await appendMediaChunk(sourceBuffer, value, signal);
       if (!started) {
         started = true;
-        await audio.play();
+        // Do not await play() here. Some decoders need more than the first
+        // MP3 chunk before the play promise resolves; blocking the reader would
+        // prevent those bytes from ever reaching MediaSource.
+        playPromise = audio.play().catch((error) => {
+          playError = error;
+        });
       }
     }
 
@@ -296,6 +303,8 @@ export async function playSpeechResponse(
     if (mediaSource.readyState === 'open' && !sourceBuffer.updating) {
       mediaSource.endOfStream();
     }
+    await playPromise;
+    if (playError) throw playError;
     await ended;
   } finally {
     try { await reader.cancel(); } catch { /* stream already closed */ }
