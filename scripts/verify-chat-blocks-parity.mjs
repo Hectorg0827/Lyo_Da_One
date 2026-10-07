@@ -49,7 +49,17 @@ const contracts = [
   {
     name: 'Web renders each lesson beat distinctly',
     path: 'web/src/components/chat/blocks/BlockRenderer.tsx',
-    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock'],
+    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock', 'MermaidBlock', "import('mermaid')"],
+  },
+  {
+    name: 'iOS renders structured tables and diagrams',
+    path: 'Sources/Views/Common/UnifiedBlockRenderer.swift',
+    needles: ['SmartMarkdownTableView', 'MermaidWebView', 'case "table"', 'case "mermaid", "diagram"'],
+  },
+  {
+    name: 'Android renders structured diagrams and math',
+    path: 'android/app/src/main/java/com/lyo/app/ui/components/SmartBlockRenderer.kt',
+    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX', '"table", "text", "chart", "graph"'],
   },
   {
     name: 'Web keeps grounded answer prose beside supplemental sources',
