@@ -973,8 +973,28 @@ export default function ConversationalVoiceLayer() {
         {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-white/85">Live conversation</div>
+        <div className="text-xs font-semibold text-white/85">
+          Live conversation{qaEnabled ? ' · QA' : ''}
+        </div>
         <div className="text-xs text-white/55 truncate">{label}</div>
+        {qaEnabled && (
+          <div className="text-[10px] text-white/40 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            <span>
+              submit→audio {qaSnapshot.submitToAudioMs == null ? '—' : `${qaSnapshot.submitToAudioMs}ms`}
+            </span>
+            <span>
+              mic→audio {qaSnapshot.micToAudioMs == null ? '—' : `${qaSnapshot.micToAudioMs}ms`}
+            </span>
+            <span>
+              segment {qaSnapshot.segmentArrivalMs == null ? '—' : `${qaSnapshot.segmentArrivalMs}ms`}
+            </span>
+            <span>barge {qaSnapshot.bargeIns}</span>
+            <span>false? {qaSnapshot.possibleFalseBargeIns}</span>
+            <span>echo {qaSnapshot.echoRejects}</span>
+            <span>reconnect {qaSnapshot.reconnects}</span>
+            {qaSnapshot.lastHandoff && <span>handoff {qaSnapshot.lastHandoff}</span>}
+          </div>
+        )}
       </div>
       <button
         type="button"
