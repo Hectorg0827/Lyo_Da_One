@@ -57,7 +57,7 @@ const contracts = [
       'sessionId',
       'turnId',
       'conversationId',
-      'language_family',
+      'detectLanguageFamily',
       'reportVoiceQuality',
     ],
     forbidden: [
