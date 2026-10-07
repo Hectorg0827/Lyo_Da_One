@@ -316,6 +316,14 @@ export default function ConversationalVoiceLayer() {
           method: 'rms_then_recognition',
         });
         pendingRmsBargeAtRef.current = 0;
+
+        // RMS interruption was attributed to the assistant turn. Now that
+        // non-echo speech is confirmed, start a fresh canonical learner turn.
+        currentTurnIdRef.current = crypto.randomUUID();
+        turnSubmittedAtRef.current = 0;
+        firstVoiceSegmentAtRef.current = 0;
+        firstAudioReportedRef.current = false;
+        setActiveVoiceQualityContext(qualityContext());
       }
 
       // During playback, keep a shadow recognizer armed. Acoustic echo
@@ -699,6 +707,9 @@ export default function ConversationalVoiceLayer() {
         ? Math.max(0, Math.round(detectedAt - speakingStartedAtRef.current))
         : -1,
       generation_active: useChatStore.getState().isGenerating,
+    });
+    reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
+      method: 'rms',
     });
     pendingRmsBargeAtRef.current = detectedAt;
     if (pendingRmsBargeTimerRef.current) clearTimeout(pendingRmsBargeTimerRef.current);
