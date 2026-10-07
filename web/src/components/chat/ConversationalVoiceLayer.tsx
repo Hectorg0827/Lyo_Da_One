@@ -138,16 +138,70 @@ export default function ConversationalVoiceLayer() {
     finalTranscriptRef.current = '';
     setLiveTranscript('');
     if (!transcript || !activeRef.current) return;
+
+    const now = voiceQualityNow();
+    const turnId = currentTurnIdRef.current || crypto.randomUUID();
+    currentTurnIdRef.current = turnId;
+
     if (isLikelyPlaybackEcho(transcript, lastSpokenTextRef.current)) {
+      reportVoiceQuality(qualityContext(turnId), 'echo_rejected', {
+        phase: phaseRef.current,
+        heard_chars: Math.min(500, transcript.length),
+        method: 'semantic_final',
+      });
       changePhase('listening');
       return;
     }
+
+    if (pendingRmsBargeTimerRef.current) {
+      clearTimeout(pendingRmsBargeTimerRef.current);
+      pendingRmsBargeTimerRef.current = null;
+    }
+    if (pendingRmsBargeAtRef.current > 0) {
+      reportVoiceQuality(qualityContext(turnId), 'barge_in_confirmed', {
+        confirm_ms: Math.max(0, Math.round(now - pendingRmsBargeAtRef.current)),
+        method: 'rms_then_speech',
+      });
+      pendingRmsBargeAtRef.current = 0;
+    }
+
     stopSpeech();
     stopRecognition();
     const interruptedPreviousTurn = interruptedPreviousTurnRef.current
       || phaseRef.current === 'speaking'
       || useChatStore.getState().isGenerating;
     if (useChatStore.getState().isGenerating) interruptGeneration();
+
+    const languageFamily = detectLanguageFamily(transcript);
+    const previousLanguageFamily = lastLanguageFamilyRef.current;
+    const languageSwitched = (
+      previousLanguageFamily !== 'unknown'
+      && languageFamily !== 'unknown'
+      && previousLanguageFamily !== languageFamily
+    );
+    if (languageFamily !== 'unknown') lastLanguageFamilyRef.current = languageFamily;
+
+    turnSubmittedAtRef.current = now;
+    firstVoiceSegmentAtRef.current = 0;
+    firstAudioReportedRef.current = false;
+    const endpointWaitMs = lastRecognitionActivityAtRef.current > 0
+      ? Math.max(0, Math.round(now - lastRecognitionActivityAtRef.current))
+      : -1;
+    const micToSubmitMs = micSpeechStartedAtRef.current > 0
+      ? Math.max(0, Math.round(now - micSpeechStartedAtRef.current))
+      : -1;
+
+    reportVoiceQuality(qualityContext(turnId), 'turn_submitted', {
+      endpoint_wait_ms: endpointWaitMs,
+      mic_to_submit_ms: micToSubmitMs,
+      interrupted_previous_turn: interruptedPreviousTurn,
+      language_family: languageFamily,
+      language_switched: languageSwitched,
+      rapid_turn: lastAssistantAudioEndedAtRef.current > 0
+        ? now - lastAssistantAudioEndedAtRef.current < 1200
+        : false,
+    });
+
     // Echo suppression is turn-local. Once a genuine learner utterance is
     // accepted, forget prior assistant speech before collecting the next reply.
     lastSpokenTextRef.current = '';
@@ -163,10 +217,17 @@ export default function ConversationalVoiceLayer() {
     await sendMessage(transcript, [], {
       voiceSession: true,
       voiceInterruptedPreviousTurn: interruptedPreviousTurn,
-      voiceTurnId: crypto.randomUUID(),
+      voiceTurnId: turnId,
       voiceLocale: navigator.language || 'auto',
     });
-  }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
+  }, [
+    changePhase,
+    interruptGeneration,
+    qualityContext,
+    sendMessage,
+    stopRecognition,
+    stopSpeech,
+  ]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
     if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
