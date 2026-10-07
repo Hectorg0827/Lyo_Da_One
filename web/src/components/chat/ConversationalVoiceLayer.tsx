@@ -17,6 +17,17 @@ import {
 
 type VoicePhase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
+type VoiceQaSnapshot = {
+  submitToAudioMs?: number;
+  micToAudioMs?: number;
+  segmentArrivalMs?: number;
+  bargeIns: number;
+  possibleFalseBargeIns: number;
+  echoRejects: number;
+  reconnects: number;
+  lastHandoff?: 'classroom' | 'test_prep';
+};
+
 type QueuedVoiceSegment = {
   text: string;
   sequence: number;
@@ -28,6 +39,9 @@ type QueuedVoiceSegment = {
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
+const MIC_ACTIVITY_RMS_THRESHOLD = 0.04;
+const MIC_ACTIVITY_FRAMES = 3;
+const POSSIBLE_FALSE_BARGE_WINDOW_MS = 1600;
 
 function latestAssistantMessage() {
   const state = useChatStore.getState();
@@ -47,6 +61,13 @@ export default function ConversationalVoiceLayer() {
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [qaEnabled, setQaEnabled] = useState(false);
+  const [qaSnapshot, setQaSnapshot] = useState<VoiceQaSnapshot>({
+    bargeIns: 0,
+    possibleFalseBargeIns: 0,
+    echoRejects: 0,
+    reconnects: 0,
+  });
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
@@ -71,11 +92,87 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
+  const qaSessionIdRef = useRef('');
+  const currentTurnIdRef = useRef<string | null>(null);
+  const firstMicActivityAtRef = useRef<number | null>(null);
+  const firstRecognitionAtRef = useRef<number | null>(null);
+  const lastRecognitionAtRef = useRef<number | null>(null);
+  const selectedEndpointDelayRef = useRef<number | null>(null);
+  const turnSubmittedAtRef = useRef<number | null>(null);
+  const firstSegmentAtRef = useRef<number | null>(null);
+  const firstAudioAtRef = useRef<number | null>(null);
+  const listeningStartedAtRef = useRef<number | null>(null);
+  const bargeInAtRef = useRef<number | null>(null);
+  const possibleFalseBargeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micActivityFramesRef = useRef(0);
+  const transportErrorAtRef = useRef<number | null>(null);
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
     setPhase(next);
   }, []);
+
+  const reportVoiceQuality = useCallback((
+    event: string,
+    metrics: Record<string, string | number | boolean> = {},
+    turnId: string | null = currentTurnIdRef.current,
+  ) => {
+    if (!qaSessionIdRef.current) return;
+    void api.chat.reportVoiceQuality({
+      session_id: qaSessionIdRef.current,
+      turn_id: turnId ?? undefined,
+      conversation_id: useChatStore.getState().activeConversationId ?? undefined,
+      platform: 'web',
+      event,
+      locale: typeof navigator !== 'undefined' ? navigator.language || 'auto' : 'auto',
+      scenario: 'live_conversation',
+      metrics,
+    }).catch(() => undefined);
+  }, []);
+
+  const resetUserTurnTiming = useCallback(() => {
+    currentTurnIdRef.current = null;
+    firstMicActivityAtRef.current = null;
+    firstRecognitionAtRef.current = null;
+    lastRecognitionAtRef.current = null;
+    selectedEndpointDelayRef.current = null;
+    turnSubmittedAtRef.current = null;
+    firstSegmentAtRef.current = null;
+    firstAudioAtRef.current = null;
+    bargeInAtRef.current = null;
+    micActivityFramesRef.current = 0;
+    listeningStartedAtRef.current = performance.now();
+  }, []);
+
+  const markFirstAudioStarted = useCallback(() => {
+    if (firstAudioAtRef.current != null) return;
+    const now = performance.now();
+    firstAudioAtRef.current = now;
+    const submitToAudioMs = turnSubmittedAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - turnSubmittedAtRef.current));
+    const micToAudioMs = firstMicActivityAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstMicActivityAtRef.current));
+    const recognitionToAudioMs = firstRecognitionAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstRecognitionAtRef.current));
+    const segmentToAudioMs = firstSegmentAtRef.current == null
+      ? undefined
+      : Math.max(0, Math.round(now - firstSegmentAtRef.current));
+
+    setQaSnapshot((previous) => ({
+      ...previous,
+      submitToAudioMs,
+      micToAudioMs,
+    }));
+    reportVoiceQuality('first_audio', {
+      ...(submitToAudioMs == null ? {} : { submit_to_audio_ms: submitToAudioMs }),
+      ...(micToAudioMs == null ? {} : { mic_to_audio_ms: micToAudioMs }),
+      ...(recognitionToAudioMs == null ? {} : { recognition_to_audio_ms: recognitionToAudioMs }),
+      ...(segmentToAudioMs == null ? {} : { segment_to_audio_ms: segmentToAudioMs }),
+    });
+  }, [reportVoiceQuality]);
 
   const stopRecognition = useCallback(() => {
     if (silenceTimerRef.current) {
