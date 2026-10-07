@@ -52,6 +52,8 @@ export default function ConversationalVoiceLayer() {
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [errorDetail, setErrorDetail] = useState('');
+  const [micSilent, setMicSilent] = useState(false);
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
@@ -76,11 +78,79 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
+  const heardAnythingRef = useRef(false);
+
+  /**
+   * Release the volume monitor's microphone capture.
+   *
+   * The recognizer competes with any other capture on the page for the
+   * microphone — on Android it is the platform speech service that opens the
+   * mic, and it cannot while this page already holds it. So the capture is
+   * held only while Lyo is speaking, and handed straight back afterwards.
+   */
+  const releaseMicMonitor = useCallback(() => {
+    loudFramesRef.current = 0;
+    analyserRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    void context?.close().catch(() => undefined);
+  }, []);
+
+  /**
+   * Listen to the microphone's volume for the duration of playback, so a
+   * learner talking over Lyo is noticed even before their words resolve.
+   *
+   * Entirely optional: when the capture is refused, barge-in still happens on
+   * the words the recognizer returns.
+   */
+  const acquireMicMonitor = useCallback(async () => {
+    if (mediaStreamRef.current) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch {
+      return;
+    }
+    // Playback may have finished while permission was being granted.
+    if (!activeRef.current || phaseRef.current !== 'speaking') {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    mediaStreamRef.current = stream;
+    const Context = window.AudioContext
+      || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) return;
+    try {
+      const context = new Context();
+      // Mobile browsers hand back a suspended context outside a tap.
+      void context.resume().catch(() => undefined);
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.2;
+      source.connect(analyser);
+      audioContextRef.current = context;
+      analyserRef.current = analyser;
+    } catch {
+      // Volume barge-in unavailable; the words still interrupt.
+    }
+  }, []);
 
   const changePhase = useCallback((next: VoicePhase) => {
+    const previous = phaseRef.current;
     phaseRef.current = next;
     setPhase(next);
-  }, []);
+    if (next === 'speaking') {
+      if (previous !== 'speaking') void acquireMicMonitor();
+    } else if (previous === 'speaking') {
+      releaseMicMonitor();
+    }
+  }, [acquireMicMonitor, releaseMicMonitor]);
 
   const stopRecognition = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -165,6 +235,8 @@ export default function ConversationalVoiceLayer() {
       if (recognitionRef.current !== recognition) return;
       const combined = tidyTranscript(transcriptRef.current.push(event).combined);
       if (!combined) return;
+      heardAnythingRef.current = true;
+      setMicSilent(false);
 
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
@@ -192,7 +264,17 @@ export default function ConversationalVoiceLayer() {
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
+      // A pause with no words in it is not a failure; onend starts us again.
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      setErrorDetail(
+        event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
+          ? 'Microphone access is blocked for this site. Allow it in your browser settings.'
+          : event?.error === 'audio-capture'
+            ? 'No microphone was found.'
+            : event?.error === 'network'
+              ? 'Speech recognition could not reach the network.'
+              : 'Voice unavailable.',
+      );
       changePhase('error');
     };
     recognition.onend = () => {
@@ -454,32 +536,17 @@ export default function ConversationalVoiceLayer() {
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
-    if (!createSpeechRecognition() || !navigator.mediaDevices?.getUserMedia) {
+    heardAnythingRef.current = false;
+    setMicSilent(false);
+    setErrorDetail('');
+    if (!createSpeechRecognition()) {
+      setErrorDetail('This browser cannot listen. Try Chrome, Edge or Safari.');
       changePhase('error');
       return;
     }
-    let cancelled = false;
-    void navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    }).then((stream) => {
-      if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
-      mediaStreamRef.current = stream;
-      const Context = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Context) {
-        const context = new Context();
-        const source = context.createMediaStreamSource(stream);
-        const analyser = context.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.2;
-        source.connect(analyser);
-        audioContextRef.current = context;
-        analyserRef.current = analyser;
-      }
-      startRecognition();
-    }).catch(() => {
-      changePhase('error');
-    });
-    return () => { cancelled = true; };
+    // Start listening straight away. The recognizer asks for the microphone
+    // itself, so nothing else may hold it open first.
+    startRecognition();
   }, [active, changePhase, startRecognition]);
 
   useEffect(() => {
@@ -488,16 +555,14 @@ export default function ConversationalVoiceLayer() {
     awaitingAssistantRef.current = false;
     stopRecognition();
     stopSpeech();
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-    void audioContextRef.current?.close();
-    audioContextRef.current = null;
-    analyserRef.current = null;
+    releaseMicMonitor();
     if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
     changePhase('idle');
     setLiveTranscript('');
-  }, [active, changePhase, stopRecognition, stopSpeech]);
+    setMicSilent(false);
+    setErrorDetail('');
+  }, [active, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
@@ -538,18 +603,31 @@ export default function ConversationalVoiceLayer() {
     void speakAssistant(latest.id, latest.content);
   }, [active, activeConversationId, finishSegmentTurnIfReady, isGenerating, speakAssistant]);
 
+  // Listening is otherwise indistinguishable from a microphone that is not
+  // reaching us at all. Say so rather than sitting on "Listening…" forever.
+  useEffect(() => {
+    if (!active || phase !== 'listening' || heardAnythingRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (activeRef.current && !heardAnythingRef.current) setMicSilent(true);
+    }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [active, phase]);
+
   const endSession = () => setVoiceSessionActive(false);
 
   if (!active) return null;
 
   const label = phase === 'listening'
-    ? (liveTranscript || 'Listening…')
+    ? (liveTranscript
+        || (micSilent
+          ? 'Not hearing anything yet — check this site’s microphone permission.'
+          : 'Listening…'))
     : phase === 'thinking'
       ? 'Lyo is thinking…'
       : phase === 'speaking'
         ? 'Lyo is speaking — start talking to interrupt'
         : phase === 'error'
-          ? 'Voice unavailable'
+          ? (errorDetail || 'Voice unavailable')
           : 'Voice ready';
 
   return (

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle, AudioLines } from 'lucide-react';
+import { ArrowUp, Plus, Mic, X, FileText, Loader2, AudioLines } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -385,14 +385,10 @@ export default function ChatInputBar() {
                 : 'bg-white/10 text-white hover:bg-white/15',
               !speechSupported && 'opacity-40 cursor-not-allowed'
             )}
-            title={speechSupported ? (voiceSessionActive ? 'End live voice conversation' : 'Start live voice conversation') : 'Voice is unavailable in this browser'}
+            title={speechSupported ? (voiceSessionActive ? 'End live voice conversation' : 'Talk with Lyo out loud') : 'Voice is unavailable in this browser'}
           >
-            {voiceSessionActive ? (
-              <AudioLines className="w-3.5 h-3.5" />
-            ) : (
-              <MessageCircle className="w-3.5 h-3.5 fill-current" />
-            )}
-            {voiceSessionActive ? 'Voice' : 'Chat'}
+            <AudioLines className="w-3.5 h-3.5" />
+            {voiceSessionActive ? 'Stop' : 'Talk'}
           </button>
 
           <div className="flex-1" />
