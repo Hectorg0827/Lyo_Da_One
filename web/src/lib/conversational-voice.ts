@@ -1,25 +1,31 @@
-export type SpeechRecognitionResultLike = {
-  isFinal?: boolean;
-  [index: number]: { transcript: string };
-};
+import type {
+  SpeechResultEventLike,
+  SpeechResultLike,
+} from './speech-transcript.mjs';
 
-export type SpeechRecognitionEventLike = {
-  resultIndex?: number;
-  results: ArrayLike<SpeechRecognitionResultLike>;
-};
+export type SpeechRecognitionResultLike = SpeechResultLike;
+
+export type SpeechRecognitionEventLike = SpeechResultEventLike;
 
 export type SpeechRecognitionLike = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
+  maxAlternatives?: number;
   start: () => void;
   stop: () => void;
   abort?: () => void;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onspeechstart?: (() => void) | null;
-  onspeechend?: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((event?: { error?: string }) => void) | null;
+  // Reported by the engine but not needed to run a turn; used for turn-taking
+  // telemetry, and to tell a microphone that never reaches us from one we are
+  // simply not speaking into.
+  onstart?: (() => void) | null;
+  onaudiostart?: (() => void) | null;
+  onspeechstart?: (() => void) | null;
+  onspeechend?: (() => void) | null;
+  onnomatch?: (() => void) | null;
 };
 
 export function createSpeechRecognition(): SpeechRecognitionLike | null {

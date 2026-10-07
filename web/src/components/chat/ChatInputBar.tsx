@@ -2,12 +2,18 @@
 
 import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Plus, Mic, X, FileText, Loader2, MessageCircle, AudioLines } from 'lucide-react';
+import { ArrowUp, Plus, Mic, X, FileText, Loader2, AudioLines } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
 import type { ChatAttachment } from '@/types';
+import {
+  configureDictation,
+  createBrowserSpeechRecognition,
+  type BrowserSpeechRecognition,
+} from '@/lib/browser-speech';
+import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
 import ConversationalVoiceLayer from './ConversationalVoiceLayer';
 
 const MAX_CHARS = 4000;
@@ -27,27 +33,6 @@ const SUPPORTED_ATTACHMENT_TYPES = new Set([
   'text/csv',
   'application/json',
 ]);
-
-// Minimal typing for the Web Speech API (not yet in lib.dom for all targets).
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-};
-
-function getSpeechRecognition(): SpeechRecognitionLike | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as unknown as Record<string, unknown>;
-  const Ctor = (w.SpeechRecognition || w.webkitSpeechRecognition) as
-    | (new () => SpeechRecognitionLike)
-    | undefined;
-  return Ctor ? new Ctor() : null;
-}
 
 function attachmentMimeType(file: File): string {
   const reportedType = file.type.toLowerCase();
@@ -85,12 +70,17 @@ export default function ChatInputBar() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
+  const dictatingRef = useRef(false);
 
   useEffect(() => {
-    setSpeechSupported(getSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
+    setSpeechSupported(createBrowserSpeechRecognition() !== null);
+    return () => {
+      dictatingRef.current = false;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   const adjustHeight = useCallback(() => {
@@ -109,35 +99,88 @@ export default function ChatInputBar() {
 
   // ── Voice dictation (Web Speech API) ──────────────────────────────────────
 
-  const toggleDictation = () => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const recognition = getSpeechRecognition();
-    if (!recognition) return;
+  const stopDictation = useCallback(() => {
+    // Clear the indicator here as well as in onend: a tap that lands in the
+    // gap between two recognizers has no live recognizer left to end.
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  }, []);
+
+  /**
+   * Start one recognizer for the dictation in progress.
+   *
+   * Recognizers end themselves after a pause, so a long sentence spans
+   * several of them. The transcript is accumulated outside the recognizer and
+   * carried across each restart; only the user pressing the mic ends it.
+   */
+  const startDictation = useCallback((continuing = false): boolean => {
+    const recognition = createBrowserSpeechRecognition();
+    if (!recognition) return false;
     recognitionRef.current = recognition;
-    dictationBaseRef.current = value ? value.replace(/\s*$/, ' ') : '';
-    recognition.lang = navigator.language || 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
+    configureDictation(recognition);
+
+    if (continuing) transcriptRef.current.carryOver();
+
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setValue((dictationBaseRef.current + transcript).slice(0, MAX_CHARS));
+      // A recognizer that has handed over may still deliver a queued result.
+      if (recognitionRef.current !== recognition) return;
+      const { combined } = transcriptRef.current.push(event);
+      const base = dictationBaseRef.current;
+      const dictated = tidyTranscript(combined, { capitalize: !base });
+      setValue((base + dictated).slice(0, MAX_CHARS));
       adjustHeight();
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => {
+
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
+      if (!dictatingRef.current) {
+        setListening(false);
+        return;
+      }
+      // Silence, not a stop: pick the dictation back up where it left off.
+      window.setTimeout(() => {
+        if (!dictatingRef.current) return;
+        if (!startDictation(true)) {
+          dictatingRef.current = false;
+          setListening(false);
+        }
+      }, 120);
+    };
+
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      // A pause with no words in it is not a failure; onend restarts us.
+      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      recognitionRef.current = null;
+      dictatingRef.current = false;
       setListening(false);
       toast.error("Couldn't access the microphone");
     };
+
     try {
       recognition.start();
-      setListening(true);
+      return true;
     } catch {
+      recognitionRef.current = null;
+      return false;
+    }
+  }, [adjustHeight]);
+
+  const toggleDictation = () => {
+    if (listening) {
+      stopDictation();
+      return;
+    }
+    if (!createBrowserSpeechRecognition()) return;
+    transcriptRef.current.reset();
+    dictationBaseRef.current = value ? value.replace(/\s*$/, ' ') : '';
+    dictatingRef.current = true;
+    if (startDictation()) {
+      setListening(true);
+    } else {
+      dictatingRef.current = false;
       toast.error('Voice input is unavailable');
     }
   };
@@ -211,7 +254,7 @@ export default function ChatInputBar() {
       || (isGenerating && !isCourseAdjustable)
       || uploading
     ) return;
-    recognitionRef.current?.stop();
+    stopDictation();
 
     setValue('');
     const sentAttachments = attachments;
@@ -342,14 +385,10 @@ export default function ChatInputBar() {
                 : 'bg-white/10 text-white hover:bg-white/15',
               !speechSupported && 'opacity-40 cursor-not-allowed'
             )}
-            title={speechSupported ? (voiceSessionActive ? 'End live voice conversation' : 'Start live voice conversation') : 'Voice is unavailable in this browser'}
+            title={speechSupported ? (voiceSessionActive ? 'End live voice conversation' : 'Talk with Lyo out loud') : 'Voice is unavailable in this browser'}
           >
-            {voiceSessionActive ? (
-              <AudioLines className="w-3.5 h-3.5" />
-            ) : (
-              <MessageCircle className="w-3.5 h-3.5 fill-current" />
-            )}
-            {voiceSessionActive ? 'Voice' : 'Chat'}
+            <AudioLines className="w-3.5 h-3.5" />
+            {voiceSessionActive ? 'Stop' : 'Talk'}
           </button>
 
           <div className="flex-1" />

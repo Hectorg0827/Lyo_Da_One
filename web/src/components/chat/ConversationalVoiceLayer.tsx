@@ -6,6 +6,11 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import {
+  createTranscriptAccumulator,
+  normalizeSpeechLang,
+  tidyTranscript,
+} from '@/lib/speech-transcript.mjs';
+import {
   createVoiceQualitySessionId,
   detectLanguageFamily,
   reportVoiceQuality,
@@ -54,13 +59,23 @@ export default function ConversationalVoiceLayer() {
 
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [errorDetail, setErrorDetail] = useState('');
+  const [micSilent, setMicSilent] = useState(false);
+  // Opening the chat with ?voicedebug=1 shows what the speech engine is
+  // actually reporting. "Listening" alone cannot distinguish a microphone
+  // that never reaches us from one we are simply not speaking into.
+  const [debugEnabled] = useState(() => (
+    typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('voicedebug') === '1'
+  ));
+  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
   const activeConversationIdRef = useRef<string | null>(activeConversationId);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finalTranscriptRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
   const lastSpokenTextRef = useRef('');
   const awaitingAssistantRef = useRef(false);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
@@ -79,6 +94,76 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
+  const heardAnythingRef = useRef(false);
+  const debugEnabledRef = useRef(false);
+  debugEnabledRef.current = debugEnabled;
+
+  const note = useCallback((entry: string) => {
+    if (!debugEnabledRef.current) return;
+    const stamp = new Date().toLocaleTimeString([], { hour12: false });
+    setDebugLog((log) => [...log.slice(-7), `${stamp} ${entry}`]);
+  }, []);
+
+  /**
+   * Release the volume monitor's microphone capture.
+   *
+   * The recognizer competes with any other capture on the page for the
+   * microphone — on Android it is the platform speech service that opens the
+   * mic, and it cannot while this page already holds it. So the capture is
+   * held only while Lyo is speaking, and handed straight back afterwards.
+   */
+  const releaseMicMonitor = useCallback(() => {
+    loudFramesRef.current = 0;
+    analyserRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    void context?.close().catch(() => undefined);
+  }, []);
+
+  /**
+   * Listen to the microphone's volume for the duration of playback, so a
+   * learner talking over Lyo is noticed even before their words resolve.
+   *
+   * Entirely optional: when the capture is refused, barge-in still happens on
+   * the words the recognizer returns.
+   */
+  const acquireMicMonitor = useCallback(async () => {
+    if (mediaStreamRef.current) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch {
+      return;
+    }
+    // Playback may have finished while permission was being granted.
+    if (!activeRef.current || phaseRef.current !== 'speaking') {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    mediaStreamRef.current = stream;
+    const Context = window.AudioContext
+      || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) return;
+    try {
+      const context = new Context();
+      // Mobile browsers hand back a suspended context outside a tap.
+      void context.resume().catch(() => undefined);
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.2;
+      source.connect(analyser);
+      audioContextRef.current = context;
+      analyserRef.current = analyser;
+    } catch {
+      // Volume barge-in unavailable; the words still interrupt.
+    }
+  }, []);
 
   // Live quality instrumentation. These refs never hold transcript/audio in
   // telemetry; only local timestamps and coarse labels leave the device.
@@ -110,9 +195,15 @@ export default function ConversationalVoiceLayer() {
   }, [activeConversationId]);
 
   const changePhase = useCallback((next: VoicePhase) => {
+    const previous = phaseRef.current;
     phaseRef.current = next;
     setPhase(next);
-  }, []);
+    if (next === 'speaking') {
+      if (previous !== 'speaking') void acquireMicMonitor();
+    } else if (previous === 'speaking') {
+      releaseMicMonitor();
+    }
+  }, [acquireMicMonitor, releaseMicMonitor]);
 
   const stopRecognition = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -141,7 +232,7 @@ export default function ConversationalVoiceLayer() {
 
   const sendVoiceTurn = useCallback(async (raw: string) => {
     const transcript = raw.trim();
-    finalTranscriptRef.current = '';
+    transcriptRef.current.reset();
     setLiveTranscript('');
     if (!transcript || !activeRef.current) return;
 
@@ -222,6 +313,7 @@ export default function ConversationalVoiceLayer() {
     voiceTurnClosedRef.current = false;
     voiceSegmentsReceivedRef.current = false;
     spokenVoiceSegmentKeysRef.current.clear();
+    note(`sending "${transcript.slice(0, 40)}"`);
     changePhase('thinking');
     interruptedPreviousTurnRef.current = false;
     await sendMessage(transcript, [], {
@@ -233,6 +325,7 @@ export default function ConversationalVoiceLayer() {
   }, [
     changePhase,
     interruptGeneration,
+    note,
     qualityContext,
     sendMessage,
     stopRecognition,
@@ -248,11 +341,24 @@ export default function ConversationalVoiceLayer() {
       return;
     }
     recognitionRef.current = recognition;
-    recognition.lang = navigator.language || 'en-US';
+    recognition.lang = normalizeSpeechLang(navigator.language);
     recognition.interimResults = true;
     recognition.continuous = true;
+    recognition.maxAlternatives = 3;
+    // This recognizer continues the turn the previous one was collecting, so
+    // the transcript keeps its words but forgets its result positions.
+    transcriptRef.current.carryOver();
+
+    recognition.onstart = () => note(`start lang=${recognition.lang}`);
+    recognition.onaudiostart = () => note('audio in');
+    recognition.onspeechend = () => note('speech ended');
+    // The engine heard words but could not transcribe them. That is not a
+    // failure of the session — keep listening rather than going quiet.
+    recognition.onnomatch = () => note('no match (heard, not understood)');
+
     recognition.onspeechstart = () => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
+      note('speech detected');
       const now = voiceQualityNow();
       // Do not rotate a submitted assistant turn merely because the
       // microphone heard something: speaker echo can fire speech-start before
@@ -277,23 +383,18 @@ export default function ConversationalVoiceLayer() {
         while_generating: useChatStore.getState().isGenerating,
       });
     };
+
     recognition.onresult = (event) => {
       // A stopped recognizer may still dispatch queued callbacks after a new
       // shadow recognizer has already taken ownership. Ignore those stale
       // callbacks so two recognition sessions can never contribute to one turn.
       if (recognitionRef.current !== recognition) return;
-      let finalText = finalTranscriptRef.current;
-      let interimText = '';
-      const start = event.resultIndex ?? 0;
-      for (let i = start; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result?.[0]?.transcript?.trim() ?? '';
-        if (!transcript) continue;
-        if (result.isFinal) finalText = `${finalText} ${transcript}`.trim();
-        else interimText = `${interimText} ${transcript}`.trim();
-      }
-      const combined = `${finalText} ${interimText}`.trim();
+      const state = transcriptRef.current.push(event);
+      const combined = tidyTranscript(state.combined);
+      note(`result n=${event.results?.length ?? 0} "${combined.slice(0, 40)}"`);
       if (!combined) return;
+      heardAnythingRef.current = true;
+      setMicSilent(false);
       lastRecognitionActivityAtRef.current = voiceQualityNow();
       if (!currentTurnIdRef.current) currentTurnIdRef.current = crypto.randomUUID();
 
@@ -332,9 +433,10 @@ export default function ConversationalVoiceLayer() {
       // immediately, so the first word is not lost while a new recognizer is
       // being started after RMS barge-in.
       if (phaseRef.current === 'speaking') {
-        // Do not commit a final playback echo into finalTranscriptRef. Otherwise
-        // the next genuine barge-in would be concatenated with Lyo's own words.
+        // Do not keep a playback echo. Otherwise the next genuine barge-in
+        // would be concatenated with Lyo's own words.
         if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) {
+          transcriptRef.current.reset();
           if (!echoReportedForPlaybackRef.current) {
             echoReportedForPlaybackRef.current = true;
             reportVoiceQuality(qualityContext(), 'echo_rejected', {
@@ -376,7 +478,6 @@ export default function ConversationalVoiceLayer() {
         changePhase('listening');
       }
 
-      finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       const endpointDelayMs = voiceEndOfTurnDelayMs(combined);
@@ -386,13 +487,25 @@ export default function ConversationalVoiceLayer() {
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
+      note(`error ${event?.error ?? 'unknown'}`);
+      // A pause with no words in it is not a failure; onend starts us again.
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      setErrorDetail(
+        event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
+          ? 'Microphone access is blocked for this site. Allow it in your browser settings.'
+          : event?.error === 'audio-capture'
+            ? 'No microphone was found.'
+            : event?.error === 'network'
+              ? 'Speech recognition could not reach the network.'
+              : 'Voice unavailable.',
+      );
       reportVoiceQuality(qualityContext(), 'recognition_error', {
         code: event?.error || 'unknown',
       });
       changePhase('error');
     };
     recognition.onend = () => {
+      note('ended');
       // stopRecognition() deliberately clears ownership before starting the
       // shadow recognizer. The old recognizer's delayed onend must not clear or
       // restart the new one.
@@ -416,7 +529,15 @@ export default function ConversationalVoiceLayer() {
     } catch {
       changePhase('error');
     }
-  }, [changePhase, interruptGeneration, qualityContext, sendVoiceTurn, stopRecognition, stopSpeech]);
+  }, [
+    changePhase,
+    interruptGeneration,
+    note,
+    qualityContext,
+    sendVoiceTurn,
+    stopRecognition,
+    stopSpeech,
+  ]);
 
   const markFirstAudio = useCallback((transport: 'server_tts' | 'device_tts') => {
     if (firstAudioReportedRef.current || !currentTurnIdRef.current) return;
@@ -729,7 +850,7 @@ export default function ConversationalVoiceLayer() {
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
-    finalTranscriptRef.current = '';
+    transcriptRef.current.reset();
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
@@ -772,32 +893,17 @@ export default function ConversationalVoiceLayer() {
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
-    if (!createSpeechRecognition() || !navigator.mediaDevices?.getUserMedia) {
+    heardAnythingRef.current = false;
+    setMicSilent(false);
+    setErrorDetail('');
+    if (!createSpeechRecognition()) {
+      setErrorDetail('This browser cannot listen. Try Chrome, Edge or Safari.');
       changePhase('error');
       return;
     }
-    let cancelled = false;
-    void navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    }).then((stream) => {
-      if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
-      mediaStreamRef.current = stream;
-      const Context = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Context) {
-        const context = new Context();
-        const source = context.createMediaStreamSource(stream);
-        const analyser = context.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.2;
-        source.connect(analyser);
-        audioContextRef.current = context;
-        analyserRef.current = analyser;
-      }
-      startRecognition();
-    }).catch(() => {
-      changePhase('error');
-    });
-    return () => { cancelled = true; };
+    // Start listening straight away. The recognizer asks for the microphone
+    // itself, so nothing else may hold it open first.
+    startRecognition();
   }, [active, changePhase, startRecognition]);
 
   useEffect(() => {
@@ -806,11 +912,7 @@ export default function ConversationalVoiceLayer() {
     awaitingAssistantRef.current = false;
     stopRecognition();
     stopSpeech();
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-    void audioContextRef.current?.close();
-    audioContextRef.current = null;
-    analyserRef.current = null;
+    releaseMicMonitor();
     if (animationFrameRef.current != null) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
     if (pendingRmsBargeTimerRef.current) {
@@ -820,7 +922,9 @@ export default function ConversationalVoiceLayer() {
     pendingRmsBargeAtRef.current = 0;
     changePhase('idle');
     setLiveTranscript('');
-  }, [active, changePhase, stopRecognition, stopSpeech]);
+    setMicSilent(false);
+    setErrorDetail('');
+  }, [active, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
@@ -861,39 +965,59 @@ export default function ConversationalVoiceLayer() {
     void speakAssistant(latest.id, latest.content);
   }, [active, activeConversationId, finishSegmentTurnIfReady, isGenerating, speakAssistant]);
 
+  // Listening is otherwise indistinguishable from a microphone that is not
+  // reaching us at all. Say so rather than sitting on "Listening…" forever.
+  useEffect(() => {
+    if (!active || phase !== 'listening' || heardAnythingRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (activeRef.current && !heardAnythingRef.current) setMicSilent(true);
+    }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [active, phase]);
+
   const endSession = () => setVoiceSessionActive(false);
 
   if (!active) return null;
 
   const label = phase === 'listening'
-    ? (liveTranscript || 'Listening…')
+    ? (liveTranscript
+        || (micSilent
+          ? 'Not hearing anything yet — check this site’s microphone permission.'
+          : 'Listening…'))
     : phase === 'thinking'
       ? 'Lyo is thinking…'
       : phase === 'speaking'
         ? 'Lyo is speaking — start talking to interrupt'
         : phase === 'error'
-          ? 'Voice unavailable'
+          ? (errorDetail || 'Voice unavailable')
           : 'Voice ready';
 
   return (
-    <div className="max-w-3xl mx-auto mb-2 rounded-2xl border border-lyo-500/25 bg-lyo-500/10 px-3 py-2.5 flex items-center gap-3">
-      <div className={cn(
-        'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-        phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
-      )}>
-        {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
+    <div className="max-w-3xl mx-auto mb-2 rounded-2xl border border-lyo-500/25 bg-lyo-500/10 px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
+          phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
+        )}>
+          {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-white/85">Live conversation</div>
+          <div className={cn('text-xs text-white/55', !debugEnabled && 'truncate')}>{label}</div>
+        </div>
+        <button
+          type="button"
+          onClick={endSession}
+          className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white/75 shrink-0"
+        >
+          End
+        </button>
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-white/85">Live conversation</div>
-        <div className="text-xs text-white/55 truncate">{label}</div>
-      </div>
-      <button
-        type="button"
-        onClick={endSession}
-        className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white/75"
-      >
-        End
-      </button>
+      {debugEnabled && (
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-black/50 px-2.5 py-2 font-mono text-[10px] leading-snug text-white/60">
+          {debugLog.length ? debugLog.join('\n') : 'waiting for the speech engine…'}
+        </pre>
+      )}
     </div>
   );
 }

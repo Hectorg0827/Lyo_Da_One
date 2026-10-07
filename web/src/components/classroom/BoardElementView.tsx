@@ -9,9 +9,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+  configureDictation,
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
+import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 import { TeachingVisualView } from './TeachingVisualView';
@@ -404,6 +406,8 @@ function TransferView({
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
+  const dictatingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const minWords = el.input.min_words ?? 6;
   const isSpanish = el.input.language_code?.toLowerCase().startsWith('es') === true;
@@ -413,7 +417,10 @@ function TransferView({
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
+    return () => {
+      dictatingRef.current = false;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -423,36 +430,89 @@ function TransferView({
     node.style.height = `${node.scrollHeight}px`;
   }, [response]);
 
-  const toggleDictation = () => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
+  // Submitting or skipping hides the microphone button, so it must also end
+  // the dictation behind it — otherwise it restarts with nothing to stop it.
+  useEffect(() => {
+    if (!locked) return;
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  }, [locked]);
+
+  /**
+   * End dictation for good.
+   *
+   * Clearing the flag before stopping matters: the recognizer restarts itself
+   * after a pause, and only this flag tells a deliberate stop from a breath.
+   */
+  const stopDictation = () => {
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  };
+
+  // One answer may span several recognizers: each ends itself after a pause,
+  // so the transcript is accumulated here and carried across every restart.
+  const startDictation = (continuing = false): boolean => {
     const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return;
-    onInputStart();
+    if (!recognition) return false;
     recognitionRef.current = recognition;
-    dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
-    recognition.lang = el.input.language_code === 'auto'
-      ? navigator.language || 'en-US'
-      : el.input.language_code || navigator.language || 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
+    configureDictation(
+      recognition,
+      el.input.language_code === 'auto' ? null : el.input.language_code,
+    );
+    if (continuing) transcriptRef.current.carryOver();
+
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0].transcript;
-      }
-      setResponse((dictationBaseRef.current + transcript).slice(0, 1200));
+      if (recognitionRef.current !== recognition) return;
+      const { combined } = transcriptRef.current.push(event);
+      const base = dictationBaseRef.current;
+      setResponse((base + tidyTranscript(combined, { capitalize: !base })).slice(0, 1200));
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
+      if (!dictatingRef.current) {
+        setListening(false);
+        return;
+      }
+      window.setTimeout(() => {
+        if (!dictatingRef.current) return;
+        if (!startDictation(true)) {
+          dictatingRef.current = false;
+          setListening(false);
+        }
+      }, 120);
+    };
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      recognitionRef.current = null;
+      dictatingRef.current = false;
+      setListening(false);
+    };
+
     try {
       recognition.start();
-      setListening(true);
+      return true;
     } catch {
-      setListening(false);
+      recognitionRef.current = null;
+      return false;
     }
+  };
+
+  const toggleDictation = () => {
+    if (listening) {
+      stopDictation();
+      return;
+    }
+    if (!createBrowserSpeechRecognition()) return;
+    onInputStart();
+    transcriptRef.current.reset();
+    dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
+    dictatingRef.current = true;
+    if (startDictation()) setListening(true);
+    else dictatingRef.current = false;
   };
 
   return (
