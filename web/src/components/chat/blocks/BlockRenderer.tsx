@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useId, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { AlertTriangle, FileText, ShieldCheck } from 'lucide-react';
 import katex from 'katex';
@@ -105,6 +106,49 @@ function MathBlock({ source }: { source: string }) {
   );
 }
 
+function MermaidBlock({ source }: { source: string }) {
+  const id = useId().replace(/:/g, '');
+  const [svg, setSvg] = useState('');
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setSvg('');
+    setFailed(false);
+    import('mermaid')
+      .then(async ({ default: mermaid }) => {
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+        return mermaid.render(`lyo-mermaid-${id}`, source);
+      })
+      .then(({ svg }) => {
+        if (active) setSvg(svg);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, source]);
+
+  if (failed) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/60">
+        Diagram unavailable. The answer text remains available above.
+      </div>
+    );
+  }
+  if (!svg) {
+    return <div className="h-24 rounded-xl border border-white/10 bg-white/5 animate-pulse" />;
+  }
+  return (
+    <div
+      className="overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-3 [&_svg]:max-w-full [&_svg]:h-auto"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
+
 /** dataViz: a math formula, a reference table, or a diagram source. */
 function DataVizBlock({ block }: { block: ChatBlock }) {
   const source = typeof block.content?.source === 'string' ? block.content.source : '';
@@ -131,12 +175,18 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
     );
   }
 
-  // Diagram formats (mermaid, chart) have no renderer here yet. Show the
-  // source rather than a blank gap, so nothing silently disappears.
+  if (format === 'mermaid' || format === 'diagram') {
+    return <MermaidBlock source={source} />;
+  }
+
+  // Generic chart/graph payloads are rendered through markdown so a table-like
+  // representation remains readable rather than exposing raw implementation text.
   return (
-    <pre className="text-white/70 font-mono text-xs overflow-x-auto p-3 rounded-xl bg-black/30 border border-white/10">
-      {source}
-    </pre>
+    <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-3">
+      <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+        {normalizeLatexDelimiters(source)}
+      </ReactMarkdown>
+    </div>
   );
 }
 
