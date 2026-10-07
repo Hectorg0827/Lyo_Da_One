@@ -241,6 +241,26 @@ export default function ConversationalVoiceLayer() {
     recognition.lang = navigator.language || 'en-US';
     recognition.interimResults = true;
     recognition.continuous = true;
+    recognition.onspeechstart = () => {
+      if (recognitionRef.current !== recognition || !activeRef.current) return;
+      const now = voiceQualityNow();
+      if (!currentTurnIdRef.current || turnSubmittedAtRef.current > 0) {
+        currentTurnIdRef.current = crypto.randomUUID();
+        turnSubmittedAtRef.current = 0;
+        firstVoiceSegmentAtRef.current = 0;
+        firstAudioReportedRef.current = false;
+      }
+      micSpeechStartedAtRef.current = now;
+      lastRecognitionActivityAtRef.current = now;
+      const floorGap = lastAssistantAudioEndedAtRef.current > 0
+        ? Math.max(0, Math.round(now - lastAssistantAudioEndedAtRef.current))
+        : -1;
+      reportVoiceQuality(qualityContext(), 'mic_speech_started', {
+        floor_gap_ms: floorGap,
+        while_speaking: phaseRef.current === 'speaking',
+        while_generating: useChatStore.getState().isGenerating,
+      });
+    };
     recognition.onresult = (event) => {
       // A stopped recognizer may still dispatch queued callbacks after a new
       // shadow recognizer has already taken ownership. Ignore those stale
@@ -258,6 +278,8 @@ export default function ConversationalVoiceLayer() {
       }
       const combined = `${finalText} ${interimText}`.trim();
       if (!combined) return;
+      lastRecognitionActivityAtRef.current = voiceQualityNow();
+      if (!currentTurnIdRef.current) currentTurnIdRef.current = crypto.randomUUID();
 
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
@@ -267,7 +289,27 @@ export default function ConversationalVoiceLayer() {
       if (phaseRef.current === 'speaking') {
         // Do not commit a final playback echo into finalTranscriptRef. Otherwise
         // the next genuine barge-in would be concatenated with Lyo's own words.
-        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) return;
+        if (isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)) {
+          reportVoiceQuality(qualityContext(), 'echo_rejected', {
+            phase: 'speaking',
+            heard_chars: Math.min(500, combined.length),
+            method: 'semantic_partial',
+          });
+          return;
+        }
+        const detectedAt = voiceQualityNow();
+        if (pendingRmsBargeTimerRef.current) {
+          clearTimeout(pendingRmsBargeTimerRef.current);
+          pendingRmsBargeTimerRef.current = null;
+        }
+        pendingRmsBargeAtRef.current = 0;
+        reportVoiceQuality(qualityContext(), 'barge_in', {
+          method: 'semantic',
+          speaking_elapsed_ms: speakingStartedAtRef.current > 0
+            ? Math.max(0, Math.round(detectedAt - speakingStartedAtRef.current))
+            : -1,
+          generation_active: useChatStore.getState().isGenerating,
+        });
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
         if (useChatStore.getState().isGenerating) interruptGeneration();
@@ -277,13 +319,17 @@ export default function ConversationalVoiceLayer() {
       finalTranscriptRef.current = finalText;
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      const endpointDelayMs = voiceEndOfTurnDelayMs(combined);
       silenceTimerRef.current = setTimeout(() => {
         void sendVoiceTurn(combined);
-      }, voiceEndOfTurnDelayMs(combined));
+      }, endpointDelayMs);
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      reportVoiceQuality(qualityContext(), 'recognition_error', {
+        code: event?.error || 'unknown',
+      });
       changePhase('error');
     };
     recognition.onend = () => {
@@ -293,6 +339,11 @@ export default function ConversationalVoiceLayer() {
       if (recognitionRef.current !== recognition) return;
       recognitionRef.current = null;
       if (!activeRef.current) return;
+      recognizerRestartCountRef.current += 1;
+      reportVoiceQuality(qualityContext(), 'recognizer_restarted', {
+        restart_count: recognizerRestartCountRef.current,
+        phase: phaseRef.current,
+      });
       if (phaseRef.current === 'speaking') {
         window.setTimeout(() => startRecognition(true), 80);
       } else if (phaseRef.current === 'listening') {
@@ -305,7 +356,7 @@ export default function ConversationalVoiceLayer() {
     } catch {
       changePhase('error');
     }
-  }, [changePhase, sendVoiceTurn, stopRecognition]);
+  }, [changePhase, interruptGeneration, qualityContext, sendVoiceTurn, stopRecognition, stopSpeech]);
 
   const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
