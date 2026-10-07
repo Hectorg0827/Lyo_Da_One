@@ -358,6 +358,24 @@ export default function ConversationalVoiceLayer() {
     }
   }, [changePhase, interruptGeneration, qualityContext, sendVoiceTurn, stopRecognition, stopSpeech]);
 
+  const markFirstAudio = useCallback((transport: 'server_tts' | 'device_tts') => {
+    if (firstAudioReportedRef.current || !currentTurnIdRef.current) return;
+    firstAudioReportedRef.current = true;
+    const now = voiceQualityNow();
+    reportVoiceQuality(qualityContext(), 'first_audio', {
+      mic_to_audio_ms: micSpeechStartedAtRef.current > 0
+        ? Math.max(0, Math.round(now - micSpeechStartedAtRef.current))
+        : -1,
+      submit_to_audio_ms: turnSubmittedAtRef.current > 0
+        ? Math.max(0, Math.round(now - turnSubmittedAtRef.current))
+        : -1,
+      segment_to_audio_ms: firstVoiceSegmentAtRef.current > 0
+        ? Math.max(0, Math.round(now - firstVoiceSegmentAtRef.current))
+        : -1,
+      transport,
+    });
+  }, [qualityContext]);
+
   const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
@@ -367,6 +385,7 @@ export default function ConversationalVoiceLayer() {
       if (audioRef.current === audio) audioRef.current = null;
     };
     audioRef.current = audio;
+    audio.onplaying = () => markFirstAudio('server_tts');
     audio.onended = () => {
       if (settled) return;
       settled = true;
@@ -385,18 +404,19 @@ export default function ConversationalVoiceLayer() {
       cleanup();
       reject(error);
     });
-  }), []);
+  }), [markFirstAudio]);
 
   const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = navigator.language || 'en-US';
     utterance.rate = 1.02;
+    utterance.onstart = () => markFirstAudio('device_tts');
     utterance.onend = () => resolve();
     utterance.onerror = () => resolve();
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
-  }), []);
+  }), [markFirstAudio]);
 
   const finishSegmentTurnIfReady = useCallback(() => {
     if (
