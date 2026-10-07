@@ -189,19 +189,20 @@ class TextToSpeechService: NSObject, ObservableObject {
     private func discardPrefetchedSpeech() {
         guard let prefetched = prefetchedSpeech else { return }
         prefetchedSpeech = nil
-        prefetched.task.cancel()
+        let task = prefetched.task
 
-        // DefaultTTSRepository materializes generated audio into a temp file.
-        // If barge-in happens after prefetch completed but before playback
-        // consumes it, delete that orphan rather than leaking one file per
-        // interrupted turn.
+        // Always observe the task result, even when stop() races with the last
+        // network byte. A completed prefetch owns a temp file until somebody
+        // explicitly removes it; cancellation by itself cannot reclaim that.
         Task {
-            guard let result = try? await prefetched.task.value,
-                  let url = URL(string: result.audioURL),
+            let result = await task.result
+            guard case .success(let speech) = result,
+                  let url = URL(string: speech.audioURL),
                   url.isFileURL
             else { return }
             try? FileManager.default.removeItem(at: url)
         }
+        task.cancel()
     }
 
     private func prefetchNextIfNeeded() {
