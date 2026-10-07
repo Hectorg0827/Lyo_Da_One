@@ -133,8 +133,13 @@ function MermaidBlock({ source }: { source: string }) {
 
   if (failed) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/60">
-        Diagram unavailable. The answer text remains available above.
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="mb-2 text-xs font-medium text-white/60">
+          Diagram preview unavailable — showing the diagram source.
+        </div>
+        <pre className="overflow-x-auto whitespace-pre-wrap text-xs font-mono text-white/70">
+          {source}
+        </pre>
       </div>
     );
   }
