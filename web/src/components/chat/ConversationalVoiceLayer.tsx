@@ -361,6 +361,7 @@ export default function ConversationalVoiceLayer() {
         reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
           method: 'semantic',
         });
+        lastAssistantAudioEndedAtRef.current = detectedAt;
 
         // The interruption belongs to the assistant turn that was cut off;
         // the recognized learner utterance starts a new canonical turn.
@@ -711,6 +712,7 @@ export default function ConversationalVoiceLayer() {
     reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
       method: 'rms',
     });
+    lastAssistantAudioEndedAtRef.current = detectedAt;
     pendingRmsBargeAtRef.current = detectedAt;
     if (pendingRmsBargeTimerRef.current) clearTimeout(pendingRmsBargeTimerRef.current);
     pendingRmsBargeTimerRef.current = setTimeout(() => {
