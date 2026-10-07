@@ -429,6 +429,23 @@ export const api = {
       return request<{ items: DueReviewItem[] }>('/api/v1/lyo2/chat/reviews/due');
     },
 
+    async reportVoiceQuality(payload: {
+      session_id: string;
+      turn_id?: string;
+      conversation_id?: string;
+      platform: 'web' | 'ios' | 'android';
+      event: string;
+      locale?: string;
+      scenario?: string;
+      metrics?: Record<string, number | boolean | string>;
+    }) {
+      return request<{ status: 'recorded' }>('/api/v1/lyo2/voice/quality', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        optionalAuth: true,
+      });
+    },
+
     stream(
       text: string,
       history: { role: string; content: string }[] | undefined,
