@@ -302,14 +302,16 @@ export default function ConversationalVoiceLayer() {
         )
       ) return;
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
+      const speechText = event.spokenText ?? event.text;
+      if (!speechText.trim()) return;
       const controller = new AbortController();
-      const audio = api.tts.openSynthesisStream(event.text, {
+      const audio = api.tts.openSynthesisStream(speechText, {
         language: navigator.language || 'auto',
         speed: 1.02,
         signal: controller.signal,
       }).catch(() => null);
       voiceSegmentQueueRef.current.push({
-        text: event.text,
+        text: speechText,
         sequence: event.sequence,
         messageId: event.messageId,
         controller,
@@ -325,20 +327,21 @@ export default function ConversationalVoiceLayer() {
       if (
         !voiceSegmentsReceivedRef.current
         && event.speak
-        && event.text.trim()
+        && (event.spokenText ?? event.text).trim()
       ) {
         voiceSegmentsReceivedRef.current = true;
         const fallbackKey = event.messageId + ':ready';
         if (!spokenVoiceSegmentKeysRef.current.has(fallbackKey)) {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
+          const speechText = event.spokenText ?? event.text;
           const controller = new AbortController();
-          const audio = api.tts.openSynthesisStream(event.text, {
+          const audio = api.tts.openSynthesisStream(speechText, {
             language: navigator.language || 'auto',
             speed: 1.02,
             signal: controller.signal,
           }).catch(() => null);
           voiceSegmentQueueRef.current.push({
-            text: event.text,
+            text: speechText,
             sequence: Number.MAX_SAFE_INTEGER,
             messageId: event.messageId,
             controller,
