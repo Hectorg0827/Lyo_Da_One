@@ -54,6 +54,14 @@ export default function ConversationalVoiceLayer() {
   const [liveTranscript, setLiveTranscript] = useState('');
   const [errorDetail, setErrorDetail] = useState('');
   const [micSilent, setMicSilent] = useState(false);
+  // Opening the chat with ?voicedebug=1 shows what the speech engine is
+  // actually reporting. "Listening" alone cannot distinguish a microphone
+  // that never reaches us from one we are simply not speaking into.
+  const [debugEnabled] = useState(() => (
+    typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('voicedebug') === '1'
+  ));
+  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
@@ -79,6 +87,14 @@ export default function ConversationalVoiceLayer() {
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
   const heardAnythingRef = useRef(false);
+  const debugEnabledRef = useRef(false);
+  debugEnabledRef.current = debugEnabled;
+
+  const note = useCallback((entry: string) => {
+    if (!debugEnabledRef.current) return;
+    const stamp = new Date().toLocaleTimeString([], { hour12: false });
+    setDebugLog((log) => [...log.slice(-7), `${stamp} ${entry}`]);
+  }, []);
 
   /**
    * Release the volume monitor's microphone capture.
@@ -202,6 +218,7 @@ export default function ConversationalVoiceLayer() {
     voiceTurnClosedRef.current = false;
     voiceSegmentsReceivedRef.current = false;
     spokenVoiceSegmentKeysRef.current.clear();
+    note(`sending "${transcript.slice(0, 40)}"`);
     changePhase('thinking');
     interruptedPreviousTurnRef.current = false;
     await sendMessage(transcript, [], {
@@ -210,7 +227,7 @@ export default function ConversationalVoiceLayer() {
       voiceTurnId: crypto.randomUUID(),
       voiceLocale: navigator.language || 'auto',
     });
-  }, [changePhase, interruptGeneration, sendMessage, stopRecognition, stopSpeech]);
+  }, [changePhase, interruptGeneration, note, sendMessage, stopRecognition, stopSpeech]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
     if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
@@ -228,12 +245,23 @@ export default function ConversationalVoiceLayer() {
     // This recognizer continues the turn the previous one was collecting, so
     // the transcript keeps its words but forgets its result positions.
     transcriptRef.current.carryOver();
+
+    recognition.onstart = () => note(`start lang=${recognition.lang}`);
+    recognition.onaudiostart = () => note('audio in');
+    recognition.onspeechstart = () => note('speech detected');
+    recognition.onspeechend = () => note('speech ended');
+    // The engine heard words but could not transcribe them. That is not a
+    // failure of the session — keep listening rather than going quiet.
+    recognition.onnomatch = () => note('no match (heard, not understood)');
+
     recognition.onresult = (event) => {
       // A stopped recognizer may still dispatch queued callbacks after a new
       // shadow recognizer has already taken ownership. Ignore those stale
       // callbacks so two recognition sessions can never contribute to one turn.
       if (recognitionRef.current !== recognition) return;
-      const combined = tidyTranscript(transcriptRef.current.push(event).combined);
+      const state = transcriptRef.current.push(event);
+      const combined = tidyTranscript(state.combined);
+      note(`result n=${event.results?.length ?? 0} "${combined.slice(0, 40)}"`);
       if (!combined) return;
       heardAnythingRef.current = true;
       setMicSilent(false);
@@ -264,6 +292,7 @@ export default function ConversationalVoiceLayer() {
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
+      note(`error ${event?.error ?? 'unknown'}`);
       // A pause with no words in it is not a failure; onend starts us again.
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
       setErrorDetail(
@@ -278,6 +307,7 @@ export default function ConversationalVoiceLayer() {
       changePhase('error');
     };
     recognition.onend = () => {
+      note('ended');
       // stopRecognition() deliberately clears ownership before starting the
       // shadow recognizer. The old recognizer's delayed onend must not clear or
       // restart the new one.
@@ -296,7 +326,7 @@ export default function ConversationalVoiceLayer() {
     } catch {
       changePhase('error');
     }
-  }, [changePhase, sendVoiceTurn, stopRecognition]);
+  }, [changePhase, note, sendVoiceTurn, stopRecognition]);
 
   const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
@@ -631,24 +661,31 @@ export default function ConversationalVoiceLayer() {
           : 'Voice ready';
 
   return (
-    <div className="max-w-3xl mx-auto mb-2 rounded-2xl border border-lyo-500/25 bg-lyo-500/10 px-3 py-2.5 flex items-center gap-3">
-      <div className={cn(
-        'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-        phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
-      )}>
-        {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
+    <div className="max-w-3xl mx-auto mb-2 rounded-2xl border border-lyo-500/25 bg-lyo-500/10 px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
+          phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
+        )}>
+          {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-white/85">Live conversation</div>
+          <div className={cn('text-xs text-white/55', !debugEnabled && 'truncate')}>{label}</div>
+        </div>
+        <button
+          type="button"
+          onClick={endSession}
+          className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white/75 shrink-0"
+        >
+          End
+        </button>
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-white/85">Live conversation</div>
-        <div className="text-xs text-white/55 truncate">{label}</div>
-      </div>
-      <button
-        type="button"
-        onClick={endSession}
-        className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white/75"
-      >
-        End
-      </button>
+      {debugEnabled && (
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-black/50 px-2.5 py-2 font-mono text-[10px] leading-snug text-white/60">
+          {debugLog.length ? debugLog.join('\n') : 'waiting for the speech engine…'}
+        </pre>
+      )}
     </div>
   );
 }
