@@ -408,7 +408,7 @@ struct SmartDataVizBlockView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
             default:
-                Text(try! AttributedString(markdown: payload.source))
+                Text((try? AttributedString(markdown: payload.source)) ?? AttributedString(payload.source))
                     .font(.caption)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
