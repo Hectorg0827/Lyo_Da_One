@@ -155,6 +155,7 @@ export function tidyTranscript(text, options) {
  */
 export function createTranscriptAccumulator() {
   let settled = '';
+  let pending = '';
   let committedThrough = -1;
 
   return {
@@ -181,6 +182,7 @@ export function createTranscriptAccumulator() {
         }
       }
 
+      pending = interim;
       const combined = mergeTranscript(settled, interim);
       return { final: settled, interim, combined };
     },
@@ -188,13 +190,20 @@ export function createTranscriptAccumulator() {
     /**
      * Keep the words said so far but forget result positions, for when the
      * recognizer restarts mid-dictation and begins numbering again at zero.
+     *
+     * A recognizer that ends without finalizing its last hypothesis still said
+     * those words on screen, so they are committed here rather than dropped —
+     * otherwise the next recognizer's first result would erase them.
      */
     carryOver() {
+      settled = mergeTranscript(settled, pending);
+      pending = '';
       committedThrough = -1;
     },
 
     reset() {
       settled = '';
+      pending = '';
       committedThrough = -1;
     },
   };

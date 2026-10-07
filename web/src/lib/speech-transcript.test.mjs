@@ -91,6 +91,28 @@ test('a recognizer restart continues the dictation rather than dropping it', () 
   assert.equal(state.combined, 'before the restart after the restart');
 });
 
+test('words still unconfirmed when a recognizer ends are not lost', () => {
+  // A recognizer that stops during a pause may never finalize its last
+  // hypothesis. Those words are already on screen, so the next recognizer
+  // must build on them rather than erase them.
+  const accumulator = createTranscriptAccumulator();
+  accumulator.push({ resultIndex: 0, results: results([['the mitochondria is', true]]) });
+  accumulator.push({ resultIndex: 1, results: results([['the mitochondria is', true], ['the powerhouse']]) });
+  accumulator.carryOver();
+  const state = accumulator.push({ resultIndex: 0, results: results([['of the cell']]) });
+  assert.equal(state.combined, 'the mitochondria is the powerhouse of the cell');
+});
+
+test('a restart after a finalized phrase does not double it', () => {
+  const accumulator = createTranscriptAccumulator();
+  accumulator.push({ resultIndex: 0, results: results([['all done']]) });
+  accumulator.push({ resultIndex: 0, results: results([['all done', true]]) });
+  accumulator.carryOver();
+  assert.equal(accumulator.final, 'all done');
+  const state = accumulator.push({ resultIndex: 0, results: results([['and more', true]]) });
+  assert.equal(state.combined, 'all done and more');
+});
+
 test('reset clears the dictation for the next session', () => {
   const accumulator = createTranscriptAccumulator();
   accumulator.push({ resultIndex: 0, results: results([['old words', true]]) });

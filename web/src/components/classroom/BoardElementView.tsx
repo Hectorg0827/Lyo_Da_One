@@ -430,6 +430,27 @@ function TransferView({
     node.style.height = `${node.scrollHeight}px`;
   }, [response]);
 
+  // Submitting or skipping hides the microphone button, so it must also end
+  // the dictation behind it — otherwise it restarts with nothing to stop it.
+  useEffect(() => {
+    if (!locked) return;
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  }, [locked]);
+
+  /**
+   * End dictation for good.
+   *
+   * Clearing the flag before stopping matters: the recognizer restarts itself
+   * after a pause, and only this flag tells a deliberate stop from a breath.
+   */
+  const stopDictation = () => {
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  };
+
   // One answer may span several recognizers: each ends itself after a pause,
   // so the transcript is accumulated here and carried across every restart.
   const startDictation = (continuing = false): boolean => {
@@ -482,11 +503,7 @@ function TransferView({
 
   const toggleDictation = () => {
     if (listening) {
-      // Clear the indicator here as well as in onend: a tap that lands in the
-      // gap between two recognizers has no live recognizer left to end.
-      dictatingRef.current = false;
-      setListening(false);
-      try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+      stopDictation();
       return;
     }
     if (!createBrowserSpeechRecognition()) return;

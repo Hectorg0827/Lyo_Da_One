@@ -270,8 +270,21 @@ function ClassroomStage() {
     setHintMenuOpen(false);
   };
 
+  /**
+   * End dictation for good.
+   *
+   * Clearing the flag before stopping matters: the recognizer restarts itself
+   * after a pause, and only this flag tells a deliberate stop from a breath.
+   */
+  const stopDictation = () => {
+    dictatingRef.current = false;
+    setListeningTarget(null);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  };
+
   const submitQuestion = () => {
     if (!question.trim()) return;
+    stopDictation();
     askQuestion(question);
     setQuestion('');
     setHandRaised(false);
@@ -281,7 +294,7 @@ function ClassroomStage() {
     if (!response.trim()) return;
     if (answerPrompt(response.trim())) {
       setPromptResponse('');
-      recognitionRef.current?.stop();
+      stopDictation();
     }
   };
 
@@ -336,11 +349,7 @@ function ClassroomStage() {
 
   const toggleDictation = (target: 'question' | 'prompt') => {
     if (listeningTarget) {
-      // Clear the indicator here as well as in onend: a tap that lands in the
-      // gap between two recognizers has no live recognizer left to end.
-      dictatingRef.current = false;
-      setListeningTarget(null);
-      try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+      stopDictation();
       return;
     }
     if (!createBrowserSpeechRecognition()) return;
