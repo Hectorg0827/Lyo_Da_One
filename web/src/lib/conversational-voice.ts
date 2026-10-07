@@ -254,10 +254,14 @@ export async function playSpeechResponse(
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     onAudio?.(audio);
-    const ended = waitForAudioEnd(audio, signal);
+    const ended = waitForAudioEnd(audio, signal).then<Error | null>(
+      () => null,
+      (error) => error instanceof Error ? error : new Error(String(error)),
+    );
     try {
       await audio.play();
-      await ended;
+      const endError = await ended;
+      if (endError) throw endError;
     } finally {
       audio.pause();
       audio.removeAttribute('src');
@@ -273,7 +277,10 @@ export async function playSpeechResponse(
   audio.preload = 'auto';
   audio.src = url;
   onAudio?.(audio);
-  const ended = waitForAudioEnd(audio, signal);
+  const ended = waitForAudioEnd(audio, signal).then<Error | null>(
+    () => null,
+    (error) => error instanceof Error ? error : new Error(String(error)),
+  );
 
   try {
     await waitForMediaSourceOpen(mediaSource, signal);
@@ -305,7 +312,8 @@ export async function playSpeechResponse(
     }
     await playPromise;
     if (playError) throw playError;
-    await ended;
+    const endError = await ended;
+    if (endError) throw endError;
   } finally {
     try { await reader.cancel(); } catch { /* stream already closed */ }
     audio.pause();
