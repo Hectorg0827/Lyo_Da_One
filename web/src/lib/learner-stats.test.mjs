@@ -84,6 +84,49 @@ test('the best-streak trend is shown only when it beats the current one', () => 
   assert.equal(byKey(tied).streak.trend, '');
 });
 
+test('an explicit null is no reading, not a reading of zero', () => {
+  // `Number(null)` is 0, so a guard written as `Number.isFinite(Number(v))`
+  // turns every null the server sends into a real zero. FastAPI serialises
+  // `Optional[int] = None` as exactly that, and the learner below is on a
+  // seven-day streak.
+  assert.deepEqual(streakFrom({ streaks: { current: null, longest: null } }, { streak: 7 }), {
+    current: 7,
+    best: 7,
+  });
+
+  const result = buildLearnerStats({
+    gamification: { user_level: { total_hours: null }, xp_summary: { total: 1250 } },
+    user: { xp: 1250 },
+  });
+  // Null hours must fall through to the XP estimate, not display "0".
+  assert.equal(byKey(result).hours.value, '13');
+});
+
+test('blank and non-numeric shapes are no reading either', () => {
+  for (const absent of ['', '   ', true, false, [], {}, 'twelve']) {
+    assert.deepEqual(streakFrom({ streaks: { current: absent } }, { streak: 4 }), {
+      current: 4,
+      best: 4,
+    });
+  }
+});
+
+test('a numeric string is still a reading', () => {
+  assert.deepEqual(streakFrom({ streaks: { current: '6', longest: '9' } }, null), {
+    current: 6,
+    best: 9,
+  });
+});
+
+test('a real zero is still reported as zero', () => {
+  // The fix must not swing the other way: a learner whose streak genuinely
+  // lapsed has a streak of 0, and that is a reading.
+  assert.deepEqual(streakFrom({ streaks: { current: 0, longest: 14 } }, { streak: 7 }), {
+    current: 0,
+    best: 14,
+  });
+});
+
 test('garbage readings do not become numbers', () => {
   const result = buildLearnerStats({
     gamification: { xp_summary: { total: 'lots' }, user_level: { total_hours: NaN } },

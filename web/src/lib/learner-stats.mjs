@@ -13,10 +13,31 @@
 
 import { shouldLeadWithConcepts } from './learner-model.mjs';
 
-/** A finite number, or null. Null means "no reading", never zero. */
+/**
+ * A finite number, or null. Null means "no reading", never zero.
+ *
+ * The coercion is deliberately narrow, because `Number()` is not: `Number(null)`
+ * is 0, and so are `Number('')`, `Number(false)` and `Number([])`. Writing this
+ * as `Number.isFinite(Number(value))` therefore turned every explicit null the
+ * server sent into a real reading of zero — and a FastAPI route with
+ * `Optional[int] = None` serialises exactly that. A learner on a seven-day
+ * streak was shown "0d" the moment the overview reported `"current": null`,
+ * and the fallback to their profile's own streak never ran because 0 looked
+ * like an answer.
+ *
+ * So: a number is a reading, a non-blank numeric string is a reading, and
+ * everything else — null, undefined, '', booleans, arrays, objects — is the
+ * absence of one. That is the same rule `normalizeMastery` follows in
+ * learner-model.mjs, and for the same reason: "never assessed" and "assessed
+ * at zero" are different claims about a person.
+ */
 function num(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 /** First finite, non-negative reading in the list; 0 if there is none. */
