@@ -418,6 +418,26 @@ export default function ConversationalVoiceLayer() {
     window.speechSynthesis.speak(utterance);
   }), [markFirstAudio]);
 
+  const closeVoiceTurn = useCallback((outcome: 'completed' | 'incomplete' | 'fallback') => {
+    const now = voiceQualityNow();
+    if (currentTurnIdRef.current) {
+      reportVoiceQuality(qualityContext(), 'assistant_turn_complete', {
+        outcome,
+        audio_started: firstAudioReportedRef.current,
+        submit_to_complete_ms: turnSubmittedAtRef.current > 0
+          ? Math.max(0, Math.round(now - turnSubmittedAtRef.current))
+          : -1,
+      });
+    }
+    lastAssistantAudioEndedAtRef.current = now;
+    currentTurnIdRef.current = null;
+    micSpeechStartedAtRef.current = 0;
+    lastRecognitionActivityAtRef.current = 0;
+    turnSubmittedAtRef.current = 0;
+    firstVoiceSegmentAtRef.current = 0;
+    firstAudioReportedRef.current = false;
+  }, [qualityContext]);
+
   const finishSegmentTurnIfReady = useCallback(() => {
     if (
       !activeRef.current
@@ -426,9 +446,10 @@ export default function ConversationalVoiceLayer() {
       || voiceSegmentQueueRef.current.length > 0
     ) return;
     awaitingAssistantRef.current = false;
+    closeVoiceTurn(voiceSegmentsReceivedRef.current ? 'completed' : 'incomplete');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, startRecognition]);
+  }, [changePhase, closeVoiceTurn, startRecognition]);
 
   const drainVoiceSegments = useCallback(async () => {
     if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
@@ -478,6 +499,19 @@ export default function ConversationalVoiceLayer() {
     if (event.type === 'voice_text_segment') {
       voiceSegmentsReceivedRef.current = true;
       awaitingAssistantRef.current = true;
+      if (!firstVoiceSegmentAtRef.current) {
+        const now = voiceQualityNow();
+        firstVoiceSegmentAtRef.current = now;
+        reportVoiceQuality(qualityContext(), 'first_voice_segment', {
+          submit_to_segment_ms: turnSubmittedAtRef.current > 0
+            ? Math.max(0, Math.round(now - turnSubmittedAtRef.current))
+            : -1,
+          mic_to_segment_ms: micSpeechStartedAtRef.current > 0
+            ? Math.max(0, Math.round(now - micSpeechStartedAtRef.current))
+            : -1,
+          sequence: event.sequence,
+        });
+      }
       const segmentKey = event.messageId + ':' + event.sequence;
       if (spokenVoiceSegmentKeysRef.current.has(segmentKey)) return;
       if (
@@ -540,7 +574,7 @@ export default function ConversationalVoiceLayer() {
       voiceTurnClosedRef.current = true;
       finishSegmentTurnIfReady();
     }
-  }, [drainVoiceSegments, finishSegmentTurnIfReady]);
+  }, [drainVoiceSegments, finishSegmentTurnIfReady, qualityContext]);
 
   useEffect(() => subscribeVoiceStreamEvents(handleVoiceStreamEvent), [handleVoiceStreamEvent]);
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
@@ -595,11 +629,12 @@ export default function ConversationalVoiceLayer() {
       ttsAbortRef.current = null;
       ttsPrefetchAbortRef.current = null;
       if (activeRef.current && phaseRef.current === 'speaking') {
+        closeVoiceTurn('fallback');
         changePhase('listening');
         startRecognition();
       }
     }
-  }, [browserSpeechFallback, changePhase, playBlob, startRecognition, stopRecognition]);
+  }, [browserSpeechFallback, changePhase, closeVoiceTurn, playBlob, startRecognition, stopRecognition]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
