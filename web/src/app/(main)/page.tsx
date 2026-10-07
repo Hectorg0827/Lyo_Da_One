@@ -3,23 +3,14 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Clock,
-  BookOpen,
-  Zap,
-  Star,
   ChevronRight,
-  Brain,
-  Sparkles,
-  Play,
   Users,
   Heart,
   MessageCircle,
-  Trophy,
   TrendingUp,
   Layers,
   Share,
   MoreHorizontal,
-  List,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
@@ -31,19 +22,11 @@ import NextForYou from '@/components/home/NextForYou';
 import CourseStack from '@/components/home/CourseStack';
 import HomeTestPrepCard from '@/components/home/HomeTestPrepCard';
 import FrontDoor from '@/components/home/FrontDoor';
+import LearnerStats from '@/components/stats/LearnerStats';
 import { shouldShowLearnerDashboard } from '@/lib/entry-contract.mjs';
-import { hasConceptEvidence, shouldLeadWithConcepts } from '@/lib/learner-model.mjs';
+import { streakFrom } from '@/lib/learner-stats.mjs';
+import { hasConceptEvidence } from '@/lib/learner-model.mjs';
 
-// Color palette for dynamically mapped courses
-const courseColors = ['#6366f1', '#ec4899', '#22c55e', '#f59e0b', '#3b82f6'];
-const courseEmojis = ['📚', '🧠', '🎨', '🐍', '🎵', '⚛️'];
-const gradientPairs = [
-  'from-[#6366f1] to-[#8b5cf6]',
-  'from-[#ec4899] to-[#f43f5e]',
-  'from-[#3b82f6] to-[#06b6d4]',
-  'from-[#f59e0b] to-[#ef4444]',
-  'from-[#22c55e] to-[#14b8a6]',
-];
 const activityColors = ['#6366f1', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
 
 // iOS FocusView.DiscoverStrip — pill chips injected into the feed
@@ -280,7 +263,6 @@ export default function HomePage() {
 
   const { data: gamification } = useApi(() => api.gamification.overview(), []);
   const { data: conceptSummary } = useApi(() => api.personalization.conceptSummary(), []);
-  const { data: courses } = useApi(() => api.courses.list(0, 4), []);
   // People this learner actually follows — not the public feed.
   //
   // This section called itself "Today in your world" while reading
@@ -303,122 +285,13 @@ export default function HomePage() {
 
   const firstName = user?.displayName.split(' ')[0] ?? 'Learner';
 
-  // Derive streak from gamification or user profile
-  const streakData = gamification?.streaks as Record<string, unknown> | undefined;
-  const currentStreak = (streakData?.current as number) || user?.streak || 0;
-  const bestStreak = (streakData?.longest as number) || (streakData?.best as number) || currentStreak;
+  // The streak reads the same here as in the stats strip below and in
+  // Profile's grid, because all three ask the same module (lib/learner-stats).
+  const { current: currentStreak } = streakFrom(gamification, user);
 
-  // Derive stats from gamification overview
   const xpSummary = gamification?.xp_summary as Record<string, unknown> | undefined;
-  const userLevel = gamification?.user_level as Record<string, unknown> | undefined;
   const achievementsData = gamification?.achievements as Record<string, unknown> | undefined;
-  const activityStats = [
-    {
-      label: 'Hours Learned',
-      value: String((userLevel?.total_hours as number) || user?.xp ? Math.round((user?.xp || 0) / 100) : 0),
-      sub: 'total',
-      icon: Clock,
-      color: '#6366f1',
-      trend: '',
-    },
-    {
-      label: 'Courses Done',
-      value: String((achievementsData?.completed as number) || user?.coursesCompleted || 0),
-      sub: 'total completed',
-      icon: BookOpen,
-      color: '#22c55e',
-      trend: '',
-    },
-    {
-      label: 'XP Earned',
-      value: String((xpSummary?.total as number) || user?.xp || 0),
-      sub: 'total',
-      icon: Zap,
-      color: '#f59e0b',
-      trend: `Level ${(userLevel?.level as number) || user?.level || 1}`,
-    },
-    {
-      label: 'Streak',
-      value: `${currentStreak}d`,
-      sub: 'current',
-      icon: Trophy,
-      color: '#ec4899',
-      trend: bestStreak > currentStreak ? `Best: ${bestStreak}d` : '',
-    },
-  ];
 
-  /**
-   * Lead with what the learner knows, not how often they showed up.
-   *
-   * XP, level, hours and streak are real, but they measure attendance. A
-   * learner with a thirty-day streak still cannot tell from that whether they
-   * understand anything. These counts are earned from their own evidence
-   * server-side — see `lyo_app/events/concept_summary.py` for what each word
-   * requires — so the headline means what it says.
-   *
-   * Streak keeps the fourth slot. It is honest about being a habit measure,
-   * and it is the one number here that rewards coming back tomorrow.
-   *
-   * If the summary is unavailable — an older backend, a failed request — the
-   * activity stats are shown instead. Rendering zeroes for a learner who has
-   * demonstrably done work would be the same fabrication this page was
-   * cleaned up to remove, just with a more flattering vocabulary.
-   */
-  // Narrowed here rather than inline: the decision lives in a .mjs module, so
-  // TypeScript cannot see through the call to know the summary is non-null.
-  const leadingConcepts = shouldLeadWithConcepts(conceptSummary) ? conceptSummary : null;
-
-  const conceptStats = leadingConcepts
-    ? [
-        {
-          label: 'Learned',
-          value: String(leadingConcepts.learned),
-          sub: 'concepts explained',
-          icon: BookOpen,
-          color: '#6366f1',
-          trend: leadingConcepts.exploring > 0 ? `${leadingConcepts.exploring} exploring` : '',
-        },
-        {
-          label: 'Mastered',
-          value: String(leadingConcepts.mastered),
-          sub: 'applied, transferred, retained',
-          icon: Trophy,
-          color: '#22c55e',
-          trend: '',
-        },
-        {
-          label: 'Retained',
-          value: String(leadingConcepts.retained),
-          sub: 'recalled after a break',
-          icon: Zap,
-          color: '#f59e0b',
-          trend: '',
-        },
-        {
-          label: 'Streak',
-          value: `${currentStreak}d`,
-          sub: 'current',
-          icon: Clock,
-          color: '#ec4899',
-          trend: bestStreak > currentStreak ? `Best: ${bestStreak}d` : '',
-        },
-      ]
-    : null;
-
-  const learningStats = conceptStats ?? activityStats;
-
-  // Map real Stack items — device- and platform-agnostic, backend-synced,
-  // sourced from every course a course card's Start action has actually
-  // saved (see /classroom's upsertCourseOnStart effect and CoursePlayer's
-  // progress sync) — NOT the generic catalog list used below for
-  // The catalogue grid below. Not personalised — see <NextForYou /> for the
-  // learner's actual recommendations.
-  const STATUS_LABEL: Record<string, string> = {
-    not_started: 'Not started',
-    in_progress: 'In progress',
-    completed: 'Completed',
-    paused: 'Paused',
-  };
   /**
    * Is there anything real to report about this learner yet?
    *
@@ -427,8 +300,8 @@ export default function HomePage() {
    * 0 hours / 0 courses is a dashboard of their own nothing — it asks them to
    * admire an empty account before the product has given them anything.
    *
-   * When there is no activity we skip the greeting, the hero card and the
-   * stats grid entirely and lead with the front door instead. Nothing here
+   * When there is no activity we skip the greeting, the course stack and the
+   * stats strip entirely and lead with the front door instead. Nothing here
    * invents a number to fill the space.
    */
   const hasRealActivity =
@@ -443,20 +316,6 @@ export default function HomePage() {
     isAuthenticated,
     hasRealActivity,
   });
-
-  // Map API courses to recommended format
-  const catalogueCourses = (courses || []).map((c: Record<string, unknown>, i: number) => ({
-    id: String(c.id ?? i),
-    title: (c.title as string) || 'Untitled Course',
-    category: (c.subject as string) || (c.category as string) || 'General',
-    duration: c.estimated_duration ? `${c.estimated_duration}h` : '?',
-    students: c.enrolled_count ? `${c.enrolled_count}` : '0',
-    rating: (c.rating as number) || 0,
-    difficulty: (c.difficulty as string) || 'Beginner',
-    emoji: courseEmojis[i % courseEmojis.length],
-    color: gradientPairs[i % gradientPairs.length],
-    isAI: (c.is_ai_generated as boolean) || false,
-  }));
 
   // Map community posts (the /community/posts wire shape: `items`, with
   // snake_case author and count fields) to what the row below renders.
@@ -487,133 +346,107 @@ export default function HomePage() {
 
   return (
     <motion.div
-      className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-8"
+      className="max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-6 sm:py-6 sm:space-y-8"
       variants={containerVariants}
       initial="hidden"
       animate={mounted ? 'visible' : 'hidden'}
     >
-      {/* ── Front door — the question the product exists to answer.
-          Shown to everyone so the Classroom and "I have a test" entries are
-          always one action away; it leads the page for a learner with no
-          activity yet, and sits under Continue Learning for one who has. */}
-      <FrontDoor knownLearner={showLearnerDashboard} />
+      {/* ── Who this is, and where they left off ───────────────────
+          A returning learner opens this page to get back into something they
+          already started. That is what the top of the screen is for now:
+          their name, the one line that says what finishing a lesson is worth
+          today, and then their courses — newest first, so the card under the
+          greeting is the one they were last in.
 
+          The front door follows, because "start something new" is the second
+          question for someone who already has courses and the first question
+          only for someone who has none. A learner with no activity does not
+          reach this block at all (see shouldShowLearnerDashboard), so for
+          them the front door still leads the page. ── */}
       {showLearnerDashboard && (
         <>
-      {/* ── Greeting (matches iOS FocusView greetingSection) ──── */}
-      <motion.div variants={itemVariants}>
-        <p className="font-rounded text-sm font-medium text-white/75">{getGreeting()}</p>
-        <h1 className="font-rounded text-4xl font-bold leading-tight drop-shadow-[0_4px_12px_rgba(168,85,247,0.25)]">
-          <span className="headline-gradient-text">{firstName}</span>
-        </h1>
-        <p className="text-sm font-medium text-white/65 mt-1.5">
-          You&apos;re one lesson away from {currentStreak > 0 ? `a ${currentStreak + 1}-day streak` : 'starting a streak'}.
-        </p>
-      </motion.div>
+          {/* ── Greeting (matches iOS FocusView greetingSection) ──── */}
+          <motion.div variants={itemVariants}>
+            <h1 className="font-rounded text-[26px] sm:text-[34px] font-bold leading-tight drop-shadow-[0_4px_12px_rgba(168,85,247,0.25)]">
+              <span className="text-white/70">{getGreeting()}, </span>
+              <span className="headline-gradient-text">{firstName}</span>
+            </h1>
+            <p className="text-[13px] sm:text-sm font-medium text-white/65 mt-1">
+              You&apos;re one lesson away from {currentStreak > 0 ? `a ${currentStreak + 1}-day streak` : 'starting a streak'}.
+            </p>
+          </motion.div>
 
-      {/* ── The test you have coming up ────────────────────────────
-          Answered in place: readiness, days remaining and the next session,
-          instead of a CTA that said nothing about this learner's own plan.
-          Collapses to one line when there is no plan. Every figure comes
-          from lib/test-prep.mjs, so "nothing assessed yet" stays distinct
-          from "0% ready". ── */}
-      <motion.div variants={itemVariants}>
-        <HomeTestPrepCard enabled={isAuthenticated && !authLoading} />
-      </motion.div>
+          {/* ── Your courses — every course this learner has started, synced
+              via the real backend so it shows up the same way on any device
+              or platform they're signed into (see lib/stack.ts).
+
+              One list, once. This section and a hero card above it were once
+              the same array: the newest course rendered large, then all of
+              them rendered small, which made one collection look like two
+              features. This is the whole stack, newest first — so the top
+              card is the course they were last in — with chips to narrow it
+              and a card that turns over for the description the backend
+              already sends and this page used to drop. ── */}
+          <motion.div variants={itemVariants}>
+            <SectionHeader title="Your courses" href="/courses" icon={Layers} />
+            <CourseStack
+              items={stackItems || []}
+              renderMenu={(item) => (
+                <ShareOrPostMenu
+                  courseId={item.content_id || String(item.id)}
+                  title={item.title}
+                  progressPercent={Math.round((item.progress || 0) * 100)}
+                />
+              )}
+            />
+          </motion.div>
         </>
       )}
 
-      {/* ── Quick Actions ─────────────────────────────────────── */}
-      <motion.div variants={itemVariants}>
-        <SectionHeader title="Quick Actions" icon={Sparkles} />
-        <div className="grid grid-cols-3 gap-3">
-          <Link
-            href="/chat"
-            className="group relative overflow-hidden rounded-xl p-4 flex flex-col gap-2 transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
-          >
-            <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-            <Brain size={22} className="text-white relative z-10" />
-            <div className="relative z-10">
-              <p className="text-sm font-bold text-white leading-tight">Ask LYO</p>
-              <p className="text-[11px] text-white/70">AI tutor</p>
-            </div>
-          </Link>
-          <Link
-            href="/discover"
-            className="glass-card group p-4 flex flex-col gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:bg-white/[0.07]"
-          >
-            <Layers size={22} className="text-[#6366f1]" />
-            <div>
-              <p className="text-sm font-bold text-primary leading-tight">Browse</p>
-              <p className="text-[11px] text-secondary">Courses</p>
-            </div>
-          </Link>
-          <Link
-            href="/clips"
-            className="glass-card group p-4 flex flex-col gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] hover:bg-white/[0.07]"
-          >
-            <Play size={22} className="text-accent-pink" style={{ color: '#ec4899' }} />
-            <div>
-              <p className="text-sm font-bold text-primary leading-tight">Watch</p>
-              <p className="text-[11px] text-secondary">Clips</p>
-            </div>
-          </Link>
-        </div>
-      </motion.div>
+      {/* ── Front door — the question the product exists to answer.
+          Shown to everyone so the Classroom and "I have a test" entries are
+          always one action away. It leads the page for a learner with no
+          activity yet, and renders compact under the courses of one who has
+          (see FrontDoor's `compact`). */}
+      <FrontDoor knownLearner={showLearnerDashboard} />
 
-      {/* ── Your courses — every course this learner has started, synced
-          via the real backend so it shows up the same way on any device or
-          platform they're signed into (see lib/stack.ts).
-
-          One list, once. This section and the hero card above it were the
-          same array: the newest course rendered large, then all of them
-          rendered small, which made one collection look like two features.
-          The hero is gone and this is the whole stack, newest first, with
-          chips to narrow it and a card that turns over for the description
-          the backend already sends and this page used to drop. ── */}
-      <motion.div variants={itemVariants}>
-        <SectionHeader title="Your courses" href="/courses" icon={Layers} />
-        <CourseStack
-          items={stackItems || []}
-          renderMenu={(item) => (
-            <ShareOrPostMenu
-              courseId={item.content_id || String(item.id)}
-              title={item.title}
-              progressPercent={Math.round((item.progress || 0) * 100)}
-            />
-          )}
-        />
-      </motion.div>
-
-      {/* ── Learning Stats — only once there is something to count ─ */}
       {showLearnerDashboard && (
-      <motion.div variants={itemVariants}>
-        <SectionHeader title="Your Stats" icon={TrendingUp} />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {learningStats.map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} className="glass-card p-4 space-y-2">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: `${stat.color}20` }}
-                >
-                  <Icon size={16} style={{ color: stat.color }} />
-                </div>
-                <div>
-                  <p className="text-xl font-black text-primary leading-none">{stat.value}</p>
-                  <p className="text-[11px] text-secondary mt-0.5">{stat.label}</p>
-                </div>
-                <p className="text-[10px] font-medium" style={{ color: stat.color }}>
-                  {stat.trend}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </motion.div>
+        /* ── The test you have coming up ────────────────────────────
+            Answered in place: readiness, days remaining and the next session,
+            instead of a CTA that said nothing about this learner's own plan.
+            Every figure comes from lib/test-prep.mjs, so "nothing assessed
+            yet" stays distinct from "0% ready".
 
+            It renders nothing when there is no plan. The front door directly
+            above it now carries a full "I have a test" tile, and two
+            invitations to the same page, stacked, is one invitation and one
+            piece of clutter. ── */
+        <motion.div variants={itemVariants}>
+          <HomeTestPrepCard enabled={isAuthenticated && !authLoading} promptWhenEmpty={false} />
+        </motion.div>
+      )}
+
+      {/* ── Learning stats — only once there is something to count ─
+          One row, not four cards in a 2x2 grid. These are numbers a learner
+          glances at on the way to something else; a third of a phone screen
+          is not what a glance is worth, and it was pushing the page's real
+          content below the fold.
+
+          The full read — what each word means, the trends, the sub-lines that
+          are the whole reason "Mastered" can be trusted — is on Profile, and
+          this taps through to it. Both shapes are built by the same module,
+          so they cannot drift into disagreeing about the same learner. ── */}
+      {showLearnerDashboard && (
+        <motion.div variants={itemVariants}>
+          <SectionHeader title="Your Stats" href="/profile" icon={TrendingUp} />
+          <LearnerStats
+            variant="strip"
+            href="/profile"
+            conceptSummary={conceptSummary}
+            gamification={gamification}
+            user={user}
+          />
+        </motion.div>
       )}
 
       {/* ── What LYO recommends next ──────────────────────────────
@@ -621,89 +454,6 @@ export default function HomePage() {
           nothing when nothing is due. This replaced a hard-coded
           "Daily Challenges" list with invented progress values. */}
       <NextForYou />
-
-      {/* ── Browse the catalogue ──────────────────────────────────
-          This was headed "Recommended For You" over `courses.list(0, 4)` —
-          the first four rows of the catalogue, identical for every learner.
-          Not invented data, but a claim about the learner ("for you") that
-          nothing behind it supported.
-
-          Real recommendations live in <NextForYou /> above, drawn from this
-          learner's own review schedule and mastery profile, each carrying the
-          reason it was chosen. The catalogue is still worth browsing; it just
-          is not personalised, so it no longer says it is. */}
-      <motion.div variants={itemVariants}>
-        <SectionHeader title="Browse the catalogue" href="/discover" icon={Star} />
-        {catalogueCourses.length === 0 ? (
-          <div className="glass-card p-6 flex flex-col items-center gap-2 text-center">
-            <Star size={28} className="text-secondary" />
-            <p className="text-sm text-secondary">Courses will appear here as they are published</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {catalogueCourses.map((course) => (
-              <Link
-                key={course.id}
-                href={`/courses/${course.id}`}
-                className="glass-card overflow-hidden group transition-all duration-200 hover:scale-[1.01] hover:bg-white/[0.06]"
-              >
-                {/* Course header gradient */}
-                <div
-                  className={cn('h-20 w-full flex items-center justify-center text-4xl relative', `bg-gradient-to-br ${course.color}`)}
-                >
-                  {course.isAI && (
-                    <span
-                      className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-                      style={{ background: 'rgba(0,0,0,0.35)', color: '#fff' }}
-                    >
-                      <Sparkles size={9} /> AI
-                    </span>
-                  )}
-                  {course.emoji}
-                </div>
-                <div className="p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-bold text-primary leading-tight flex-1">{course.title}</p>
-                  </div>
-                  <p className="text-[11px] text-secondary">{course.category}</p>
-                  <div className="flex items-center gap-3 text-[11px] text-secondary">
-                    <span className="flex items-center gap-1">
-                      <Clock size={11} /> {course.duration}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Users size={11} /> {course.students}
-                    </span>
-                    {course.rating > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Star size={11} className="text-yellow-400" /> {course.rating}
-                      </span>
-                    )}
-                    <span
-                      className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium"
-                      style={{
-                        backgroundColor:
-                          course.difficulty === 'beginner' || course.difficulty === 'Beginner'
-                            ? 'rgba(34,197,94,0.15)'
-                            : course.difficulty === 'advanced' || course.difficulty === 'Advanced'
-                            ? 'rgba(239,68,68,0.15)'
-                            : 'rgba(99,102,241,0.15)',
-                        color:
-                          course.difficulty === 'beginner' || course.difficulty === 'Beginner'
-                            ? '#22c55e'
-                            : course.difficulty === 'advanced' || course.difficulty === 'Advanced'
-                            ? '#ef4444'
-                            : '#a78bfa',
-                      }}
-                    >
-                      {course.difficulty}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </motion.div>
 
       {/* ── Recent Community Activity ─────────────────────────── */}
       <motion.div variants={itemVariants}>

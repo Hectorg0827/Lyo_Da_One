@@ -65,6 +65,8 @@ const sidebar = readCode('web/src/components/layout/Sidebar.tsx');
 const chatSidebar = readCode('web/src/components/chat/ChatSidebar.tsx');
 const entryContract = readCode('web/src/lib/entry-contract.mjs');
 const learnerModel = readCode('web/src/lib/learner-model.mjs');
+const learnerStats = readCode('web/src/lib/learner-stats.mjs');
+const profile = readCode('web/src/app/(main)/profile/page.tsx');
 const lessonView = readCode('web/src/components/courses/LessonView.tsx');
 const learningProgress = readCode('web/src/lib/learning-progress.ts');
 const classroomStore = readCode('web/src/stores/classroom-store.ts');
@@ -98,6 +100,7 @@ for (const [source, label] of [
   [learningStats, 'Learning stats'],
   [nextForYou, 'Next-for-you'],
   [frontDoor, 'Front door'],
+  [learnerStats, 'Learner stats'],
 ]) {
   rejectPattern(source, /Math\.random\(\)/, `${label} generated learner data`);
 }
@@ -217,14 +220,30 @@ rejectText(classroomStore, '`Application: ${trimmed}`', 'Classroom mislabels eve
 // evidence server-side, never assembled on the client from whatever score is
 // to hand.
 
+// The four numbers are built in one module and rendered in two shapes: a
+// one-line strip on Home, the full grid on Profile. Both read the same
+// builder, so a surface cannot quietly headline a different figure.
 requireText(home, 'api.personalization.conceptSummary(', 'Home reads the concept summary');
-requireText(home, 'shouldLeadWithConcepts(', 'Home decides the headline by the shared rule');
-requireText(home, "label: 'Mastered'", 'Home headlines concepts mastered');
-requireText(home, "label: 'Retained'", 'Home headlines concepts retained');
+requireText(home, '<LearnerStats', 'Home mounts the shared stats');
+requireText(profile, 'api.personalization.conceptSummary(', 'Profile reads the concept summary');
+requireText(profile, '<LearnerStats', 'Profile mounts the shared stats');
+requireText(learnerStats, 'shouldLeadWithConcepts(', 'Stats decide the headline by the shared rule');
+requireText(learnerStats, "label: 'Mastered'", 'Stats headline concepts mastered');
+requireText(learnerStats, "label: 'Retained'", 'Stats headline concepts retained');
+// The sub-line is what makes "Mastered" a claim rather than a compliment. The
+// strip drops it for space; the grid must not.
+requireText(learnerStats, 'applied, transferred, retained', 'Mastered says what it took');
 
-// Concept counts must come from the server's summary, not be recomputed here.
-for (const invented of ['.filter((c) => c.mastered', 'countMastered(', 'mastered += ']) {
-  rejectText(home, invented, 'Home derives concept counts on the client');
+// Concept counts must come from the server's summary, not be recomputed on
+// the client — on any of the three surfaces that touch them.
+for (const [source, label] of [
+  [home, 'Home'],
+  [profile, 'Profile'],
+  [learnerStats, 'Learner stats'],
+]) {
+  for (const invented of ['.filter((c) => c.mastered', 'countMastered(', 'mastered += ']) {
+    rejectText(source, invented, `${label} derives concept counts on the client`);
+  }
 }
 
 // A learner with no evidence yet must not be shown three zeroes as a

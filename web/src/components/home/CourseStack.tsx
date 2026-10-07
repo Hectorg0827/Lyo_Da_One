@@ -96,8 +96,13 @@ export default function CourseStack({
 
   if (items.length === 0) {
     return (
+      /* `/courses` and not `/discover`: Discover is the clips reel. This is
+         the "I have no courses yet" state, so it has to land on the actual
+         catalogue — the one with search and difficulty filters. It is also
+         Focus's only remaining pointer at the catalogue now that the page no
+         longer reprints its first four rows. */
       <Link
-        href="/discover"
+        href="/courses"
         className="glass-card flex flex-col items-center gap-2 p-6 text-center transition-all duration-200 hover:bg-white/[0.07]"
       >
         <Layers size={28} className="text-secondary" />

@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
-  GraduationCap, CalendarClock, ArrowRight, SlidersHorizontal,
+  GraduationCap, CalendarClock, ArrowRight, SlidersHorizontal, ChevronDown,
   Check, Gauge, Timer, Languages, Target,
 } from 'lucide-react';
 import {
@@ -87,6 +87,21 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
   const [language, setLanguage] = useState('auto');
   const [goal, setGoal] = useState('');
 
+  /**
+   * Two jobs, one card.
+   *
+   * To a first-time visitor this card *is* the product: it leads the page and
+   * has to make the case, so it keeps the full headline and the sentence that
+   * explains what "live teacher" means.
+   *
+   * To a learner who already has courses it sits below their own work, and its
+   * only job is "start another one". The pitch is already won, so the pitch is
+   * dropped: smaller heading, no body copy, tighter padding. On a phone that
+   * is the difference between this card owning the first screen and it being
+   * one tidy block under the courses the learner actually came back for.
+   */
+  const compact = knownLearner;
+
   const trimmed = topic.trim();
   const chosenObjective = GOALS.find((g) => g.value === goal)?.objective;
   // Count only answers that change the lesson, so the badge never claims the
@@ -116,9 +131,13 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
       initial={reduceMotion ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="group/door relative overflow-hidden rounded-[32px]
-        border border-white/[0.13] p-6 sm:p-10
-        shadow-[0_30px_80px_-24px_rgba(49,16,120,0.85),0_2px_0_0_rgba(255,255,255,0.06)_inset]"
+      className={[
+        'group/door relative overflow-hidden border border-white/[0.13]',
+        'shadow-[0_30px_80px_-24px_rgba(49,16,120,0.85),0_2px_0_0_rgba(255,255,255,0.06)_inset]',
+        compact
+          ? 'rounded-[24px] p-4 sm:rounded-[28px] sm:p-6'
+          : 'rounded-[28px] p-5 sm:rounded-[32px] sm:p-10',
+      ].join(' ')}
       style={{ background: '#150d2e' }}
       aria-labelledby="front-door-heading"
     >
@@ -165,23 +184,33 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
             )}
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-teal" />
           </span>
-          A live teacher, not a playlist
+          {compact ? 'Start a new course' : 'A live teacher, not a playlist'}
         </div>
 
         <h1
           id="front-door-heading"
-          className="mt-3 font-rounded text-[32px] sm:text-[44px] font-extrabold leading-[1.05] tracking-[-0.02em] text-white"
+          className={[
+            'mt-2 font-rounded font-extrabold leading-[1.05] tracking-[-0.02em] text-white',
+            compact
+              ? 'text-[21px] sm:text-[26px]'
+              : 'mt-3 text-[30px] sm:text-[44px]',
+          ].join(' ')}
         >
-          What do you want to learn?
+          {compact ? 'What do you want to learn next?' : 'What do you want to learn?'}
         </h1>
 
-        <p className="mt-3 max-w-xl text-sm sm:text-base font-medium text-white/75">
-          LYO teaches you live, checks what you understand, adapts when you&apos;re stuck,
-          and remembers what you&apos;ve mastered.
-        </p>
+        {!compact && (
+          <p className="mt-3 max-w-xl text-sm sm:text-base font-medium text-white/75">
+            LYO teaches you live, checks what you understand, adapts when you&apos;re stuck,
+            and remembers what you&apos;ve mastered.
+          </p>
+        )}
 
         <form
-          className="mt-6 flex flex-col sm:flex-row gap-3"
+          className={[
+            'flex flex-col sm:flex-row gap-2.5 sm:gap-3',
+            compact ? 'mt-3.5' : 'mt-6',
+          ].join(' ')}
           onSubmit={(e) => {
             e.preventDefault();
             enterClassroom();
@@ -195,12 +224,17 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
               id="front-door-topic"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="Anything — a subject, a skill, a chapter you're stuck on"
+              placeholder={compact
+                ? 'A subject, a skill, a chapter you\u2019re stuck on'
+                : 'Anything \u2014 a subject, a skill, a chapter you\u2019re stuck on'}
               autoComplete="off"
-              className="peer w-full rounded-2xl bg-black/30 border border-white/20 px-5 py-4
-                text-base text-white placeholder-white/45 outline-none backdrop-blur-md
-                transition-all duration-200
-                focus:border-white/55 focus:bg-black/40 focus:shadow-[0_0_0_4px_rgba(255,255,255,0.10)]"
+              className={[
+                'peer w-full rounded-2xl bg-black/30 border border-white/20',
+                'text-white placeholder-white/45 outline-none backdrop-blur-md',
+                'transition-all duration-200',
+                'focus:border-white/55 focus:bg-black/40 focus:shadow-[0_0_0_4px_rgba(255,255,255,0.10)]',
+                compact ? 'px-4 py-3.5 text-[15px]' : 'px-5 py-4 text-base',
+              ].join(' ')}
             />
             {/* A thin accent that fills on focus — the field answering back. */}
             <span
@@ -218,8 +252,9 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
                outline that still says what it is; it fills in the moment
                there is something to teach. */
             className={[
-              'group/cta shrink-0 inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-4',
-              'text-base font-bold transition-all duration-300',
+              'group/cta shrink-0 inline-flex items-center justify-center gap-2 rounded-2xl',
+              'font-bold transition-all duration-300',
+              compact ? 'px-5 py-3.5 text-[15px]' : 'px-6 py-4 text-base',
               trimmed
                 ? 'bg-white text-[#1b1035] shadow-[0_10px_34px_-8px_rgba(255,255,255,0.55)] '
                   + 'hover:scale-[1.02] hover:shadow-[0_16px_44px_-8px_rgba(255,255,255,0.7)] active:scale-95'
@@ -238,40 +273,67 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
           </button>
         </form>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-white/50">Try</span>
+        {/* ── Suggestions ──
+            One row that scrolls sideways, not a wrapping block. Four example
+            chips wrapping to three lines on a phone was most of this card's
+            height, and it grew every time an example was added. A single row
+            costs one line whatever is in it, and the clipped chip at the right
+            edge is what tells you to push it. */}
+        <div
+          className={[
+            'no-scrollbar flex items-center gap-2 overflow-x-auto pb-0.5',
+            compact ? 'mt-3' : 'mt-4',
+          ].join(' ')}
+        >
+          <span className="shrink-0 text-xs font-medium text-white/50">Try</span>
           {EXAMPLES.map((example) => (
             <button
               key={example}
               type="button"
               onClick={() => setTopic(example)}
-              className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5
-                text-xs font-medium text-white/80 backdrop-blur-md
+              className="shrink-0 whitespace-nowrap rounded-full border border-white/20 bg-white/10
+                px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur-md
                 transition-all duration-200 hover:bg-white/20 hover:text-white
-                hover:border-white/40 hover:-translate-y-0.5 active:scale-95"
+                hover:border-white/40 active:scale-95"
             >
               {example}
             </button>
           ))}
-
-          <button
-            type="button"
-            onClick={() => setTuning((open) => !open)}
-            aria-expanded={tuning}
-            aria-controls={panelId}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/20 sm:ml-auto
-              bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/80 backdrop-blur-md
-              transition-colors hover:bg-white/20 hover:text-white"
-          >
-            <SlidersHorizontal size={13} />
-            {tuning ? 'Hide options' : 'Set level & length'}
-            {tunedCount > 0 && !tuning && (
-              <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-[#1b1035]">
-                {tunedCount}
-              </span>
-            )}
-          </button>
         </div>
+
+        {/* ── The options control ──
+            Its own row, and shaped like a control rather than a fifth chip in
+            a row of examples. Sitting among the suggestions it read as one
+            more thing to tap in passing; here the chevron says it opens
+            something and the badge says how much of it you have answered. */}
+        <button
+          type="button"
+          onClick={() => setTuning((open) => !open)}
+          aria-expanded={tuning}
+          aria-controls={panelId}
+          className={[
+            'mt-3 inline-flex w-full items-center gap-2 rounded-2xl border px-4 py-3',
+            'text-[13px] font-semibold backdrop-blur-md transition-colors duration-200 sm:w-auto',
+            tuning
+              ? 'border-white/40 bg-white/[0.16] text-white'
+              : 'border-white/20 bg-white/[0.08] text-white/80 hover:border-white/35 hover:bg-white/[0.14] hover:text-white',
+          ].join(' ')}
+        >
+          <SlidersHorizontal size={14} className="shrink-0" />
+          Set level &amp; length
+          {tunedCount > 0 && (
+            <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-bold tabular-nums text-[#1b1035]">
+              {tunedCount}
+            </span>
+          )}
+          <ChevronDown
+            size={14}
+            className={[
+              'ml-auto shrink-0 text-white/55 transition-transform duration-300',
+              tuning ? 'rotate-180' : '',
+            ].join(' ')}
+          />
+        </button>
 
         {/* ── The optional questions ──
             Collapsed by default. Every control here changes what the server
@@ -354,26 +416,46 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
           )}
         </AnimatePresence>
 
-        <div className="mt-6 pt-5 border-t border-white/15">
+        {/* ── The second door ──
+            A test with a date on it is a different request from "teach me
+            this", and it is the one people arrive with. It used to be an
+            outline button with a caption stranded under it after a rule —
+            shaped like a footnote, so it read like leftover text from the
+            card above.
+
+            It is a tile now: the whole thing is the target, the amber is the
+            same amber the test-prep card and the Test Prep page already use,
+            so this is visibly the way in to *that*, and the two lines say
+            what it does instead of leaving a caption to explain the button.
+            Equal in form to the classroom CTA, distinct in colour, second in
+            reading order. ── */}
+        <div className={['border-t border-white/15', compact ? 'mt-4 pt-4' : 'mt-6 pt-5'].join(' ')}>
           <button
             type="button"
             onClick={startTestPrep}
-            className="group/test inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10
-              px-5 py-3 text-sm font-semibold text-white backdrop-blur-md
-              transition-all duration-200 hover:bg-white/20 hover:border-white/40 active:scale-95"
+            className="group/test flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/35
+              bg-[#F59E0B]/[0.13] p-3.5 text-left backdrop-blur-md
+              transition-all duration-200 hover:border-[#F59E0B]/60 hover:bg-[#F59E0B]/[0.22]
+              active:scale-[0.99]"
           >
-            <CalendarClock size={16} />
-            I have a test
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#F59E0B]/30 bg-[#F59E0B]/20">
+              <CalendarClock size={18} className="text-[#FBBF24]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-rounded text-[15px] font-bold leading-tight text-white">
+                I have a test
+              </span>
+              <span className="mt-0.5 block text-[11.5px] font-medium leading-snug text-white/60">
+                {knownLearner
+                  ? 'The date and your notes \u2014 LYO plans around what you know'
+                  : 'Bring the date and your notes \u2014 LYO plans it with you'}
+              </span>
+            </span>
             <ArrowRight
-              size={15}
-              className="opacity-70 transition-transform duration-200 group-hover/test:translate-x-0.5"
+              size={16}
+              className="shrink-0 text-[#FBBF24] transition-transform duration-200 group-hover/test:translate-x-0.5"
             />
           </button>
-          <p className="mt-2 text-xs text-white/55">
-            {knownLearner
-              ? 'Bring the date and your notes — LYO builds the plan around what you already know.'
-              : 'Bring the date and your notes. LYO finds what you already know and what you don’t.'}
-          </p>
         </div>
       </div>
     </motion.section>
