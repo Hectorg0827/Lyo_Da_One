@@ -254,10 +254,10 @@ export async function playSpeechResponse(
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     onAudio?.(audio);
-    const ended = waitForAudioEnd(audio, signal).then<Error | null>(
-      () => null,
-      (error) => error instanceof Error ? error : new Error(String(error)),
-    );
+    const ended: Promise<Error | null> = waitForAudioEnd(audio, signal).then(
+    (): Error | null => null,
+    (error): Error | null => error instanceof Error ? error : new Error(String(error)),
+  );
     try {
       await audio.play();
       const endError = await ended;
@@ -277,9 +277,9 @@ export async function playSpeechResponse(
   audio.preload = 'auto';
   audio.src = url;
   onAudio?.(audio);
-  const ended = waitForAudioEnd(audio, signal).then<Error | null>(
-    () => null,
-    (error) => error instanceof Error ? error : new Error(String(error)),
+  const ended: Promise<Error | null> = waitForAudioEnd(audio, signal).then(
+    (): Error | null => null,
+    (error): Error | null => error instanceof Error ? error : new Error(String(error)),
   );
 
   try {
