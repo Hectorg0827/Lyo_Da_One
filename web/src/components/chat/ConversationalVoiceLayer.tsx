@@ -57,6 +57,7 @@ export default function ConversationalVoiceLayer() {
 
   const phaseRef = useRef<VoicePhase>('idle');
   const activeRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(activeConversationId);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalTranscriptRef = useRef('');
@@ -98,10 +99,14 @@ export default function ConversationalVoiceLayer() {
   const qualityContext = useCallback((turnId?: string) => ({
     sessionId: voiceQualitySessionIdRef.current,
     turnId: turnId ?? currentTurnIdRef.current ?? undefined,
-    conversationId: activeConversationId ?? undefined,
+    conversationId: activeConversationIdRef.current ?? undefined,
     locale: typeof navigator !== 'undefined' ? (navigator.language || 'auto') : 'auto',
     scenario: 'live_conversation',
-  }), [activeConversationId]);
+  }), []);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   const changePhase = useCallback((next: VoicePhase) => {
     phaseRef.current = next;
