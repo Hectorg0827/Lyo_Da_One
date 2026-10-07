@@ -37,7 +37,7 @@ const contracts = [
       "addSourceBuffer('audio/mpeg')",
       'response.body.getReader()',
       'appendMediaChunk',
-      'await audio.play()',
+      'playPromise = audio.play()',
     ],
   },
   {
@@ -130,7 +130,8 @@ const contracts = [
       'struct PrefetchedSpeech',
       'prefetchNextIfNeeded()',
       'Task<TTSResult, Error>',
-      'prefetchedSpeech?.task.cancel()',
+      'discardPrefetchedSpeech()',
+      'task.cancel()',
       'generatedResult(for:',
     ],
   },
