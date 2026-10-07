@@ -427,7 +427,8 @@ fun ChatScreen(nav: NavHostController) {
                         }
 
                         is ChatStreamEvent.VoiceSegment -> {
-                            if (voiceConversation && event.text.isNotBlank()) {
+                            val speechText = event.spokenText ?: event.text
+                            if (voiceConversation && speechText.isNotBlank()) {
                                 val key = "${event.messageId}:${event.sequence}"
                                 voiceSegmentStreamOpen = true
                                 if (
@@ -438,7 +439,7 @@ fun ChatScreen(nav: NavHostController) {
                                         "voice-segment:${event.messageId}:${event.sequence}"
                                     pendingVoiceUtterances += 1
                                     val accepted = textToSpeech?.speak(
-                                        event.text,
+                                        speechText,
                                         if (pendingVoiceUtterances == 1) {
                                             TextToSpeech.QUEUE_FLUSH
                                         } else {
@@ -451,7 +452,7 @@ fun ChatScreen(nav: NavHostController) {
                                         streamedVoiceSegmentKeys.add(key)
                                         lastSpokenVoiceText = listOf(
                                             lastSpokenVoiceText,
-                                            event.text,
+                                            speechText,
                                         ).filter { it.isNotBlank() }.joinToString(" ")
                                         speakingMessageId = utteranceId
                                     } else {
@@ -463,6 +464,7 @@ fun ChatScreen(nav: NavHostController) {
                         }
 
                         is ChatStreamEvent.VoiceReady -> {
+                            val speechText = event.spokenText ?: event.text
                             val hadSegments = streamedVoiceSegmentKeys.any {
                                 it.startsWith("${event.messageId}:")
                             }
@@ -471,14 +473,14 @@ fun ChatScreen(nav: NavHostController) {
                                 voiceConversation &&
                                 event.speak &&
                                 !hadSegments &&
-                                event.text.isNotBlank() &&
+                                speechText.isNotBlank() &&
                                 textToSpeechReady
                             ) {
                                 val utteranceId = event.messageId
-                                lastSpokenVoiceText = event.text
+                                lastSpokenVoiceText = speechText
                                 speakingMessageId = utteranceId
                                 textToSpeech?.speak(
-                                    event.text,
+                                    speechText,
                                     TextToSpeech.QUEUE_FLUSH,
                                     null,
                                     utteranceId,
