@@ -320,6 +320,25 @@ export default function ConversationalVoiceLayer() {
       }
       lastRecognitionAtRef.current = recognitionNow;
 
+      // If RMS already yielded the floor, the recognizer confirms whether that
+      // interruption was a real learner utterance rather than speaker echo.
+      if (bargeInAtRef.current != null && phaseRef.current === 'listening') {
+        if (possibleFalseBargeTimerRef.current) {
+          clearTimeout(possibleFalseBargeTimerRef.current);
+          possibleFalseBargeTimerRef.current = null;
+        }
+        const rmsToRecognitionMs = Math.max(
+          0,
+          Math.round(recognitionNow - bargeInAtRef.current),
+        );
+        setQaSnapshot((previous) => ({ ...previous, bargeIns: previous.bargeIns + 1 }));
+        reportVoiceQuality('barge_in_confirmed', {
+          source: 'rms_plus_semantic',
+          rms_to_recognition_ms: rmsToRecognitionMs,
+        });
+        bargeInAtRef.current = null;
+      }
+
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
       // the second line of defence. A non-echo utterance owns the floor
@@ -654,6 +673,19 @@ export default function ConversationalVoiceLayer() {
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
+    if (firstSegmentAtRef.current == null) {
+      firstSegmentAtRef.current = speakingStartedAtRef.current;
+      const submitToFallbackMs = turnSubmittedAtRef.current == null
+        ? undefined
+        : Math.max(0, Math.round(speakingStartedAtRef.current - turnSubmittedAtRef.current));
+      setQaSnapshot((previous) => ({
+        ...previous,
+        segmentArrivalMs: submitToFallbackMs,
+      }));
+      reportVoiceQuality('fallback_answer_ready', {
+        ...(submitToFallbackMs == null ? {} : { submit_to_answer_ms: submitToFallbackMs }),
+      });
+    }
     startRecognition(true);
     lastSpokenTextRef.current = text;
     lastSpokenMessageIdRef.current = messageId;
@@ -690,25 +722,43 @@ export default function ConversationalVoiceLayer() {
           next = null;
         }
 
-        await playBlob(await current.promise);
+        await playBlob(await current.promise, markFirstAudioStarted);
       }
     } catch {
       if (activeRef.current && phaseRef.current === 'speaking') {
-        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '));
+        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '), markFirstAudioStarted);
       }
     } finally {
       ttsAbortRef.current = null;
       ttsPrefetchAbortRef.current = null;
       if (activeRef.current && phaseRef.current === 'speaking') {
+        reportVoiceQuality('assistant_turn_complete');
+        resetUserTurnTiming();
         changePhase('listening');
         startRecognition();
       }
     }
-  }, [browserSpeechFallback, changePhase, playBlob, startRecognition, stopRecognition]);
+  }, [
+    browserSpeechFallback,
+    changePhase,
+    markFirstAudioStarted,
+    playBlob,
+    reportVoiceQuality,
+    resetUserTurnTiming,
+    startRecognition,
+    stopRecognition,
+  ]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    const now = performance.now();
+    bargeInAtRef.current = now;
+    if (firstMicActivityAtRef.current == null) firstMicActivityAtRef.current = now;
     interruptedPreviousTurnRef.current = true;
+    reportVoiceQuality('barge_in_candidate', {
+      source: 'rms',
+      assistant_speaking_ms: Math.max(0, Math.round(now - speakingStartedAtRef.current)),
+    });
     stopSpeech();
     if (useChatStore.getState().isGenerating) interruptGeneration();
     loudFramesRef.current = 0;
@@ -716,7 +766,29 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     changePhase('listening');
     startRecognition();
-  }, [changePhase, interruptGeneration, startRecognition, stopSpeech]);
+
+    if (possibleFalseBargeTimerRef.current) {
+      clearTimeout(possibleFalseBargeTimerRef.current);
+    }
+    possibleFalseBargeTimerRef.current = setTimeout(() => {
+      if (bargeInAtRef.current == null) return;
+      setQaSnapshot((previous) => ({
+        ...previous,
+        possibleFalseBargeIns: previous.possibleFalseBargeIns + 1,
+      }));
+      reportVoiceQuality('possible_false_barge_in', {
+        no_recognized_utterance_ms: POSSIBLE_FALSE_BARGE_WINDOW_MS,
+      });
+      bargeInAtRef.current = null;
+      possibleFalseBargeTimerRef.current = null;
+    }, POSSIBLE_FALSE_BARGE_WINDOW_MS);
+  }, [
+    changePhase,
+    interruptGeneration,
+    reportVoiceQuality,
+    startRecognition,
+    stopSpeech,
+  ]);
 
   useEffect(() => {
     if (!active) return;
