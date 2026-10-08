@@ -30,7 +30,7 @@ import {
   Play,
   MessageCircle,
 } from 'lucide-react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
@@ -38,6 +38,8 @@ import { api } from '@/lib/api';
 import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
 import CreateClipModal from '@/components/clips/CreateClipModal';
 import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
+import CourseArtwork from '@/components/home/CourseArtwork';
+import SurfaceLoading from '@/components/ui/SurfaceLoading';
 
 interface Reel {
   id: string;
@@ -282,6 +284,7 @@ function ReelSlide({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
+  const reduceMotion = useReducedMotion() === true;
 
   // Only the slide in view plays — matches the iOS paged TabView behaviour.
   useEffect(() => {
@@ -318,13 +321,16 @@ function ReelSlide({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={reel.posterUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
-        // iOS no-video fallback: translucent blue→purple over black
-        <div
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(135deg, rgba(0,0,255,0.3), rgba(128,0,128,0.3)), #000000',
-          }}
-        />
+        <motion.div
+          className="absolute inset-0 overflow-hidden bg-black"
+          initial={reduceMotion ? false : { opacity: 0.72, scale: 1.025 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          aria-hidden="true"
+        >
+          <CourseArtwork title={reel.title} className="h-full w-full" />
+          <div className="absolute inset-0 bg-black/15" />
+        </motion.div>
       )}
 
       {/* Paused affordance */}
@@ -635,7 +641,7 @@ function DiscoverContent() {
 
 export default function DiscoverPage() {
   return (
-    <Suspense fallback={<div className="h-full bg-black" aria-label="Loading Discover" />}>
+    <Suspense fallback={<SurfaceLoading label="Opening Discover…" />}>
       <DiscoverContent />
     </Suspense>
   );
