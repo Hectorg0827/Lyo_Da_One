@@ -242,6 +242,21 @@ if (fs.existsSync(voiceLayerBarge)) {
       "Web voice: the barge-in bar must track Lyo's own bleed, not a fixed level",
     );
   }
+  // Recognized words alone cannot end a turn while Lyo is audible: the
+  // microphone hears Lyo through the speaker, and that bleed transcribes into
+  // words that are in no echo of the answer, so Lyo interrupts itself.
+  if (!/shouldEndTurnOnSpeech\(\{/.test(source)) {
+    failures.push(
+      'Web voice: speech heard during playback must be weighed against the '
+      + "microphone level, or Lyo's own bleed reads as a learner",
+    );
+  }
+  if (!/monitorState: micMonitorStateRef\.current/.test(source)) {
+    failures.push(
+      'Web voice: that decision must know whether the volume monitor is ready, '
+      + 'or the opening of playback falls back to words alone',
+    );
+  }
   // An answer streams in far faster than it is spoken, so it is shown only as
   // far as it has been read aloud.
   if (!/\bsetVoiceSpokenText\(/.test(source)) {

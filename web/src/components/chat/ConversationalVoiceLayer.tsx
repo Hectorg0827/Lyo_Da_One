@@ -11,6 +11,8 @@ import {
   tidyTranscript,
 } from '@/lib/speech-transcript.mjs';
 import { joinSpoken, spokenPrefix } from '@/lib/voice-reveal.mjs';
+import { shouldEndTurnOnSpeech } from '@/lib/voice-barge-in.mjs';
+import type { MicMonitorState } from '@/lib/voice-barge-in.mjs';
 import {
   createVoiceQualitySessionId,
   detectLanguageFamily,
@@ -114,6 +116,10 @@ export default function ConversationalVoiceLayer() {
   const bleedFloorRef = useRef(0);
   const spokenSoFarRef = useRef('');
   const duckedRef = useRef(false);
+  // What the volume monitor can contribute to judging an interruption. It is
+  // granted the microphone asynchronously, so 'pending' covers the opening of
+  // playback — exactly when Lyo is most likely to hear itself.
+  const micMonitorStateRef = useRef<MicMonitorState>('pending');
   const voiceSegmentQueueRef = useRef<QueuedVoiceSegment[]>([]);
   const voiceSegmentDrainActiveRef = useRef(false);
   const voiceTurnClosedRef = useRef(false);
@@ -139,6 +145,7 @@ export default function ConversationalVoiceLayer() {
    * held only while Lyo is speaking, and handed straight back afterwards.
    */
   const releaseMicMonitor = useCallback(() => {
+    micMonitorStateRef.current = 'pending';
     loudFramesRef.current = 0;
     analyserRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -157,13 +164,18 @@ export default function ConversationalVoiceLayer() {
    */
   const acquireMicMonitor = useCallback(async () => {
     if (mediaStreamRef.current) return;
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      micMonitorStateRef.current = 'unavailable';
+      return;
+    }
+    micMonitorStateRef.current = 'pending';
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch {
+      micMonitorStateRef.current = 'unavailable';
       return;
     }
     // Playback may have finished while permission was being granted.
@@ -174,7 +186,10 @@ export default function ConversationalVoiceLayer() {
     mediaStreamRef.current = stream;
     const Context = window.AudioContext
       || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Context) return;
+    if (!Context) {
+      micMonitorStateRef.current = 'unavailable';
+      return;
+    }
     try {
       const context = new Context();
       // Mobile browsers hand back a suspended context outside a tap.
@@ -186,8 +201,10 @@ export default function ConversationalVoiceLayer() {
       source.connect(analyser);
       audioContextRef.current = context;
       analyserRef.current = analyser;
+      micMonitorStateRef.current = 'ready';
     } catch {
-      // Volume barge-in unavailable; the words still interrupt.
+      // Without a level to compare against, words are the only evidence left.
+      micMonitorStateRef.current = 'unavailable';
     }
   }, []);
 
@@ -528,6 +545,24 @@ export default function ConversationalVoiceLayer() {
           }
           return;
         }
+
+        // Words that match nothing Lyo said are not proof of a learner: the
+        // microphone hears Lyo through the speaker, and that bleed is
+        // distorted enough that the engine regularly returns words from no
+        // part of the answer. Ending the turn on those is Lyo interrupting
+        // itself. A real interruption is also louder than Lyo currently is,
+        // which is what the volume monitor arms — so both are required,
+        // unless there is no monitor to ask.
+        if (!shouldEndTurnOnSpeech({
+          isEcho: false,
+          loudEnough: pendingRmsBargeAtRef.current > 0,
+          monitorState: micMonitorStateRef.current,
+        })) {
+          note(`held: "${combined.slice(0, 24)}" not louder than Lyo`);
+          transcriptRef.current.reset();
+          return;
+        }
+
         const detectedAt = voiceQualityNow();
         if (pendingRmsBargeTimerRef.current) {
           clearTimeout(pendingRmsBargeTimerRef.current);
