@@ -242,6 +242,38 @@ if (fs.existsSync(voiceLayerBarge)) {
       "Web voice: the barge-in bar must track Lyo's own bleed, not a fixed level",
     );
   }
+  // Recognized words alone cannot end a turn while Lyo is audible: the
+  // microphone hears Lyo through the speaker, and that bleed transcribes into
+  // words that are in no echo of the answer, so Lyo interrupts itself.
+  if (!/shouldEndTurnOnSpeech\(\{/.test(source)) {
+    failures.push(
+      'Web voice: speech heard during playback must be weighed against the '
+      + "microphone level, or Lyo's own bleed reads as a learner",
+    );
+  }
+  // The confirmation block consumes the loudness flag, so reading it at the
+  // decision point finds it already spent by the very speech that confirmed
+  // it — holding the turn exactly when the learner did interrupt.
+  if (/loudEnough: pendingRmsBargeAtRef\.current/.test(source)) {
+    failures.push(
+      'Web voice: the microphone level must be read before the confirmation '
+      + 'block clears it, or a real interruption never registers',
+    );
+  }
+  // A suspended audio context still yields an analyser, and it reads silence
+  // forever — which is indistinguishable from a learner who never spoke.
+  if (!/context\.state !== 'running'/.test(source)) {
+    failures.push(
+      'Web voice: the monitor counts as ready only once its audio context is '
+      + 'running, or a suspended one reports silence and holds every interruption',
+    );
+  }
+  if (!/monitorState: micMonitorStateRef\.current/.test(source)) {
+    failures.push(
+      'Web voice: that decision must know whether the volume monitor is ready, '
+      + 'or the opening of playback falls back to words alone',
+    );
+  }
   // An answer streams in far faster than it is spoken, so it is shown only as
   // far as it has been read aloud.
   if (!/\bsetVoiceSpokenText\(/.test(source)) {

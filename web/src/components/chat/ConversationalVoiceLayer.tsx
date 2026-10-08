@@ -11,6 +11,8 @@ import {
   tidyTranscript,
 } from '@/lib/speech-transcript.mjs';
 import { joinSpoken, spokenPrefix } from '@/lib/voice-reveal.mjs';
+import { shouldEndTurnOnSpeech } from '@/lib/voice-barge-in.mjs';
+import type { MicMonitorState } from '@/lib/voice-barge-in.mjs';
 import {
   createVoiceQualitySessionId,
   detectLanguageFamily,
@@ -114,6 +116,10 @@ export default function ConversationalVoiceLayer() {
   const bleedFloorRef = useRef(0);
   const spokenSoFarRef = useRef('');
   const duckedRef = useRef(false);
+  // What the volume monitor can contribute to judging an interruption. It is
+  // granted the microphone asynchronously, so 'pending' covers the opening of
+  // playback — exactly when Lyo is most likely to hear itself.
+  const micMonitorStateRef = useRef<MicMonitorState>('pending');
   const voiceSegmentQueueRef = useRef<QueuedVoiceSegment[]>([]);
   const voiceSegmentDrainActiveRef = useRef(false);
   const voiceTurnClosedRef = useRef(false);
@@ -139,6 +145,7 @@ export default function ConversationalVoiceLayer() {
    * held only while Lyo is speaking, and handed straight back afterwards.
    */
   const releaseMicMonitor = useCallback(() => {
+    micMonitorStateRef.current = 'pending';
     loudFramesRef.current = 0;
     analyserRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -157,13 +164,18 @@ export default function ConversationalVoiceLayer() {
    */
   const acquireMicMonitor = useCallback(async () => {
     if (mediaStreamRef.current) return;
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      micMonitorStateRef.current = 'unavailable';
+      return;
+    }
+    micMonitorStateRef.current = 'pending';
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch {
+      micMonitorStateRef.current = 'unavailable';
       return;
     }
     // Playback may have finished while permission was being granted.
@@ -174,11 +186,25 @@ export default function ConversationalVoiceLayer() {
     mediaStreamRef.current = stream;
     const Context = window.AudioContext
       || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Context) return;
+    if (!Context) {
+      micMonitorStateRef.current = 'unavailable';
+      return;
+    }
     try {
       const context = new Context();
-      // Mobile browsers hand back a suspended context outside a tap.
-      void context.resume().catch(() => undefined);
+      // Mobile browsers hand back a suspended context outside a tap, and this
+      // runs when playback starts rather than when one happened. Waiting for
+      // the resume matters: a suspended context still yields an analyser, but
+      // it reads silence forever — and silence is indistinguishable from a
+      // learner who never spoke, so every interruption would be held.
+      if (context.state === 'suspended') {
+        try { await context.resume(); } catch { /* settled by the check below */ }
+      }
+      if (context.state !== 'running') {
+        micMonitorStateRef.current = 'unavailable';
+        void context.close().catch(() => undefined);
+        return;
+      }
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 512;
@@ -186,8 +212,10 @@ export default function ConversationalVoiceLayer() {
       source.connect(analyser);
       audioContextRef.current = context;
       analyserRef.current = analyser;
+      micMonitorStateRef.current = 'ready';
     } catch {
-      // Volume barge-in unavailable; the words still interrupt.
+      // Without a level to compare against, words are the only evidence left.
+      micMonitorStateRef.current = 'unavailable';
     }
   }, []);
 
@@ -478,6 +506,13 @@ export default function ConversationalVoiceLayer() {
       lastRecognitionActivityAtRef.current = voiceQualityNow();
       if (!currentTurnIdRef.current) currentTurnIdRef.current = crypto.randomUUID();
 
+      // Read whether the microphone had risen above Lyo before anything below
+      // can clear it. The confirmation block immediately following consumes
+      // that flag, so reading it at the decision point instead would find it
+      // already spent by the very speech that confirmed it — and the turn
+      // would be held exactly when the learner did interrupt.
+      const roseAboveLyo = pendingRmsBargeAtRef.current > 0;
+
       // An RMS-triggered interruption is only considered real once speech
       // recognition produces a non-echo utterance. This separates genuine
       // barge-in from speaker bleed/noise in live-device telemetry.
@@ -528,6 +563,24 @@ export default function ConversationalVoiceLayer() {
           }
           return;
         }
+
+        // Words that match nothing Lyo said are not proof of a learner: the
+        // microphone hears Lyo through the speaker, and that bleed is
+        // distorted enough that the engine regularly returns words from no
+        // part of the answer. Ending the turn on those is Lyo interrupting
+        // itself. A real interruption is also louder than Lyo currently is,
+        // which is what the volume monitor arms — so both are required,
+        // unless there is no monitor to ask.
+        if (!shouldEndTurnOnSpeech({
+          isEcho: false,
+          loudEnough: roseAboveLyo,
+          monitorState: micMonitorStateRef.current,
+        })) {
+          note(`held: "${combined.slice(0, 24)}" not louder than Lyo`);
+          transcriptRef.current.reset();
+          return;
+        }
+
         const detectedAt = voiceQualityNow();
         if (pendingRmsBargeTimerRef.current) {
           clearTimeout(pendingRmsBargeTimerRef.current);
