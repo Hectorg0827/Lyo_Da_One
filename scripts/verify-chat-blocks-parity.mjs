@@ -49,7 +49,23 @@ const contracts = [
   {
     name: 'Web renders each lesson beat distinctly',
     path: 'web/src/components/chat/blocks/BlockRenderer.tsx',
-    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock'],
+    needles: ["case 'quiz'", "case 'dataViz'", "case 'media'", "'callout'", "'sourceNavigator'",
+      'SourceNavigatorBlock', 'CheckBlock', 'MermaidView', 'ChartView', '<img'],
+  },
+  {
+    name: 'Android renders shared visual Smart Blocks instead of raw source',
+    path: 'android/app/src/main/java/com/lyo/app/ui/components/SmartBlockRenderer.kt',
+    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX'],
+  },
+  {
+    name: 'Android Classroom also renders teaching diagrams',
+    path: 'android/app/src/main/java/com/lyo/app/ui/classroom/catalog/MermaidBlock.kt',
+    needles: ['WebViewBlock(WebViewBlockKind.MERMAID, source)'],
+  },
+  {
+    name: 'iOS renders visual Smart Blocks in the unified renderer',
+    path: 'Sources/Views/Common/UnifiedBlockRenderer.swift',
+    needles: ['case .dataViz', 'case .media', 'MermaidWebView', 'AsyncImage'],
   },
   {
     name: 'Web keeps grounded answer prose beside supplemental sources',
