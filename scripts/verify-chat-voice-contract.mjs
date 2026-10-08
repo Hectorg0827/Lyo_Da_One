@@ -216,6 +216,58 @@ if (fs.existsSync(voiceLayer)) {
   }
 }
 
+// Playback bleeds back into the microphone, so loudness alone cannot end a
+// turn: Lyo hears itself and cuts itself off. Loudness ducks and waits for the
+// recognizer to confirm words that are not an echo.
+const voiceLayerBarge = 'web/src/components/chat/ConversationalVoiceLayer.tsx';
+if (fs.existsSync(voiceLayerBarge)) {
+  const source = fs.readFileSync(voiceLayerBarge, 'utf8');
+  const bargeIn = source.match(/const bargeIn = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/);
+  if (!bargeIn) {
+    failures.push('Web voice: bargeIn not found in the expected shape');
+  } else {
+    if (bargeIn[1].includes('stopSpeech()')) {
+      failures.push(
+        'Web voice: a loud microphone alone must not stop playback; '
+        + "Lyo's own voice clears the bar and it interrupts itself",
+      );
+    }
+    if (!bargeIn[1].includes('duckPlayback()')) {
+      failures.push('Web voice: a suspected interruption must duck playback while unconfirmed');
+    }
+  }
+  // The bar must be built from the measured bleed, not merely mention it.
+  if (!/bleedFloorRef\.current \* BARGE_IN_EXCESS/.test(source)) {
+    failures.push(
+      "Web voice: the barge-in bar must track Lyo's own bleed, not a fixed level",
+    );
+  }
+  // An answer streams in far faster than it is spoken, so it is shown only as
+  // far as it has been read aloud.
+  if (!/\bsetVoiceSpokenText\(/.test(source)) {
+    failures.push('Web voice: spoken progress must be published for the answer to follow');
+  }
+}
+
+// Voice stream events are addressed to the message this client is rendering.
+// The server's own id names a row the client has never seen, so anything
+// matching on it — the display following the voice, the guard against
+// speaking a turn twice — silently never matches and the feature reads as
+// doing nothing rather than as broken.
+const chatStore = 'web/src/stores/chat-store.ts';
+if (fs.existsSync(chatStore)) {
+  const source = fs.readFileSync(chatStore, 'utf8');
+  if (/messageId:\s*(?:typeof\s*)?chunk\.message_id/.test(source)) {
+    failures.push(
+      "Web transport: voice events must carry this client's message id, "
+      + "not the server's, or nothing downstream can match them",
+    );
+  }
+  if (!/messageId: aiMessageId/.test(source)) {
+    failures.push('Web transport: voice events must carry the rendered assistant message id');
+  }
+}
+
 // Live voice renders inside the chat input, so its effects run first: a
 // passive effect would start the live recognizer before dictation released the
 // microphone. The handover has to be ordered by the control itself.

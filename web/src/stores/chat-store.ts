@@ -162,6 +162,14 @@ interface ChatStore {
   sessionSummary: SessionSummary | null;
   dueReviews: DueReviewItem[];
   voiceSessionActive: boolean;
+  /**
+   * How much of an assistant answer Lyo has actually said out loud.
+   *
+   * A streamed answer arrives far faster than it can be spoken, so during a
+   * live conversation the message is shown only as far as the voice has read,
+   * and the clamp is released (null) once the turn is over.
+   */
+  voiceSpokenText: { messageId: string; text: string } | null;
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -188,6 +196,7 @@ interface ChatStore {
   fetchDueReviews: () => Promise<void>;
   dismissDueReview: (skillId: string) => void;
   setVoiceSessionActive: (active: boolean) => void;
+  setVoiceSpokenText: (value: { messageId: string; text: string } | null) => void;
   interruptGeneration: () => void;
 }
 
@@ -203,8 +212,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionSummary: null,
   dueReviews: [],
   voiceSessionActive: false,
+  voiceSpokenText: null,
 
-  setVoiceSessionActive: (active) => set({ voiceSessionActive: active }),
+  setVoiceSessionActive: (active) => set({
+    voiceSessionActive: active,
+    ...(active ? {} : { voiceSpokenText: null }),
+  }),
+  setVoiceSpokenText: (value) => set({ voiceSpokenText: value }),
   interruptGeneration: () => {
     activeStreamToken += 1;
     activeStreamController?.abort();
@@ -614,24 +628,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
           if (chunk.type === 'voice_text_segment') {
+            // These events are addressed to the message this client is
+            // rendering, so they carry its id. The server's own id names a
+            // row this client has never seen: anything matching on it — the
+            // display following the voice, the guard against speaking a turn
+            // twice — silently never matches.
             if (
               typeof chunk.text === 'string'
               && typeof chunk.sequence === 'number'
-              && typeof chunk.message_id === 'string'
             ) {
               publishVoiceStreamEvent({
                 type: 'voice_text_segment',
                 text: chunk.text,
                 sequence: chunk.sequence,
-                messageId: chunk.message_id,
+                messageId: aiMessageId,
               });
             }
           } else if (chunk.type === 'voice_ready') {
-            if (typeof chunk.text === 'string' && typeof chunk.message_id === 'string') {
+            if (typeof chunk.text === 'string') {
               publishVoiceStreamEvent({
                 type: 'voice_ready',
                 text: chunk.text,
-                messageId: chunk.message_id,
+                messageId: aiMessageId,
                 speak: chunk.speak !== false,
               });
               if (
@@ -653,7 +671,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             publishVoiceStreamEvent({
               type: 'voice_incomplete',
               text: typeof chunk.text === 'string' ? chunk.text : '',
-              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : aiMessageId,
+              messageId: aiMessageId,
             });
           } else if (chunk.type === 'interaction_contract') {
             patchAiMessage({
