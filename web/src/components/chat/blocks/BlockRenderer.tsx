@@ -179,7 +179,7 @@ function MediaBlock({ block }: { block: ChatBlock }) {
   const alt = typeof block.content?.alt === 'string' ? block.content.alt : '';
   const caption = typeof block.content?.caption === 'string' ? block.content.caption : '';
   const sourceUrl = typeof block.metadata?.source_url === 'string' &&
-    /^https:\/\/commons\\.wikimedia\\.org\//i.test(block.metadata.source_url)
+    /^https:\/\/commons\.wikimedia\.org\//i.test(block.metadata.source_url)
       ? block.metadata.source_url : null;
   if (block.subtype !== 'image' || !/^https:\/\//i.test(url)) {
     return <GenericBlock block={block} />;
