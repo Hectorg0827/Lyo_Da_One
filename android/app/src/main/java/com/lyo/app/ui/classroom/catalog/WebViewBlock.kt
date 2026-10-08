@@ -53,11 +53,32 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
     )
 }
 
+
+/**
+ * KaTeX's render() expects the TeX body, not delimiters used by Markdown or
+ * model output. Keep unmatched wrappers intact rather than deleting content.
+ * Shared by Chat and Classroom through WebViewBlock.
+ */
+internal fun normalizeKaTeXSource(raw: String): String {
+    val source = raw.trim()
+    return when {
+        source.length >= 4 && source.startsWith("$") && source.endsWith("$") ->
+            source.substring(2, source.length - 2).trim()
+        source.length >= 4 && source.startsWith("\\[") && source.endsWith("\\]") ->
+            source.substring(2, source.length - 2).trim()
+        source.length >= 4 && source.startsWith("\\(") && source.endsWith("\\)") ->
+            source.substring(2, source.length - 2).trim()
+        source.length >= 2 && source.startsWith("$") && source.endsWith("$") ->
+            source.substring(1, source.length - 1).trim()
+        else -> source
+    }
+}
+
 private fun buildHtml(kind: WebViewBlockKind, source: String): String {
     // JSONObject.quote() gives a properly-escaped JS string literal —
     // safer than manual string interpolation for arbitrary
     // LLM-generated source text (backslashes, quotes, newlines).
-    val escapedSource = JSONObject.quote(source)
+    val escapedSource = JSONObject.quote(if (kind == WebViewBlockKind.LATEX) normalizeKaTeXSource(source) else source)
     return when (kind) {
         WebViewBlockKind.MERMAID -> """
             <!DOCTYPE html><html><head><meta charset="utf-8">
