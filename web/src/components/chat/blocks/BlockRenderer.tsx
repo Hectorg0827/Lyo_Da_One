@@ -178,6 +178,9 @@ function MediaBlock({ block }: { block: ChatBlock }) {
   const url = typeof block.content?.url === 'string' ? block.content.url : '';
   const alt = typeof block.content?.alt === 'string' ? block.content.alt : '';
   const caption = typeof block.content?.caption === 'string' ? block.content.caption : '';
+  const sourceUrl = typeof block.metadata?.source_url === 'string' &&
+    /^https:\/\/commons\\.wikimedia\\.org\//i.test(block.metadata.source_url)
+      ? block.metadata.source_url : null;
   if (block.subtype !== 'image' || !/^https:\/\//i.test(url)) {
     return <GenericBlock block={block} />;
   }
@@ -186,7 +189,9 @@ function MediaBlock({ block }: { block: ChatBlock }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={url} alt={alt || caption || 'Educational illustration'}
         loading="lazy" className="max-h-80 w-full object-contain" />
-      {caption && <figcaption className="px-3 py-2 text-xs text-white/70">{caption}</figcaption>}
+      {caption && <figcaption className="px-3 py-2 text-xs text-white/70">
+        {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer" className="underline">{caption}</a> : caption}
+      </figcaption>}
     </figure>
   );
 }
