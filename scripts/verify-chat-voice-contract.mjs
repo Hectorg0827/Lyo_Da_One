@@ -201,16 +201,32 @@ if (fs.existsSync(voiceLayer)) {
       + 'restarting the recognizer after a pause would cancel the turn being sent',
     );
   }
+  // A turn kept alive across a restart must not then fire into the middle of
+  // the sentence the learner has resumed.
+  const speechStart = source.match(
+    /recognition\.onspeechstart = \(\) => \{([\s\S]*?)\n    \};/,
+  );
+  if (!speechStart) {
+    failures.push('Web voice: onspeechstart not found in the expected shape');
+  } else if (!speechStart[1].includes('armTurnTimer(')) {
+    failures.push(
+      'Web voice: renewed speech must defer the turn already waiting to be sent, '
+      + 'or it submits mid-sentence and truncates the learner',
+    );
+  }
 }
 
-// Live voice and dictation own the same microphone, and starting a live
-// conversation hides the dictation button, so the session must end dictation
-// rather than leave a second recognizer running with nothing to stop it.
+// Live voice renders inside the chat input, so its effects run first: a
+// passive effect would start the live recognizer before dictation released the
+// microphone. The handover has to be ordered by the control itself.
 const chatInput = 'web/src/components/chat/ChatInputBar.tsx';
 if (fs.existsSync(chatInput)) {
   const source = fs.readFileSync(chatInput, 'utf8');
-  if (!/if \(voiceSessionActive\) stopDictation\(\);/.test(source)) {
-    failures.push('Web chat input: starting a live conversation must end dictation');
+  if (!/if \(!voiceSessionActive\) stopDictation\(\);/.test(source)) {
+    failures.push(
+      'Web chat input: the live-conversation control must stop dictation '
+      + 'before activating the session, not through an effect afterwards',
+    );
   }
 }
 
