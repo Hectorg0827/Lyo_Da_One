@@ -192,8 +192,19 @@ export default function ConversationalVoiceLayer() {
     }
     try {
       const context = new Context();
-      // Mobile browsers hand back a suspended context outside a tap.
-      void context.resume().catch(() => undefined);
+      // Mobile browsers hand back a suspended context outside a tap, and this
+      // runs when playback starts rather than when one happened. Waiting for
+      // the resume matters: a suspended context still yields an analyser, but
+      // it reads silence forever — and silence is indistinguishable from a
+      // learner who never spoke, so every interruption would be held.
+      if (context.state === 'suspended') {
+        try { await context.resume(); } catch { /* settled by the check below */ }
+      }
+      if (context.state !== 'running') {
+        micMonitorStateRef.current = 'unavailable';
+        void context.close().catch(() => undefined);
+        return;
+      }
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 512;

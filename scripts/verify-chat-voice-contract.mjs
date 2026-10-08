@@ -260,6 +260,14 @@ if (fs.existsSync(voiceLayerBarge)) {
       + 'block clears it, or a real interruption never registers',
     );
   }
+  // A suspended audio context still yields an analyser, and it reads silence
+  // forever — which is indistinguishable from a learner who never spoke.
+  if (!/context\.state !== 'running'/.test(source)) {
+    failures.push(
+      'Web voice: the monitor counts as ready only once its audio context is '
+      + 'running, or a suspended one reports silence and holds every interruption',
+    );
+  }
   if (!/monitorState: micMonitorStateRef\.current/.test(source)) {
     failures.push(
       'Web voice: that decision must know whether the volume monitor is ready, '
