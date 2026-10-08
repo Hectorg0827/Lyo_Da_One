@@ -249,6 +249,25 @@ if (fs.existsSync(voiceLayerBarge)) {
   }
 }
 
+// Voice stream events are addressed to the message this client is rendering.
+// The server's own id names a row the client has never seen, so anything
+// matching on it — the display following the voice, the guard against
+// speaking a turn twice — silently never matches and the feature reads as
+// doing nothing rather than as broken.
+const chatStore = 'web/src/stores/chat-store.ts';
+if (fs.existsSync(chatStore)) {
+  const source = fs.readFileSync(chatStore, 'utf8');
+  if (/messageId:\s*(?:typeof\s*)?chunk\.message_id/.test(source)) {
+    failures.push(
+      "Web transport: voice events must carry this client's message id, "
+      + "not the server's, or nothing downstream can match them",
+    );
+  }
+  if (!/messageId: aiMessageId/.test(source)) {
+    failures.push('Web transport: voice events must carry the rendered assistant message id');
+  }
+}
+
 // Live voice renders inside the chat input, so its effects run first: a
 // passive effect would start the live recognizer before dictation released the
 // microphone. The handover has to be ordered by the control itself.
