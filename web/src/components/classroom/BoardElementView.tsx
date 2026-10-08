@@ -43,7 +43,7 @@ function loadMermaid() {
 
 // ─── Individual renderers ─────────────────────────────────────────────────────
 
-function MermaidView({ source }: { source: string }) {
+export function MermaidView({ source }: { source: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const idRef = useRef(`mmd_${Math.random().toString(36).slice(2)}`);
@@ -117,7 +117,7 @@ function LatexView({ latex }: { latex: string }) {
   );
 }
 
-function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; labels: string[]; values: number[] }) {
+export function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; labels: string[]; values: number[] }) {
   const max = Math.max(...values, 1);
   const W = 560, H = 200, PAD = 30;
   const n = Math.min(labels.length, values.length);
