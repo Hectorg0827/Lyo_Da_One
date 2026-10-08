@@ -293,10 +293,97 @@ if (/courseId:\s*"?\bGENERATE:\\\(session\.conceptId\)/.test(iosTestPrepRules)) 
   );
 }
 
+// ── A class starts, and a stuck one can be left ───────────────────────────
+//
+// The live teaching session is keyed server-side by `session_id`, and the
+// engine stores the learner's place inside it. Every client used to send the
+// course id (or, for a free topic, the topic text), which meant the id never
+// changed: opening the same topic a second time handed back the session the
+// learner left, mid-unit, with no opening and no way to ask for a clean
+// start. It was worst after a failed step, because the broken session was the
+// one that came back every time.
+//
+// Three platforms disagreeing about when a class starts, when it may resume,
+// or how long a step may go missing before the class admits it is three
+// different products. The rules live in one file per platform; these are the
+// assertions that keep the three files saying the same thing.
+const webSessionContract = read('web/src/lib/classroom-contract.mjs');
+const iosSessionContract = read('Sources/Models/ClassroomSessionContract.swift');
+const androidSessionContract = read(
+  'android/app/src/main/java/com/lyo/app/data/classroom/ClassroomSessionContract.kt',
+);
+const androidEngine = androidLivingEngine;
+
+const sessionContracts = [
+  ['Web session contract', webSessionContract],
+  ['iOS session contract', iosSessionContract],
+  ['Android session contract', androidSessionContract],
+];
+
+for (const [label, source] of sessionContracts) {
+  // The storage key, so a seat saved by one surface is the seat another finds.
+  requireText(source, 'lyo_classroom_session:', `${label}: shared session storage key`);
+  // A second class on a topic is a second session, not the first one resumed.
+  requireText(source, '~', `${label}: a repeat entry needs its own session id`);
+  // The copy a learner reads when a step never arrives. Identical on purpose:
+  // a stalled lesson must not feel like three different failures.
+  requireText(source, 'not a wrong answer', `${label}: stall recovery wording`);
+  requireText(source, 'stop Lyo at any time', `${label}: opening card wording`);
+  requireText(source, 'Understand and apply ', `${label}: default objective`);
+}
+
+// The two thresholds, as numbers, on all three. A platform that waits twice
+// as long as another is a platform that looks broken next to it.
+requireText(webSessionContract, 'CLASSROOM_STALL_NOTICE_MS = 12000', 'Web stall notice threshold');
+requireText(
+  webSessionContract, 'CLASSROOM_STALL_RECOVERY_MS = 30000', 'Web stall recovery threshold',
+);
+requireText(iosSessionContract, 'stallNoticeSeconds: TimeInterval = 12', 'iOS stall notice threshold');
+requireText(
+  iosSessionContract, 'stallRecoverySeconds: TimeInterval = 30', 'iOS stall recovery threshold',
+);
+requireText(androidSessionContract, 'STALL_NOTICE_MS = 12_000L', 'Android stall notice threshold');
+requireText(
+  androidSessionContract, 'STALL_RECOVERY_MS = 30_000L', 'Android stall recovery threshold',
+);
+
+// The one thing the nudge may never be. Re-sending the learner's own answer
+// because the first one was slow coming back is a second attempt on their
+// record for a failure that was not theirs.
+requireText(web, "sendAction('continue', get().nextActionComponentId", 'Web stall nudge is continue');
+requireText(
+  iosClassroom, 'sendUserAction(actionIntent: "continue", componentId: "continue")',
+  'iOS stall nudge is continue',
+);
+requireText(
+  androidEngine, 'ClassroomBridge.continueLessonAction(sessionId, "continue", "android_continue")',
+  'Android stall nudge is continue',
+);
+
+// Progress belongs to the course, not to this particular class — otherwise
+// starting a lesson over starts the learner's progress over with it.
+requireText(web, 'updateCourseProgress(get().courseId', 'Web progress is filed under the course');
+requireText(
+  androidEngine, 'StackRepository.updateCourseProgress(courseId,',
+  'Android progress is filed under the course',
+);
+
+// Every surface offers the seat back rather than imposing it, and can walk
+// away from a session that cannot produce its next step.
+requireText(web, 'resumeLesson', 'Web resume offer');
+requireText(web, 'restartLesson', 'Web lesson restart');
+requireText(iosClassroom, 'func resumeLesson', 'iOS resume offer');
+requireText(iosClassroom, 'func restartLesson', 'iOS lesson restart');
+requireText(androidEngine, 'resumableSession', 'Android resume offer');
+requireText(androidLivingClassroom, 'sessionAttempt += 1', 'Android lesson restart');
+
 if (failures.length) {
   console.error('AI Classroom parity gate failed:\n');
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
 
-console.log('AI Classroom voice, locale, interruption, and learner-gating parity verified.');
+console.log(
+  'AI Classroom voice, locale, interruption, learner-gating, session-start and '
+    + 'stall-recovery parity verified.'
+);

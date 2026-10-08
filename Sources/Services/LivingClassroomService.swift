@@ -23,6 +23,25 @@ class LivingClassroomService: ObservableObject {
     /// Short status string for the UI (e.g. "Designing your lesson…").
     @Published var statusText: String?
 
+    // MARK: - Waiting, and waiting too long
+
+    /// How far past "the next step is coming" the current wait has gone.
+    /// Waiting is the one classroom state with no natural end: every other
+    /// one is left by something the learner or the teacher does, so when a
+    /// generation fails the class does not break, it simply stops, with a
+    /// "preparing the next step…" line that is true forever.
+    @Published private(set) var stallPhase: ClassroomStallPhase = .none
+    /// Something the classroom reported and is carrying on from. Distinct
+    /// from `error`, which means the class itself is over.
+    @Published var notice: String?
+    /// True when this class picked up a session the learner had already
+    /// started, so the opening can say so.
+    @Published private(set) var resumedSession: Bool = false
+    /// A session the learner could still return to, if they want it.
+    @Published private(set) var resumableSession: ClassroomSavedSession?
+    /// The cover page: what this class is, before any of it is taught.
+    @Published private(set) var opening: ClassroomOpening?
+
     private var componentQueue: [SDUIComponent] = []
 
     private var webSocketTask: URLSessionWebSocketTask?
@@ -39,7 +58,17 @@ class LivingClassroomService: ObservableObject {
     private var requestedDurationMinutes: Int?
     private var requestedRecordScope: String = "topic"
     private var connectedSessionId: String = ""
+    private var requestedDifficulty: String?
+    private var courseKey: String = ""
+    private let sessionStore: ClassroomSessionStore
+    private var stallTimer: Timer?
+    private var waitingSince: Date?
+    private var stallNudged: Bool = false
     private let logger = Logger(subsystem: "com.lyo.app", category: "LivingClassroomService")
+
+    init(sessionStore: ClassroomSessionStore = ClassroomSessionStore()) {
+        self.sessionStore = sessionStore
+    }
 
     // MARK: - Lesson identity
 
@@ -83,12 +112,13 @@ class LivingClassroomService: ObservableObject {
     deinit {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         urlSession?.invalidateAndCancel()
+        // The run loop holds the wait watchdog, not this object, so it has to
+        // be told to stop rather than released with everything else.
+        stallTimer?.invalidate()
     }
 
     private func normalizedSessionId(from rawSessionId: String) -> String {
-        rawSessionId.hasPrefix("GENERATE:")
-            ? String(rawSessionId.dropFirst("GENERATE:".count))
-            : rawSessionId
+        ClassroomSessionContract.normalizedSessionId(rawSessionId)
     }
 
     /// Connects to the real-time Server-Driven UI WebSockets.
@@ -104,7 +134,10 @@ class LivingClassroomService: ObservableObject {
         durationMinutes: Int? = nil,
         recordScope: String = "topic",
         mode: String = "solo",
-        reviewConceptId: String? = nil
+        reviewConceptId: String? = nil,
+        difficulty: String? = nil,
+        resume: Bool = false,
+        resumeSession: ClassroomSavedSession? = nil
     ) {
         self.topic = (topic?.isEmpty == false ? topic! : sessionId)
 
@@ -115,8 +148,47 @@ class LivingClassroomService: ObservableObject {
         }
 
         isConnecting = true
-        self.sessionId = sessionId
         self.courseId = courseId ?? sessionId
+        self.requestedDifficulty = difficulty
+
+        // Which session this is. The course's history decides whether this is
+        // a new class or the old one carried on — opening a topic a second
+        // time used to hand back the session the learner left, mid-unit, with
+        // no opening and no way to ask for a clean start.
+        self.courseKey = ClassroomSessionContract.courseKey(
+            courseId: courseId, topic: self.topic
+        )
+        // Starting a class overwrites the stored record, so by the time the
+        // learner reads "pick up where you left off" the storage no longer
+        // holds the session that offer is about — it has to be carried.
+        let saved = resumeSession ?? sessionStore.saved(courseKey: courseKey)
+        let start = ClassroomSessionContract.sessionStart(
+            courseKey: courseKey, saved: saved, resume: resume
+        )
+        sessionStore.save(
+            ClassroomSavedSession(
+                id: start.sessionId, startedAt: Date(), generation: start.generation
+            ),
+            courseKey: courseKey
+        )
+        self.sessionId = start.sessionId
+        self.resumedSession = start.resumed
+        self.resumableSession =
+            (!start.resumed && ClassroomSessionContract.canResume(saved)) ? saved : nil
+        self.notice = nil
+
+        // The cover page goes up before the socket does. A learner should
+        // never be looking at a blank stage wondering whether the class has
+        // begun, and after a resume they should be told that it is the middle
+        // of one rather than left to infer it from the teacher's first line.
+        self.opening = ClassroomSessionContract.opening(
+            topic: self.topic,
+            objective: nil,
+            durationMinutes: durationMinutes,
+            difficulty: difficulty,
+            mode: mode,
+            resumed: start.resumed
+        )
         self.lessonId = lessonId
         self.requestedLanguage = language
         self.requestedMode = ["solo", "classroom", "challenge", "review"].contains(mode) ? mode : "solo"
@@ -125,6 +197,7 @@ class LivingClassroomService: ObservableObject {
         self.requestedRecordScope = recordScope == "unit" ? "unit" : "topic"
         self.isGenerating = true
         self.statusText = "Connecting to your live classroom…"
+        startStallWatch()
 
         Task {
             do {
@@ -154,12 +227,16 @@ class LivingClassroomService: ObservableObject {
                     .replacingOccurrences(of: "https://", with: "wss://")
                     .replacingOccurrences(of: "http://", with: "ws://")
 
-                // Strip "GENERATE:" prefix — pass just the topic as the session_id
-                let resolvedSessionId = self.normalizedSessionId(from: sessionId)
+                // The session this entry resolved to (see ClassroomSessionContract),
+                // already free of any "GENERATE:" prefix. Not the raw argument:
+                // sending that back is what made every class a resume.
+                let resolvedSessionId = self.normalizedSessionId(from: self.sessionId)
                 self.connectedSessionId = resolvedSessionId
 
-                // Topic: use passed topic, fall back to session_id itself
-                let resolvedTopic = topic ?? resolvedSessionId
+                // Topic: what the learner asked to be taught. Never the
+                // resolved session id, which carries a generation suffix for
+                // a second class and would teach "Minecraft~2".
+                let resolvedTopic = self.topic
                 guard var urlComponents = URLComponents(
                     string: "\(wsBaseString)/api/v1/classroom/ws/connect"
                 ) else {
@@ -194,6 +271,14 @@ class LivingClassroomService: ObservableObject {
                    !reviewConceptId.isEmpty {
                     urlComponents.queryItems?.append(
                         URLQueryItem(name: "review_concept_id", value: reviewConceptId)
+                    )
+                }
+                // The level the opening card names is the level the engine is
+                // asked for, so the cover page cannot promise a lesson
+                // different from the one planned.
+                if let difficulty = self.requestedDifficulty, !difficulty.isEmpty {
+                    urlComponents.queryItems?.append(
+                        URLQueryItem(name: "difficulty", value: difficulty)
                     )
                 }
                 guard let url = urlComponents.url else {
@@ -233,6 +318,8 @@ class LivingClassroomService: ObservableObject {
     /// Gracefully closes the connection
     func disconnect() {
         flushActivityUpdates()
+        stopStallWatch()
+        stallPhase = .none
         TextToSpeechService.shared.stop()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
@@ -244,20 +331,129 @@ class LivingClassroomService: ObservableObject {
         logger.info("Disconnected from WebSocket")
     }
 
+    // MARK: - The watchdog
+
+    /// One tick of the wait watchdog.
+    ///
+    /// A wait that is merely slow is said out loud and left alone. A wait
+    /// that passes the recovery threshold is asked after once, with
+    /// `continue` — the one intent that cannot be mistaken for a second
+    /// answer — and only if that second wait also runs out does the class
+    /// admit the step is not coming and put recovery controls in front of
+    /// the learner.
+    ///
+    /// It ticks rather than arming a timer at each of the places a wait
+    /// begins: a wait that started without arming its own timer is exactly
+    /// the wait nobody would notice was never ending.
+    private func stallTick(now: Date = Date()) {
+        guard isGenerating, isConnected, !lessonComplete else {
+            waitingSince = nil
+            stallNudged = false
+            if stallPhase != .none { stallPhase = .none }
+            return
+        }
+        guard let since = waitingSince else {
+            waitingSince = now
+            return
+        }
+        let waited = now.timeIntervalSince(since)
+        if waited >= ClassroomSessionContract.stallRecoverySeconds {
+            if !stallNudged {
+                // One unprompted ask, then the learner decides. Resending the
+                // learner's own answer here would risk grading it twice, so
+                // the nudge is always `continue`.
+                stallNudged = true
+                waitingSince = now
+                if sendUserAction(actionIntent: "continue", componentId: "continue") {
+                    if stallPhase != .slow { stallPhase = .slow }
+                } else {
+                    stallPhase = .stalled
+                }
+                return
+            }
+            if stallPhase != .stalled { stallPhase = .stalled }
+            return
+        }
+        if waited >= ClassroomSessionContract.stallNoticeSeconds, stallPhase == .none {
+            stallPhase = .slow
+        }
+    }
+
+    private func startStallWatch() {
+        stopStallWatch()
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.stallTick() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        stallTimer = timer
+    }
+
+    private func stopStallWatch() {
+        stallTimer?.invalidate()
+        stallTimer = nil
+        waitingSince = nil
+        stallNudged = false
+    }
+
+    /// Content arrived: the wait is over now, not on the next tick.
+    private func clearWait() {
+        waitingSince = nil
+        stallNudged = false
+        if stallPhase != .none { stallPhase = .none }
+    }
+
+    // MARK: - Recovery
+
+    /// The step did not come; ask for it again.
+    ///
+    /// Always `continue`, never the learner's own submission replayed. A
+    /// resent answer is a second answer as far as the grader is concerned,
+    /// and a learner who waited out a slow network must not pay for it with
+    /// a duplicate attempt on their record.
+    func nudgeTeacher() {
+        notice = nil
+        guard sendUserAction(actionIntent: "continue", componentId: "continue") else { return }
+        isGenerating = true
+        waitingSince = Date()
+        stallNudged = true
+        stallPhase = .slow
+    }
+
+    /// Leave a stuck session behind and teach this topic from the top.
+    ///
+    /// The server holds the learner's place inside the session, so a session
+    /// that cannot produce its next step cannot be argued out of it — the
+    /// only real recovery is a different session. Evidence already earned is
+    /// filed against the concept, not the session, so nothing demonstrated
+    /// is lost by starting the teaching again.
+    func restartLesson() {
+        reconnect(resume: false)
+    }
+
+    /// Return to the session this learner left part-way through.
+    func resumeLesson() {
+        guard let seat = resumableSession else { return }
+        reconnect(resume: true, resumeSession: seat)
+    }
+
     /// Re-establishes the WebSocket using the previously stored sessionId. Used by the UI's reconnect banner.
-    func reconnect() {
+    func reconnect(resume: Bool? = nil, resumeSession: ClassroomSavedSession? = nil) {
         guard !sessionId.isEmpty else {
             logger.warning("Cannot reconnect — no sessionId stored")
             return
         }
         logger.info("\u{1F501} Reconnecting WebSocket for session \(self.sessionId)")
         // Clear any half-open task before reconnecting.
+        stopStallWatch()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
         isConnecting = false
         error = nil
+        stallPhase = .none
+        // A plain reconnect is the same class carried on, so it asks for the
+        // seat it already has. Restarting and resuming say so explicitly.
         connect(
             sessionId: sessionId,
             courseId: courseId,
@@ -267,7 +463,10 @@ class LivingClassroomService: ObservableObject {
             durationMinutes: requestedDurationMinutes,
             recordScope: requestedRecordScope,
             mode: requestedMode,
-            reviewConceptId: requestedReviewConceptId
+            reviewConceptId: requestedReviewConceptId,
+            difficulty: requestedDifficulty,
+            resume: resume ?? true,
+            resumeSession: resumeSession
         )
     }
 
@@ -477,7 +676,20 @@ class LivingClassroomService: ObservableObject {
                 case "control":
                     self.logger.info("Received control message")
                 case "error":
+                    // The classroom saying something went wrong is not the
+                    // same as the class being over, so this is a notice
+                    // rather than a fatal error — but it stops being
+                    // invisible. It used to reach the log alone, while the
+                    // learner watched a board that had simply stopped.
                     self.logger.error("Received server error stream event")
+                    var reported = "The classroom hit a snag."
+                    if let rootObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let message = rootObj["message"] as? String,
+                       !message.isEmpty {
+                        reported = message
+                    }
+                    self.notice = reported
+
                 default:
                     self.logger.warning("Unknown message type: \(envelope.type)")
                 }
@@ -500,6 +712,7 @@ class LivingClassroomService: ObservableObject {
         self.componentQueue = scene.components
         self.hasQueuedComponents = !self.componentQueue.isEmpty
         self.isGenerating = false
+        self.clearWait()
         self.canContinue = false
         self.statusText = nil
 
@@ -528,6 +741,7 @@ class LivingClassroomService: ObservableObject {
         else {
             self.componentQueue.append(component)
             self.hasQueuedComponents = true
+            self.clearWait()
             logger.info("Queued new component: \(component.type.rawValue) - \(component.id)")
 
             if self.renderedComponents.isEmpty {
@@ -580,6 +794,7 @@ class LivingClassroomService: ObservableObject {
     private func completeSceneRender() {
         logger.info("Completed rendering scene")
         isGenerating = false
+        clearWait()
     }
 
     func requestNextScene() {

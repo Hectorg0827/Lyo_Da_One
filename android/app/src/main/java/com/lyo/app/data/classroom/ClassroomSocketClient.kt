@@ -119,7 +119,12 @@ object ClassroomSocketClient {
         val params = pendingConnection ?: return
         val token = TokenManager.accessToken
         if (token == null) {
-            _events.tryEmit(ClassroomServerEvent.ErrorEvent("Sign in to start a secure AI classroom."))
+            _events.tryEmit(
+                ClassroomServerEvent.ErrorEvent(
+                    "Sign in to start a secure AI classroom.",
+                    fatal = true,
+                ),
+            )
             return
         }
 

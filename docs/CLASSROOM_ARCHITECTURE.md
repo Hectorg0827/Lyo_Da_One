@@ -1184,3 +1184,113 @@ mean a server rolled back below this change cannot read a session saved above
 it. That is how every earlier field here arrived, and it bounds a rollback to
 in-flight sessions rather than to saved learner evidence, which lives in the
 record and not in the session.
+
+---
+
+## 13. Phase I — a class has a beginning, and a stuck one has a way out
+
+### 13.1 What a learner actually saw
+
+A learner opened a free-topic class on Minecraft. The first thing the teacher
+said was *"Let's stay with Navigating the Minecraft World a moment longer."*
+Below it sat the board's paused notice — §11.4's `paused_notice`, the one that
+says the next step didn't load — and a Retry that produced the same notice
+again.
+
+Two different things went wrong and read as one failure:
+
+1. **A generation failed.** That is a backend fault, and the recovery copy on
+   the board is working as designed: the teacher does not apologise, the
+   notice does, and Retry is offered. Nothing in this repo fixes the
+   generation itself.
+2. **Retry could not get out of it.** `session_id` was the course id — or, for
+   a free topic, the topic text — on all three clients. The engine keys the
+   learner's place (`GuidedState`) to that id, so every re-entry resumed the
+   same session: the same stuck one, with the same first line. There was no
+   way, anywhere in the product, to ask for a clean start.
+
+The opening compounded it. Phase G/H made the first *teaching* move a
+diagnostic probe, which is the right opening question — but nothing above it
+said what the class was. A learner had no way to tell the start of a class
+from the middle of one, and on a resumed session they really were in the
+middle of one, with nothing on screen admitting it.
+
+### 13.2 What a session id is for
+
+The rule is now explicit and identical on three platforms:
+
+| Entry | `session_id` sent | Resumed? |
+| --- | --- | --- |
+| First class on a course or topic | the course key, exactly as before | no |
+| Opening it again | `<course key>~2`, `~3`, … | no |
+| "Pick up where I left off" | the saved id, carried by the offer | yes |
+| Saved session older than 6 hours | a new generation | no |
+
+The first row matters: a learner meeting a topic for the first time sends the
+id every client always sent, so this change cannot regress a first class. The
+offer carries the seat it is about rather than reading storage, because
+starting a class overwrites the stored record — reading it back would resume
+the class the learner is already sitting in.
+
+Course progress moved off the session id onto the course id at the same time.
+They were the same string, so nothing noticed; once a second class gets its
+own session, filing progress under it would reset the learner's progress every
+time they restarted a lesson.
+
+### 13.3 Waiting is the one state with no natural end
+
+Every other classroom state is left by something the learner or the teacher
+does. A wait for a generated step is left only by that step arriving — so when
+generation fails, the class does not break, it stops, with a "preparing the
+next step…" line that stays true forever.
+
+Each client now runs a one-second watch over that wait:
+
+- **12s** — say so. The caption stops claiming progress it isn't making.
+- **30s** — ask once, with `continue`.
+- **30s more** — admit it: recovery controls, *Ask Lyo again* and *Start this
+  lesson over*.
+
+The nudge is always `continue`, never the learner's own submission replayed.
+A resent answer is a second answer as far as the grader is concerned, and a
+learner who waited out a slow generation must not pay for it with a duplicate
+attempt on their record. That is asserted on all three platforms by the parity
+gate and by a test per platform.
+
+A wire `error` event also stopped being invisible. Web filed it in the
+transcript drawer, iOS in the log, and Android treated it as fatal and ended
+the class. All three now show it beside a class that is still open; only a
+failure that stops the class running (no token, no socket) ends it.
+
+### 13.4 What landed
+
+| Change | Where (this repo) |
+| --- | --- |
+| Session start, resume window, stall thresholds and opening copy | `web/src/lib/classroom-contract.mjs`, `Sources/Models/ClassroomSessionContract.swift`, `android/.../data/classroom/ClassroomSessionContract.kt` |
+| The wait watchdog and the recovery actions | `web/src/stores/classroom-store.ts`, `Sources/Services/LivingClassroomService.swift`, `android/.../ui/classroom/ClassroomEngine.kt` |
+| The opening card, the stall card, the notice and the resume offer | `web/src/components/classroom/BoardElementView.tsx` + `web/src/app/(main)/classroom/page.tsx`, `Sources/Views/Main/Classroom/LivingClassroomView.swift`, `android/.../ui/classroom/ClassroomChrome.kt` + `ClassroomScreen.kt` |
+| A recoverable classroom error told apart from a fatal one | `android/.../data/classroom/ClassroomServerEvent.kt` (`ErrorEvent.fatal`) |
+| `?resume=1` as the only way a link asks for the old seat | `web/src/lib/entry-contract.mjs` |
+| The three contracts held to the same numbers and the same words | `scripts/verify-classroom-parity.mjs` |
+
+### 13.5 Verification, and its limits
+
+- 339 web unit tests pass, including 13 new ones driving the real store
+  through a controllable clock: the cover page, a second class getting its own
+  session, the offered seat, the slow/ask-once/stall sequence, a paused class
+  not being accused of stalling, and a stalled quiz answer being asked after
+  with `continue` rather than resubmitted.
+- `npx tsc --noEmit` and `next build` are clean. All classroom and product
+  parity gates pass; the new assertions were confirmed to bite by mutating the
+  Android recovery threshold.
+- **The iOS and Android changes were not compiled or run.** This environment
+  has no Xcode, no Android SDK and no Gradle wrapper, so
+  `ClassroomSessionContractTests.swift` and `ClassroomSessionContractTest.kt`
+  are unrun here and the two UIs were reviewed by reading. CI is the gate.
+- **The backend generation failure that started this is untouched.** It lives
+  in `LyoBackendJune` (`adaptive_session.py`'s `unavailable` / `paused_teaching`
+  path) and is not reachable from this repo. What changed is that a learner who
+  hits it is no longer trapped in the session it broke.
+- Nobody has sat a lesson through a real stall. The thresholds are a judgement
+  about how long a learner will wait before a classroom looks broken, not a
+  measurement.

@@ -50,6 +50,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lyo.app.data.api.LearnerConceptRecordDto
 import com.lyo.app.data.api.LearnerEvidenceRecordDto
+import com.lyo.app.data.classroom.ClassroomOpening
+import com.lyo.app.data.classroom.ClassroomSessionContract
+import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoGold
 import com.lyo.app.ui.theme.Surface
@@ -509,5 +512,167 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modi
                 Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/**
+ * The first thing on the board: what this class is, before any of it is
+ * taught.
+ *
+ * A lesson used to open on whatever the engine generated first, which left a
+ * learner no way to tell the start of a class from the middle of one — worst
+ * of all on a resumed session, where the teacher really did carry on from a
+ * place the learner had been given no reminder of. This says the subject,
+ * what the session is for, how long it runs, and that they are allowed to
+ * interrupt. It teaches nothing, and claims nothing the class was not asked
+ * for.
+ */
+@Composable
+fun OpeningCard(opening: ClassroomOpening, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .background(Surface, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+    ) {
+        Text(opening.title, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+        if (opening.resumed) {
+            Text(
+                "Picking up where you left off",
+                color = ClassroomTokens.AccentPurple,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        Text(
+            "By the end: ${opening.objective}",
+            color = TextPrimary,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            opening.facts.forEach { fact ->
+                Text(
+                    fact,
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .background(Background, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+        Text(
+            opening.note,
+            color = TextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}
+
+/**
+ * The step never arrived.
+ *
+ * Says so, says it is not the learner's fault, and gives them two things that
+ * actually move the class on — asking again, and leaving the stuck session
+ * behind. A retry that silently re-enters the same dead session is what made
+ * this a loop rather than a hiccup.
+ */
+@Composable
+fun StallRecoveryCard(
+    onAskAgain: () -> Unit,
+    onStartOver: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(Surface, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text("This step is stuck", color = TextPrimary, style = MaterialTheme.typography.labelLarge)
+        Text(
+            ClassroomSessionContract.STALL_RECOVERY,
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 10.dp),
+        ) {
+            Button(
+                onClick = onAskAgain,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ClassroomTokens.AccentPurple,
+                    contentColor = TextPrimary,
+                ),
+            ) { Text("Ask Lyo again") }
+            OutlinedButton(onClick = onStartOver) { Text("Start this lesson over") }
+        }
+    }
+}
+
+/**
+ * A problem the classroom reported and is carrying on from. Not the error
+ * text above the board: the class is still open.
+ */
+@Composable
+fun ClassroomNoticeCard(
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(Surface, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            message,
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = onDismiss) { Text("Dismiss") }
+    }
+}
+
+/**
+ * A seat the learner left part-way through, offered rather than forced on
+ * them. Opening the same topic again now starts a new class, so the old one
+ * has to be reachable on purpose or it is simply gone.
+ */
+@Composable
+fun ResumeOfferCard(onResume: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(Surface, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            "You have an unfinished class on this topic.",
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+        )
+        Button(
+            onClick = onResume,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ClassroomTokens.AccentPurple,
+                contentColor = TextPrimary,
+            ),
+        ) { Text("Pick up") }
     }
 }

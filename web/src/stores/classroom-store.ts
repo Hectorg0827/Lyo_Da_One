@@ -3,13 +3,25 @@
 import { create } from 'zustand';
 import { SpeechPreparationCache, playSpeechResponse, boardTransitionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
-import { buildClassroomWsUrl, classroomSceneStart } from '@/lib/classroom-contract.mjs';
+import {
+  CLASSROOM_STALL_NOTICE_MS,
+  CLASSROOM_STALL_RECOVERY_MS,
+  buildClassroomWsUrl,
+  canResumeClassroom,
+  classroomCourseKey,
+  classroomOpening,
+  classroomSceneStart,
+  classroomSessionStart,
+  classroomSessionStorageKey,
+} from '@/lib/classroom-contract.mjs';
 import { updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
+  ClassroomOpening,
+  ClassroomSavedSession,
   HintLevel,
 } from '@/lib/classroom-contract.mjs';
 
@@ -101,6 +113,10 @@ export interface DirectorTurn {
 // ─── Board model — the main attraction ───────────────────────────────────────
 
 export type BoardElement =
+  /** The cover page: what this class is, before any of it is taught. Written
+      by the client from the request it just made, so it is on screen in the
+      time it takes to open a socket rather than after a generation. */
+  | { id: string; kind: 'opening'; opening: ClassroomOpening }
   | { id: string; kind: 'teaching_visual'; visual: TeachingVisual }
   | { id: string; kind: 'chalk'; text: string; highlightedTerm?: string }
   | { id: string; kind: 'highlight'; term: string }
@@ -146,12 +162,40 @@ export interface ClassroomConnection extends ClassroomContractConnection {
   mode?: ClassroomMode;
   courseId?: string;
   lessonId?: string;
+  /** The learner asking for the seat they left, rather than a new class.
+      Never the default: see classroomSessionStart. */
+  resume?: boolean;
+  /** Which seat, when it is not simply the last one stored. Starting a
+      class overwrites that stored record, so by the time the learner reads
+      "pick up where you left off" the storage no longer holds the session
+      the offer is about — it has to be carried. */
+  resumeSession?: ClassroomSavedSession;
 }
+
+/**
+ * How far past "the next step is coming" a wait has gone.
+ *
+ * `slow` is still a wait. `stalled` is the admission that the step is not
+ * arriving, and is the only one that puts recovery controls on screen.
+ */
+export type StallPhase = 'none' | 'slow' | 'stalled';
 
 interface ClassroomStore {
   status: Status;
   topic: string;
+  /** The id the live teaching session is keyed by server-side. Not the
+      course: a second class on one course is a second session. */
   sessionId: string;
+  /** The course this class belongs to, which is what Stacks progress is
+      filed under. Kept apart from sessionId so starting a lesson over does
+      not start the learner's progress over with it. */
+  courseId: string;
+  /** True when this class picked up a session the learner had already
+      started. The opening says so rather than letting a mid-lesson teacher
+      turn be the first thing they read. */
+  resumedSession: boolean;
+  /** A session the learner could still return to, if they want it. */
+  resumable: ClassroomSavedSession | null;
   objective: string;
   languageCode: string;
 
@@ -192,6 +236,10 @@ interface ClassroomStore {
   nextActionIntent: string;
   nextActionComponentId: string;
   error: string | null;
+  /** A problem the classroom reported and recovered from, or is waiting out.
+      Distinct from `error`, which means the class itself is over. */
+  notice: string | null;
+  stallPhase: StallPhase;
 
   soundOn: boolean;
   setRevealedCount: (count: number) => void;
@@ -212,6 +260,15 @@ interface ClassroomStore {
   signal: (kind: 'confused' | 'too_easy') => void;
   requestHint: (level: HintLevel) => void;
   continueLesson: () => void;
+  /** Ask the teacher for the step that never came. Sends `continue`, never a
+      second copy of a graded answer — a stalled submission must not be
+      marked twice because the network was slow. */
+  nudgeTeacher: () => void;
+  /** Leave the stuck session behind and teach this topic from the top. */
+  restartLesson: () => void;
+  /** Return to the session this learner left part-way through. */
+  resumeLesson: () => void;
+  dismissNotice: () => void;
   updateActivity: (id: string, values: Record<string, unknown>) => boolean;
   /** Cuts the currently-playing narration turn short and immediately
       advances to the next queued one — a video-style "skip ahead" for the
@@ -245,6 +302,69 @@ let contentLatencyRecorded = false;
 let idCounter = 0;
 let pendingErase = false; // erase lazily when the NEW scene's content arrives
 const nextId = () => `cf_${++idCounter}`;
+
+// ─── Remembering a seat ──────────────────────────────────────────────────────
+
+/**
+ * The last live session started for a course, so "pick up where you left
+ * off" can mean a specific session rather than whichever one the server
+ * still happens to be holding.
+ *
+ * Browser storage, because the id only has to outlive the tab that made it;
+ * an unreadable or absent record simply means this is a first class, which
+ * is the behaviour every client had before any of this existed.
+ */
+function readSavedSession(courseKey: string): ClassroomSavedSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(classroomSessionStorageKey(courseKey));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ClassroomSavedSession>;
+    if (!parsed || typeof parsed.id !== 'string' || !parsed.id) return null;
+    return {
+      id: parsed.id,
+      startedAt: Number(parsed.startedAt) || 0,
+      generation: Math.max(1, Number(parsed.generation) || 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedSession(courseKey: string, saved: ClassroomSavedSession) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(classroomSessionStorageKey(courseKey), JSON.stringify(saved));
+  } catch { /* a learner with storage blocked simply never resumes */ }
+}
+
+// ─── The watchdog ────────────────────────────────────────────────────────────
+
+/**
+ * Waiting is the one classroom state with no natural end.
+ *
+ * Every other state is left by something the learner or the teacher does. A
+ * wait for a generated step is left only by that step arriving, so when
+ * generation fails the class does not break — it simply stops, with a
+ * "preparing the next step…" line that is true forever. This watch is what
+ * turns that into something a learner can act on.
+ *
+ * It ticks rather than arming a timer at each of the dozen places a wait
+ * begins: a wait that started without arming its own timer is exactly the
+ * wait nobody would notice was never ending.
+ */
+let stallTicker: ReturnType<typeof setInterval> | null = null;
+let waitingSince: number | null = null;
+let stallNudged = false;
+let lastConnection: ClassroomConnection | null = null;
+const STALL_TICK_MS = 1000;
+
+function stopStallWatch() {
+  if (stallTicker) clearInterval(stallTicker);
+  stallTicker = null;
+  waitingSince = null;
+  stallNudged = false;
+}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
@@ -542,7 +662,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     maybeEraseForNewScene();
     recordResponseLatency('content');
     sfx('chalk');
-    set((s) => ({ board: [...s.board, el], viewingBoard: -1, waitingForScene: false }));
+    waitingSince = null;
+    stallNudged = false;
+    set((s) => ({
+      board: [...s.board, el], viewingBoard: -1, waitingForScene: false, stallPhase: 'none',
+    }));
   }
 
   /** Wire the current spoken emphasis onto the board: mark the term inline
@@ -779,7 +903,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       .slice(0, 3)
       .forEach((turn) => prefetchSpeechLine((turn.text ?? '').trim()));
     turnQueue.push(...turns);
-    set({ waitingForScene: false });
+    waitingSince = null;
+    stallNudged = false;
+    set({ waitingForScene: false, stallPhase: 'none' });
     resumePlayer();
   }
 
@@ -853,7 +979,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         // Android's ClassroomEngine.syncStackProgress. sessionId equals
         // the real course id once the classroom route passes a real
         // courseId (falls back to topic otherwise, same as upsert).
-        void updateCourseProgress(get().sessionId, current / total);
+        void updateCourseProgress(get().courseId || get().sessionId, current / total);
         break;
       }
       case 'CTAButton':
@@ -910,9 +1036,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'scene_complete':
         set({ waitingForScene: false });
         break;
-      case 'error':
-        pushTranscript('System', (msg.message as string) || 'The classroom hit a snag.');
+      case 'error': {
+        // The classroom saying something went wrong is not the same as the
+        // class being over, so this is a notice rather than a fatal error —
+        // but it stops being invisible. It used to land in the transcript
+        // drawer alone, where a learner watching a board that had stopped
+        // moving would never find it.
+        const message = (msg.message as string) || 'The classroom hit a snag.';
+        pushTranscript('System', message);
+        set({ notice: message });
         break;
+      }
       default:
         break;
     }
@@ -964,16 +1098,71 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   /** Surfaces a dropped action instead of hanging the board. */
   function reportOffline() {
+    stopStallWatch();
     set({
       waitingForScene: false,
+      stallPhase: 'none',
       error: 'That did not reach the classroom — the session is not connected.',
     });
+  }
+
+  /**
+   * One tick of the wait watchdog.
+   *
+   * A wait that is merely slow is said out loud and left alone. A wait that
+   * passes the recovery threshold is asked after once, with `continue` — the
+   * one intent that cannot be mistaken for a second answer — and only if that
+   * second wait also runs out does the class admit the step is not coming and
+   * put recovery controls in front of the learner.
+   */
+  function stallTick() {
+    const { waitingForScene, status, isPaused, stallPhase } = get();
+    if (!waitingForScene || status !== 'live' || isPaused) {
+      waitingSince = null;
+      stallNudged = false;
+      if (stallPhase !== 'none') set({ stallPhase: 'none' });
+      return;
+    }
+    const now = Date.now();
+    if (waitingSince === null) {
+      waitingSince = now;
+      return;
+    }
+    const waited = now - waitingSince;
+    if (waited >= CLASSROOM_STALL_RECOVERY_MS) {
+      if (!stallNudged) {
+        // One unprompted ask, then the learner decides. Resending the
+        // learner's own answer here would risk grading it twice, so the
+        // nudge is always `continue`.
+        stallNudged = true;
+        waitingSince = now;
+        if (!sendAction('continue', get().nextActionComponentId || 'web_continue')) {
+          set({ stallPhase: 'stalled' });
+        } else if (stallPhase !== 'slow') {
+          set({ stallPhase: 'slow' });
+        }
+        return;
+      }
+      if (stallPhase !== 'stalled') set({ stallPhase: 'stalled' });
+      return;
+    }
+    if (waited >= CLASSROOM_STALL_NOTICE_MS && stallPhase === 'none') {
+      set({ stallPhase: 'slow' });
+    }
+  }
+
+  function startStallWatch() {
+    stopStallWatch();
+    stallTicker = setInterval(stallTick, STALL_TICK_MS);
   }
 
   return {
     status: 'idle',
     topic: '',
     sessionId: '',
+    courseId: '',
+    resumedSession: false,
+    resumable: null,
     objective: '',
     languageCode: 'auto',
     board: [],
@@ -994,6 +1183,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     nextActionIntent: 'continue',
     nextActionComponentId: 'web_continue',
     error: null,
+    notice: null,
+    stallPhase: 'none',
     soundOn: false,
     revealedCount: 0,
     voiceOn: true,
@@ -1015,19 +1206,57 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       idCounter = 0;
       turnQueue = [];
       pendingErase = false;
-      const sessionId = connection.sessionId || connection.topic;
+      lastConnection = connection;
+
+      // Which session this is. An explicitly-requested session id still wins
+      // (a caller that already knows its session), otherwise the course
+      // decides, and the course's history decides whether this is a new
+      // class or the old one carried on.
+      const courseKey = classroomCourseKey(connection);
+      const saved = connection.resumeSession ?? readSavedSession(courseKey);
+      const start = connection.sessionId
+        ? { sessionId: connection.sessionId, generation: 1, resumed: false }
+        : classroomSessionStart(courseKey, saved, { resume: connection.resume === true });
+      const sessionId = start.sessionId;
+      writeSavedSession(courseKey, {
+        id: sessionId,
+        startedAt: Date.now(),
+        generation: start.generation,
+      });
+
+      // The cover page goes up before the socket does. A learner should
+      // never be looking at a blank stage wondering whether the class has
+      // begun, and after a resume they should be told that it is the middle
+      // of one rather than left to infer it from the teacher's first line.
+      const opening = classroomOpening({
+        topic: connection.topic,
+        objective: connection.objective,
+        durationMinutes: connection.durationMinutes,
+        difficulty: connection.difficulty,
+        mode: connection.mode,
+        resumed: start.resumed,
+      });
+
       set({
         status: 'connecting',
         topic: connection.topic,
         sessionId,
+        courseId: connection.courseId || '',
+        resumedSession: start.resumed,
+        // Offer the old seat back only when there is one worth offering and
+        // this class is not already sitting in it.
+        resumable: !start.resumed && canResumeClassroom(saved) ? saved : null,
         objective: connection.objective || '',
         languageCode: connection.language || 'auto',
-        board: [], boardHistory: [], recordConcepts: [], viewingBoard: -1,
+        board: [{ id: nextId(), kind: 'opening', opening }],
+        boardHistory: [], recordConcepts: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
         isPaused: false, progressCurrent: 0, progressTotal: 0,
-        continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue', error: null,
+        continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue',
+        error: null, notice: null, stallPhase: 'none',
       });
+      startStallWatch();
 
       const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
       ws = socket;
@@ -1047,6 +1276,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     disconnect: () => {
       flushActivities();
       stopPlayer();
+      stopStallWatch();
       turnQueue = [];
       authToken = null;
       prefetchedSpeech.clear();
@@ -1264,6 +1494,54 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         nextActionIntent: 'continue',
       });
     },
+
+    /**
+     * The step did not come; ask for it again.
+     *
+     * Always `continue`, never the learner's own submission replayed. A
+     * resent answer is a second answer as far as the grader is concerned,
+     * and a learner who waited out a slow network must not pay for it with
+     * a duplicate attempt on their record.
+     */
+    nudgeTeacher: () => {
+      if (!sendAction('continue', get().nextActionComponentId || 'web_continue')) {
+        reportOffline();
+        return;
+      }
+      waitingSince = Date.now();
+      stallNudged = true;
+      set({ waitingForScene: true, stallPhase: 'slow', notice: null, lyoState: 'thinking' });
+    },
+
+    /**
+     * Leave a stuck session behind.
+     *
+     * The server holds the learner's place inside the session, so a session
+     * that cannot produce its next step cannot be argued out of it — the
+     * only real recovery is a different session. Evidence already earned is
+     * filed against the concept, not the session, so nothing demonstrated is
+     * lost by starting the teaching again.
+     */
+    restartLesson: () => {
+      const connection = lastConnection;
+      if (!connection) return;
+      get().disconnect();
+      get().connect({
+        ...connection, sessionId: undefined, resume: false, resumeSession: undefined,
+      });
+    },
+
+    resumeLesson: () => {
+      const connection = lastConnection;
+      const saved = get().resumable;
+      if (!connection || !saved) return;
+      get().disconnect();
+      get().connect({
+        ...connection, sessionId: undefined, resume: true, resumeSession: saved,
+      });
+    },
+
+    dismissNotice: () => set({ notice: null }),
 
     skipTurn: () => {
       // Nothing playing to cut short: idle, paused, or the learner already
