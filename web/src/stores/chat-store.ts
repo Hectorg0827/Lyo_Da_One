@@ -775,9 +775,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               if (chunk.type === 'text_delta') {
                 receivedTextDelta = true;
                 appendToAiMessage(text);
-              } else if (!(chunk.type === 'answer' && receivedTextDelta)) {
-                // The backend preserves a final answer snapshot for old clients.
-                // After deltas have rendered, appending it would duplicate text.
+              } else if (chunk.type === 'answer' && receivedTextDelta) {
+                // The verified final snapshot can correct streamed draft text.
+                // Reconcile it in place so copy, history and rendered text agree.
+                accumulated = text;
+                patchAiMessage({ content: accumulated });
+              } else {
                 appendToAiMessage(text);
               }
             }
