@@ -251,6 +251,15 @@ if (fs.existsSync(voiceLayerBarge)) {
       + "microphone level, or Lyo's own bleed reads as a learner",
     );
   }
+  // The confirmation block consumes the loudness flag, so reading it at the
+  // decision point finds it already spent by the very speech that confirmed
+  // it — holding the turn exactly when the learner did interrupt.
+  if (/loudEnough: pendingRmsBargeAtRef\.current/.test(source)) {
+    failures.push(
+      'Web voice: the microphone level must be read before the confirmation '
+      + 'block clears it, or a real interruption never registers',
+    );
+  }
   if (!/monitorState: micMonitorStateRef\.current/.test(source)) {
     failures.push(
       'Web voice: that decision must know whether the volume monitor is ready, '

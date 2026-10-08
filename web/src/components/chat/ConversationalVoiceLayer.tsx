@@ -495,6 +495,13 @@ export default function ConversationalVoiceLayer() {
       lastRecognitionActivityAtRef.current = voiceQualityNow();
       if (!currentTurnIdRef.current) currentTurnIdRef.current = crypto.randomUUID();
 
+      // Read whether the microphone had risen above Lyo before anything below
+      // can clear it. The confirmation block immediately following consumes
+      // that flag, so reading it at the decision point instead would find it
+      // already spent by the very speech that confirmed it — and the turn
+      // would be held exactly when the learner did interrupt.
+      const roseAboveLyo = pendingRmsBargeAtRef.current > 0;
+
       // An RMS-triggered interruption is only considered real once speech
       // recognition produces a non-echo utterance. This separates genuine
       // barge-in from speaker bleed/noise in live-device telemetry.
@@ -555,7 +562,7 @@ export default function ConversationalVoiceLayer() {
         // unless there is no monitor to ask.
         if (!shouldEndTurnOnSpeech({
           isEcho: false,
-          loudEnough: pendingRmsBargeAtRef.current > 0,
+          loudEnough: roseAboveLyo,
           monitorState: micMonitorStateRef.current,
         })) {
           note(`held: "${combined.slice(0, 24)}" not louder than Lyo`);
