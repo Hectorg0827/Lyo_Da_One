@@ -205,11 +205,24 @@ export default function ConversationalVoiceLayer() {
     }
   }, [acquireMicMonitor, releaseMicMonitor]);
 
-  const stopRecognition = useCallback(() => {
+  /**
+   * Abandon the turn the learner has stopped speaking but not yet sent.
+   *
+   * Deliberately separate from stopping the recognizer. A recognizer ends
+   * itself after every pause and is replaced moments later, which is the same
+   * pause the end-of-turn timer is counting out — so tearing the timer down
+   * with the recognizer meant the replacement always arrived first and the
+   * turn was never sent. Only finishing, speaking over, or leaving the turn
+   * cancels it.
+   */
+  const cancelPendingTurn = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+  }, []);
+
+  const stopRecognition = useCallback(() => {
     try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
     recognitionRef.current = null;
   }, []);
@@ -267,6 +280,7 @@ export default function ConversationalVoiceLayer() {
     }
 
     stopSpeech();
+    cancelPendingTurn();
     stopRecognition();
     const interruptedPreviousTurn = interruptedPreviousTurnRef.current
       || phaseRef.current === 'speaking'
@@ -323,6 +337,7 @@ export default function ConversationalVoiceLayer() {
       voiceLocale: navigator.language || 'auto',
     });
   }, [
+    cancelPendingTurn,
     changePhase,
     interruptGeneration,
     note,
@@ -638,6 +653,7 @@ export default function ConversationalVoiceLayer() {
     voiceSegmentDrainActiveRef.current = true;
     echoReportedForPlaybackRef.current = false;
     echoReportedForPlaybackRef.current = false;
+    cancelPendingTurn();
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
@@ -671,6 +687,7 @@ export default function ConversationalVoiceLayer() {
     }
   }, [
     browserSpeechFallback,
+    cancelPendingTurn,
     changePhase,
     finishSegmentTurnIfReady,
     playBlob,
@@ -764,6 +781,7 @@ export default function ConversationalVoiceLayer() {
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
     const chunks = splitSpeechChunks(text);
     if (!chunks.length || !activeRef.current) return;
+    cancelPendingTurn();
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
@@ -818,7 +836,15 @@ export default function ConversationalVoiceLayer() {
         startRecognition();
       }
     }
-  }, [browserSpeechFallback, changePhase, closeVoiceTurn, playBlob, startRecognition, stopRecognition]);
+  }, [
+    browserSpeechFallback,
+    cancelPendingTurn,
+    changePhase,
+    closeVoiceTurn,
+    playBlob,
+    startRecognition,
+    stopRecognition,
+  ]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
@@ -910,6 +936,7 @@ export default function ConversationalVoiceLayer() {
     activeRef.current = active;
     if (active) return;
     awaitingAssistantRef.current = false;
+    cancelPendingTurn();
     stopRecognition();
     stopSpeech();
     releaseMicMonitor();
@@ -924,7 +951,7 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     setMicSilent(false);
     setErrorDetail('');
-  }, [active, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
+  }, [active, cancelPendingTurn, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;

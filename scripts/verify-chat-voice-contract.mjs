@@ -178,6 +178,42 @@ for (const contract of contracts) {
   }
 }
 
+// A learner's turn is sent by a timer counting out the pause after they stop
+// speaking. The recognizer ends itself during that same pause and is replaced
+// moments later, so tearing the timer down with the recognizer means the
+// replacement always wins and the turn is never sent — the session transcribes
+// and then sits there. Ending the turn and stopping the recognizer must stay
+// separate concerns.
+const voiceLayer = 'web/src/components/chat/ConversationalVoiceLayer.tsx';
+if (fs.existsSync(voiceLayer)) {
+  const source = fs.readFileSync(voiceLayer, 'utf8');
+  if (!source.includes('const cancelPendingTurn = useCallback(')) {
+    failures.push('Web voice: end-of-turn cancellation must be its own callback');
+  }
+  const stopRecognition = source.match(
+    /const stopRecognition = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/,
+  );
+  if (!stopRecognition) {
+    failures.push('Web voice: stopRecognition not found in the expected shape');
+  } else if (stopRecognition[1].includes('silenceTimerRef')) {
+    failures.push(
+      'Web voice: stopRecognition must not clear the end-of-turn timer; '
+      + 'restarting the recognizer after a pause would cancel the turn being sent',
+    );
+  }
+}
+
+// Live voice and dictation own the same microphone, and starting a live
+// conversation hides the dictation button, so the session must end dictation
+// rather than leave a second recognizer running with nothing to stop it.
+const chatInput = 'web/src/components/chat/ChatInputBar.tsx';
+if (fs.existsSync(chatInput)) {
+  const source = fs.readFileSync(chatInput, 'utf8');
+  if (!/if \(voiceSessionActive\) stopDictation\(\);/.test(source)) {
+    failures.push('Web chat input: starting a live conversation must end dictation');
+  }
+}
+
 const iosModels = 'Sources/Models/Lyo2Models.swift';
 if (fs.existsSync(iosModels)) {
   const source = fs.readFileSync(iosModels, 'utf8');

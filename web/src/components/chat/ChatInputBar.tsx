@@ -168,6 +168,13 @@ export default function ChatInputBar() {
     }
   }, [adjustHeight]);
 
+  // Starting a live conversation hides the dictation microphone button, so it
+  // must also end the dictation behind it: two recognizers would otherwise
+  // compete for one microphone, with no control left to stop the hidden one.
+  useEffect(() => {
+    if (voiceSessionActive) stopDictation();
+  }, [voiceSessionActive, stopDictation]);
+
   const toggleDictation = () => {
     if (listening) {
       stopDictation();
