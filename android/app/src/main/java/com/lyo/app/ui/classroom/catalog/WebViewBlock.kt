@@ -62,7 +62,7 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
 internal fun normalizeKaTeXSource(raw: String): String {
     val source = raw.trim()
     return when {
-        source.length >= 4 && source.startsWith("$") && source.endsWith("$") ->
+        source.length >= 4 && source.startsWith("$" + "$") && source.endsWith("$" + "$") ->
             source.substring(2, source.length - 2).trim()
         source.length >= 4 && source.startsWith("\\[") && source.endsWith("\\]") ->
             source.substring(2, source.length - 2).trim()
