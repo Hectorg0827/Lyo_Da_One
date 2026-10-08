@@ -178,6 +178,58 @@ for (const contract of contracts) {
   }
 }
 
+// A learner's turn is sent by a timer counting out the pause after they stop
+// speaking. The recognizer ends itself during that same pause and is replaced
+// moments later, so tearing the timer down with the recognizer means the
+// replacement always wins and the turn is never sent — the session transcribes
+// and then sits there. Ending the turn and stopping the recognizer must stay
+// separate concerns.
+const voiceLayer = 'web/src/components/chat/ConversationalVoiceLayer.tsx';
+if (fs.existsSync(voiceLayer)) {
+  const source = fs.readFileSync(voiceLayer, 'utf8');
+  if (!source.includes('const cancelPendingTurn = useCallback(')) {
+    failures.push('Web voice: end-of-turn cancellation must be its own callback');
+  }
+  const stopRecognition = source.match(
+    /const stopRecognition = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/,
+  );
+  if (!stopRecognition) {
+    failures.push('Web voice: stopRecognition not found in the expected shape');
+  } else if (stopRecognition[1].includes('silenceTimerRef')) {
+    failures.push(
+      'Web voice: stopRecognition must not clear the end-of-turn timer; '
+      + 'restarting the recognizer after a pause would cancel the turn being sent',
+    );
+  }
+  // A turn kept alive across a restart must not then fire into the middle of
+  // the sentence the learner has resumed.
+  const speechStart = source.match(
+    /recognition\.onspeechstart = \(\) => \{([\s\S]*?)\n    \};/,
+  );
+  if (!speechStart) {
+    failures.push('Web voice: onspeechstart not found in the expected shape');
+  } else if (!speechStart[1].includes('armTurnTimer(')) {
+    failures.push(
+      'Web voice: renewed speech must defer the turn already waiting to be sent, '
+      + 'or it submits mid-sentence and truncates the learner',
+    );
+  }
+}
+
+// Live voice renders inside the chat input, so its effects run first: a
+// passive effect would start the live recognizer before dictation released the
+// microphone. The handover has to be ordered by the control itself.
+const chatInput = 'web/src/components/chat/ChatInputBar.tsx';
+if (fs.existsSync(chatInput)) {
+  const source = fs.readFileSync(chatInput, 'utf8');
+  if (!/if \(!voiceSessionActive\) stopDictation\(\);/.test(source)) {
+    failures.push(
+      'Web chat input: the live-conversation control must stop dictation '
+      + 'before activating the session, not through an effect afterwards',
+    );
+  }
+}
+
 const iosModels = 'Sources/Models/Lyo2Models.swift';
 if (fs.existsSync(iosModels)) {
   const source = fs.readFileSync(iosModels, 'utf8');

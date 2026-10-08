@@ -168,6 +168,26 @@ export default function ChatInputBar() {
     }
   }, [adjustHeight]);
 
+  /**
+   * Hand the microphone to a live conversation.
+   *
+   * Dictation is stopped here rather than in an effect because the live voice
+   * layer renders inside this component: its effects run before this one's, so
+   * by the time a passive effect reacted it would already have started its own
+   * recognizer against a microphone dictation still held — and a browser that
+   * refuses the second recognizer leaves the session in an error it never
+   * retries. Stopping first keeps the handover ordered.
+   */
+  const toggleVoiceSession = () => {
+    if (!voiceSessionActive) stopDictation();
+    setVoiceSessionActive(!voiceSessionActive);
+  };
+
+  // Backstop for a live conversation started anywhere but the control above.
+  useEffect(() => {
+    if (voiceSessionActive) stopDictation();
+  }, [voiceSessionActive, stopDictation]);
+
   const toggleDictation = () => {
     if (listening) {
       stopDictation();
@@ -376,7 +396,7 @@ export default function ChatInputBar() {
           {/* Mode pill — voice is a delivery layer over the same Chat contract. */}
           <button
             type="button"
-            onClick={() => setVoiceSessionActive(!voiceSessionActive)}
+            onClick={toggleVoiceSession}
             disabled={!speechSupported}
             className={cn(
               'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold select-none transition-colors',

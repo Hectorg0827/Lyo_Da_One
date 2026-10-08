@@ -40,6 +40,13 @@ type QueuedVoiceSegment = {
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
+/**
+ * How long a turn already waiting to be sent is held back once the microphone
+ * hears the learner again, before the first word of that new speech arrives.
+ * Long enough for a result to land and re-arm the turn with the fuller
+ * sentence; short enough that speech which never resolves still gets sent.
+ */
+const RESUMED_SPEECH_GRACE_MS = 1500;
 
 function latestAssistantMessage() {
   const state = useChatStore.getState();
@@ -75,6 +82,7 @@ export default function ConversationalVoiceLayer() {
   const activeConversationIdRef = useRef<string | null>(activeConversationId);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTurnTextRef = useRef('');
   const transcriptRef = useRef(createTranscriptAccumulator());
   const lastSpokenTextRef = useRef('');
   const awaitingAssistantRef = useRef(false);
@@ -205,11 +213,25 @@ export default function ConversationalVoiceLayer() {
     }
   }, [acquireMicMonitor, releaseMicMonitor]);
 
-  const stopRecognition = useCallback(() => {
+  /**
+   * Abandon the turn the learner has stopped speaking but not yet sent.
+   *
+   * Deliberately separate from stopping the recognizer. A recognizer ends
+   * itself after every pause and is replaced moments later, which is the same
+   * pause the end-of-turn timer is counting out — so tearing the timer down
+   * with the recognizer meant the replacement always arrived first and the
+   * turn was never sent. Only finishing, speaking over, or leaving the turn
+   * cancels it.
+   */
+  const cancelPendingTurn = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+    pendingTurnTextRef.current = '';
+  }, []);
+
+  const stopRecognition = useCallback(() => {
     try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
     recognitionRef.current = null;
   }, []);
@@ -267,6 +289,7 @@ export default function ConversationalVoiceLayer() {
     }
 
     stopSpeech();
+    cancelPendingTurn();
     stopRecognition();
     const interruptedPreviousTurn = interruptedPreviousTurnRef.current
       || phaseRef.current === 'speaking'
@@ -323,6 +346,7 @@ export default function ConversationalVoiceLayer() {
       voiceLocale: navigator.language || 'auto',
     });
   }, [
+    cancelPendingTurn,
     changePhase,
     interruptGeneration,
     note,
@@ -331,6 +355,20 @@ export default function ConversationalVoiceLayer() {
     stopRecognition,
     stopSpeech,
   ]);
+
+  /**
+   * Arm the turn the learner has stopped speaking, to be sent once the pause
+   * outlasts `delayMs`. Re-arming replaces any turn already waiting.
+   */
+  const armTurnTimer = useCallback((text: string, delayMs: number) => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    pendingTurnTextRef.current = text;
+    silenceTimerRef.current = setTimeout(() => {
+      silenceTimerRef.current = null;
+      pendingTurnTextRef.current = '';
+      void sendVoiceTurn(text);
+    }, delayMs);
+  }, [sendVoiceTurn]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
     if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
@@ -359,6 +397,13 @@ export default function ConversationalVoiceLayer() {
     recognition.onspeechstart = () => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
       note('speech detected');
+      // The learner is talking again, so the pause this turn was waiting on is
+      // over before it ever expired — sending now would cut their sentence in
+      // half. Hold it back rather than drop it: a result re-arms it with the
+      // fuller sentence, and speech that never resolves still gets sent.
+      if (silenceTimerRef.current && pendingTurnTextRef.current) {
+        armTurnTimer(pendingTurnTextRef.current, RESUMED_SPEECH_GRACE_MS);
+      }
       const now = voiceQualityNow();
       // Do not rotate a submitted assistant turn merely because the
       // microphone heard something: speaker echo can fire speech-start before
@@ -481,9 +526,7 @@ export default function ConversationalVoiceLayer() {
       setLiveTranscript(combined);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       const endpointDelayMs = voiceEndOfTurnDelayMs(combined);
-      silenceTimerRef.current = setTimeout(() => {
-        void sendVoiceTurn(combined);
-      }, endpointDelayMs);
+      armTurnTimer(combined, endpointDelayMs);
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
@@ -530,6 +573,7 @@ export default function ConversationalVoiceLayer() {
       changePhase('error');
     }
   }, [
+    armTurnTimer,
     changePhase,
     interruptGeneration,
     note,
@@ -638,6 +682,7 @@ export default function ConversationalVoiceLayer() {
     voiceSegmentDrainActiveRef.current = true;
     echoReportedForPlaybackRef.current = false;
     echoReportedForPlaybackRef.current = false;
+    cancelPendingTurn();
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
@@ -671,6 +716,7 @@ export default function ConversationalVoiceLayer() {
     }
   }, [
     browserSpeechFallback,
+    cancelPendingTurn,
     changePhase,
     finishSegmentTurnIfReady,
     playBlob,
@@ -764,6 +810,7 @@ export default function ConversationalVoiceLayer() {
   const speakAssistant = useCallback(async (messageId: string, text: string) => {
     const chunks = splitSpeechChunks(text);
     if (!chunks.length || !activeRef.current) return;
+    cancelPendingTurn();
     stopRecognition();
     changePhase('speaking');
     speakingStartedAtRef.current = performance.now();
@@ -818,7 +865,15 @@ export default function ConversationalVoiceLayer() {
         startRecognition();
       }
     }
-  }, [browserSpeechFallback, changePhase, closeVoiceTurn, playBlob, startRecognition, stopRecognition]);
+  }, [
+    browserSpeechFallback,
+    cancelPendingTurn,
+    changePhase,
+    closeVoiceTurn,
+    playBlob,
+    startRecognition,
+    stopRecognition,
+  ]);
 
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
@@ -910,6 +965,7 @@ export default function ConversationalVoiceLayer() {
     activeRef.current = active;
     if (active) return;
     awaitingAssistantRef.current = false;
+    cancelPendingTurn();
     stopRecognition();
     stopSpeech();
     releaseMicMonitor();
@@ -924,7 +980,7 @@ export default function ConversationalVoiceLayer() {
     setLiveTranscript('');
     setMicSilent(false);
     setErrorDetail('');
-  }, [active, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
+  }, [active, cancelPendingTurn, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
 
   useEffect(() => {
     if (!active) return;
