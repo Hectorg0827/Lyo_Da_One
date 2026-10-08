@@ -162,6 +162,14 @@ interface ChatStore {
   sessionSummary: SessionSummary | null;
   dueReviews: DueReviewItem[];
   voiceSessionActive: boolean;
+  /**
+   * How much of an assistant answer Lyo has actually said out loud.
+   *
+   * A streamed answer arrives far faster than it can be spoken, so during a
+   * live conversation the message is shown only as far as the voice has read,
+   * and the clamp is released (null) once the turn is over.
+   */
+  voiceSpokenText: { messageId: string; text: string } | null;
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -188,6 +196,7 @@ interface ChatStore {
   fetchDueReviews: () => Promise<void>;
   dismissDueReview: (skillId: string) => void;
   setVoiceSessionActive: (active: boolean) => void;
+  setVoiceSpokenText: (value: { messageId: string; text: string } | null) => void;
   interruptGeneration: () => void;
 }
 
@@ -203,8 +212,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionSummary: null,
   dueReviews: [],
   voiceSessionActive: false,
+  voiceSpokenText: null,
 
-  setVoiceSessionActive: (active) => set({ voiceSessionActive: active }),
+  setVoiceSessionActive: (active) => set({
+    voiceSessionActive: active,
+    ...(active ? {} : { voiceSpokenText: null }),
+  }),
+  setVoiceSpokenText: (value) => set({ voiceSpokenText: value }),
   interruptGeneration: () => {
     activeStreamToken += 1;
     activeStreamController?.abort();

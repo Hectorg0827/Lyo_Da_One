@@ -10,6 +10,7 @@ import {
   normalizeSpeechLang,
   tidyTranscript,
 } from '@/lib/speech-transcript.mjs';
+import { joinSpoken, spokenPrefix } from '@/lib/voice-reveal.mjs';
 import {
   createVoiceQualitySessionId,
   detectLanguageFamily,
@@ -40,6 +41,20 @@ type QueuedVoiceSegment = {
 const BARGE_IN_GRACE_MS = 350;
 const BARGE_IN_RMS_THRESHOLD = 0.085;
 const BARGE_IN_FRAMES = 5;
+/**
+ * How far above Lyo's own voice the microphone must rise to count as someone
+ * talking over it.
+ *
+ * Playback bleeds back into the microphone from the speaker, and echo
+ * cancellation does not remove all of it on a phone held in the hand. A fixed
+ * threshold therefore hears Lyo as a learner interrupting, and Lyo cuts itself
+ * off seconds after it starts. The floor below tracks that bleed while Lyo
+ * speaks, so what counts as an interruption is "louder than Lyo currently is",
+ * not "louder than a constant".
+ */
+const BARGE_IN_EXCESS = 2.2;
+/** Volume playback drops to while a suspected interruption is unconfirmed. */
+const DUCKED_VOLUME = 0.22;
 /**
  * How long a turn already waiting to be sent is held back once the microphone
  * hears the learner again, before the first word of that new speech arrives.
@@ -96,6 +111,9 @@ export default function ConversationalVoiceLayer() {
   const animationFrameRef = useRef<number | null>(null);
   const speakingStartedAtRef = useRef(0);
   const loudFramesRef = useRef(0);
+  const bleedFloorRef = useRef(0);
+  const spokenSoFarRef = useRef('');
+  const duckedRef = useRef(false);
   const voiceSegmentQueueRef = useRef<QueuedVoiceSegment[]>([]);
   const voiceSegmentDrainActiveRef = useRef(false);
   const voiceTurnClosedRef = useRef(false);
@@ -236,6 +254,21 @@ export default function ConversationalVoiceLayer() {
     recognitionRef.current = null;
   }, []);
 
+  /**
+   * Quieten playback without abandoning it, while a suspected interruption is
+   * still unconfirmed. Quieter playback also bleeds less into the microphone,
+   * which gives the recognizer a better chance of resolving what was said.
+   */
+  const duckPlayback = useCallback(() => {
+    duckedRef.current = true;
+    if (audioRef.current) audioRef.current.volume = DUCKED_VOLUME;
+  }, []);
+
+  const restorePlayback = useCallback(() => {
+    duckedRef.current = false;
+    if (audioRef.current) audioRef.current.volume = 1;
+  }, []);
+
   const stopSpeech = useCallback(() => {
     ttsAbortRef.current?.abort();
     ttsPrefetchAbortRef.current?.abort();
@@ -250,6 +283,7 @@ export default function ConversationalVoiceLayer() {
     voiceSegmentQueueRef.current.forEach((segment) => segment.controller.abort());
     voiceSegmentQueueRef.current = [];
     voiceSegmentDrainActiveRef.current = false;
+    duckedRef.current = false;
   }, []);
 
   const sendVoiceTurn = useCallback(async (raw: string) => {
@@ -336,6 +370,7 @@ export default function ConversationalVoiceLayer() {
     voiceTurnClosedRef.current = false;
     voiceSegmentsReceivedRef.current = false;
     spokenVoiceSegmentKeysRef.current.clear();
+    releaseSpoken();
     note(`sending "${transcript.slice(0, 40)}"`);
     changePhase('thinking');
     interruptedPreviousTurnRef.current = false;
@@ -454,6 +489,7 @@ export default function ConversationalVoiceLayer() {
           clearTimeout(pendingRmsBargeTimerRef.current);
           pendingRmsBargeTimerRef.current = null;
         }
+        restorePlayback();
         reportVoiceQuality(qualityContext(), 'barge_in_confirmed', {
           confirm_ms: Math.max(
             0,
@@ -578,6 +614,7 @@ export default function ConversationalVoiceLayer() {
     interruptGeneration,
     note,
     qualityContext,
+    restorePlayback,
     sendVoiceTurn,
     stopRecognition,
     stopSpeech,
@@ -601,7 +638,10 @@ export default function ConversationalVoiceLayer() {
     });
   }, [qualityContext]);
 
-  const playBlob = useCallback((blob: Blob) => new Promise<void>((resolve, reject) => {
+  const playBlob = useCallback((
+    blob: Blob,
+    onProgress?: (fraction: number) => void,
+  ) => new Promise<void>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     let settled = false;
@@ -610,10 +650,21 @@ export default function ConversationalVoiceLayer() {
       if (audioRef.current === audio) audioRef.current = null;
     };
     audioRef.current = audio;
+    // A segment carries on at whatever volume the previous one was ducked to,
+    // so an unconfirmed interruption is not undone by the next segment.
+    audio.volume = duckedRef.current ? DUCKED_VOLUME : 1;
     audio.onplaying = () => markFirstAudio('server_tts');
+    if (onProgress) {
+      audio.ontimeupdate = () => {
+        const total = audio.duration;
+        if (!Number.isFinite(total) || total <= 0) return;
+        onProgress(Math.min(1, Math.max(0, audio.currentTime / total)));
+      };
+    }
     audio.onended = () => {
       if (settled) return;
       settled = true;
+      onProgress?.(1);
       cleanup();
       resolve();
     };
@@ -642,6 +693,36 @@ export default function ConversationalVoiceLayer() {
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }), [markFirstAudio]);
+
+  /**
+   * Show an answer only as far as Lyo has read it.
+   *
+   * The written answer streams in far faster than it can be spoken, so without
+   * this the whole reply is on screen before the first word is heard and there
+   * is nothing to follow. Words of the segment being played are revealed in
+   * step with the audio, on top of everything already said.
+   */
+  const revealSpoken = useCallback((messageId: string, segment: string, fraction: number) => {
+    useChatStore.getState().setVoiceSpokenText({
+      messageId,
+      text: joinSpoken(spokenSoFarRef.current, spokenPrefix(segment, fraction)),
+    });
+  }, []);
+
+  /** Fold a finished segment into what has been said, ready for the next. */
+  const commitSpoken = useCallback((messageId: string, segment: string) => {
+    spokenSoFarRef.current = joinSpoken(spokenSoFarRef.current, segment);
+    useChatStore.getState().setVoiceSpokenText({
+      messageId,
+      text: spokenSoFarRef.current,
+    });
+  }, []);
+
+  /** Release the clamp so the answer reads in full once the turn is over. */
+  const releaseSpoken = useCallback(() => {
+    spokenSoFarRef.current = '';
+    useChatStore.getState().setVoiceSpokenText(null);
+  }, []);
 
   const closeVoiceTurn = useCallback((outcome: 'completed' | 'incomplete' | 'fallback') => {
     const now = voiceQualityNow();
@@ -673,9 +754,10 @@ export default function ConversationalVoiceLayer() {
     ) return;
     awaitingAssistantRef.current = false;
     closeVoiceTurn(voiceSegmentsReceivedRef.current ? 'completed' : 'incomplete');
+    releaseSpoken();
     changePhase('listening');
     startRecognition();
-  }, [changePhase, closeVoiceTurn, startRecognition]);
+  }, [changePhase, closeVoiceTurn, releaseSpoken, startRecognition]);
 
   const drainVoiceSegments = useCallback(async () => {
     if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
@@ -702,11 +784,14 @@ export default function ConversationalVoiceLayer() {
           ttsAbortRef.current = segment.controller;
           const blob = await segment.audio;
           if (!blob) throw new Error('Segment synthesis failed');
-          await playBlob(blob);
+          await playBlob(blob, (fraction) => revealSpoken(segment.messageId, spoken, fraction));
         } catch {
           if (!activeRef.current || phaseRef.current !== 'speaking') break;
+          // The device voice reports no progress, so the segment appears whole.
+          revealSpoken(segment.messageId, spoken, 1);
           await browserSpeechFallback(spoken);
         } finally {
+          commitSpoken(segment.messageId, spoken);
           ttsAbortRef.current = null;
         }
       }
@@ -718,8 +803,10 @@ export default function ConversationalVoiceLayer() {
     browserSpeechFallback,
     cancelPendingTurn,
     changePhase,
+    commitSpoken,
     finishSegmentTurnIfReady,
     playBlob,
+    revealSpoken,
     stopRecognition,
   ]);
 
@@ -850,7 +937,11 @@ export default function ConversationalVoiceLayer() {
           next = null;
         }
 
-        await playBlob(await current.promise);
+        await playBlob(
+          await current.promise,
+          (fraction) => revealSpoken(messageId, chunks[index], fraction),
+        );
+        commitSpoken(messageId, chunks[index]);
       }
     } catch {
       if (activeRef.current && phaseRef.current === 'speaking') {
@@ -859,6 +950,7 @@ export default function ConversationalVoiceLayer() {
     } finally {
       ttsAbortRef.current = null;
       ttsPrefetchAbortRef.current = null;
+      releaseSpoken();
       if (activeRef.current && phaseRef.current === 'speaking') {
         closeVoiceTurn('fallback');
         changePhase('listening');
@@ -870,26 +962,39 @@ export default function ConversationalVoiceLayer() {
     cancelPendingTurn,
     changePhase,
     closeVoiceTurn,
+    commitSpoken,
     playBlob,
+    releaseSpoken,
+    revealSpoken,
     startRecognition,
     stopRecognition,
   ]);
 
+  /**
+   * The microphone is louder than Lyo currently is, so someone may be talking
+   * over it.
+   *
+   * Loudness alone does not end Lyo's turn. A room, a cough or a burst of its
+   * own playback can all clear the bar, and ending the turn on that means Lyo
+   * cuts itself off mid-sentence for no reason. Playback ducks instead, which
+   * is instant and reversible, and the recognizer decides: words that are not
+   * an echo end the turn for real (in onresult), and a window that closes
+   * without them simply brings the volume back.
+   */
   const bargeIn = useCallback(() => {
     if (!activeRef.current || phaseRef.current !== 'speaking') return;
+    if (pendingRmsBargeAtRef.current > 0) return;
     const detectedAt = voiceQualityNow();
     reportVoiceQuality(qualityContext(), 'barge_in', {
-      method: 'rms',
+      method: 'rms_ducked',
       speaking_elapsed_ms: speakingStartedAtRef.current > 0
         ? Math.max(0, Math.round(detectedAt - speakingStartedAtRef.current))
         : -1,
       generation_active: useChatStore.getState().isGenerating,
     });
-    reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
-      method: 'rms',
-    });
-    lastAssistantAudioEndedAtRef.current = detectedAt;
     pendingRmsBargeAtRef.current = detectedAt;
+    duckPlayback();
+    loudFramesRef.current = 0;
     if (pendingRmsBargeTimerRef.current) clearTimeout(pendingRmsBargeTimerRef.current);
     pendingRmsBargeTimerRef.current = setTimeout(() => {
       if (!pendingRmsBargeAtRef.current) return;
@@ -899,17 +1004,10 @@ export default function ConversationalVoiceLayer() {
       });
       pendingRmsBargeAtRef.current = 0;
       pendingRmsBargeTimerRef.current = null;
+      // Nothing the recognizer could call speech: Lyo was talking to itself.
+      if (phaseRef.current === 'speaking') restorePlayback();
     }, 1800);
-
-    interruptedPreviousTurnRef.current = true;
-    stopSpeech();
-    if (useChatStore.getState().isGenerating) interruptGeneration();
-    loudFramesRef.current = 0;
-    transcriptRef.current.reset();
-    setLiveTranscript('');
-    changePhase('listening');
-    startRecognition();
-  }, [changePhase, interruptGeneration, qualityContext, startRecognition, stopSpeech]);
+  }, [duckPlayback, qualityContext, restorePlayback]);
 
   useEffect(() => {
     if (active) {
@@ -976,11 +1074,20 @@ export default function ConversationalVoiceLayer() {
       pendingRmsBargeTimerRef.current = null;
     }
     pendingRmsBargeAtRef.current = 0;
+    releaseSpoken();
     changePhase('idle');
     setLiveTranscript('');
     setMicSilent(false);
     setErrorDetail('');
-  }, [active, cancelPendingTurn, changePhase, releaseMicMonitor, stopRecognition, stopSpeech]);
+  }, [
+    active,
+    cancelPendingTurn,
+    changePhase,
+    releaseMicMonitor,
+    releaseSpoken,
+    stopRecognition,
+    stopSpeech,
+  ]);
 
   useEffect(() => {
     if (!active) return;
@@ -995,9 +1102,24 @@ export default function ConversationalVoiceLayer() {
           sum += normalized * normalized;
         }
         const rms = Math.sqrt(sum / samples.length);
-        loudFramesRef.current = rms > BARGE_IN_RMS_THRESHOLD ? loudFramesRef.current + 1 : 0;
+
+        // Track how loud Lyo's own playback comes back through the microphone:
+        // fall quickly toward quiet so the floor follows a pause in its speech,
+        // and rise slowly so a learner talking over it cannot drag the floor up
+        // to meet their own voice.
+        bleedFloorRef.current = bleedFloorRef.current === 0
+          ? rms
+          : rms < bleedFloorRef.current
+            ? bleedFloorRef.current * 0.9 + rms * 0.1
+            : bleedFloorRef.current * 0.995 + rms * 0.005;
+
+        const bar = Math.max(BARGE_IN_RMS_THRESHOLD, bleedFloorRef.current * BARGE_IN_EXCESS);
+        loudFramesRef.current = rms > bar ? loudFramesRef.current + 1 : 0;
         if (loudFramesRef.current >= BARGE_IN_FRAMES) bargeIn();
-      } else loudFramesRef.current = 0;
+      } else {
+        loudFramesRef.current = 0;
+        bleedFloorRef.current = 0;
+      }
       animationFrameRef.current = requestAnimationFrame(tick);
     };
     animationFrameRef.current = requestAnimationFrame(tick);
