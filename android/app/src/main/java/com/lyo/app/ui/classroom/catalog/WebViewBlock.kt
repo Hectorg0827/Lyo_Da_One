@@ -1,13 +1,22 @@
 package com.lyo.app.ui.classroom.catalog
 
 import android.annotation.SuppressLint
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
 
@@ -37,29 +46,63 @@ enum class WebViewBlockKind { MERMAID, LATEX }
 @Composable
 fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Modifier) {
     val html = remember(kind, source) { buildHtml(kind, source) }
-    AndroidView(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(220.dp), // fixed height: WebView can't natively report content-height back into Compose's layout pass without a JS bridge round-trip, which needs a real device to validate the timing of — see the class doc comment.
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            }
-        },
-        update = { webView ->
-            webView.loadDataWithBaseURL(
-                "https://cdn.jsdelivr.net/",
-                html,
-                "text/html",
-                "UTF-8",
-                null,
+    var rendered by remember(kind, source) { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            factory = { context ->
+                lateinit var webView: WebView
+                webView = WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    addJavascriptInterface(
+                        object {
+                            @JavascriptInterface
+                            fun onRendered() {
+                                webView.post { rendered = true }
+                            }
+                        },
+                        "LyoBridge",
+                    )
+                }
+                webView
+            },
+            update = { webView ->
+                if (webView.tag != html) {
+                    rendered = false
+                    webView.tag = html
+                    webView.loadDataWithBaseURL(
+                        "https://cdn.jsdelivr.net/",
+                        html,
+                        "text/html",
+                        "UTF-8",
+                        null,
+                    )
+                }
+            },
+        )
+
+        // Keep the source readable until the renderer explicitly reports
+        // success. If the CDN is blocked or JavaScript fails, this remains as
+        // the lossless fallback instead of leaving a blank WebView.
+        if (!rendered) {
+            Text(
+                text = source,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
             )
-        },
-    )
+        }
+    }
 }
+
 
 private fun buildHtml(kind: WebViewBlockKind, source: String): String {
     // JSONObject.quote() gives a properly-escaped JS string literal —
@@ -75,7 +118,10 @@ private fun buildHtml(kind: WebViewBlockKind, source: String): String {
             <body>
               <div class="mermaid">${source.htmlEscape()}</div>
               <script>
-                mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+                mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+                mermaid.run({ querySelector: '.mermaid' })
+                  .then(() => LyoBridge.onRendered())
+                  .catch(() => {});
               </script>
             </body></html>
         """.trimIndent()
@@ -89,7 +135,10 @@ private fun buildHtml(kind: WebViewBlockKind, source: String): String {
             <body>
               <div id="math"></div>
               <script>
-                katex.render($escapedSource, document.getElementById('math'), { throwOnError: false, displayMode: true });
+                try {
+                  katex.render($escapedSource, document.getElementById('math'), { throwOnError: false, displayMode: true });
+                  LyoBridge.onRendered();
+                } catch (_) {}
               </script>
             </body></html>
         """.trimIndent()

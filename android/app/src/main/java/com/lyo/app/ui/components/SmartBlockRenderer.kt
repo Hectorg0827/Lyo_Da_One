@@ -55,6 +55,8 @@ import com.lyo.app.data.api.QuizBlockPayload
 import com.lyo.app.data.api.SmartBlock
 import com.lyo.app.data.api.SmartBlockContent
 import com.lyo.app.data.api.TextBlockPayload
+import com.lyo.app.ui.classroom.catalog.WebViewBlock
+import com.lyo.app.ui.classroom.catalog.WebViewBlockKind
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
@@ -333,21 +335,21 @@ private fun FlashcardBlockView(payload: FlashcardBlockPayload, color: Color) {
 private fun DataVizBlockView(payload: DataVizBlockPayload, color: Color) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         payload.title?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = TextSecondary) }
-        // No mermaid.js/KaTeX renderer wired in here — WebViewBlock.kt hosts
-        // one, but its own doc comment discloses it hasn't been verified on
-        // a real device. Labeled raw source is the same honest fallback iOS
-        // uses for math (UnifiedBlockRenderer.swift) and this codebase
-        // already uses for diagrams elsewhere (MermaidBlockRenderer.kt).
-        Text(
-            text = payload.source,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp,
-            color = color,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-                .padding(12.dp),
-        )
+        when (payload.format.lowercase()) {
+            "mermaid", "diagram" -> WebViewBlock(
+                kind = WebViewBlockKind.MERMAID,
+                source = payload.source,
+            )
+            "math", "latex" -> WebViewBlock(
+                kind = WebViewBlockKind.LATEX,
+                source = payload.source,
+            )
+            "table", "text", "chart", "graph" -> MarkdownText(
+                payload.source,
+                color = color,
+            )
+            else -> MarkdownText(payload.source, color = color)
+        }
     }
 }
 

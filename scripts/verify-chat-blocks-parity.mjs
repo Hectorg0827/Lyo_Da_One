@@ -49,7 +49,22 @@ const contracts = [
   {
     name: 'Web renders each lesson beat distinctly',
     path: 'web/src/components/chat/blocks/BlockRenderer.tsx',
-    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock'],
+    needles: ["case 'quiz'", "case 'dataViz'", "'callout'", "'sourceNavigator'", 'SourceNavigatorBlock', 'CheckBlock', 'MermaidBlock', "import('mermaid')"],
+  },
+  {
+    name: 'iOS renders structured tables and diagrams',
+    path: 'Sources/Views/Common/UnifiedBlockRenderer.swift',
+    needles: ['SmartMarkdownTableView', 'MermaidWebView', 'case "table"', 'case "mermaid", "diagram"', 'omittingEmptySubsequences: false', 'lyoRender', 'diagramRendered'],
+  },
+  {
+    name: 'Android renders structured diagrams and math',
+    path: 'android/app/src/main/java/com/lyo/app/ui/components/SmartBlockRenderer.kt',
+    needles: ['WebViewBlockKind.MERMAID', 'WebViewBlockKind.LATEX', '"table", "text", "chart", "graph"'],
+  },
+  {
+    name: 'Android data-viz WebView is lossless on renderer failure',
+    path: 'android/app/src/main/java/com/lyo/app/ui/classroom/catalog/WebViewBlock.kt',
+    needles: ['onRendered', 'if (!rendered)', 'LyoBridge', 'mermaid.run'],
   },
   {
     name: 'Web keeps grounded answer prose beside supplemental sources',
