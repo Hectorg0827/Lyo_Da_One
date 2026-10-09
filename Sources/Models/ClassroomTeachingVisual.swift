@@ -50,9 +50,19 @@ struct ClassroomTeachingVisual: Codable, Equatable {
         case attribution
     }
 
-    private func isTrustedImage(_ raw: String?) -> Bool {
-        guard let raw, let url = URL(string: raw), url.scheme == "https" else { return raw == nil }
-        return url.host == "upload.wikimedia.org" || url.host == "commons.wikimedia.org"
+    // Mirror the server's exact allowlists. Attribution links and media files
+    // have different trusted hosts; never accept substring host matches.
+    private func isTrustedMediaURL(_ raw: String?, source: Bool = false) -> Bool {
+        guard let raw else { return true }
+        guard raw.count <= 1200, let parts = URLComponents(string: raw),
+              parts.scheme == "https", let host = parts.host,
+              parts.user == nil, parts.password == nil,
+              let path = parts.path.isEmpty ? nil : parts.path,
+              path != "/" else { return false }
+        let hosts: Set<String> = source
+            ? ["commons.wikimedia.org", "www.pexels.com", "images.nasa.gov", "www.si.edu"]
+            : ["upload.wikimedia.org", "images.pexels.com", "images-assets.nasa.gov", "ids.si.edu"]
+        return hosts.contains(host.lowercased())
     }
 
     var isValid: Bool {
@@ -71,8 +81,8 @@ struct ClassroomTeachingVisual: Codable, Equatable {
                 }
         case "annotated_image":
             return !(imageQuery ?? "").isEmpty
-                && isTrustedImage(imageUrl)
-                && isTrustedImage(sourceUrl)
+                && isTrustedMediaURL(imageUrl)
+                && isTrustedMediaURL(sourceUrl, source: true)
                 && entries.allSatisfy { item in
                     if item.x == nil && item.y == nil { return true }
                     guard let x = item.x, let y = item.y else { return false }

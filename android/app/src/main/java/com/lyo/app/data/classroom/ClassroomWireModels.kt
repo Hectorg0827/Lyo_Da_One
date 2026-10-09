@@ -184,6 +184,32 @@ data class UserActionEnvelope(
     val answer_data: Map<String, Any?>? = null,
 )
 
+/** Trust media and attribution separately, matching the backend's exact HTTPS hosts.
+ * Do not use string prefix checks: an attacker can spoof a trusted hostname.
+ */
+private val teachingImageHosts = setOf(
+    "upload.wikimedia.org", "images.pexels.com", "images-assets.nasa.gov", "ids.si.edu",
+)
+private val teachingSourceHosts = setOf(
+    "commons.wikimedia.org", "www.pexels.com", "images.nasa.gov", "www.si.edu",
+)
+
+private fun trustedTeachingURL(url: String?, allowedHosts: Set<String>): Boolean {
+    if (url == null) return true
+    if (url.length > 1200) return false
+    return try {
+        val parts = java.net.URI(url)
+        parts.scheme?.lowercase() == "https" &&
+            parts.host?.lowercase() in allowedHosts &&
+            parts.rawUserInfo == null &&
+            !parts.rawPath.isNullOrEmpty() && parts.rawPath != "/"
+    } catch (_: java.net.URISyntaxException) {
+        false
+    } catch (_: IllegalArgumentException) {
+        false
+    }
+}
+
 /** Prevent a malformed supplemental tool from taking down the actual lesson. */
 fun ClassroomBlock.isTeachingVisualValid(): Boolean {
     fun entriesOk(min: Int = 2, max: Int = 8): Boolean =
@@ -203,8 +229,8 @@ fun ClassroomBlock.isTeachingVisualValid(): Boolean {
                     ((it.x == null && it.y == null) || (it.x != null && it.y != null &&
                         it.x.isFinite() && it.y.isFinite() && it.x in 0.0..1.0 && it.y in 0.0..1.0))
             } != false) &&
-            (image_url == null || image_url.startsWith("https://upload.wikimedia.org/")) &&
-            (source_url == null || source_url.startsWith("https://commons.wikimedia.org/"))
+            trustedTeachingURL(image_url, teachingImageHosts) &&
+            trustedTeachingURL(source_url, teachingSourceHosts)
         "graph" -> !expression.isNullOrBlank() && params != null && params.size in 1..3 &&
             params.map { it.name }.distinct().size == params.size && x_min != null && x_max != null &&
             x_min.isFinite() && x_max.isFinite() && x_min < x_max && y_min != null && y_max != null &&
