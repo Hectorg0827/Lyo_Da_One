@@ -189,6 +189,22 @@ class ClassroomEngine(
     /** The notebook drawer's content — see TranscriptLine's doc comment. */
     val transcript = mutableStateListOf<TranscriptLine>()
 
+    /**
+     * True once the teacher has put anything on the board, and true from then
+     * on.
+     *
+     * The cover page and the resume offer used to key off `transcript`, which
+     * only grows when something is *said*. A scene whose first component is a
+     * QuizCard, InputField or LessonBlock renders straight to the board
+     * without a transcript line, so the cover page stayed drawn on top of a
+     * live board and could cover the learner's first checkpoint.
+     *
+     * A latch rather than a live reading of the board: `clearBoard()` empties
+     * it between scenes, and a cover page that reappeared mid-lesson every
+     * time the teacher wiped the board would be worse than the bug it fixes.
+     */
+    var hasBoardContent by mutableStateOf(false); private set
+
     /** Server-owned evidence only. Never derived from transcript or local UI state. */
     var learnerRecord by mutableStateOf<LearnerEvidenceRecordDto?>(null); private set
     var learnerRecordLoading by mutableStateOf(false); private set
@@ -482,6 +498,7 @@ class ClassroomEngine(
 
     private fun applyMutation(mutation: ClassroomBridge.BoardMutation) {
         boardChildren = mutation.boardChildren
+        if (boardChildren.isNotEmpty()) hasBoardContent = true
         mutation.messages.forEach { applyMessage(it) }
     }
 

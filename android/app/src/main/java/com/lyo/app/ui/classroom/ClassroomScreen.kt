@@ -237,7 +237,12 @@ fun ClassroomScreen(
                 // taught. A learner should never be looking at a blank board
                 // wondering whether the class has begun, and after a resume
                 // they should be told that it is the middle of one.
-                if (engine.status == "connecting" || engine.transcript.isEmpty()) {
+                // Gone as soon as the teacher puts anything on the board —
+                // not merely once something has been said. A scene opening on
+                // a QuizCard adds no transcript line, and this card is drawn
+                // over the board, so keying off narration left it covering
+                // the learner's first checkpoint.
+                if (!engine.hasBoardContent) {
                     OpeningCard(
                         opening = engine.opening,
                         modifier = Modifier
@@ -281,7 +286,7 @@ fun ClassroomScreen(
                 engine.notice?.let { message ->
                     ClassroomNoticeCard(message = message, onDismiss = { engine.dismissNotice() })
                 }
-                engine.resumableSession?.takeIf { engine.transcript.isEmpty() }?.let { seat ->
+                engine.resumableSession?.takeIf { !engine.hasBoardContent }?.let { seat ->
                     ResumeOfferCard(onResume = {
                         resumeSeat = seat
                         sessionAttempt += 1
