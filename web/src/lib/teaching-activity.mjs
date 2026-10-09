@@ -1,3 +1,25 @@
+/** Keep Classroom media permissions aligned with backend visual_library.py.
+ * Validate URL host exactly; startsWith on a hostname allows lookalike domains.
+ */
+const TEACHING_IMAGE_HOSTS = new Set([
+  'upload.wikimedia.org', 'images.pexels.com', 'images-assets.nasa.gov', 'ids.si.edu',
+]);
+const TEACHING_SOURCE_HOSTS = new Set([
+  'commons.wikimedia.org', 'www.pexels.com', 'images.nasa.gov', 'www.si.edu',
+]);
+
+function approvedTeachingUrl(raw, allowedHosts) {
+  if (raw == null) return true;
+  if (typeof raw !== 'string' || raw.length > 1200) return false;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && allowedHosts.has(url.hostname)
+      && !url.username && !url.password && url.pathname !== '/';
+  } catch {
+    return false;
+  }
+}
+
 /** Validate the public, non-grading teaching-tool payload before rendering. */
 export function parseTeachingVisual(raw) {
   const kinds = ['fraction_bar', 'comparison', 'sequence', 'graph', 'process_flow', 'timeline', 'number_line', 'annotated_image'];
@@ -32,8 +54,8 @@ export function parseTeachingVisual(raw) {
     || raw.entries.some(i => (i.x == null) !== (i.y == null)
       || (i.x != null && (!Number.isFinite(i.x) || i.x < 0 || i.x > 1))
       || (i.y != null && (!Number.isFinite(i.y) || i.y < 0 || i.y > 1)))
-    || (raw.image_url != null && (typeof raw.image_url !== 'string' || !raw.image_url.startsWith('https://upload.wikimedia.org/')))
-    || (raw.source_url != null && (typeof raw.source_url !== 'string' || !raw.source_url.startsWith('https://commons.wikimedia.org/')))
+    || !approvedTeachingUrl(raw.image_url, TEACHING_IMAGE_HOSTS)
+    || !approvedTeachingUrl(raw.source_url, TEACHING_SOURCE_HOSTS)
   )) return null;
 
   if (raw.kind === 'graph' && (
