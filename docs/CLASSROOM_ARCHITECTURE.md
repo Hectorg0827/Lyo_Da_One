@@ -1189,6 +1189,10 @@ record and not in the session.
 
 ## 13. Phase I — a class has a beginning, and a stuck one has a way out
 
+> Unusually for this document, this phase changed both repos. The backend rows
+> below are edits that landed, not contract decisions: `LyoBackendJune` was
+> writable for this work.
+
 ### 13.1 What a learner actually saw
 
 A learner opened a free-topic class on Minecraft. The first thing the teacher
@@ -1264,6 +1268,13 @@ failure that stops the class running (no token, no socket) ends it.
 
 ### 13.4 What landed
 
+| Change | Where (`LyoBackendJune`) |
+| --- | --- |
+| `recovery_attempts` on `GuidedState`, counted on the saved state and reset by any success | `adaptive_teaching.py`, `adaptive_session.py` |
+| A retried step escalated to a more capable already-configured provider | `adaptive_teaching.py` (`model_json`, `_escalate`) |
+| A step that has failed twice asking for a question falls back to teaching | `adaptive_session.py` (`RELAX_RECOVERY_AFTER`, `TEACHING_MOVES`) |
+| The dead end proved dead, and proved fixed | `tests/test_classroom_recovery.py` |
+
 | Change | Where (this repo) |
 | --- | --- |
 | Session start, resume window, stall thresholds and opening copy | `web/src/lib/classroom-contract.mjs`, `Sources/Models/ClassroomSessionContract.swift`, `android/.../data/classroom/ClassroomSessionContract.kt` |
@@ -1287,10 +1298,21 @@ failure that stops the class running (no token, no socket) ends it.
   has no Xcode, no Android SDK and no Gradle wrapper, so
   `ClassroomSessionContractTests.swift` and `ClassroomSessionContractTest.kt`
   are unrun here and the two UIs were reviewed by reading. CI is the gate.
-- **The backend generation failure that started this is untouched.** It lives
-  in `LyoBackendJune` (`adaptive_session.py`'s `unavailable` / `paused_teaching`
-  path) and is not reachable from this repo. What changed is that a learner who
-  hits it is no longer trapped in the session it broke.
+- **The backend half is fixed too, in `LyoBackendJune`.** The generation
+  failure itself is a provider outcome and will happen again; what was wrong
+  was that `unavailable` saves `before_generation`, so Retry resent a
+  byte-identical request — same move, same unit, same learner input, same
+  provider order — and a step the model could not compose once it could not
+  compose ever. `LearningTurn` was also configured for `gpt-4o-mini` and
+  `gemini-2.5-flash` only, so a unit neither could author had no path to being
+  taught at all. A retried step now escalates to `gpt-4o` (a reorder of
+  providers this module already uses — no new credential or client), and a
+  step that has failed twice stops asking for a question and teaches instead,
+  which earns no evidence and completes no unit. 433 backend classroom tests
+  pass and the full suite matches its baseline failure-for-failure.
+- **The two halves are independent on purpose.** The client watchdog still
+  earns its place: it covers a server that never answers at all, which no
+  server-side retry policy can.
 - Nobody has sat a lesson through a real stall. The thresholds are a judgement
   about how long a learner will wait before a classroom looks broken, not a
   measurement.
