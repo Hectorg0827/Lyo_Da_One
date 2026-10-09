@@ -1316,3 +1316,86 @@ failure that stops the class running (no token, no socket) ends it.
 - Nobody has sat a lesson through a real stall. The thresholds are a judgement
   about how long a learner will wait before a classroom looks broken, not a
   measurement.
+
+---
+
+## 14. Phase J — the schema becomes a rule, and the retry gets a future
+
+Also a `LyoBackendJune` change; recorded here because §13 is where a reader
+looks for why a lesson stops, and both of these are about that.
+
+### 14.1 The contract was never enforced
+
+`model_json` built `schema.model_json_schema()`, pasted it into the system
+prompt, and set the provider's loose JSON mode. OpenAI's `{"type":
+"json_object"}` and Gemini's `responseMimeType` both mean one thing: *reply
+with some JSON*. Neither looks at the contract.
+
+So the schema was advice. A model that drifted from it produced output
+`model_validate_json` rejected — and a rejected turn is a retry, and two
+rejected retries is §13's paused board. The engine was absorbing, as a
+pedagogical failure, something that was only ever a formatting one.
+
+Both providers will take the schema itself. `strict_schema.py` converts a
+Pydantic contract into the dialect they accept: `$ref`s inlined, since support
+differs by provider and version; validation-only keywords dropped, since they
+are re-checked by the real model afterwards and the annotated contract still
+reaches the prompt; every object closed and every property required, because
+strict mode has no optional property.
+
+That last rule is the one worth guarding. It is safe **only** because it does
+not touch types. A field Pydantic marks nullable already carries `{"type":
+"null"}`; a field it does not, does not gain it. Requiring a property can
+therefore never make `null` legal where the model would reject it — which is
+the one way this conversion could hand a provider permission to produce
+something the server then throws away, i.e. reintroduce the exact failure it
+exists to remove. `test_requiring_a_field_never_makes_null_legal_where_it_was_not`
+asserts it per contract.
+
+**It ships off**, behind `CLASSROOM_STRICT_SCHEMA`. The conversion is tested;
+that a provider *accepts* the dialect is not, and cannot be from here — only
+the provider can answer it, and neither API is reachable from the environment
+this was written in. On by default would be betting every teaching turn on a
+guess. A provider that rejects the schema also gets one automatic retry in the
+old loose mode, so the worst case is the behaviour that preceded all of this
+rather than a teacher who cannot speak.
+
+### 14.2 The escalation pointed at a model being wound down
+
+§13 gave a failed step a stronger model on its retry, because `LearningTurn`
+could otherwise only ever be attempted by `gpt-4o-mini` and
+`gemini-2.5-flash` — so a unit neither could author had no path to being
+taught at all. It reached for `gpt-4o`, chosen from what the registry already
+had rather than from what has a future: a May 2024 model, pulled from ChatGPT
+in February 2026, carrying published retirement dates.
+
+It now reaches for `gemini-2.5-pro` — the one model in `ai_resilience`'s
+registry the live teaching path never asked for. Already configured, already
+keyed, already behind its own circuit breaker, and idle.
+
+The provider order is filtered against that registry downstream, so a name the
+registry does not carry is dropped **silently**: the escalation becomes a
+no-op, the retry re-runs on the models that just failed, and the symptom is
+indistinguishable from the bug the escalation exists to fix. `tests/test_model_escalation.py`
+holds the two files to each other and fails if the target is missing from the
+registry, or is one of the models the ordinary order already tried.
+
+### 14.3 What this does not claim
+
+- **No model was upgraded.** Both changes use models already in the registry
+  under keys the deployment already holds. Moving to a current generation
+  (the GPT-5 and Gemini 3 families) is a separate decision that needs model
+  names verified against the official pricing pages, which were unreachable
+  from here — published aggregator tables contradicted each other on names
+  and prices, so none were relied on.
+- **Enforcement fixes shape, not sense.** The structured-output literature is
+  consistent that schema pass rates run well above value accuracy: a model
+  held to a contract returns well-formed JSON, not a good question. The
+  pedagogical rejections in `turn()` — repeated checkpoint, wrong target,
+  tapped answer on an independent application — are untouched and should be
+  expected to continue.
+- **Nothing here was measured against production.** The right next step is the
+  counters §11.7 added and nobody has read: `lyo_classroom_model_seconds` and
+  `lyo_classroom_model_tokens_total`, by operation, provider and outcome. They
+  would say which contract actually fails, on which provider, and how often —
+  which is a better basis for the next model decision than any benchmark.
