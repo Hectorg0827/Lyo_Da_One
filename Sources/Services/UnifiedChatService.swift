@@ -70,6 +70,15 @@ final class UnifiedChatService: ObservableObject {
     /// Cancelled when real content (answer/done/error) arrives.
     private var streamTimeoutTask: Task<Void, Never>?
 
+    private struct PendingVisualUpdate {
+        let conversationId: String
+        let messageId: String
+        let blockId: String
+        let values: [String: Any]
+    }
+    private var pendingVisualUpdates: [String: PendingVisualUpdate] = [:]
+    private var visualSaveTasks: [String: Task<Void, Never>] = [:]
+
     private let backendAI = BackendAIService.shared
     private let lyo2ChatService = Lyo2ChatService.shared
     private let stackStore = UIStackStore.shared
@@ -1827,6 +1836,45 @@ final class UnifiedChatService: ObservableObject {
             contentTypes: [.text]
         )
         messages.append(msg)
+    }
+
+    /// Coalesce slider changes and serialize saves per diagram. Capture the
+    /// conversation now so navigation cannot send an edit to another thread.
+    func updateVisual(messageId: String, blockId: String, values: [String: Any]) {
+        guard messages.contains(where: { $0.id == messageId && $0.smartBlocks?.contains(where: { $0.id == blockId }) == true }) else { return }
+        let conversationId = currentConversationId
+        let key = "\(conversationId):\(blockId)"
+        pendingVisualUpdates[key] = PendingVisualUpdate(
+            conversationId: conversationId, messageId: messageId, blockId: blockId, values: values
+        )
+        guard visualSaveTasks[key] == nil else { return }
+        visualSaveTasks[key] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard let self else { return }
+            defer { self.visualSaveTasks[key] = nil }
+            while let update = self.pendingVisualUpdates.removeValue(forKey: key) {
+                do {
+                    let block = try await self.lyo2ChatService.updateVisual(
+                        conversationId: update.conversationId, blockId: update.blockId, values: update.values
+                    )
+                    if self.currentConversationId == update.conversationId,
+                       let index = self.messages.firstIndex(where: { $0.id == update.messageId }) {
+                        self.messages[index].smartBlocks = self.messages[index].smartBlocks?.map {
+                            $0.id == update.blockId ? block : $0
+                        }
+                    }
+                } catch {
+                    if self.pendingVisualUpdates[key] == nil { self.pendingVisualUpdates[key] = update }
+                    if self.currentConversationId == update.conversationId {
+                        self.error = "Could not save this diagram change. Adjust it again to retry."
+                    }
+                    break
+                }
+                if self.pendingVisualUpdates[key] != nil {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                }
+            }
+        }
     }
 
     /// Submit an in-chat check answer for server grading and store the verdict.

@@ -117,4 +117,32 @@ final class GuidedTeachingTests: XCTestCase {
         XCTAssertEqual(graph.yMin, -10)
         XCTAssertEqual(graph.yMax, 10)
     }
+
+    func testChatAndTestPrepPieUsesTheClassroomContractAndSurvivesPersistence() throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "SharedFractionPie", withExtension: "json"))
+        let block = try JSONDecoder().decode(SmartBlock.self, from: Data(contentsOf: url))
+        XCTAssertEqual(block.subtype, "teaching_visual")
+        guard case .interactive(let payload) = block.content else { return XCTFail("Expected a shared teaching visual") }
+        let raw = try XCTUnwrap(payload.visual)
+        let visual = try JSONDecoder().decode(ClassroomTeachingVisual.self, from: JSONEncoder().encode(raw))
+        XCTAssertTrue(visual.isValid)
+        XCTAssertEqual(visual.kind, "fraction_pie")
+        XCTAssertEqual(visual.parts, 4)
+        XCTAssertEqual(visual.value, 3)
+        XCTAssertEqual(payload.items.first?.detail, visual.description)
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let restored = try decoder.decode(SmartBlock.self, from: encoder.encode(block))
+        guard case .interactive(let saved) = restored.content else { return XCTFail("Lost the interactive payload") }
+        let savedRaw = try XCTUnwrap(saved.visual)
+        XCTAssertEqual(try JSONDecoder().decode(ClassroomTeachingVisual.self, from: JSONEncoder().encode(savedRaw)), visual)
+        let componentData = try JSONSerialization.data(withJSONObject: [
+            "component_id": "visual:fractions", "type": "LessonBlock", "block_type": "teaching_visual",
+            "block": try JSONSerialization.jsonObject(with: JSONEncoder().encode(visual)),
+        ])
+        let component = try JSONDecoder().decode(SDUIComponent.self, from: componentData)
+        XCTAssertEqual(component.teachingVisual, visual)
+    }
 }

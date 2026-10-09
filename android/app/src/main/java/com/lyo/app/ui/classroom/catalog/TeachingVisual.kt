@@ -78,6 +78,7 @@ fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String
         if (!visual.isTeachingVisualValid()) {
             Text(visual.description.orEmpty(), color = Color.White)
         } else when (visual.kind) {
+            "fraction_pie" -> FractionPieCard(visual, id, onUpdate)
             "fraction_bar" -> {
                 val parts = visual.parts!!
                 val amount = visual.whole!! * value / parts

@@ -273,10 +273,12 @@ public struct ProgressBlockPayload: Codable, Sendable {
 public struct InteractiveBlockPayload: Codable, Sendable {
     public let items: [InteractiveItem]
     public var title: String?
-    
-    public init(items: [InteractiveItem], title: String? = nil) {
+    public var visual: [String: AnyCodable]?
+
+    public init(items: [InteractiveItem], title: String? = nil, visual: [String: AnyCodable]? = nil) {
         self.items = items
         self.title = title
+        self.visual = visual
     }
 }
 
