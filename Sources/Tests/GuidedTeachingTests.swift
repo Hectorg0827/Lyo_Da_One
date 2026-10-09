@@ -117,4 +117,52 @@ final class GuidedTeachingTests: XCTestCase {
         XCTAssertEqual(graph.yMin, -10)
         XCTAssertEqual(graph.yMax, 10)
     }
+    func testClassroomAcceptsOnlyApprovedEducationMediaAndSourceHosts() throws {
+        func decode(_ image: String, _ source: String) throws -> ClassroomTeachingVisual {
+            let record: [String: Any] = [
+                "kind": "annotated_image",
+                "title": "Biology specimen",
+                "caption": "Examine this scientific specimen in the learning activity.",
+                "description": "An image illustrates the lesson's important real-world details.",
+                "parts": 10, "whole": 1.0, "unit": "", "value": 0,
+                "entries": [], "expression": "", "params": [],
+                "x_min": -5.0, "x_max": 5.0, "y_min": -10.0, "y_max": 10.0,
+                "image_query": "photosynthesis leaf",
+                "image_url": image, "source_url": source,
+                "attribution": "Source and license credit",
+            ]
+            return try JSONDecoder().decode(
+                ClassroomTeachingVisual.self,
+                from: JSONSerialization.data(withJSONObject: record)
+            )
+        }
+
+        let approved: [(String, String)] = [
+            ("https://upload.wikimedia.org/wikipedia/commons/leaf.jpg", "https://commons.wikimedia.org/wiki/File:Leaf.jpg"),
+            ("https://images.pexels.com/photos/1/leaf.jpeg", "https://www.pexels.com/photo/green-leaf-1/"),
+            ("https://images-assets.nasa.gov/image/PIA1/thumb.jpg", "https://images.nasa.gov/details/PIA1"),
+            ("https://ids.si.edu/ids/deliveryService?id=ABC", "https://www.si.edu/object/edanmdm-x"),
+        ]
+        for (image, source) in approved {
+            XCTAssertTrue(try decode(image, source).isValid)
+        }
+
+        XCTAssertFalse(try decode(
+            "https://images.pexels.com.evil.test/a.jpg",
+            "https://www.pexels.com/photo/green-leaf-1/"
+        ).isValid)
+        XCTAssertFalse(try decode(
+            "http://images.pexels.com/photos/1/a.jpg",
+            "https://www.pexels.com/photo/green-leaf-1/"
+        ).isValid)
+        XCTAssertFalse(try decode(
+            "https://images.pexels.com/photos/1/a.jpg",
+            "https://www.pexels.com.evil.test/photo/green-leaf-1/"
+        ).isValid)
+        XCTAssertFalse(try decode(
+            "https://images.pexels.com/photos/1/a.jpg",
+            "https://images-assets.nasa.gov/image/PIA1/thumb.jpg"
+        ).isValid)
+    }
+
 }
