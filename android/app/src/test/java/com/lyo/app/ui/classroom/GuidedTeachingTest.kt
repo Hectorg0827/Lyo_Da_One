@@ -111,4 +111,33 @@ class GuidedTeachingTest {
         val graph = ClassroomBridge.actionToUserAction(action.copy(context = mapOf("params" to params)), "fixture")
         assertEquals(mapOf("params" to mapOf("a" to 2.0)), graph.answer_data)
     }
+    @Test fun `Classroom accepts approved education media and attribution domains`() {
+        val sources = listOf(
+            "https://upload.wikimedia.org/wikipedia/commons/leaf.jpg" to "https://commons.wikimedia.org/wiki/File:Leaf.jpg",
+            "https://images.pexels.com/photos/1/photo.jpeg" to "https://www.pexels.com/photo/green-leaf-1/",
+            "https://images-assets.nasa.gov/image/PIA1/thumb.jpg" to "https://images.nasa.gov/details/PIA1",
+            "https://ids.si.edu/ids/deliveryService?id=ABC" to "https://www.si.edu/object/edanmdm-x",
+        )
+        sources.forEach { (media, source) ->
+            assertTrue(ClassroomBlock(
+                kind = "annotated_image", image_query = "leaf",
+                image_url = media, source_url = source,
+            ).isTeachingVisualValid())
+        }
+    }
+
+    @Test fun `Classroom rejects spoofed visual hosts and invalid URL schemes`() {
+        val safe = ClassroomBlock(
+            kind = "annotated_image", image_query = "leaf",
+            image_url = "https://images.pexels.com/photos/1/photo.jpeg",
+            source_url = "https://www.pexels.com/photo/leaf-1/",
+        )
+        assertTrue(safe.isTeachingVisualValid())
+        assertFalse(safe.copy(image_url = "https://images.pexels.com.attacker.test/a.jpg").isTeachingVisualValid())
+        assertFalse(safe.copy(image_url = "http://images.pexels.com/photos/a.jpg").isTeachingVisualValid())
+        assertFalse(safe.copy(image_url = "https://bad.test@images.pexels.com/a.jpg").isTeachingVisualValid())
+        assertFalse(safe.copy(source_url = "https://www.pexels.com.evil.test/photo").isTeachingVisualValid())
+        assertFalse(safe.copy(source_url = "https://images-assets.nasa.gov/image/1.jpg").isTeachingVisualValid())
+    }
+
 }
