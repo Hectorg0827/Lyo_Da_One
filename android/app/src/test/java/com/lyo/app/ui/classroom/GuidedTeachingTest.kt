@@ -134,6 +134,8 @@ class GuidedTeachingTest {
         )
         assertTrue(safe.isTeachingVisualValid())
         assertFalse(safe.copy(image_url = "https://images.pexels.com.attacker.test/a.jpg").isTeachingVisualValid())
+        assertFalse(safe.copy(image_url = "https://images.pexels.com/%").isTeachingVisualValid())
+        assertFalse(safe.copy(source_url = "https://www.pexels.com/%").isTeachingVisualValid())
         assertFalse(safe.copy(image_url = "http://images.pexels.com/photos/a.jpg").isTeachingVisualValid())
         assertFalse(safe.copy(image_url = "https://bad.test@images.pexels.com/a.jpg").isTeachingVisualValid())
         assertFalse(safe.copy(source_url = "https://www.pexels.com.evil.test/photo").isTeachingVisualValid())
