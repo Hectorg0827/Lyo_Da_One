@@ -1862,6 +1862,16 @@ final class UnifiedChatService: ObservableObject {
                         self.messages[index].smartBlocks = self.messages[index].smartBlocks?.map {
                             $0.id == update.blockId ? block : $0
                         }
+                        await self.saveConversation()
+                        if self.error == "Could not save this diagram change. Adjust it again to retry." {
+                            self.error = nil
+                        }
+                    } else {
+                        // A save may finish after the learner opens another
+                        // thread. Keep the original conversation's cache current.
+                        ConversationManager.shared.updateSavedVisual(
+                            conversationId: update.conversationId, messageId: update.messageId, block: block
+                        )
                     }
                 } catch {
                     if self.pendingVisualUpdates[key] == nil { self.pendingVisualUpdates[key] = update }

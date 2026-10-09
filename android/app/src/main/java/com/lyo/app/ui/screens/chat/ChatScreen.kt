@@ -172,13 +172,6 @@ private data class PendingChatAttachment(
     val isImage: Boolean,
 )
 
-private data class PendingVisualUpdate(
-    val conversationId: String,
-    val messageId: String,
-    val blockId: String,
-    val values: Map<String, JsonElement>,
-)
-
 private data class LinkedAttachment(
     val name: String,
     val url: String,
@@ -209,8 +202,6 @@ fun ChatScreen(nav: NavHostController) {
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
-    val pendingVisualUpdates = remember { mutableMapOf<String, PendingVisualUpdate>() }
-    val visualSaveJobs = remember { mutableMapOf<String, Job>() }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
@@ -762,44 +753,26 @@ fun ChatScreen(nav: NavHostController) {
 
     fun updateVisual(messageId: String, blockId: String, values: Map<String, JsonElement>) {
         val conversationId = activeConversationId ?: return
-        val key = "$conversationId:$blockId"
-        pendingVisualUpdates[key] = PendingVisualUpdate(conversationId, messageId, blockId, values)
-        if (visualSaveJobs[key]?.isActive == true) return
-        visualSaveJobs[key] = scope.launch {
-            try {
-                // Keep gestures immediate and coalesce saves. Only one request
-                // per diagram may run, so an older edit cannot arrive last.
-                delay(300)
-                while (true) {
-                    val update = pendingVisualUpdates.remove(key) ?: break
-                    try {
-                        val response = ApiClient.api.updateChatVisual(
-                            VisualUpdateRequest(update.conversationId, update.blockId, update.values),
-                        )
-                        if (activeConversationId == update.conversationId) {
-                            val index = messages.indexOfFirst { it.id == update.messageId }
-                            if (index >= 0) {
-                                val current = messages[index]
-                                messages[index] = current.copy(blocks = current.blocks?.map {
-                                    if (it.id == update.blockId) response.block else it
-                                })
-                            }
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        pendingVisualUpdates.putIfAbsent(key, update)
-                        if (activeConversationId == update.conversationId) {
-                            inputError = "Could not save this diagram change. Adjust it again to retry."
-                        }
-                        break
+        com.lyo.app.data.api.ChatVisualSaves.queue.enqueue(
+            VisualUpdateRequest(conversationId, blockId, values),
+            onSaved = { block ->
+                if (activeConversationId == conversationId) {
+                    val index = messages.indexOfFirst { it.id == messageId }
+                    if (index >= 0) {
+                        val current = messages[index]
+                        messages[index] = current.copy(blocks = current.blocks?.map {
+                            if (it.id == blockId) block else it
+                        })
                     }
-                    if (pendingVisualUpdates.containsKey(key)) delay(300)
+                    if (inputError == "Could not save this diagram change. Adjust it again to retry.") inputError = null
                 }
-            } finally {
-                visualSaveJobs.remove(key)
-            }
-        }
+            },
+            onFailure = {
+                if (activeConversationId == conversationId) {
+                    inputError = "Could not save this diagram change. Adjust it again to retry."
+                }
+            },
+        )
     }
 
     fun startDictation() {
