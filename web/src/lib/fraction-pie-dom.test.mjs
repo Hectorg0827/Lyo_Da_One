@@ -25,11 +25,10 @@ const mocks = {
   '@/stores/classroom-store': { useClassroomStore: selector => selector({
     languageCode: 'en', updateActivity: (id, values) => classroomUpdates.push({ id, values }),
   }) },
-  './Explorable': { Explorable: () => null },
 };
 
-// Run the actual TSX renderers. Only stores and the unrelated graph component
-// are replaced; SVG, React event handling, range controls and save logic are real.
+// Run the actual TSX renderers. Only stores are replaced; SVG, graph plotting,
+// React event handling, range controls and save logic are real.
 function loadTsx(filename) {
   if (modules.has(filename)) return modules.get(filename).exports;
   const mod = new Module(filename);
@@ -38,8 +37,9 @@ function loadTsx(filename) {
   modules.set(filename, mod);
   mod.require = name => {
     if (mocks[name]) return mocks[name];
-    if (name.startsWith('@/')) {
-      const base = path.join(webRoot, 'src', name.slice(2));
+    if (name.startsWith('@/') || name.startsWith('./')) {
+      const base = name.startsWith('@/') ? path.join(webRoot, 'src', name.slice(2))
+        : path.resolve(path.dirname(filename), name);
       if (base.endsWith('.mjs')) return require(base);
       const resolved = ['.tsx', '.ts'].map(ext => base + ext).find(existsSync);
       if (resolved) return loadTsx(resolved);
@@ -68,7 +68,7 @@ async function mount(Component, props) {
 }
 
 async function range(container, label, value) {
-  const control = [...container.querySelectorAll('label')].find(x => x.textContent.startsWith(label));
+  const control = [...container.querySelectorAll('label')].find(x => x.textContent.trim().startsWith(label));
   const input = document.getElementById(control.htmlFor);
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, String(value));
@@ -207,5 +207,25 @@ test('changing active Chat cannot send an old message edit to the new conversati
     await range(view.container, 'Numerator', 1);
     await tick(t);
     assert.equal(calls[0][0], 'conversation-1');
+  } finally { await view.close(); }
+});
+
+test('the shared Chat save queue also keeps existing graph controls visible after an edit and failed save', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let succeeds = false;
+  const calls = [];
+  const props = chatState(async (...args) => { calls.push(args); return succeeds; });
+  props.block.content.visual = { ...fixture.content.visual, kind: 'graph',
+    expression: 'a*x', params: [{ name: 'a', min: -2, max: 2, initial: 1, step: 0.1 }] };
+  const view = await mount(TeachingVisualBlock, props);
+  try {
+    await range(view.container, 'a', 2);
+    assert.ok(view.container.querySelector('input[type="range"]'), 'Graph must not disappear while saving');
+    await tick(t);
+    assert.deepEqual(calls[0].at(-1), { params: { a: 2 } });
+    assert.match(view.container.querySelector('[role="status"]').textContent, /Could not save/);
+    succeeds = true;
+    await act(async () => [...view.container.querySelectorAll('button')].find(x => x.textContent === 'Retry').click());
+    assert.equal(view.container.querySelector('[role="status"]'), null);
   } finally { await view.close(); }
 });

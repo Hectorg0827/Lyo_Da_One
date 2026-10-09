@@ -19,9 +19,13 @@ export default function TeachingVisualBlock({ block, message }: { block: ChatBlo
   const key = saves.keyFor({ conversationId: conversationId ?? '', messageId: message.id, blockId: block.id });
   const subscribe = useCallback((listener: () => void) => saves.subscribe(key, listener), [key]);
   const snapshot = useSyncExternalStore(subscribe, () => saves.getSnapshot(key), () => null);
-  const rawVisual = (block.content as Record<string, unknown>)?.visual;
-  const visual = parseTeachingVisual(snapshot && rawVisual && typeof rawVisual === 'object'
-    ? { ...rawVisual, ...snapshot.values } : rawVisual);
+  const storedVisual = parseTeachingVisual((block.content as Record<string, unknown>)?.visual);
+  const params = snapshot?.values.params as Record<string, number> | undefined;
+  const visual = storedVisual && snapshot ? parseTeachingVisual(
+    storedVisual.kind === 'graph' && params
+      ? { ...storedVisual, params: storedVisual.params.map(p => ({ ...p, initial: params[p.name] ?? p.initial })) }
+      : { ...storedVisual, ...snapshot.values },
+  ) : storedVisual;
 
   // Flush when leaving; the shared queue retains retries and prevents a second
   // mounted view from sending a newer request ahead of the previous save.
