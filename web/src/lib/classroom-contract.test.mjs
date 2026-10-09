@@ -161,3 +161,17 @@ test('the stall thresholds give the first one time to be slow before it is broke
   assert.ok(CLASSROOM_STALL_RECOVERY_MS > CLASSROOM_STALL_NOTICE_MS);
   assert.match(CLASSROOM_STALL_RECOVERY, /not a wrong answer/);
 });
+
+test('a class that reached its end is not an unfinished one', () => {
+  // A learner who sat a lesson through to the dismissal and reopened the
+  // topic an hour later was told they had an unfinished class, and the offer
+  // would have dropped them on its last screen. Age cannot tell a finished
+  // class from an abandoned one; this flag can.
+  const now = Date.now();
+  const seat = { id: 'course-7', startedAt: now - 60_000, generation: 1 };
+  assert.equal(canResumeClassroom(seat, now), true);
+  assert.equal(canResumeClassroom({ ...seat, finished: true }, now), false);
+  const start = classroomSessionStart('course-7', { ...seat, finished: true }, { resume: true, now });
+  assert.equal(start.resumed, false, 'a finished class is started again, not resumed');
+  assert.equal(start.sessionId, 'course-7~2');
+})

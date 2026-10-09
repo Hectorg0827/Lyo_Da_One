@@ -196,6 +196,8 @@ interface ClassroomStore {
   resumedSession: boolean;
   /** A session the learner could still return to, if they want it. */
   resumable: ClassroomSavedSession | null;
+  /** Which course's history this class was resolved against. */
+  courseKey: string;
   objective: string;
   languageCode: string;
 
@@ -325,10 +327,22 @@ function readSavedSession(courseKey: string): ClassroomSavedSession | null {
       id: parsed.id,
       startedAt: Number(parsed.startedAt) || 0,
       generation: Math.max(1, Number(parsed.generation) || 1),
+      // Carried through, not rebuilt from the fields this reader happens to
+      // name: dropping it here would silently re-offer a class the learner
+      // had already finished, with canResumeClassroom never seeing the flag
+      // that exists to prevent exactly that.
+      finished: parsed.finished === true,
     };
   } catch {
     return null;
   }
+}
+
+/** Mark the stored seat finished, so it stops being offered as unfinished. */
+function markSavedSessionFinished(courseKey: string, sessionId: string) {
+  const saved = readSavedSession(courseKey);
+  if (!saved || saved.id !== sessionId) return;
+  writeSavedSession(courseKey, { ...saved, finished: true });
 }
 
 function writeSavedSession(courseKey: string, saved: ClassroomSavedSession) {
@@ -862,6 +876,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         return;
 
       case 'session_end':
+        // The class reached its end. The seat stops being an unfinished one
+        // from here, however recently it was started.
+        markSavedSessionFinished(get().courseKey, get().sessionId);
         sfx('bell');
         addBoardElement({ id: nextId(), kind: 'dismissal', homework: turn.homework, nextHook: turn.next_hook });
         pushTranscript('Teacher', `🔔 Class dismissed. ${turn.homework ? `Homework: ${turn.homework}` : ''}`);
@@ -1163,6 +1180,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     courseId: '',
     resumedSession: false,
     resumable: null,
+    courseKey: '',
     objective: '',
     languageCode: 'auto',
     board: [],
@@ -1242,6 +1260,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         topic: connection.topic,
         sessionId,
         courseId: connection.courseId || '',
+        courseKey,
         resumedSession: start.resumed,
         // Offer the old seat back only when there is one worth offering and
         // this class is not already sitting in it.

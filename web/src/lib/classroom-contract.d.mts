@@ -32,6 +32,8 @@ export interface ClassroomSavedSession {
   id: string;
   startedAt: number;
   generation: number;
+  /** The class reached its end, so it is not an unfinished one to resume. */
+  finished?: boolean;
 }
 
 export interface ClassroomSessionStart {

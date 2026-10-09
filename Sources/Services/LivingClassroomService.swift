@@ -524,11 +524,30 @@ class LivingClassroomService: ObservableObject {
         // JSONSerialization emits UTF-8 JSON bytes by contract.
         let jsonString = String(decoding: data, as: UTF8.self)
 
+        // Every learner action but an activity nudge expects a new screen
+        // back, so the class is waiting from here until one arrives.
+        //
+        // This lives in the one place every action goes through, rather than
+        // in each handler. The quiz, transfer, hint, skip and prompt paths
+        // all call straight through to here, and none of them set it: after
+        // a scene had rendered `isGenerating` was false, so the watchdog
+        // treated the whole lesson as idle and cleared its own timer on
+        // every tick. The slow and stalled states could only ever appear for
+        // the opening connection, which is the one wait they were least
+        // needed for.
+        if actionIntent != "update_activity" {
+            isGenerating = true
+            waitingSince = Date()
+            stallNudged = false
+            if stallPhase != .none { stallPhase = .none }
+        }
+
         task.send(.string(jsonString)) { [weak self] error in
             Task { @MainActor in
                 if let error = error {
                     self?.logger.error("Failed to send user action: \(error.localizedDescription)")
                     self?.isGenerating = false
+                    self?.clearWait()
                     self?.statusText = nil
                     self?.error = error
                     // Rebuild the active lesson with the same server scene so

@@ -14,6 +14,16 @@ struct ClassroomSavedSession: Codable, Equatable {
     let id: String
     let startedAt: Date
     let generation: Int
+    /// The class reached its end, so it is not an unfinished one to resume.
+    /// Decoded as `false` for a seat saved before this field existed.
+    var finished: Bool = false
+
+    init(id: String, startedAt: Date, generation: Int, finished: Bool = false) {
+        self.id = id
+        self.startedAt = startedAt
+        self.generation = generation
+        self.finished = finished
+    }
 }
 
 /// Which session this entry connects with, and whether it is a continuation.
@@ -81,6 +91,8 @@ enum ClassroomSessionContract {
 
     static func canResume(_ saved: ClassroomSavedSession?, now: Date = Date()) -> Bool {
         guard let saved, !saved.id.isEmpty else { return false }
+        // A class that reached its end is not unfinished, however recent.
+        if saved.finished { return false }
         let age = now.timeIntervalSince(saved.startedAt)
         return age >= 0 && age <= resumeWindow
     }

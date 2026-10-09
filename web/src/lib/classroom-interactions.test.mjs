@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as audio from './classroom-audio.mjs';
 import * as contract from './classroom-contract.mjs';
+import { canResumeClassroom } from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
 
@@ -326,4 +327,42 @@ test('picking up where you left off returns to that class, not the one just open
   assert.equal(store.getState().sessionId, left.id);
   assert.equal(store.getState().resumedSession, true);
   store.getState().disconnect();
+});
+
+test('a web entry that names only its course still gets a session of its own', () => {
+  // The classroom route knows which course was opened, never which server
+  // session the learner should land in. It used to pass the course id as
+  // `sessionId`, which took the explicit-session branch on every entry and
+  // left classroomSessionStart unreachable in the running app: repeat visits
+  // kept sending the original id, `resume=1` did nothing, and every connect
+  // reset the saved generation to 1. The store tests passed throughout,
+  // because they had never sent the shape the page actually sends.
+  const left = { id: 'course-7', startedAt: Date.now(), generation: 1 };
+  const { store } = classroom({
+    connection: { topic: 'Fractions', courseId: 'course-7' },
+    storage: { 'lyo_classroom_session:course-7': JSON.stringify(left) },
+  });
+  assert.equal(store.getState().sessionId, 'course-7~2');
+  assert.equal(store.getState().courseId, 'course-7');
+  assert.equal(store.getState().resumable.id, 'course-7');
+  store.getState().disconnect();
+});
+
+test('a class taught to its end stops being offered back as unfinished', () => {
+  const { store, sockets, storage } = classroom({ connection: { topic: 'Minecraft' } });
+  sockets[0].receive(component('TeacherMessage', {
+    text: JSON.stringify([{ type: 'session_end', homework: 'Build a shelter' }]),
+  }));
+  const saved = JSON.parse(storage['lyo_classroom_session:Minecraft']);
+  assert.equal(saved.finished, true);
+  assert.equal(canResumeClassroom(saved), false);
+  store.getState().disconnect();
+
+  // Reopening the topic treats it as a new class with nothing to resume.
+  const next = classroom({
+    connection: { topic: 'Minecraft' },
+    storage: { 'lyo_classroom_session:Minecraft': JSON.stringify(saved) },
+  });
+  assert.equal(next.store.getState().resumable, null);
+  next.store.getState().disconnect();
 });

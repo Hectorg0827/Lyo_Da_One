@@ -345,7 +345,13 @@ class ClassroomEngine(
     }
 
     internal fun stallTick(now: Long) {
-        if (!awaitingStep || status != "live" || isPaused || hasActiveCheckpoint) {
+        // Not `status == "live"`. Android only reaches "live" when the first
+        // server event arrives, so requiring it made the watchdog blind to
+        // exactly the wait it matters most for: a socket that opens and then
+        // never produces an opening scene. The learner sat on "Preparing your
+        // classroom…" with no recovery controls, for ever. An errored session
+        // has its own banner and is the only state with nothing to wait for.
+        if (!awaitingStep || status == "error" || isPaused || hasActiveCheckpoint) {
             waitingSince = null
             stallNudged = false
             if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
@@ -539,10 +545,15 @@ class ClassroomEngine(
                     }
                 }
             }
-            "session_end" -> pushTranscript(
-                "Teacher",
-                "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
-            )
+            "session_end" -> {
+                // The class reached its end, so its seat stops being an
+                // unfinished one however recently it was started.
+                ClassroomSessionStore.markFinished(sessionId, courseKey)
+                pushTranscript(
+                    "Teacher",
+                    "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
+                )
+            }
         }
 
         if (turn.type == "user_prompt") {

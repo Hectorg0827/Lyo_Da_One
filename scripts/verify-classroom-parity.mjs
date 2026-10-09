@@ -368,6 +368,27 @@ requireText(
   'Android progress is filed under the course',
 );
 
+// The route must not pin the session it connects with.
+//
+// A surface knows which *course* a learner opened; which server session they
+// land in is classroomSessionStart's decision, made from that course's own
+// history. The web page used to pass the course id as `sessionId`, which took
+// the explicit-session branch on every entry and left the whole generation
+// rule unreachable in the running app — repeat visits kept sending the
+// original id, `resume=1` did nothing, and every connect reset the saved
+// generation. Every store test passed throughout, because none of them sent
+// the shape the page actually sent.
+rejectText(webPage, 'sessionId: courseId', 'Web entry pins the session instead of resolving it');
+requireText(webPage, 'courseId,', 'Web entry carries the course');
+
+// A finished class is not an unfinished one. Without this a learner who sat a
+// lesson to its dismissal and reopened the topic within the resume window was
+// told they had an unfinished class, and taking the offer would have dropped
+// them on its last screen.
+for (const [label, source] of sessionContracts) {
+  requireText(source, 'finished', `${label}: a finished class is not resumable`);
+}
+
 // Every surface offers the seat back rather than imposing it, and can walk
 // away from a session that cannot produce its next step.
 requireText(web, 'resumeLesson', 'Web resume offer');

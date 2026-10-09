@@ -20,6 +20,8 @@ data class ClassroomSavedSession(
     val id: String,
     val startedAt: Long,
     val generation: Int,
+    /** The class reached its end, so it is not an unfinished one to resume. */
+    val finished: Boolean = false,
 )
 
 /** Which session this entry connects with, and whether it is a continuation. */
@@ -91,6 +93,8 @@ object ClassroomSessionContract {
 
     fun canResume(saved: ClassroomSavedSession?, now: Long = System.currentTimeMillis()): Boolean {
         if (saved == null || saved.id.isEmpty()) return false
+        // A class that reached its end is not unfinished, however recent.
+        if (saved.finished) return false
         val age = now - saved.startedAt
         return age in 0..RESUME_WINDOW_MS
     }
@@ -171,19 +175,29 @@ object ClassroomSessionStore {
         // id\u0000startedAt\u0000generation — a record this small does not need a
         // JSON dependency, and a malformed one reads as "no history", which is
         // the behaviour a first class already has.
+        // A record written before `finished` existed has three parts and
+        // reads as unfinished, which is what it was.
         val parts = raw.split('\u0000')
-        if (parts.size != 3) return null
+        if (parts.size !in 3..4) return null
         val startedAt = parts[1].toLongOrNull() ?: return null
         val generation = parts[2].toIntOrNull() ?: return null
         if (parts[0].isEmpty()) return null
-        return ClassroomSavedSession(parts[0], startedAt, generation)
+        return ClassroomSavedSession(parts[0], startedAt, generation, parts.getOrNull(3) == "1")
     }
 
     fun save(session: ClassroomSavedSession, courseKey: String) {
         val key = ClassroomSessionContract.storageKey(courseKey)
-        val raw = "${session.id}\u0000${session.startedAt}\u0000${session.generation}"
+        val finished = if (session.finished) "1" else "0"
+        val raw = "${session.id}\u0000${session.startedAt}\u0000${session.generation}\u0000$finished"
         val store = prefs
         if (store != null) store.edit().putString(key, raw).apply() else fallback[key] = raw
+    }
+
+    /** Mark the stored seat finished, so it stops being offered as unfinished. */
+    fun markFinished(sessionId: String, courseKey: String) {
+        val seat = saved(courseKey) ?: return
+        if (seat.id != sessionId) return
+        save(seat.copy(finished = true), courseKey)
     }
 
     /** Test seam: forget everything this process remembers. */

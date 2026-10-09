@@ -96,6 +96,12 @@ export const CLASSROOM_RESUME_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 export function canResumeClassroom(saved, now = Date.now()) {
   if (!saved || !saved.id) return false;
+  // A class that reached its end is not unfinished, however recent it is.
+  // Without this a learner who sat a lesson through to the dismissal and
+  // reopened the topic an hour later was told they had an unfinished class
+  // and offered the finished one back — which would drop them on its last
+  // screen. Age alone cannot tell those two apart.
+  if (saved.finished) return false;
   const startedAt = Number(saved.startedAt);
   if (!Number.isFinite(startedAt)) return false;
   return now - startedAt >= 0 && now - startedAt <= CLASSROOM_RESUME_WINDOW_MS;

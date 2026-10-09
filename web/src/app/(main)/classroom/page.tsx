@@ -101,7 +101,14 @@ function ClassroomStage() {
   const animationsOff = reduceMotion || systemReducedMotion === true;
   const connection: ClassroomConnection = {
     topic,
-    sessionId: courseId,
+    // Deliberately no `sessionId`. This route knows which *course* the
+    // learner opened, never which server session they should land in —
+    // that is what classroomSessionStart decides from the course's own
+    // history. Pinning it here (it used to send the course id) short-
+    // circuited that decision on every single web entry: repeat visits kept
+    // sending the original id, `resume=1` did nothing, and each connect
+    // reset the saved generation to 1. The stuck-session bug this whole
+    // change exists to fix, still fixed everywhere except in the app.
     courseId,
     lessonId,
     reviewConceptId,
@@ -188,6 +195,11 @@ function ClassroomStage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, topic]);
 
+  // Nothing has been taught yet: the board still holds only the cover page.
+  // The offer of an unfinished class belongs to that moment alone — taking it
+  // mid-lesson would discard the lesson the learner is already being taught,
+  // which is what leaving the banner up for the whole session invited.
+  const openingOnly = board.every((el) => el.kind === 'opening');
   const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
   const totalBoards = boardHistory.length;
   const activeCheckpoint = viewingBoard === -1
@@ -590,7 +602,7 @@ function ClassroomStage() {
                 forced on them. Opening the same topic again now starts a new
                 class, so the old one has to be reachable on purpose or it is
                 simply gone. */}
-            {resumable && viewingBoard === -1 && status !== 'error' && (
+            {resumable && viewingBoard === -1 && status !== 'error' && openingOnly && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/12 bg-white/5 px-4 py-3">
                 <p className="text-sm text-white/75">
                   You have an unfinished class on this topic.
