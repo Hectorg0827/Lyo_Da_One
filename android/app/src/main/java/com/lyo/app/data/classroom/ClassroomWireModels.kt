@@ -203,6 +203,8 @@ private fun trustedTeachingURL(url: String?, allowedHosts: Set<String>): Boolean
             parts.host?.lowercase() in allowedHosts &&
             parts.rawUserInfo == null &&
             !parts.rawPath.isNullOrEmpty() && parts.rawPath != "/"
+    } catch (_: java.net.URISyntaxException) {
+        false
     } catch (_: IllegalArgumentException) {
         false
     }
