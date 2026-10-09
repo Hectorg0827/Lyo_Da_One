@@ -27,6 +27,7 @@
 		0878E07F27CCBE7E525A3C84 /* A2UIVoiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D91C6C0399809C7224AEC8 /* A2UIVoiceController.swift */; };
 		0AB82B6ECEFB8A76BC0EE061 /* ChatHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A789B12100244E087E952BDA /* ChatHistoryView.swift */; };
 		0AFA67DAFFBBB8738F9A63E4 /* ActiveLessonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75ECF06EDDB171E68051C88 /* ActiveLessonView.swift */; };
+		3D780ACD247AEE51F073B2AF /* StudyMaterialExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C060962766EEA17BCFDF81C4 /* StudyMaterialExtractor.swift */; };
 		0B8651585E85E856BF56D1AB /* TestPrepProgressBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3449E067B067849B91B3C5 /* TestPrepProgressBubbleView.swift */; };
 		0C3C0AA22C106AD00E33CA61 /* TopicArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6747E7BABC1C9B54485BDCB1 /* TopicArt.swift */; };
 		0C43D43B305F8698BBE04B63 /* CommunityDockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449898973954CEB145288955 /* CommunityDockView.swift */; };
@@ -492,6 +493,7 @@
 		06C4DFC91B76CEAE391BFCE4 /* LegacyCourseTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyCourseTypes.swift; sourceTree = "<group>"; };
 		06F9D8FAFA7242BABEFBC929 /* LyoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoApp.swift; sourceTree = "<group>"; };
 		075F7D4648CC5E75553F8450 /* NetworkRequestable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestable.swift; sourceTree = "<group>"; };
+		C060962766EEA17BCFDF81C4 /* StudyMaterialExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyMaterialExtractor.swift; sourceTree = "<group>"; };
 		0799495534EC7A3489A9E940 /* StudyPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlanView.swift; sourceTree = "<group>"; };
 		07E37207D0BADA9ED83C80B9 /* LyoResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyoResponse.swift; sourceTree = "<group>"; };
 		081093C3B2ED47991D735491 /* CourseRuntimeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseRuntimeView.swift; sourceTree = "<group>"; };
@@ -1950,6 +1952,7 @@
 			isa = PBXGroup;
 			children = (
 				A29371C25540B912D67E0E91 /* EducationChatEnrichment.swift */,
+				C060962766EEA17BCFDF81C4 /* StudyMaterialExtractor.swift */,
 			);
 			path = Education;
 			sourceTree = "<group>";
@@ -2520,6 +2523,7 @@
 				499C8B0AC23D6EA8AC25A803 /* StreakCalendarView.swift in Sources */,
 				01D132B07B2975A1EBB24F6C /* StreamingResponseManager.swift in Sources */,
 				BAC616AABD4AFBE2D1EC004B /* StudyGroupDetailView.swift in Sources */,
+				3D780ACD247AEE51F073B2AF /* StudyMaterialExtractor.swift in Sources */,
 				611446F7E0FEB3E2DD77B4B7 /* StudyPlanBubbleView.swift in Sources */,
 				CAFFC47F7E6D686D3CFF9551 /* StudyPlanCard.swift in Sources */,
 				C1A868F5F93A901E3DE17A2F /* StudyPlanView.swift in Sources */,

@@ -270,6 +270,7 @@ final class UnifiedChatService: ObservableObject {
                 shouldAnimate: true
             )
             messages.append(fastMsg)
+            applyStudyMaterialFallback(aiMessageId: aiMessageId)
             conversationHistory.append(ConversationMessage(role: "assistant", content: text))
             isLoading = false
             await saveConversation()
@@ -1177,7 +1178,73 @@ final class UnifiedChatService: ObservableObject {
                 Log.ai.warning(
                     "⚠️ Replaced orphaned skeleton with fallback message (no answer received)")
             }
+            applyStudyMaterialFallback(aiMessageId: aiMessageId)
             isLoading = false
+        }
+    }
+
+    /// Chat renders flashcards, study plans and notes, but only ever received
+    /// them as backend artifact blocks. When the reply to a "make me flashcards"
+    /// ask arrives as plain Markdown instead — the common case — lift the cards
+    /// out of the text so the learner gets a real deck rather than a paragraph.
+    ///
+    /// A reply that already carries a study widget (or SmartBlocks) is left
+    /// alone: the backend's own structured answer always wins.
+    private func applyStudyMaterialFallback(aiMessageId: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == aiMessageId }) else { return }
+        let message = messages[idx]
+        guard !message.isFromUser else { return }
+        guard (message.smartBlocks ?? []).isEmpty else { return }
+
+        let existing = message.contentTypes ?? []
+        guard !existing.contains(where: { Self.isStudyWidget($0) }) else { return }
+
+        guard message.content.count > 40 else { return }
+        guard let ask = messages.last(where: { $0.isFromUser })?.content else { return }
+        guard let result = StudyMaterialExtractor.extract(from: message.content, userAsk: ask)
+        else { return }
+
+        var merged = existing.filter {
+            switch $0 {
+            case .processing, .text: return false
+            default: return true
+            }
+        }
+        merged.append(.text)
+        merged.append(contentsOf: result.contentTypes)
+
+        var rebuilt = LyoMessage(
+            id: message.id,
+            sessionId: message.sessionId,
+            content: result.displayText,
+            isFromUser: false,
+            timestamp: message.timestamp,
+            attachments: message.attachments,
+            actions: message.actions,
+            status: message.status,
+            contentTypes: merged,
+            responseMode: message.responseMode,
+            quickExplainer: message.quickExplainer,
+            courseProposal: message.courseProposal,
+            shouldAnimate: false
+        )
+        rebuilt.checkResults = message.checkResults
+        messages[idx] = rebuilt
+
+        Log.ai.info(
+            "📚 Lifted study material from reply text: \(result.contentTypes.count) card group(s)")
+        Task { await saveConversation() }
+    }
+
+    /// Structured learning content the backend already supplied, which the
+    /// Markdown fallback must never duplicate.
+    private static func isStudyWidget(_ type: MessageContentType) -> Bool {
+        switch type {
+        case .flashcards, .studyPlan, .notes, .quiz, .quizDeck, .courseProposal,
+            .courseRoadmap, .testPrep, .testPrepProgress, .topicSelection:
+            return true
+        default:
+            return false
         }
     }
 
