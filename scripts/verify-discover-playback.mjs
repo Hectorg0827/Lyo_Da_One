@@ -20,7 +20,7 @@ for (const text of [
   'Next clip',
   'api.clips.discover(page)',
 ]) assert.ok(web.includes(text), 'Web playback contract missing: ' + text);
-assert.ok(!/<video[\\s\\S]*?\\bloop\\b/.test(web), 'Web videos may not loop indefinitely');
+assert.ok(!/<video[^>]*\bloop\b/.test(web), 'Web videos may not loop indefinitely');
 
 for (const text of [
   'onFinished: { advanceAfter(item.id) }',
