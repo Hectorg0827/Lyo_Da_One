@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBoardDocument, presentationRoleFor, workspaceGroups, classroomIsPaused } from './board-presentation.mjs';
+import { parseBoardDocument, presentationRoleFor, workspaceGroups, classroomIsPaused, workspaceScrollAnchor } from './board-presentation.mjs';
 
 test('accepts tools used by different subjects without interpreting or executing their content', () => {
   const blocks = [
@@ -47,4 +47,23 @@ test('practice stays a task; source details do not become board notes or pauses'
   assert.deepEqual(groups.details.map(el => el.id), ['source']);
   assert.equal(classroomIsPaused(elements), true);
   assert.equal(classroomIsPaused(elements.slice(0, 4)), false);
+});
+
+test('new teaching tools receive focus while reference additions preserve the current teaching moment', () => {
+  const board = [{ id: 'steps', kind: 'summary' }];
+  assert.equal(workspaceScrollAnchor(board), 'steps');
+  board.push({ id: 'process', kind: 'teaching_visual' });
+  assert.equal(workspaceScrollAnchor(board), 'process');
+  board.push({ id: 'memory', kind: 'summary', presentationRole: 'reference' });
+  board.push({ id: 'source', kind: 'source' });
+  assert.equal(workspaceScrollAnchor(board), 'process');
+});
+
+test('answering or skipping a card keeps its feedback in place; recovery takes priority', () => {
+  const board = [{ id: 'tool', kind: 'teaching_visual' }, { id: 'task', kind: 'quiz' }];
+  assert.equal(workspaceScrollAnchor(board), 'task');
+  board[1] = { ...board[1], answered: 'a', skipped: true };
+  assert.equal(workspaceScrollAnchor(board), 'task');
+  board.push({ id: 'notice', kind: 'summary', presentationRole: 'recovery' });
+  assert.equal(workspaceScrollAnchor(board), 'notice');
 });

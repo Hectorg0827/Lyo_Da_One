@@ -45,3 +45,12 @@ export function workspaceGroups(elements) {
 export function classroomIsPaused(elements) {
   return elements.some(element => element.presentationRole === 'recovery' || element.id === 'classroom-recovery/notice');
 }
+
+/** Newly added teaching tools receive focus. References never steal it, and
+ * answering an existing card must not scroll away from its feedback. */
+export function workspaceScrollAnchor(elements) {
+  const groups = workspaceGroups(elements);
+  const last = items => items[items.length - 1]?.id;
+  return last(groups.recovery) || last(groups.practice) || last(groups.board)
+    || last(groups.feedback) || last(groups.reference) || last(elements);
+}

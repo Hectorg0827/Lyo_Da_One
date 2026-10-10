@@ -9,7 +9,10 @@ import type { BoardDocument } from '@/lib/board-presentation.mjs';
 /** Authored content only; React escapes cells/code and markdown never enables raw HTML. */
 export function BoardDocumentView({ document, fallback }: { document?: BoardDocument | null; fallback?: string }) {
   const markdown = (text: string) => (
-    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}
+      // Images go through the existing TeachingVisual media validation. A
+      // markdown image must not turn authored notes into an unvalidated fetch.
+      components={{ img: ({ alt }) => <span>{alt}</span> }}>
       {text}
     </ReactMarkdown>
   );

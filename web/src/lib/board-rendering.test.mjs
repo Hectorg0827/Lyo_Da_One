@@ -31,3 +31,9 @@ test('legacy markdown remains readable and never enables raw HTML or executable 
   assert.doesNotMatch(html, /<script>|href="javascript:/);
   assert.match(html, /Evidence/);
 });
+
+test('markdown image syntax retains its text equivalent without bypassing validated teaching media', () => {
+  const html = renderToStaticMarkup(React.createElement(BoardDocumentView, { fallback: '![A specimen](https://example.com/unvalidated.png)' }));
+  assert.match(html, /A specimen/);
+  assert.doesNotMatch(html, /<img|src=/);
+});

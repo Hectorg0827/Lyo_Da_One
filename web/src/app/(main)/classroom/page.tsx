@@ -24,7 +24,7 @@ import {
   type HintLevel,
 } from '@/stores/classroom-store';
 import { ClassroomWorkspace } from '@/components/classroom/ClassroomWorkspace';
-import { classroomIsPaused, workspaceGroups } from '@/lib/board-presentation.mjs';
+import { classroomIsPaused, workspaceScrollAnchor } from '@/lib/board-presentation.mjs';
 import { upsertCourseOnStart } from '@/lib/stack';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
@@ -186,9 +186,8 @@ function ClassroomStage() {
       (el.kind === 'quiz' && !el.answered && !el.skipped)
       || (el.kind === 'transfer' && !el.submitted && !el.skipped))
     : undefined;
-  const latestBoardId = shownBoard[shownBoard.length - 1]?.id;
-  const workspace = workspaceGroups(shownBoard);
-  const focusElementId = activeCheckpoint?.id ?? workspace.recovery[0]?.id ?? workspace.board[0]?.id ?? latestBoardId;
+  const scrollAnchorId = workspaceScrollAnchor(shownBoard);
+  const focusElementId = activeCheckpoint?.id ?? scrollAnchorId;
 
   // Bring the *start* of the new question into view. Scrolling to the bottom
   // clipped the question and left only its last sentence on short phones.
@@ -207,7 +206,7 @@ function ClassroomStage() {
     // Answering updates the same card. It must not reposition the board while
     // the learner is reading the feedback; a new board element does reposition it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestBoardId, viewingBoard, animationsOff, focusElementId]);
+  }, [scrollAnchorId, viewingBoard, animationsOff]);
 
   const pendingCheckpoint = board.some((el) =>
     (el.kind === 'quiz' && !el.answered && !el.skipped)

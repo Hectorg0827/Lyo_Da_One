@@ -616,7 +616,7 @@ function SummaryView({ el, compactText }: { el: Extract<BoardElement, { kind: 's
   const content = <BoardDocumentView document={el.boardDocument} fallback={el.content} />;
   return (
     <section className={cn('space-y-3 rounded-xl border p-4', recovery
-      ? 'border-[var(--warning)]/40 bg-[var(--surface-2)]'
+      ? 'border-[var(--warning)] bg-[var(--surface-2)]'
       : 'border-[var(--border)] bg-[var(--surface)]')} role={recovery ? 'status' : undefined}>
       <h3 className="flex items-start gap-2 text-base font-semibold text-[var(--text-primary)]">
         <BookOpenCheck className={cn('mt-0.5 h-4 w-4 shrink-0', recovery ? 'text-[var(--warning)]' : 'text-lyo-300')} /> {el.title}
