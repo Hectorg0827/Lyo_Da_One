@@ -212,6 +212,13 @@ struct DiscoverView: View {
                     selectedReelId = ids.first ?? ""
                 }
             }
+            .onChange(of: selectedReelId) { current in
+                let visible = viewModel.filteredItems
+                guard viewModel.searchQuery.isEmpty,
+                      let index = visible.firstIndex(where: { $0.id == current }),
+                      index >= visible.count - 4 else { return }
+                Task { await viewModel.loadMore() }
+            }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
         }
