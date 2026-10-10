@@ -2,9 +2,11 @@ package com.lyo.app.ui.classroom
 
 import com.google.gson.JsonParser
 import com.lyo.app.data.classroom.ClassroomComponent
+import com.lyo.app.data.classroom.ClassroomBlock
 import com.lyo.app.data.classroom.parseBoardDocument
 import com.lyo.app.data.classroom.presentationRole
 import com.lyo.app.data.a2ui.A2uiMessage
+import com.lyo.app.data.a2ui.A2uiValue
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -31,7 +33,7 @@ class BoardPresentationTest {
         val mutation = ClassroomBridge.onImmediateComponentRender(component, emptyList())
         val writes = mutation.messages.filterIsInstance<A2uiMessage.UpdateDataModel>().associateBy { it.path }
         assertEquals(json, writes.getValue("/board/elements/summary_board:step/document").value)
-        assertEquals("Full legacy content", writes.getValue("/board/elements/summary_board:step/content").value.asString)
+        assertEquals("Full legacy content", writes.getValue("/board/elements/summary_board:step/content").value?.asString)
         assertFalse(writes.containsKey("/canContinue"))
         assertEquals("reference", ClassroomComponent(component_id = "memory-visual:earlier").presentationRole())
     }
@@ -40,6 +42,14 @@ class BoardPresentationTest {
         val component = ClassroomComponent(component_id = "classroom-recovery/notice", type = "ExampleBlock", content = "Retry to carry on")
         val mutation = ClassroomBridge.onImmediateComponentRender(component, emptyList())
         val paused = mutation.messages.filterIsInstance<A2uiMessage.UpdateDataModel>().single { it.path == "/lessonRecovery" }
-        assertTrue(paused.value.asBoolean)
+        assertTrue(paused.value?.asBoolean == true)
+    }
+
+    @Test fun `remembered visuals carry their reference role to the renderer`() {
+        val component = ClassroomComponent(component_id = "memory-visual:anchor", type = "LessonBlock", block_type = "teaching_visual", block = ClassroomBlock(kind = "fraction_bar"))
+        val mutation = ClassroomBridge.onImmediateComponentRender(component, emptyList())
+        val visual = mutation.messages.filterIsInstance<A2uiMessage.UpdateComponents>().flatMap { it.components }.single { it.component == "TeachingVisual" }
+        val role = visual.properties["role"] as A2uiValue.Literal
+        assertEquals("reference", role.value.asString)
     }
 }

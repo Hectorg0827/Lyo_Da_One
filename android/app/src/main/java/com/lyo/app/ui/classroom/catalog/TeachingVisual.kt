@@ -37,14 +37,15 @@ import com.lyo.app.ui.theme.LyoVioletLight
 fun A2uiRenderScope.TeachingVisualRenderer() {
     val raw = resolve("visual") ?: return
     val visual = remember(raw) { runCatching { Gson().fromJson(raw, ClassroomBlock::class.java) }.getOrNull() } ?: return
-    TeachingVisualCard(visual, component.id) { fireAction("update_activity", it) }
+    TeachingVisualCard(visual, component.id, readOnly = literalString("role") == "reference") { fireAction("update_activity", it) }
 }
 
 @Composable
-fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, JsonElement>) -> Unit) {
+fun TeachingVisualCard(visual: ClassroomBlock, id: String, readOnly: Boolean = false, onUpdate: (Map<String, JsonElement>) -> Unit) {
     val cyan = LyoVioletLight
     var value by remember(id) { mutableIntStateOf(visual.value ?: 0) }
     fun change(next: Int) {
+        if (readOnly) return
         value = next
         onUpdate(mapOf("value" to JsonPrimitive(next)))
     }
@@ -52,6 +53,7 @@ fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String
     @Composable
     fun EntryButton(index: Int, item: TeachingVisualItem, prefix: String = "") {
         TextButton(
+            enabled = !readOnly,
             onClick = { change(index) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .semantics { selected = value == index }
@@ -73,6 +75,7 @@ fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String
             .border(1.dp, cyan.copy(alpha = 0.25f), RoundedCornerShape(16.dp)).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (readOnly) Text("KEEP IN VIEW · REFERENCE", color = cyan, style = MaterialTheme.typography.labelSmall)
         Text(visual.title.orEmpty(), color = Color.White, style = MaterialTheme.typography.titleMedium)
         Text(visual.caption.orEmpty(), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
 
@@ -99,6 +102,7 @@ fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String
                     }
                 }
                 Slider(
+                    enabled = !readOnly,
                     value = value.toFloat(),
                     onValueChange = { change(it.toInt()) },
                     valueRange = 0f..parts.toFloat(),
@@ -199,6 +203,7 @@ fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String
                 params.forEach { param ->
                     Text("${param.name} = ${"%.2f".format(values.getValue(param.name!!))}", color = cyan)
                     Slider(
+                        enabled = !readOnly,
                         value = values.getValue(param.name!!).toFloat(),
                         onValueChange = { next ->
                             values = values + (param.name to next.toDouble())

@@ -538,7 +538,7 @@ function ClassroomStage() {
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">{activeSpeaker && activeSpeaker !== 'Teacher' ? `${activeSpeaker} speaks` : 'Lyo explains'}</p>
-            {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-8 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
+            {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
           </div>
           <div data-classroom-caption-target className={cn('relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]')}>
           <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">

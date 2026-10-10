@@ -264,7 +264,10 @@ object ClassroomBridge {
                 if (component.block_type == "teaching_visual" && component.block != null) {
                     val id = component.component_id ?: UUID.randomUUID().toString()
                     appendLeaf(boardChildren,
-                        A2uiComponent(id, "TeachingVisual", mapOf("visual" to A2uiValue.PathRef("/board/elements/$id/visual"))),
+                        A2uiComponent(id, "TeachingVisual", mapOf(
+                            "visual" to A2uiValue.PathRef("/board/elements/$id/visual"),
+                            "role" to A2uiValue.Literal(JsonPrimitive(component.presentationRole())),
+                        )),
                         listOf("/board/elements/$id/visual" to Gson().toJsonTree(component.block)))
                 } else if (component.block_type == "summary" && component.block != null) {
                     val id = UUID.randomUUID().toString()
