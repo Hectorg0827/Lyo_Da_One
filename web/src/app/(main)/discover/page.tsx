@@ -537,7 +537,7 @@ function DiscoverContent() {
     if (index + 1 >= filtered.length) return;
     setActiveIndex(index + 1);
     const scroller = scrollerRef.current;
-    if (scroller) scroller.scrollTo({ top: (index + 1) * scroller.clientHeight, behavior: 'instant' });
+    if (scroller) scroller.scrollTo({ top: (index + 1) * scroller.clientHeight, behavior: 'auto' });
   }, [filtered.length]);
 
   useEffect(() => {
