@@ -1068,6 +1068,10 @@ class LyoAIViewModel: ObservableObject {
         Task { await unifiedChat.answerCheck(messageId: messageId, blockId: blockId, selectedIndex: selectedIndex) }
     }
 
+    func updateSmartVisual(messageId: String, blockId: String, values: [String: Any]) {
+        unifiedChat.updateVisual(messageId: messageId, blockId: blockId, values: values)
+    }
+
     private func chatErrorMessage(for error: Error) -> String {
         let lyoError = LyoError.from(error: error)
 

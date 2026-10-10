@@ -89,6 +89,8 @@ import com.lyo.app.data.api.CheckAnswerRequest
 import com.lyo.app.data.api.CheckAnswerResult
 import com.lyo.app.data.api.CreateAiConversationRequest
 import com.lyo.app.data.api.SmartBlock
+import com.lyo.app.data.api.VisualUpdateRequest
+import com.google.gson.JsonElement
 import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.components.SmartBlockList
 import com.lyo.app.ui.theme.Background
@@ -749,6 +751,30 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    fun updateVisual(messageId: String, blockId: String, values: Map<String, JsonElement>) {
+        val conversationId = activeConversationId ?: return
+        com.lyo.app.data.api.ChatVisualSaves.queue.enqueue(
+            VisualUpdateRequest(conversationId, blockId, values),
+            onSaved = { block ->
+                if (activeConversationId == conversationId) {
+                    val index = messages.indexOfFirst { it.id == messageId }
+                    if (index >= 0) {
+                        val current = messages[index]
+                        messages[index] = current.copy(blocks = current.blocks?.map {
+                            if (it.id == blockId) block else it
+                        })
+                    }
+                    if (inputError == "Could not save this diagram change. Adjust it again to retry.") inputError = null
+                }
+            },
+            onFailure = {
+                if (activeConversationId == conversationId) {
+                    inputError = "Could not save this diagram change. Adjust it again to retry."
+                }
+            },
+        )
+    }
+
     fun startDictation() {
         if (isStreaming || uploadingAttachment || dictating) return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -894,6 +920,7 @@ fun ChatScreen(nav: NavHostController) {
                         canSpeak = textToSpeechReady && msg.role == "assistant" && msg.content.isNotBlank(),
                         speaking = speakingMessageId == msg.id,
                         onAnswerCheck = { blockId, index -> answerCheck(msg.id, blockId, index) },
+                        onVisualUpdate = { blockId, values -> updateVisual(msg.id, blockId, values) },
                         onToggleSpeech = { toggleSpeech(msg) },
                     )
                 }
@@ -1112,6 +1139,7 @@ private fun MessageBubble(
     speaking: Boolean,
     onToggleSpeech: () -> Unit,
     onAnswerCheck: (blockId: String, selectedIndex: Int) -> Unit,
+    onVisualUpdate: (blockId: String, values: Map<String, JsonElement>) -> Unit,
 ) {
     val context = LocalContext.current
     val isUser = msg.role == "user"
@@ -1216,6 +1244,7 @@ private fun MessageBubble(
                         blocks = blocks,
                         checkResults = msg.checkResults,
                         onQuizAnswer = onAnswerCheck,
+                        onVisualUpdate = onVisualUpdate,
                         modifier = Modifier.padding(top = if (parsed.attachments.isNotEmpty()) 8.dp else 0.dp),
                         contentColor = if (isUser) Color.White else TextPrimary,
                     )

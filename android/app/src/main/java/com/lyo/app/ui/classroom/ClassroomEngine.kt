@@ -109,9 +109,11 @@ class ClassroomEngine(
     val resumedSession: Boolean = sessionStart.resumed
 
     /** A session the learner could still return to, if they want it. */
-    val resumableSession: ClassroomSavedSession? =
+    var resumableSession: ClassroomSavedSession? by mutableStateOf(
         ClassroomSessionStore.saved(courseKey)
             ?.takeIf { !sessionStart.resumed && ClassroomSessionContract.canResume(it) }
+    )
+        private set
 
     /**
      * The cover page: what this class is, before any of it is taught. Built
@@ -304,6 +306,10 @@ class ClassroomEngine(
                 hasActiveCheckpoint = false
                 status = "live"
                 recordConcepts = event.metadata?.target_concepts.orEmpty()
+                if (event.metadata?.course_complete == true) {
+                    ClassroomSessionStore.markFinished(sessionId, courseKey)
+                    resumableSession = null
+                }
                 // Lazy erase: don't clear the board the instant scene_start
                 // arrives on its own — wait until real content actually
                 // lands, so the board never flashes empty during ordinary

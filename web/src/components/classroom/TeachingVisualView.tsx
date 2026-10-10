@@ -5,14 +5,26 @@ import { ArrowRight, Minus, Plus } from 'lucide-react';
 import type { TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { useClassroomStore } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
+import { FractionPie } from '@/components/shared/FractionPie';
 
 export function TeachingVisualView({ id, visual }: { id: string; visual: TeachingVisual }) {
-  const rangeId = useId();
-  const [value, setValue] = useState(visual.value);
   const update = useClassroomStore(s => s.updateActivity);
   const spanish = useClassroomStore(s => s.languageCode.startsWith('es'));
+  return <TeachingVisualCard id={id} visual={visual} spanish={spanish} onUpdate={values => { update(id, values); }} />;
+}
+
+/** Surface-independent renderer; only its caller decides where updates go. */
+export function TeachingVisualCard({ id, visual, spanish = false, onUpdate }: {
+  id: string;
+  visual: TeachingVisual;
+  spanish?: boolean;
+  onUpdate?: (values: Record<string, unknown>) => void;
+}) {
+  const rangeId = useId();
+  const [value, setValue] = useState(visual.value);
   const change = (next: number) => {
-    if (update(id, { value: next })) setValue(next);
+    setValue(next);
+    onUpdate?.({ value: next });
   };
 
   const entryButtons = (numbered = false) => (
@@ -41,6 +53,10 @@ export function TeachingVisualView({ id, visual }: { id: string; visual: Teachin
         <span className="rounded-full border border-sky-300/20 bg-sky-300/5 px-3 py-1.5 text-xs text-sky-200">{spanish ? 'Visual' : 'Visual'}</span>
       </div>
       <p className="mb-5 max-w-prose text-sm leading-relaxed text-slate-200">{visual.caption}</p>
+
+      {visual.kind === 'fraction_pie' && <FractionPie key={visual.visual_id || id}
+        initial={{ parts: visual.parts, value: visual.value }} whole={visual.whole} unit={visual.unit} spanish={spanish}
+        onChange={next => onUpdate?.({ parts: next.parts, value: next.value })} />}
 
       {visual.kind === 'fraction_bar' && (
         <div className="space-y-5">
@@ -160,7 +176,7 @@ export function TeachingVisualView({ id, visual }: { id: string; visual: Teachin
 
       {visual.kind === 'graph' && <Explorable expression={visual.expression} params={visual.params} xMin={visual.x_min} xMax={visual.x_max}
         yMin={visual.y_min} yMax={visual.y_max}
-        onValuesChange={params => update(id, { params })} />}
+        onValuesChange={params => onUpdate?.({ params })} />}
 
       <p className="sr-only">{visual.description}</p>
     </section>

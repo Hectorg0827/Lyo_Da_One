@@ -24,6 +24,7 @@ data class ClassroomSceneMetadata(
     val target_evidence_type: String? = null,
     val teaching_policy_version: String? = null,
     val target_concepts: List<String>? = null,
+    val course_complete: Boolean = false,
 )
 
 /** One selectable answer inside a `QuizCard` component's `options`. */
@@ -191,7 +192,7 @@ fun ClassroomBlock.isTeachingVisualValid(): Boolean {
             entries.all { !it.label.isNullOrBlank() && !it.detail.isNullOrBlank() }
 
     return when (kind) {
-        "fraction_bar" -> parts != null && parts in 2..20 && value != null && value in 0..parts &&
+        "fraction_bar", "fraction_pie" -> parts != null && parts in (if (kind == "fraction_pie") 1 else 2)..20 && value != null && value in 0..parts &&
             whole != null && whole.isFinite() && whole > 0
         "comparison", "sequence", "process_flow", "timeline" -> entriesOk()
         "number_line" -> entriesOk() && x_min != null && x_max != null && x_min.isFinite() &&

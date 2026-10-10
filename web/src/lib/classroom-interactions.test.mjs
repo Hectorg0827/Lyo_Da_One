@@ -366,3 +366,15 @@ test('a class taught to its end stops being offered back as unfinished', () => {
   assert.equal(next.store.getState().resumable, null);
   next.store.getState().disconnect();
 });
+
+test('durably completed guided scenes stop being offered back without a director turn', () => {
+  const { store, sockets, storage } = classroom({ connection: { topic: 'Fractions' } });
+  sockets[0].receive({ event_type: 'scene_start', scene: { metadata: { course_complete: false } } });
+  assert.equal(JSON.parse(storage['lyo_classroom_session:Fractions']).finished, undefined);
+  sockets[0].receive({ event_type: 'scene_start', scene: { metadata: { course_complete: true } } });
+  const saved = JSON.parse(storage['lyo_classroom_session:Fractions']);
+  assert.equal(saved.finished, true);
+  assert.equal(canResumeClassroom(saved), false);
+  assert.equal(store.getState().resumable, null);
+  store.getState().disconnect();
+});

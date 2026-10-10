@@ -61,13 +61,21 @@ class LivingClassroomService: ObservableObject {
     private var requestedDifficulty: String?
     private var courseKey: String = ""
     private let sessionStore: ClassroomSessionStore
+    private let actionSender: ((String) -> Void)?
+    private let now: () -> Date
     private var stallTimer: Timer?
     private var waitingSince: Date?
     private var stallNudged: Bool = false
     private let logger = Logger(subsystem: "com.lyo.app", category: "LivingClassroomService")
 
-    init(sessionStore: ClassroomSessionStore = ClassroomSessionStore()) {
+    init(
+        sessionStore: ClassroomSessionStore = ClassroomSessionStore(),
+        actionSender: ((String) -> Void)? = nil,
+        now: @escaping () -> Date = { Date() }
+    ) {
         self.sessionStore = sessionStore
+        self.actionSender = actionSender
+        self.now = now
     }
 
     // MARK: - Lesson identity
@@ -163,19 +171,20 @@ class LivingClassroomService: ObservableObject {
         // holds the session that offer is about — it has to be carried.
         let saved = resumeSession ?? sessionStore.saved(courseKey: courseKey)
         let start = ClassroomSessionContract.sessionStart(
-            courseKey: courseKey, saved: saved, resume: resume
+            courseKey: courseKey, saved: saved, resume: resume, now: now()
         )
         sessionStore.save(
             ClassroomSavedSession(
-                id: start.sessionId, startedAt: Date(), generation: start.generation
+                id: start.sessionId, startedAt: now(), generation: start.generation
             ),
             courseKey: courseKey
         )
         self.sessionId = start.sessionId
         self.resumedSession = start.resumed
         self.resumableSession =
-            (!start.resumed && ClassroomSessionContract.canResume(saved)) ? saved : nil
+            (!start.resumed && ClassroomSessionContract.canResume(saved, now: now())) ? saved : nil
         self.notice = nil
+        self.lessonComplete = false
 
         // The cover page goes up before the socket does. A learner should
         // never be looking at a blank stage wondering whether the class has
@@ -198,6 +207,14 @@ class LivingClassroomService: ObservableObject {
         self.isGenerating = true
         self.statusText = "Connecting to your live classroom…"
         startStallWatch()
+
+        // An injected transport owns its connection/authentication. The same
+        // action and incoming-message paths still drive the lesson state.
+        if actionSender != nil {
+            self.isConnected = true
+            self.isConnecting = false
+            return
+        }
 
         Task {
             do {
@@ -345,7 +362,7 @@ class LivingClassroomService: ObservableObject {
     /// It ticks rather than arming a timer at each of the places a wait
     /// begins: a wait that started without arming its own timer is exactly
     /// the wait nobody would notice was never ending.
-    private func stallTick(now: Date = Date()) {
+    func stallTick(now: Date = Date()) {
         guard isGenerating, isConnected, !lessonComplete else {
             waitingSince = nil
             stallNudged = false
@@ -362,9 +379,12 @@ class LivingClassroomService: ObservableObject {
                 // One unprompted ask, then the learner decides. Resending the
                 // learner's own answer here would risk grading it twice, so
                 // the nudge is always `continue`.
-                stallNudged = true
-                waitingSince = now
                 if sendUserAction(actionIntent: "continue", componentId: "continue") {
+                    // sendUserAction starts a fresh wait for learner actions.
+                    // This send is the one automatic recovery, so restore its
+                    // history after the shared send path resets the wait.
+                    stallNudged = true
+                    waitingSince = now
                     if stallPhase != .slow { stallPhase = .slow }
                 } else {
                     stallPhase = .stalled
@@ -382,7 +402,10 @@ class LivingClassroomService: ObservableObject {
     private func startStallWatch() {
         stopStallWatch()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.stallTick() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.stallTick(now: self.now())
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         stallTimer = timer
@@ -414,7 +437,7 @@ class LivingClassroomService: ObservableObject {
         notice = nil
         guard sendUserAction(actionIntent: "continue", componentId: "continue") else { return }
         isGenerating = true
-        waitingSince = Date()
+        waitingSince = now()
         stallNudged = true
         stallPhase = .slow
     }
@@ -487,7 +510,7 @@ class LivingClassroomService: ObservableObject {
             bargeIn()
         }
 
-        guard isConnected, let task = webSocketTask else {
+        guard isConnected, webSocketTask != nil || actionSender != nil else {
             logger.warning("WebSocket not connected — learner action was not sent")
             isGenerating = false
             statusText = nil
@@ -504,7 +527,7 @@ class LivingClassroomService: ObservableObject {
             "session_id": outboundSessionId,
             "action_intent": actionIntent,
             "component_id": componentId,
-            "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "timestamp": ISO8601DateFormatter().string(from: now()),
         ]
 
         if let actionData = actionData {
@@ -537,12 +560,12 @@ class LivingClassroomService: ObservableObject {
         // needed for.
         if actionIntent != "update_activity" {
             isGenerating = true
-            waitingSince = Date()
+            waitingSince = now()
             stallNudged = false
             if stallPhase != .none { stallPhase = .none }
         }
 
-        task.send(.string(jsonString)) { [weak self] error in
+        let completion: (Error?) -> Void = { [weak self] error in
             Task { @MainActor in
                 if let error = error {
                     self?.logger.error("Failed to send user action: \(error.localizedDescription)")
@@ -557,6 +580,11 @@ class LivingClassroomService: ObservableObject {
                     self?.logger.info("📤 Sent user action: \(actionIntent)")
                 }
             }
+        }
+        if let actionSender {
+            actionSender(jsonString)
+        } else {
+            webSocketTask?.send(.string(jsonString), completionHandler: completion)
         }
         return true
     }
@@ -627,7 +655,7 @@ class LivingClassroomService: ObservableObject {
     }
 
     /// Parses the JSON payload and routes events for SDUI streaming
-    private func handleWebSocketMessage(_ message: String) {
+    func handleWebSocketMessage(_ message: String) {
         guard let data = message.data(using: .utf8) else { return }
 
         do {
@@ -688,6 +716,9 @@ class LivingClassroomService: ObservableObject {
                 case "scene_complete", "SCENE_COMPLETE":
                     self.completeSceneRender()
 
+                case "session_end":
+                    self.markLessonComplete()
+
                 case "system_state":
                     self.logger.info(
                         "Received system_state message - fully connected to Live Classroom stream")
@@ -734,6 +765,12 @@ class LivingClassroomService: ObservableObject {
         self.clearWait()
         self.canContinue = false
         self.statusText = nil
+        if scene.metadata?.courseComplete == true {
+            markLessonComplete()
+        }
+        for component in scene.components {
+            recordCompletion(in: component)
+        }
 
         logger.info(
             "Started rendering scene: \(scene.sceneType) [\(scene.id)] with \(scene.components.count) components"
@@ -744,6 +781,7 @@ class LivingClassroomService: ObservableObject {
     }
 
     private func renderComponent(_ component: SDUIComponent) {
+        recordCompletion(in: component)
         // If it's already on screen, update it seamlessly
         if let index = self.renderedComponents.firstIndex(where: { $0.id == component.id }) {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
@@ -767,6 +805,29 @@ class LivingClassroomService: ObservableObject {
                 revealNextComponent()
             }
         }
+    }
+
+    private func recordCompletion(in component: SDUIComponent) {
+        if component.type == .ctaButton, component.actionIntent == "end_lesson" {
+            markLessonComplete()
+            return
+        }
+        guard component.type == .teacherMessage,
+              let data = component.content.data(using: .utf8),
+              let turns = try? JSONDecoder().decode([ActiveLessonAdapter.DirectorTurn].self, from: data),
+              turns.contains(where: { $0.type == "session_end" }) else { return }
+        markLessonComplete()
+    }
+
+    private func markLessonComplete() {
+        lessonComplete = true
+        isGenerating = false
+        canContinue = false
+        statusText = nil
+        resumableSession = nil
+        clearWait()
+        stopStallWatch()
+        sessionStore.markFinished(sessionId: sessionId, courseKey: courseKey)
     }
 
     /// Pulls the next component from the queue and displays it.

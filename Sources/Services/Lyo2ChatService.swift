@@ -124,6 +124,27 @@ class Lyo2ChatService: ObservableObject {
         }
     }
 
+    /// Save bounded exploration on a server-authored diagram, without grading.
+    func updateVisual(conversationId: String, blockId: String, values: [String: Any]) async throws -> SmartBlock {
+        guard let url = URL(string: "\(AppConfig.baseURL)/api/v1/lyo2/chat/visual") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "conversation_id": conversationId, "block_id": blockId, "values": values,
+        ])
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        await SaaSHeaders.apply(to: &request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let response = response as? HTTPURLResponse,
+              (200...299).contains(response.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        struct VisualResponse: Decodable { let block: SmartBlock }
+        return try JSONDecoder().decode(VisualResponse.self, from: data).block
+    }
+
     /// Grade an in-chat check against the block the server itself emitted.
     ///
     /// Sends only which option was picked. Correctness comes back from the

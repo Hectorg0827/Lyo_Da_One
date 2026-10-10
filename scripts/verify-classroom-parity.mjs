@@ -82,7 +82,7 @@ requireText(iosClassroom, 'bargeIn()', 'iOS interruption contract');
 requireText(androidLivingEngine, 'voicePlayer?.stop()', 'Android learner barge-in stops teacher voice');
 requireText(androidLivingEngine, 'ClassroomBridge.askQuestionAction', 'Android interruption contract');
 requireText(web, "if (!sendAction('skip_question'", 'Web offline-safe skip');
-requireText(iosClassroom, 'guard isConnected, let task = webSocketTask', 'iOS offline-safe action');
+requireText(iosClassroom, 'guard isConnected, webSocketTask != nil || actionSender != nil', 'iOS offline-safe action');
 requireText(iosView, 'guard onSkip(component) else { return false }', 'iOS offline-safe skip');
 requireText(androidSocket, 'fun send(envelope: UserActionEnvelope): Boolean', 'Android socket reports failed sends');
 requireText(androidLivingEngine, 'if (!sent) return', 'Android failed answer cannot advance locally');

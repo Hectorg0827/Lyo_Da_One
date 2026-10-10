@@ -24,6 +24,18 @@ struct ClassroomSavedSession: Codable, Equatable {
         self.generation = generation
         self.finished = finished
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, startedAt, generation, finished
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        startedAt = try values.decode(Date.self, forKey: .startedAt)
+        generation = try values.decode(Int.self, forKey: .generation)
+        finished = try values.decodeIfPresent(Bool.self, forKey: .finished) ?? false
+    }
 }
 
 /// Which session this entry connects with, and whether it is a continuation.
@@ -183,5 +195,11 @@ struct ClassroomSessionStore {
     func save(_ session: ClassroomSavedSession, courseKey: String) {
         guard let data = try? JSONEncoder().encode(session) else { return }
         defaults.set(data, forKey: ClassroomSessionContract.storageKey(courseKey: courseKey))
+    }
+
+    func markFinished(sessionId: String, courseKey: String) {
+        guard var session = saved(courseKey: courseKey), session.id == sessionId else { return }
+        session.finished = true
+        save(session, courseKey: courseKey)
     }
 }

@@ -1029,6 +1029,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'scene_stream': {
         const start = classroomSceneStart(msg);
         set({ recordConcepts: conceptsFromClassScene(start?.scene) });
+        if ((start?.scene as { metadata?: Record<string, unknown> } | undefined)?.metadata?.course_complete === true) {
+          markSavedSessionFinished(get().courseKey, get().sessionId);
+          set({ resumable: null });
+        }
         // A new scene invalidates every older queued or playing turn.
         stopPlayer();
         prefetchedSpeech.clear();
@@ -1488,7 +1492,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const params = values.params as Record<string, number> | undefined;
         const visual = parseTeachingVisual(params
           ? { ...el.visual, params: el.visual.params.map(p => ({ ...p, initial: params[p.name] })) }
-          : { ...el.visual, value: values.value });
+          : { ...el.visual, value: values.value, ...(values.parts != null ? { parts: values.parts } : {}) });
         return visual ? { ...el, visual } : el;
       }) }));
       activityUpdates.set(id, values);

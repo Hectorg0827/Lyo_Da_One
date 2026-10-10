@@ -7,7 +7,7 @@ export interface TeachingVisualItem {
 }
 export interface TeachingVisual {
   visual_id?: string;
-  kind: 'fraction_bar' | 'comparison' | 'sequence' | 'graph' | 'process_flow' | 'timeline' | 'number_line' | 'annotated_image';
+  kind: 'fraction_bar' | 'fraction_pie' | 'comparison' | 'sequence' | 'graph' | 'process_flow' | 'timeline' | 'number_line' | 'annotated_image';
   title: string;
   caption: string;
   description: string;

@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.google.gson.Gson
 
 /**
  * The rules that decide whether a class starts or resumes, and when a wait
@@ -18,6 +19,19 @@ import org.junit.Test
  * together.
  */
 class ClassroomSessionContractTest {
+    @Test
+    fun `guided completion metadata marks the matching seat finished`() {
+        val start = ClassroomSessionContract.sessionStart("fractions", null)
+        ClassroomSessionStore.save(
+            ClassroomSavedSession(start.sessionId, System.currentTimeMillis(), start.generation), "fractions",
+        )
+        val metadata = Gson().fromJson("{\"course_complete\":true}", ClassroomSceneMetadata::class.java)
+        assertTrue(metadata.course_complete)
+        ClassroomSessionStore.markFinished(start.sessionId, "fractions")
+        assertFalse(ClassroomSessionContract.canResume(ClassroomSessionStore.saved("fractions")))
+        assertFalse(Gson().fromJson("{}", ClassroomSceneMetadata::class.java).course_complete)
+    }
+
 
     @Before
     fun reset() {

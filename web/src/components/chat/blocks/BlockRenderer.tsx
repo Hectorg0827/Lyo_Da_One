@@ -13,6 +13,8 @@ import {
 } from '../markdown-config';
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
+import TeachingVisualBlock from './TeachingVisualBlock';
+import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { MermaidView, ChartView } from '@/components/classroom/BoardElementView';
 
 const inlineMarkdownComponents = {
@@ -179,7 +181,7 @@ function MediaBlock({ block }: { block: ChatBlock }) {
   const alt = typeof block.content?.alt === 'string' ? block.content.alt : '';
   const caption = typeof block.content?.caption === 'string' ? block.content.caption : '';
   const sourceUrl = typeof block.metadata?.source_url === 'string' &&
-    /^https:\/\/commons\.wikimedia\.org\//i.test(block.metadata.source_url)
+    /^https:\/\/(?:commons\.wikimedia\.org|www\.pexels\.com|images\.nasa\.gov|www\.si\.edu)\//i.test(block.metadata.source_url)
       ? block.metadata.source_url : null;
   if (block.subtype !== 'image' || !/^https:\/\//i.test(url)) {
     return <GenericBlock block={block} />;
@@ -382,6 +384,9 @@ export default function BlockRenderer({
           case 'quiz':
             return <CheckBlock key={block.id} block={block} message={message} />;
           case 'interactive':
+            if (block.subtype === 'teaching_visual' && parseTeachingVisual(block.content?.visual)) {
+              return <TeachingVisualBlock key={block.id} block={block} message={message} />;
+            }
             if (block.subtype === 'explorable') {
               return <ExplorableBlock key={block.id} block={block} />;
             }

@@ -30,6 +30,7 @@ struct EnhancedMessageBubble: View {
     /// A v2 SmartBlock quiz was answered — (blockId, selectedIndex). Grading
     /// is server-authoritative; see `UnifiedChatService.answerCheck`.
     let onSmartQuizAnswer: ((String, Int) -> Void)?
+    let onSmartVisualUpdate: ((String, [String: Any]) -> Void)?
 
     @StateObject private var audioService = AudioPlaybackService.shared
     @State private var showFullImage = false
@@ -46,7 +47,8 @@ struct EnhancedMessageBubble: View {
         onSuggestedAction: ((SuggestedActionCard) -> Void)? = nil,
         highlights: [ChatHighlight] = [],
         onTextSelectionAction: ((TextSelectionAction) -> Void)? = nil,
-        onSmartQuizAnswer: ((String, Int) -> Void)? = nil
+        onSmartQuizAnswer: ((String, Int) -> Void)? = nil,
+        onSmartVisualUpdate: ((String, [String: Any]) -> Void)? = nil
     ) {
         self.message = message
         self.onTTSToggle = onTTSToggle
@@ -59,6 +61,7 @@ struct EnhancedMessageBubble: View {
         self.highlights = highlights
         self.onTextSelectionAction = onTextSelectionAction
         self.onSmartQuizAnswer = onSmartQuizAnswer
+        self.onSmartVisualUpdate = onSmartVisualUpdate
     }
     
     /// True when contentTypes contains rich content that should suppress raw text rendering
@@ -295,6 +298,9 @@ struct EnhancedMessageBubble: View {
                     checkResult: message.checkResults?[block.id],
                     onQuizAnswer: { index in
                         onSmartQuizAnswer?(block.id, index)
+                    },
+                    onVisualUpdate: { values in
+                        onSmartVisualUpdate?(block.id, values)
                     }
                 )
             }
