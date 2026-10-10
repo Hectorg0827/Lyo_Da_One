@@ -479,7 +479,7 @@ fun BottomActionDock(
  *  per course, matching web/iOS's `TEACHER_VARIANTS[stableHash(courseId)]`
  *  pattern), never driven by a wire-contract field. */
 @Composable
-fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modifier = Modifier) {
+fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modifier = Modifier, mascotState: String = "reading", lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
     val speaker = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("speaker")
         ?.takeIf { it.isJsonPrimitive }?.asString
     val text = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("text")
@@ -490,24 +490,32 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modi
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(Surface, RoundedCornerShape(16.dp))
+            .padding(12.dp),
     ) {
-        val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = "", variant = "teacher")
+        val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = mascotState, variant = "lyo")
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(frame.drawableRes),
-            contentDescription = "Teacher",
+            contentDescription = "Lyo is $mascotState",
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = frame.modifier
                 .size(40.dp)
                 .background(Surface, CircleShape),
         )
         if (text != null) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 if (speaker != null) {
-                    Text(text = speaker, color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
+                    Text(text = if (speaker == "Teacher") "Lyo explains" else "$speaker speaks", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
                 Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+        } else {
+            Text("Lyo is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
+        }
+        Column {
+            if (lessonRecovery) Text("Paused", color = ClassroomTokens.Gold, style = MaterialTheme.typography.labelSmall)
+            androidx.compose.material3.TextButton(onClick = onTranscript) { Text("Transcript", color = ClassroomTokens.AccentPurple) }
         }
     }
 }

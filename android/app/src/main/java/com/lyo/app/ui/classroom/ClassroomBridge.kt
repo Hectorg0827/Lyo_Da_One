@@ -11,6 +11,7 @@ import com.lyo.app.data.a2ui.A2uiChildren
 import com.lyo.app.data.a2ui.A2uiComponent
 import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiValue
+import com.lyo.app.data.classroom.presentationRole
 import com.lyo.app.data.classroom.ClassroomComponent
 import com.lyo.app.data.classroom.ClassroomServerEvent
 import com.lyo.app.data.classroom.DirectorTurn
@@ -246,10 +247,12 @@ object ClassroomBridge {
             }
 
             "ExampleBlock" -> {
-                val id = UUID.randomUUID().toString()
+                val id = component.component_id ?: UUID.randomUUID().toString()
                 appendSummary(
                     id = id,
                     title = component.title ?: "Worked example",
+                    document = component.board_document,
+                    role = component.presentationRole(),
                     content = component.content,
                     items = emptyList(),
                     retrievalScheduled = false,
@@ -269,6 +272,7 @@ object ClassroomBridge {
                     val summaryMutation = appendSummary(
                         id = id,
                         title = block.title ?: "Lesson summary",
+                        role = "reference",
                         content = block.content,
                         items = block.items ?: emptyList(),
                         retrievalScheduled = block.retrieval_scheduled == true,
@@ -871,6 +875,8 @@ object ClassroomBridge {
         items: List<String>,
         retrievalScheduled: Boolean,
         boardChildren: List<String>,
+        document: JsonElement? = null,
+        role: String = "board",
     ): BoardMutation = appendLeaf(
         boardChildren = boardChildren,
         newComponent = A2uiComponent(
@@ -881,14 +887,18 @@ object ClassroomBridge {
                 "content" to A2uiValue.PathRef("/board/elements/summary_$id/content"),
                 "items" to A2uiValue.PathRef("/board/elements/summary_$id/items"),
                 "retrievalScheduled" to A2uiValue.PathRef("/board/elements/summary_$id/retrievalScheduled"),
+                "document" to A2uiValue.PathRef("/board/elements/summary_$id/document"),
+                "role" to A2uiValue.PathRef("/board/elements/summary_$id/role"),
             ),
         ),
         dataModelWrites = listOf(
             "/board/elements/summary_$id/title" to JsonPrimitive(title),
+            "/board/elements/summary_$id/document" to (document ?: JsonNull.INSTANCE),
+            "/board/elements/summary_$id/role" to JsonPrimitive(role),
             "/board/elements/summary_$id/content" to (content?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
             "/board/elements/summary_$id/items" to JsonArray().apply { items.forEach { add(it) } },
             "/board/elements/summary_$id/retrievalScheduled" to JsonPrimitive(retrievalScheduled),
-        ),
+        ) + if (role == "recovery") listOf("/lessonRecovery" to JsonPrimitive(true)) else emptyList(),
     )
 
     private fun appendSourceLine(labels: List<String>?, boardChildren: List<String>): BoardMutation {

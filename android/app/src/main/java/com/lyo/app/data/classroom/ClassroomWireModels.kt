@@ -20,6 +20,7 @@ package com.lyo.app.data.classroom
  * permission to advance or grade a lesson locally.
  */
 data class ClassroomSceneMetadata(
+    val presentation_focus: String? = null,
     val teaching_action: String? = null,
     val target_evidence_type: String? = null,
     val teaching_policy_version: String? = null,
@@ -111,6 +112,8 @@ data class ClassroomComponent(
     val source_attributions: List<String>? = null,
     val title: String? = null,
     val content: String? = null,
+    val board_document: com.google.gson.JsonElement? = null,
+    val presentation_role: String? = null,
     val block_type: String? = null,
     val block: ClassroomBlock? = null,
     // Celebration-only fields (lyo_app's _create_celebration_components).

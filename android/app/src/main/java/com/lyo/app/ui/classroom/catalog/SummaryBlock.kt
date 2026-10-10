@@ -8,6 +8,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.TextButton
+import com.lyo.app.data.classroom.parseBoardDocument
+import com.lyo.app.ui.theme.LyoVioletLight
+import com.lyo.app.ui.theme.LyoAmber
+import com.lyo.app.ui.theme.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.lyo.app.ui.classroom.a2ui.A2uiRenderScope
@@ -27,20 +36,35 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
     val content = resolveString("content")
     val items = resolveStringList("items")
     val retrievalScheduled = resolveBoolean("retrievalScheduled", false)
+    val role = resolveString("role", "board") ?: "board"
+    val document = parseBoardDocument(resolve("document"))
+    var expanded by remember(component.id) { mutableStateOf(role != "details") }
+    val accent = if (role == "recovery") LyoAmber else LyoVioletLight
+    val label = when (role) {
+        "reference" -> "KEEP IN VIEW"
+        "feedback" -> "FEEDBACK"
+        "recovery" -> "LESSON PAUSED"
+        "details" -> "LESSON DETAILS"
+        else -> "TEACHING TOOL"
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .border(1.dp, LyoGreen.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-            .background(LyoGreen.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .background(Surface, RoundedCornerShape(12.dp))
             .padding(12.dp),
     ) {
-        Text(text = title, color = LyoGreen)
-        if (content != null) {
+        Text(text = label, color = accent)
+        Text(text = title, color = TextPrimary)
+        if (role == "details") TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide details" else "Read details") }
+        if (expanded && document != null) {
+            BoardDocumentView(document)
+        } else if (expanded && content != null) {
             Text(text = content, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
         }
-        items.forEach { item ->
+        if (expanded) items.forEach { item ->
             Text(text = "•  $item", color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
         }
         if (retrievalScheduled) {

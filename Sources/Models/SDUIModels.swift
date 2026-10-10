@@ -15,6 +15,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         lhs.question == rhs.question &&
         lhs.options == rhs.options &&
         lhs.teachingVisual == rhs.teachingVisual &&
+        lhs.boardDocument == rhs.boardDocument &&
+        lhs.presentationRole == rhs.presentationRole &&
         lhs.actionIntent == rhs.actionIntent &&
         lhs.languageCode == rhs.languageCode
     }
@@ -43,6 +45,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
     // Populated only when type == .lessonBlock.
     let lessonBlock: LiveLessonBlock?
     let teachingVisual: ClassroomTeachingVisual?
+    let boardDocument: ClassroomBoardDocument?
+    let presentationRole: String?
 
     enum CodingKeys: String, CodingKey {
         case componentId = "component_id"
@@ -67,6 +71,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         case audioURL = "audio_url"
         case blockType = "block_type"
         case block
+        case boardDocument = "board_document"
+        case presentationRole = "presentation_role"
     }
 
     init(
@@ -88,7 +94,9 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         languageCode: String? = nil,
         audioURL: String? = nil,
         lessonBlock: LiveLessonBlock? = nil,
-        teachingVisual: ClassroomTeachingVisual? = nil
+        teachingVisual: ClassroomTeachingVisual? = nil,
+        boardDocument: ClassroomBoardDocument? = nil,
+        presentationRole: String? = nil
     ) {
         self.id = id
         self.type = type
@@ -109,6 +117,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         self.audioURL = audioURL
         self.lessonBlock = lessonBlock
         self.teachingVisual = teachingVisual
+        self.boardDocument = boardDocument?.isValid == true ? boardDocument : nil
+        self.presentationRole = presentationRole
     }
 
     init(from decoder: Decoder) throws {
@@ -144,6 +154,9 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         self.actionPayload = try container.decodeIfPresent([String: String].self, forKey: .actionPayload)
         self.languageCode = try container.decodeIfPresent(String.self, forKey: .languageCode)
         self.audioURL = try container.decodeIfPresent(String.self, forKey: .audioURL)
+        let document = try? container.decodeIfPresent(ClassroomBoardDocument.self, forKey: .boardDocument)
+        self.boardDocument = document?.isValid == true ? document : nil
+        self.presentationRole = try? container.decodeIfPresent(String.self, forKey: .presentationRole)
 
         // Decode the rich-block payload carried by LessonBlock components.
         // The backend's LessonBlock has fields: { block_type: String, block: { ...LiveLessonBlock fields... } }
@@ -182,6 +195,8 @@ struct SDUIComponent: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(actionPayload, forKey: .actionPayload)
         try container.encodeIfPresent(languageCode, forKey: .languageCode)
         try container.encodeIfPresent(audioURL, forKey: .audioURL)
+        try container.encodeIfPresent(boardDocument, forKey: .boardDocument)
+        try container.encodeIfPresent(presentationRole, forKey: .presentationRole)
         if let visual = teachingVisual {
             try container.encode("teaching_visual", forKey: .blockType)
             try container.encode(visual, forKey: .block)

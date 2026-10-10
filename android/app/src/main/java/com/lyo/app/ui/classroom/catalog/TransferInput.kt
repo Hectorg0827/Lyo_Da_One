@@ -45,6 +45,7 @@ fun A2uiRenderScope.TransferInputRenderer() {
     val ready = wordCount >= minWords && !submitted
 
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
         Text(text = question, color = TextPrimary)
         if (submitted) {
             Text(

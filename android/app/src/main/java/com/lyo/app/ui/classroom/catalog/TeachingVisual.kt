@@ -30,6 +30,7 @@ import com.lyo.app.data.classroom.ClassroomBlock
 import com.lyo.app.data.classroom.TeachingVisualItem
 import com.lyo.app.data.classroom.isTeachingVisualValid
 import com.lyo.app.ui.classroom.a2ui.A2uiRenderScope
+import com.lyo.app.ui.theme.LyoVioletLight
 
 /** Exploring changes the representation; only a separate server checkpoint is graded. */
 @Composable
@@ -41,7 +42,7 @@ fun A2uiRenderScope.TeachingVisualRenderer() {
 
 @Composable
 fun TeachingVisualCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, JsonElement>) -> Unit) {
-    val cyan = Color(0xFF7DD3FC)
+    val cyan = LyoVioletLight
     var value by remember(id) { mutableIntStateOf(visual.value ?: 0) }
     fun change(next: Int) {
         value = next

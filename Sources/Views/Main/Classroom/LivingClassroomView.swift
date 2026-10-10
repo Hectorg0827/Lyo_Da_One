@@ -478,6 +478,7 @@ struct LivingClassroomView: View {
                 subtitle: lessonSubtitle(stepCount: steps.count)
             ),
             steps: steps,
+            isWaiting: service.isGenerating,
             onAdvance: { step in handleAdvance(step, isLast: step.id == steps.last?.id) },
             onAskLyo: { step in openAskOverlay(for: step) },
             onExplainEasier: { step in explainStepEasier(step) },
