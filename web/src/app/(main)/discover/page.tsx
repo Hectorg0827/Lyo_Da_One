@@ -264,6 +264,8 @@ function InfoOverlay({ reel }: { reel: Reel }) {
 function ReelSlide({
   reel,
   isActive,
+  shouldLoad,
+  onEnded,
   onAsk,
   onCourse,
   onComment,
@@ -273,6 +275,8 @@ function ReelSlide({
 }: {
   reel: Reel;
   isActive: boolean;
+  shouldLoad: boolean;
+  onEnded: () => void;
   onAsk: () => void;
   onCourse: () => void;
   onComment: () => void;
@@ -282,21 +286,38 @@ function ReelSlide({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
-  // Only the slide in view plays — matches the iOS paged TabView behaviour.
+  // Play only the visible slide. Preloaded neighbouring slides remain paused.
+  // A rejected play promise must be visible, not a permanently black frame.
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    if (isActive && !paused) {
-      el.play().catch(() => {});
+    const video = videoRef.current;
+    if (!video) return;
+    if (isActive && !paused && !loadFailed) {
+      video.play().catch(() => {
+        if (videoRef.current === video && !video.paused) return;
+        if (videoRef.current === video) setLoadFailed(true);
+      });
     } else {
-      el.pause();
+      video.pause();
     }
-  }, [isActive, paused]);
+  }, [isActive, paused, loadFailed, retryKey, shouldLoad]);
 
   useEffect(() => {
     if (!isActive) setPaused(false);
   }, [isActive]);
+
+  useEffect(() => {
+    setLoadFailed(false);
+    setRetryKey(0);
+  }, [reel.videoUrl]);
+
+  const retry = () => {
+    setLoadFailed(false);
+    setPaused(false);
+    setRetryKey((key) => key + 1);
+  };
 
   return (
     <section
@@ -304,14 +325,18 @@ function ReelSlide({
       onClick={() => reel.videoUrl && setPaused((p) => !p)}
     >
       {/* Media */}
-      {reel.videoUrl ? (
+      {reel.videoUrl && shouldLoad ? (
         <video
+          key={retryKey}
           ref={videoRef}
           src={reel.videoUrl}
           poster={reel.posterUrl || undefined}
-          loop
+          preload="auto"
           playsInline
           muted
+          onError={() => setLoadFailed(true)}
+          onLoadedData={() => setLoadFailed(false)}
+          onEnded={onEnded}
           className="absolute inset-0 w-full h-full object-cover"
         />
       ) : reel.posterUrl ? (
@@ -327,8 +352,23 @@ function ReelSlide({
         />
       )}
 
+      {/* Playback errors must offer a way out even when the media URL is dead. */}
+      {loadFailed && isActive && reel.videoUrl && (
+        <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/50">
+          <div className="flex flex-col items-center gap-3 p-5 rounded-xl bg-black/80 text-white">
+            <span className="text-sm font-semibold">Video couldn't load</span>
+            <button className="rounded-lg border border-white/40 px-4 py-2 text-sm" onClick={(e) => { e.stopPropagation(); retry(); }}>
+              Retry video
+            </button>
+            <button className="text-sm underline" onClick={(e) => { e.stopPropagation(); onEnded(); }}>
+              Next clip
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Paused affordance */}
-      {paused && reel.videoUrl && (
+      {paused && reel.videoUrl && !loadFailed && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
             <Play className="w-7 h-7 text-white" fill="white" />
@@ -416,7 +456,18 @@ function DiscoverContent() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const viewed = useRef<Set<string>>(new Set());
 
-  const { data, isLoading } = useApi(() => api.clips.discover(), []);
+  const { data, isLoading, error: feedError, refetch } = useApi(() => api.clips.discover(), []);
+  const [moreClips, setMoreClips] = useState<Record<string, unknown>[]>([]);
+  const nextPage = useRef(2);
+  const fetchingPage = useRef(false);
+
+  // Load subsequent pages before the user reaches the end. Discover is a
+  // continuous feed, not a reel that silently stops after 20 clips.
+  useEffect(() => {
+    nextPage.current = 2;
+    fetchingPage.current = false;
+    setMoreClips([]);
+  }, [data]);
 
   // A named clip need not be on the first page of Discover. When it is not,
   // it is fetched by id and put at the front, so the link lands on the clip
@@ -444,13 +495,29 @@ function DiscoverContent() {
   }, [clipParam]);
 
   const reels = useMemo(() => {
-    const list = ((data?.clips as Record<string, unknown>[]) || []).map(adaptReel);
+    const list = [...((data?.clips as Record<string, unknown>[]) || []), ...moreClips].map(adaptReel);
     // The named clip leads, and is not repeated further down the feed.
     const ordered = namedReel
       ? [namedReel, ...list.filter((r) => r.id !== namedReel.id)]
       : list;
     return ordered.map((r) => ({ ...r, ...overrides[r.id] }));
-  }, [data, overrides, namedReel]);
+  }, [data, overrides, namedReel, moreClips]);
+
+  useEffect(() => {
+    if (isLoading || !data || query || fetchingPage.current) return;
+    const loadedCount = (data.clips?.length || 0) + moreClips.length;
+    if (activeIndex < reels.length - 4 || loadedCount >= (data.total || 0)) return;
+    fetchingPage.current = true;
+    const page = nextPage.current;
+    api.clips.discover(page).then((result) => {
+      nextPage.current = page + 1;
+      setMoreClips((current) => [...current, ...(result.clips || [])]);
+    }).catch(() => {
+      // Don't hold playback hostage to pagination; retry as the user moves.
+    }).finally(() => {
+      fetchingPage.current = false;
+    });
+  }, [activeIndex, isLoading, data, moreClips.length, reels.length, query]);
 
   // Client-side filter over title + subtitle + tags (iOS DiscoverViewModel)
   const filtered = useMemo(() => {
@@ -463,6 +530,20 @@ function DiscoverContent() {
         r.tags.some((t) => t.toLowerCase().includes(q))
     );
   }, [reels, query]);
+
+  // Snap instantly to the next ready clip on natural completion. The last
+  // clip stays paused when there is no subsequent item to advance into.
+  const advanceFrom = useCallback((index: number) => {
+    if (index + 1 >= filtered.length) return;
+    setActiveIndex(index + 1);
+    const scroller = scrollerRef.current;
+    if (scroller) scroller.scrollTo({ top: (index + 1) * scroller.clientHeight, behavior: 'instant' });
+  }, [filtered.length]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    scrollerRef.current?.scrollTo({ top: 0 });
+  }, [query]);
 
   // Track which slide is in view so only it plays
   useEffect(() => {
@@ -559,6 +640,11 @@ function DiscoverContent() {
               />
             ))}
           </div>
+        ) : feedError && !data ? (
+          <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center text-white">
+            <p>Discover couldn't load. Check your connection and try again.</p>
+            <button className="rounded-lg border border-white/40 px-5 py-2" onClick={refetch}>Retry Discover</button>
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState
             message={
@@ -573,6 +659,8 @@ function DiscoverContent() {
               key={reel.id}
               reel={reel}
               isActive={i === activeIndex}
+              shouldLoad={Math.abs(i - activeIndex) <= 1}
+              onEnded={() => advanceFrom(i)}
               onAsk={() => handleAsk(reel)}
               onCourse={() => handleCourse(reel)}
               onComment={() => setCommentsFor(reel.id)}
