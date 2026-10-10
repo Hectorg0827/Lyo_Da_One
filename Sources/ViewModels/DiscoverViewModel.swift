@@ -275,7 +275,7 @@ final class DiscoverViewModel: ObservableObject {
         let offset = nextOffset
         let next = await DataService.shared.fetchDiscoverFeed(limit: 20, offset: offset)
         guard generation == feedGeneration else { return }
-        let known = Set(items.map(\\.id))
+        let known = Set(items.map(\.id))
         items.append(contentsOf: next.filter { !known.contains($0.id) })
         nextOffset += 20
         hasMore = next.count == 20
