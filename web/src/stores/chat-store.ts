@@ -182,6 +182,7 @@ interface ChatStore {
   ) => Promise<void>;
   reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
   undoCourseRevision: () => Promise<void>;
+  updateVisual: (conversationId: string, messageId: string, blockId: string, values: Record<string, unknown>) => Promise<boolean>;
   answerCheck: (
     messageId: string,
     blockId: string,
@@ -1155,6 +1156,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ courseRevisionUndo: null });
     await get().reviseActiveCourse(previous);
     set({ courseRevisionUndo: null });
+  },
+
+  updateVisual: async (conversationId, messageId, blockId, values) => {
+    if (!conversationId || conversationId.startsWith('local-')) return false;
+    try {
+      const { block } = await api.chat.updateVisual({ conversationId, blockId, values });
+      set(state => ({ conversations: state.conversations.map(conversation => conversation.id === conversationId
+        ? { ...conversation, messages: conversation.messages.map(message => message.id === messageId
+          ? { ...message, blocks: message.blocks?.map(existing => existing.id === blockId ? block : existing) }
+          : message) }
+        : conversation) }));
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0, hintUsed = false) => {

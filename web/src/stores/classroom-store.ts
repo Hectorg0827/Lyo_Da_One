@@ -1239,7 +1239,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const params = values.params as Record<string, number> | undefined;
         const visual = parseTeachingVisual(params
           ? { ...el.visual, params: el.visual.params.map(p => ({ ...p, initial: params[p.name] })) }
-          : { ...el.visual, value: values.value });
+          : { ...el.visual, value: values.value, ...(values.parts != null ? { parts: values.parts } : {}) });
         return visual ? { ...el, visual } : el;
       }) }));
       activityUpdates.set(id, values);
