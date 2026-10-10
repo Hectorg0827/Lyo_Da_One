@@ -3,17 +3,15 @@ import AVKit
 
 struct DiscoverReelView: View {
     let item: DiscoverItem
+    // Page selection is authoritative; offscreen neighbours preroll silently.
+    var isActive: Bool = true
+    var onFinished: () -> Void = {}
     let onLike: () -> Void
     let onComment: () -> Void
     let onShare: () -> Void
     let onSave: () -> Void
     let onAskLio: () -> Void
     let onStart: () -> Void
-
-    // TabView can mount neighbour pages early. Only the selected page plays;
-    // neighbouring players preroll while paused for quick swipes.
-    var isActive: Bool = true
-    var onFinished: () -> Void = {}
 
     // New interaction callbacks
     var onConvertToCourse: () -> Void = {}
