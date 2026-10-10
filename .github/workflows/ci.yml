@@ -79,6 +79,9 @@ jobs:
       - name: Verify Android Discover integrity
         run: node scripts/verify-android-discover-integrity.mjs
 
+      - name: Verify Discover continuous playback
+        run: node scripts/verify-discover-playback.mjs
+
       - name: Verify Android Notifications reliability
         run: node scripts/verify-android-notifications-reliability.mjs
 
