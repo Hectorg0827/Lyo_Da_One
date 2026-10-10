@@ -116,6 +116,34 @@ final class ClassroomRecoveryServiceTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(store.saved(courseKey: "fractions")).finished)
     }
 
+    func testAChallengeAfterCompletionRestartsRecoveryWithoutReopeningTheSavedLesson() async throws {
+        let suite = "ClassroomRecoveryServiceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ClassroomSessionStore(defaults: defaults)
+        var time = Date(timeIntervalSince1970: 1_000)
+        var sent: [String] = []
+        let service = LivingClassroomService(sessionStore: store,
+                                            actionSender: { sent.append($0) }, now: { time })
+        defer { service.disconnect() }
+        service.connect(sessionId: "fractions", courseId: "fractions", topic: "Fractions")
+        service.handleWebSocketMessage("{\"type\":\"session_end\"}")
+        await Task.yield()
+        await Task.yield()
+        XCTAssertTrue(service.lessonComplete)
+        XCTAssertTrue(service.sendUserAction(actionIntent: "user_message", componentId: "recap_challenge",
+                                            actionData: ["message": "Give me one challenge question"]))
+        XCTAssertFalse(service.lessonComplete)
+        XCTAssertTrue(try XCTUnwrap(store.saved(courseKey: "fractions")).finished)
+        time.addTimeInterval(30)
+        service.stallTick(now: time)
+        XCTAssertEqual(sent.count, 2)
+        time.addTimeInterval(30)
+        service.stallTick(now: time)
+        XCTAssertEqual(service.stallPhase, .stalled)
+        XCTAssertEqual(sent.count, 2)
+    }
+
     func testACompletionCannotFinishTheNewerSeat() throws {
         let suite = "ClassroomRecoveryServiceTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

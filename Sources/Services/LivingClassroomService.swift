@@ -559,6 +559,12 @@ class LivingClassroomService: ObservableObject {
         // the opening connection, which is the one wait they were least
         // needed for.
         if actionIntent != "update_activity" {
+            if lessonComplete {
+                // A follow-up challenge starts another wait, while the saved
+                // lesson remains finished for future resume decisions.
+                lessonComplete = false
+                startStallWatch()
+            }
             isGenerating = true
             waitingSince = now()
             stallNudged = false
