@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Share
@@ -837,7 +838,7 @@ private fun ClipPage(
         }
         if (isPaused && isCurrent) {
             Icon(
-                Icons.Filled.Add,
+                Icons.Filled.PlayArrow,
                 contentDescription = "Paused — tap to resume",
                 tint = Color.White,
                 modifier = Modifier.align(Alignment.Center).size(44.dp),
