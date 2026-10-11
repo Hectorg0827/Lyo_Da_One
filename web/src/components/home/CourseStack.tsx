@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, Clock, Play, RotateCcw, Check, Layers } from 'lucide-react';
 import type { StackItem } from '@/lib/stack';
 import CourseArtwork from '@/components/home/CourseArtwork';
+import { courseDestination } from '@/lib/course-destination.mjs';
 import {
   ACTION_REVIEW,
   BLURB_DESCRIPTION,
@@ -245,7 +246,9 @@ function CourseCard({
   const [flipped, setFlipped] = useState(false);
   const openBack = onBodyClick ?? (() => setFlipped(true));
 
-  const href = `/courses/${item.content_id || item.id}`;
+  // Stack row IDs are not course IDs. Topic-only cards must launch a lesson,
+  // not call the integer-only course-detail API with a title or Stack row ID.
+  const href = courseDestination(item);
   const action = actionFor(item);
   const finished = isFinished(item);
   const blurb = blurbFor(item);
