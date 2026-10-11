@@ -123,13 +123,12 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
       resumed: true,
     };
   }
-  // No history: send the plain course key, exactly as every client did before
-  // this contract existed.
-  if (!saved || !saved.id) {
-    return { sessionId: key, generation: 1, resumed: false };
-  }
-  const generation = Math.max(1, Number(saved.generation) || 1) + 1;
-  return { sessionId: `${key}~${generation}`, generation, resumed: false };
+  // A brand-new client has no local history, but the backend can still hold
+  // an old failed session under the plain topic key. Every fresh entry needs
+  // its own server identity, even on the first run after app installation.
+  // Keep the original course key separate for learner progress.
+  const generation = !saved?.id ? 1 : Math.max(1, Number(saved.generation) || 1) + 1;
+  return { sessionId: `${key}~${generation}-${now}`, generation, resumed: false };
 }
 
 // ─── When the next step does not arrive ─────────────────────────────────────
