@@ -109,6 +109,17 @@ export function normalizeSessionMinutes(minutes) {
 }
 
 /**
+ * Canonical server-owned session durations may be more precise than the
+ * front-door presets (for example a 7-minute Coach mission). The Classroom
+ * backend accepts 3–60 minutes, so preserve that exact bounded integer here.
+ */
+export function normalizeServerSessionMinutes(minutes) {
+  const value = Number(minutes);
+  if (!Number.isInteger(value) || value < 3 || value > 60) return null;
+  return value;
+}
+
+/**
  * Open the Classroom on a topic.
  *
  * Returns null for an empty topic: a Classroom with nothing to teach is not a
@@ -120,7 +131,7 @@ export function normalizeSessionMinutes(minutes) {
  * the URL it always did and the Classroom's own defaults still apply.
  */
 export function classroomEntryHref({
-  topic, mode, objective, courseId, lessonId, reviewConceptId, level, minutes, language, recordScope,
+  topic, mode, objective, courseId, lessonId, reviewConceptId, level, minutes, serverMinutes, language, recordScope,
 } = {}) {
   const cleanTopic = (topic ?? '').trim();
   if (!cleanTopic) return null;
@@ -141,7 +152,9 @@ export function classroomEntryHref({
   const cleanLevel = normalizeLevel(level);
   if (cleanLevel) params.set('difficulty', cleanLevel);
 
-  const cleanMinutes = normalizeSessionMinutes(minutes);
+  const cleanMinutes = serverMinutes != null
+    ? normalizeServerSessionMinutes(serverMinutes)
+    : normalizeSessionMinutes(minutes);
   if (cleanMinutes) params.set('duration', String(cleanMinutes));
 
   const cleanLanguage = normalizeLanguage(language);

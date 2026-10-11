@@ -25,7 +25,10 @@ import {
 } from '@/stores/classroom-store';
 import { BoardElementView } from '@/components/classroom/BoardElementView';
 import { upsertCourseOnStart } from '@/lib/stack';
-import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
+import {
+  SESSION_LENGTHS,
+  normalizeServerSessionMinutes,
+} from '@/lib/entry-contract.mjs';
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
@@ -85,7 +88,7 @@ function ClassroomStage() {
   // front door offers but the Classroom does not recognise becomes 10 here
   // with nothing on screen saying so, which is a lesson quietly shorter than
   // the one the learner asked for.
-  const initialDuration = normalizeSessionMinutes(params.get('duration')) ?? 10;
+  const initialDuration = normalizeServerSessionMinutes(params.get('duration')) ?? 10;
   const [mode, setMode] = useState<ClassroomMode>(initialMode);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -478,6 +481,9 @@ function ClassroomStage() {
               onChange={(event) => setDurationMinutes(Number(event.target.value))}
               className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
             >
+              {!SESSION_LENGTHS.includes(durationMinutes) && (
+                <option value={durationMinutes}>{durationMinutes} minutes</option>
+              )}
               {SESSION_LENGTHS.map((minutes) => (
                 <option key={minutes} value={minutes}>{minutes} minutes</option>
               ))}
