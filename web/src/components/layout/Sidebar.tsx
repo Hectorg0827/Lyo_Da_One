@@ -25,7 +25,7 @@ import { useAuthStore } from '@/stores/auth-store';
    ============================================================ */
 const navItems = [
   { href: '/', icon: Home, label: 'Home' },
-  { href: '/chat', icon: MessageSquare, label: 'LYO', isAI: true },
+  { href: '/chat', icon: MessageSquare, label: 'LYO Tutor', isAI: true },
   { href: '/courses', icon: BookOpen, label: 'My Courses' },
   // Test prep is a distinct job from browsing courses: a learner with a date
   // in mind needs their readiness and today's sessions, not the catalogue.
