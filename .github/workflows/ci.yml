@@ -201,6 +201,15 @@ jobs:
         if: steps.android-build.outcome == 'failure'
         run: exit 1
 
+      - name: Upload Android build for device validation
+        if: steps.android-build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: discover-device-validation-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
   web:
     name: Typecheck & Build (Web)
     runs-on: ubuntu-latest

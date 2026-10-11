@@ -1,0 +1,33 @@
+{
+  "id": "fraction-pie-block-1",
+  "schema_version": 1,
+  "type": "interactive",
+  "subtype": "teaching_visual",
+  "content": {
+    "title": "Explore the fraction",
+    "items": [{"label": "Explore the fraction", "detail": "3/4: 3 shaded slices out of 4 equal slices."}],
+    "visual": {
+      "visual_id": "fraction-pie-visual-1",
+      "kind": "fraction_pie",
+      "title": "Explore the fraction",
+      "caption": "Tap slices or change the numerator and denominator to see the fraction change.",
+      "description": "3/4: 3 shaded slices out of 4 equal slices.",
+      "parts": 4,
+      "whole": 1,
+      "unit": "",
+      "value": 3,
+      "entries": [],
+      "expression": "",
+      "params": [],
+      "x_min": -5,
+      "x_max": 5,
+      "y_min": -10,
+      "y_max": 10,
+      "image_query": "",
+      "image_url": null,
+      "source_url": null,
+      "attribution": null
+    }
+  },
+  "metadata": {"instructional_role": "representation", "source_surface": "test_prep", "concept_id": "fractions"}
+}

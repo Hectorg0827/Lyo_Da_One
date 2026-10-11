@@ -2,6 +2,8 @@ package com.lyo.app.ui.screens.clips
 
 import android.content.Intent
 import android.net.Uri
+import androidx.media3.common.C
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
@@ -35,6 +37,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Share
@@ -54,12 +59,15 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,8 +82,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavHostController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
@@ -96,6 +109,10 @@ import com.lyo.app.ui.theme.TextSecondary
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -126,24 +143,54 @@ fun ClipsScreen(nav: NavHostController) {
     var hasMore by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var pausedClipId by remember { mutableStateOf<String?>(null) }
+    var scrubbingClipId by remember { mutableStateOf<String?>(null) }
+    var pendingAdvanceId by remember { mutableStateOf<String?>(null) }
+    var muted by remember { mutableStateOf(false) }
+    var feedGeneration by remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var foreground by remember(lifecycleOwner) { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     // Exactly three small player instances at most: current, previous, next.
     // Unlike VideoView, ExoPlayer prepares upcoming clips before a swipe.
     val players = remember { mutableStateMapOf<String, ExoPlayer>() }
+    val playerSources = remember { mutableMapOf<String, String>() }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            foreground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if (!foreground) players.values.forEach { it.playWhenReady = false }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            players.values.forEach { it.playWhenReady = false }
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             players.values.forEach { it.release() }
             players.clear()
+            playerSources.clear()
         }
     }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    LaunchedEffect(clips.isEmpty()) {
+        if (clips.isEmpty()) {
+            players.values.forEach { it.release() }
+            players.clear()
+            playerSources.clear()
+        }
+    }
 
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) pendingVideoUri = uri
     }
 
     LaunchedEffect(refreshKey) {
-        if (clips.isEmpty()) loading = true
+        val generation = ++feedGeneration
+        loading = true
+        loadingMore = false
+        pendingAdvanceId = null
         loadError = null
 
         val discovery = runCatching { ApiClient.api.discoverClips(1, 20).clips.orEmpty() }
@@ -160,6 +207,8 @@ fun ClipsScreen(nav: NavHostController) {
             else -> null
         }
 
+        currentCoroutineContext().ensureActive()
+        if (generation != feedGeneration) return@LaunchedEffect
         if (resolved != null) {
             clips = resolved
             likedIds = resolved.filter { it.isLiked == true }.map { it.idStr }.toSet()
@@ -268,11 +317,12 @@ fun ClipsScreen(nav: NavHostController) {
             clips.isNotEmpty() -> {
                 val pagerState = rememberPagerState(pageCount = { clips.size })
                 val currentClipId = clips.getOrNull(pagerState.currentPage)?.idStr
+                val playbackAllowed = foreground && commentsClipId == null && pendingVideoUri == null
 
                 // Keep only the visible reel and its immediate neighbours in
                 // memory. Preparing the next clip ahead of the swipe removes
                 // the per-item buffering delay of VideoView.
-                LaunchedEffect(clips.map { it.idStr to it.videoUrl }, pagerState.currentPage, pausedClipId) {
+                LaunchedEffect(clips.map { it.idStr to it.videoUrl }, pagerState.currentPage, pausedClipId, scrubbingClipId, playbackAllowed, muted) {
                     val index = pagerState.currentPage
                     val neighbours = (index - 1..index + 1)
                         .mapNotNull { clips.getOrNull(it) }
@@ -280,38 +330,68 @@ fun ClipsScreen(nav: NavHostController) {
                     val keep = neighbours.map { it.idStr }.toSet()
                     players.keys.toList().filterNot { it in keep }.forEach { key ->
                         players.remove(key)?.release()
+                        playerSources.remove(key)
                     }
                     neighbours.forEach { clip ->
+                        if (playerSources[clip.idStr] != clip.videoUrl) {
+                            players.remove(clip.idStr)?.release()
+                            playerSources[clip.idStr] = clip.videoUrl!!
+                        }
                         val player = players[clip.idStr] ?: ExoPlayer.Builder(context).build().apply {
                             repeatMode = Player.REPEAT_MODE_OFF
+                            setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+                            setHandleAudioBecomingNoisy(true)
                             setMediaItem(MediaItem.fromUri(clip.videoUrl!!))
                             prepare()
                         }.also { players[clip.idStr] = it }
-                        player.playWhenReady = clip.idStr == currentClipId && pausedClipId != clip.idStr
+                        player.volume = if (muted) 0f else 1f
+                        player.playWhenReady = DiscoverPlaybackIntent(clip.idStr == currentClipId, playbackAllowed, pausedClipId == clip.idStr, scrubbingClipId == clip.idStr).shouldPlay
                     }
                 }
 
-                LaunchedEffect(pagerState.currentPage, clips.size, hasMore) {
-                    if (!hasMore || loadingMore || pagerState.currentPage < clips.size - 4) return@LaunchedEffect
+                LaunchedEffect(pagerState.currentPage, clips.size, hasMore, loading, refreshKey) {
+                    if (loading || !hasMore || loadingMore || pagerState.currentPage < clips.size - 4) return@LaunchedEffect
                     loadingMore = true
+                    val generation = feedGeneration
                     val page = nextPage
-                    runCatching { ApiClient.api.discoverClips(page, 20).clips.orEmpty() }
-                        .onSuccess { batch ->
+                    // This request belongs to the feed, so a swipe does not cancel it.
+                    scope.launch {
+                        try {
+                            val batch = ApiClient.api.discoverClips(page, 20).clips.orEmpty()
+                            if (generation != feedGeneration) return@launch
                             val known = clips.map { it.idStr }.toSet()
-                            clips = clips + batch.filterNot { it.idStr in known }
+                            clips = clips + batch.distinctBy { it.idStr }.filterNot { it.idStr in known }
                             nextPage = page + 1
                             hasMore = batch.size == 20
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            if (generation == feedGeneration) {
+                                hasMore = false
+                                interactionError = "More clips could not be loaded. Refresh Discover to retry."
+                            }
+                        } finally {
+                            if (generation == feedGeneration) loadingMore = false
                         }
-                        .onFailure {
-                            // Playback of already fetched clips continues.
-                            hasMore = false
-                            interactionError = "More clips could not be loaded. Refresh Discover to retry."
-                        }
-                    loadingMore = false
+                    }
                 }
 
                 LaunchedEffect(currentClipId) {
+                    if (pendingAdvanceId != currentClipId) pendingAdvanceId = null
+                    if (pausedClipId != currentClipId) pausedClipId = null
+                    if (scrubbingClipId != currentClipId) scrubbingClipId = null
                     currentClipId?.let(::syncView)
+                }
+
+                LaunchedEffect(pendingAdvanceId, currentClipId, clips.size, playbackAllowed) {
+                    if (pendingAdvanceId != null && pendingAdvanceId == currentClipId && playbackAllowed) {
+                        val page = pagerState.currentPage
+                        val next = nextDiscoverPage(page, page, clips.size)
+                        if (next != null) {
+                            pendingAdvanceId = null
+                            pagerState.animateScrollToPage(page + 1)
+                        }
+                    }
                 }
 
                 VerticalPager(
@@ -326,13 +406,34 @@ fun ClipsScreen(nav: NavHostController) {
                         isCurrent = pagerState.currentPage == page,
                         player = players[id],
                         isPaused = pausedClipId == id,
+                        foreground = playbackAllowed,
+                        isScrubbing = scrubbingClipId == id,
+                        muted = muted,
+                        onToggleMute = { muted = !muted },
+                        onScrubbingChange = { scrubbing ->
+                            if (scrubbing) scrubbingClipId = id
+                            else if (scrubbingClipId == id) scrubbingClipId = null
+                        },
+                        onSeek = { position ->
+                            if (pagerState.currentPage == page && playbackAllowed) players[id]?.seekTo(position)
+                        },
+                        onRetry = {
+                            if (pagerState.currentPage == page && playbackAllowed) {
+                                pausedClipId = null
+                                players[id]?.prepare()
+                                players[id]?.playWhenReady = scrubbingClipId != id
+                            }
+                        },
+                        onExternalPause = { if (pagerState.currentPage == page) pausedClipId = id },
                         onTogglePlayback = {
-                            pausedClipId = if (pausedClipId == id) null else id
+                            if (players[id]?.playbackState == Player.STATE_ENDED) {
+                                pendingAdvanceId = null
+                                players[id]?.seekTo(0)
+                                pausedClipId = null
+                            } else pausedClipId = if (pausedClipId == id) null else id
                         },
                         onPlaybackEnded = {
-                            if (pagerState.currentPage == page && page + 1 < clips.size) {
-                                scope.launch { pagerState.animateScrollToPage(page + 1) }
-                            }
+                            if (pagerState.currentPage == page && playbackAllowed) pendingAdvanceId = id
                         },
                         liked = id in likedIds,
                         saved = id in savedIds,
@@ -773,6 +874,14 @@ private fun ClipPage(
     isCurrent: Boolean,
     player: ExoPlayer?,
     isPaused: Boolean,
+    foreground: Boolean,
+    isScrubbing: Boolean,
+    muted: Boolean,
+    onToggleMute: () -> Unit,
+    onScrubbingChange: (Boolean) -> Unit,
+    onSeek: (Long) -> Unit,
+    onRetry: () -> Unit,
+    onExternalPause: () -> Unit,
     onTogglePlayback: () -> Unit,
     onPlaybackEnded: () -> Unit,
     liked: Boolean,
@@ -789,14 +898,31 @@ private fun ClipPage(
 ) {
     var playbackError by remember(clip.idStr) { mutableStateOf<String?>(null) }
 
-    DisposableEffect(player, isCurrent) {
-        if (player == null || !isCurrent) {
+    val canAdvance by rememberUpdatedState(DiscoverPlaybackIntent(isCurrent, foreground, isPaused, isScrubbing).shouldPlay)
+    val endedCallback by rememberUpdatedState(onPlaybackEnded)
+    val externalPauseCallback by rememberUpdatedState(onExternalPause)
+    var position by remember(player) { mutableLongStateOf(0L) }
+    var duration by remember(player) { mutableLongStateOf(0L) }
+    LaunchedEffect(player, isCurrent, foreground, isScrubbing) {
+        if (player == null || !isCurrent || !foreground) return@LaunchedEffect
+        while (true) {
+            if (!isScrubbing) position = player.currentPosition.coerceAtLeast(0)
+            duration = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0
+            delay(200)
+        }
+    }
+
+    DisposableEffect(player) {
+        if (player == null) {
             onDispose { }
         } else {
             val listener = object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_READY) playbackError = null
-                    if (state == Player.STATE_ENDED) onPlaybackEnded()
+                    if (state == Player.STATE_ENDED && canAdvance) endedCallback()
+                }
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) externalPauseCallback()
                 }
                 override fun onPlayerError(error: PlaybackException) {
                     playbackError = "This video could not be played."
@@ -836,6 +962,31 @@ private fun ClipPage(
                 modifier = Modifier.fillMaxSize().clickable(onClick = onTogglePlayback),
             )
         }
+        if (isCurrent && player != null && playbackError == null) {
+            Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Slider(
+                    value = position.toFloat().coerceIn(0f, duration.coerceAtLeast(1).toFloat()),
+                    onValueChange = { value -> onScrubbingChange(true); position = value.toLong() },
+                    onValueChangeFinished = { onSeek(position); onScrubbingChange(false) },
+                    valueRange = 0f..duration.coerceAtLeast(1).toFloat(),
+                    enabled = duration > 0 && foreground,
+                    modifier = Modifier.semantics { contentDescription = "Seek video" },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onTogglePlayback) {
+                        Icon(if (isPaused || player.playbackState == Player.STATE_ENDED) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                            contentDescription = if (isPaused) "Play video" else "Pause video", tint = Color.White)
+                    }
+                    Text(clipPlaybackTime(position) + " / " + clipPlaybackTime(duration), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onToggleMute) {
+                        Icon(if (muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                            contentDescription = if (muted) "Unmute video" else "Mute video", tint = Color.White)
+                    }
+                }
+            }
+        }
+
         if (isPaused && isCurrent) {
             Icon(
                 Icons.Filled.PlayArrow,
@@ -853,7 +1004,7 @@ private fun ClipPage(
             ) {
                 Text(playbackError.orEmpty(), color = Color.White)
                 Row {
-                    TextButton(onClick = { playbackError = null; player?.prepare(); player?.play() }) {
+                    TextButton(onClick = { playbackError = null; onRetry() }) {
                         Text("Retry", color = Color.White)
                     }
                     TextButton(onClick = onPlaybackEnded) {
@@ -894,7 +1045,7 @@ private fun ClipPage(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth(0.75f)
-                .padding(start = 16.dp, bottom = 24.dp),
+                .padding(start = 16.dp, bottom = 96.dp),
         ) {
             Text(
                 clip.title ?: "Untitled Clip",
@@ -943,7 +1094,7 @@ private fun ClipPage(
             verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 10.dp, bottom = 32.dp),
+                .padding(end = 10.dp, bottom = 104.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(onClick = onLike, enabled = !likePending) {
@@ -1109,4 +1260,9 @@ private fun clipFailureMessage(error: Throwable?, action: String): String = when
     is IOException -> "Check your connection and try to $action again."
     null -> "LYO could not $action."
     else -> error.localizedMessage ?: "LYO could not $action."
+}
+
+private fun clipPlaybackTime(milliseconds: Long): String {
+    val seconds = (milliseconds / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(seconds / 60, seconds % 60)
 }

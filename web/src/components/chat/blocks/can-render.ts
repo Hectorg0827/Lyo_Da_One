@@ -1,3 +1,4 @@
+import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { canRenderExplorable } from '@/lib/explorable.mjs';
 import type { ChatBlock } from '@/types';
 
@@ -48,6 +49,7 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
     // the same chain as the default case — not by falling out of the switch,
     // which would return undefined and hide the fallback just as quietly.
     case 'interactive':
+      if (block.subtype === 'teaching_visual') return !!parseTeachingVisual(content.visual) || genericChain(str, content);
       return block.subtype === 'explorable'
         ? canRenderExplorable(content)
         : genericChain(str, content);

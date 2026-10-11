@@ -385,13 +385,15 @@ export const api = {
       });
     },
 
-    /**
-     * Submit an answer to an in-chat check.
-     *
-     * Sends only WHICH option was picked. Correctness is decided server-side
-     * from the block the server itself emitted — the client never grades, and
-     * never trusts `correct_index` off the wire for that purpose.
-     */
+    /** Save bounded diagram exploration independently from quiz grading. */
+    async updateVisual(params: { conversationId: string; blockId: string; values: Record<string, unknown> }) {
+      return request<{ block: ChatBlock }>('/api/v1/lyo2/chat/visual', {
+        method: 'POST',
+        body: JSON.stringify({ conversation_id: params.conversationId, block_id: params.blockId, values: params.values }),
+      });
+    },
+
+    /** Submit a choice for server-authoritative grading. */
     async checkAnswer(params: {
       conversationId: string;
       blockId: string;

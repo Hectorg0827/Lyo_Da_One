@@ -18,6 +18,7 @@ struct UnifiedBlockRenderer: View {
     // Callbacks
     var onQuizAnswer: ((Int) -> Void)?
     var onAction: ((String) -> Void)?
+    var onVisualUpdate: (([String: Any]) -> Void)?
 
     enum RenderContext {
         case chat
@@ -49,7 +50,16 @@ struct UnifiedBlockRenderer: View {
                 SmartProgressBlockView(payload: payload, subtype: block.subtype)
                 
             case .interactive(let payload):
-                SmartInteractiveBlockView(payload: payload, subtype: block.subtype)
+                if block.subtype == "teaching_visual", let raw = payload.visual,
+                   let data = try? JSONEncoder().encode(raw),
+                   let visual = try? JSONDecoder().decode(ClassroomTeachingVisual.self, from: data), visual.isValid {
+                    ClassroomTeachingVisualView(visual: visual) { values in
+                        onVisualUpdate?(values)
+                        return true
+                    }
+                } else {
+                    SmartInteractiveBlockView(payload: payload, subtype: block.subtype)
+                }
                 
             case .masteryMap(let payload):
                 SmartMasteryMapBlockView(payload: payload)

@@ -5,6 +5,7 @@ import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
+import com.lyo.app.data.classroom.ClassroomBlock
 import java.lang.reflect.Type
 import java.util.UUID
 
@@ -137,6 +138,7 @@ data class InteractiveItem(
 data class InteractiveBlockPayload(
     val items: List<InteractiveItem> = emptyList(),
     val title: String? = null,
+    val visual: ClassroomBlock? = null,
 )
 
 data class MasteryNodePayload(
@@ -226,6 +228,14 @@ class SmartBlockDeserializer : JsonDeserializer<SmartBlock> {
  * reads those back from the block it already emitted, so the client cannot
  * assert its own correctness.
  */
+data class VisualUpdateRequest(
+    @SerializedName("conversation_id") val conversationId: String,
+    @SerializedName("block_id") val blockId: String,
+    val values: Map<String, JsonElement>,
+)
+
+data class VisualUpdateResponse(val block: SmartBlock)
+
 data class CheckAnswerRequest(
     @SerializedName("conversation_id") val conversationId: String,
     @SerializedName("block_id") val blockId: String,

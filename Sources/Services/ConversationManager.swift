@@ -98,16 +98,19 @@ class ConversationManager: ObservableObject {
     @Published var currentConversation: SavedConversation?
     
     // MARK: - Storage
-    private let userDefaults = UserDefaults.standard
+    private let userDefaults: UserDefaults
     private let conversationsKey = "saved_conversations"
     private let currentConversationKey = "current_conversation_id"
     private static let attachmentPattern = try! NSRegularExpression(
         pattern: #"!\[([^\]]*)\]\((https?://[^)]*/api/v1/media/file/chat/[^)]+)\)|\[📎 ([^\]]+)\]\((https?://[^)]*/api/v1/media/file/chat/[^)]+)\)"#
     )
     
-    private init() {
-        loadConversations()
-        Task { await refreshFromServer() }
+    init(userDefaults: UserDefaults = .standard, refreshFromServer: Bool = true) {
+        self.userDefaults = userDefaults
+        if refreshFromServer {
+            loadConversations()
+            Task { await self.refreshFromServer() }
+        }
     }
     
     // MARK: - Conversation Management
@@ -157,6 +160,23 @@ class ConversationManager: ObservableObject {
         conversations.sort { $0.lastUpdated > $1.lastUpdated }
         
         // Persist to storage
+        persistConversations()
+    }
+
+    /// Merge a completed diagram save into its original cached conversation.
+    /// The current thread and any quiz verdicts remain independently owned.
+    func updateSavedVisual(conversationId: String, messageId: String, block: SmartBlock) {
+        guard let conversationIndex = conversations.firstIndex(where: { $0.id == conversationId }),
+              let messageIndex = conversations[conversationIndex].messages.firstIndex(where: { $0.id == messageId }),
+              conversations[conversationIndex].messages[messageIndex].smartBlocks?.contains(where: { $0.id == block.id }) == true
+        else { return }
+        conversations[conversationIndex].messages[messageIndex].smartBlocks =
+            conversations[conversationIndex].messages[messageIndex].smartBlocks?.map {
+                $0.id == block.id ? block : $0
+            }
+        if currentConversation?.id == conversationId {
+            currentConversation = conversations[conversationIndex]
+        }
         persistConversations()
     }
 

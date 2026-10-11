@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Discover View
 
 struct DiscoverView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var uiState: AppUIState
     @EnvironmentObject var uiStackStore: UIStackStore
     
@@ -17,6 +18,11 @@ struct DiscoverView: View {
     @State private var itemToShare: DiscoverItem?
     @State private var animateHeader = false
     @State private var selectedReelId = ""
+    @State private var pendingAdvanceId: String?
+
+    private var playbackAllowed: Bool {
+        !showClassroom && !showLioChat && itemToShare == nil && viewModel.selectedContextItem == nil && viewModel.selectedItemForComments == nil
+    }
     
     var body: some View {
         NavigationStack {
@@ -105,6 +111,12 @@ struct DiscoverView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active, let pending = pendingAdvanceId { advanceAfter(pending) }
+        }
+        .onChange(of: playbackAllowed) { allowed in
+            if allowed, let pending = pendingAdvanceId { advanceAfter(pending) }
+        }
     }
     
     // MARK: - Error Banner
@@ -186,6 +198,8 @@ struct DiscoverView: View {
                     DiscoverReelView(
                         item: item,
                         isActive: (selectedReelId.isEmpty ? viewModel.filteredItems.first?.id : selectedReelId) == item.id,
+                        shouldLoad: shouldLoad(item.id),
+                        playbackAllowed: playbackAllowed,
                         onFinished: { advanceAfter(item.id) },
                         onLike: { 
                             viewModel.toggleLike(for: item)
@@ -210,9 +224,12 @@ struct DiscoverView: View {
             .onChange(of: viewModel.filteredItems.map(\.id)) { ids in
                 if !ids.contains(selectedReelId) {
                     selectedReelId = ids.first ?? ""
+                    pendingAdvanceId = nil
                 }
+                if let pending = pendingAdvanceId { advanceAfter(pending) }
             }
             .onChange(of: selectedReelId) { current in
+                pendingAdvanceId = nil
                 let visible = viewModel.filteredItems
                 guard viewModel.searchQuery.isEmpty,
                       let index = visible.firstIndex(where: { $0.id == current }),
@@ -227,9 +244,23 @@ struct DiscoverView: View {
     
     private func advanceAfter(_ clipId: String) {
         let reels = viewModel.filteredItems
-        guard let index = reels.firstIndex(where: { $0.id == clipId }),
-              reels.indices.contains(index + 1) else { return }
+        guard playbackAllowed, scenePhase == .active,
+              (selectedReelId.isEmpty ? reels.first?.id : selectedReelId) == clipId,
+              let index = reels.firstIndex(where: { $0.id == clipId }) else { return }
+        guard reels.indices.contains(index + 1) else {
+            pendingAdvanceId = clipId
+            Task { await viewModel.loadMore() }
+            return
+        }
+        pendingAdvanceId = nil
         selectedReelId = reels[index + 1].id
+    }
+
+    private func shouldLoad(_ clipId: String) -> Bool {
+        let ids = viewModel.filteredItems.map(\.id)
+        let selected = ids.firstIndex(of: selectedReelId) ?? 0
+        guard let index = ids.firstIndex(of: clipId) else { return false }
+        return abs(index - selected) <= 1
     }
 
     // MARK: - Empty State
