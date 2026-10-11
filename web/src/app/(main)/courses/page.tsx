@@ -106,7 +106,7 @@ export default function CoursesPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabId>('saved');
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) setActiveTab('browse');
+    if (!authLoading) setActiveTab(isAuthenticated ? 'saved' : 'browse');
   }, [authLoading, isAuthenticated]);
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
