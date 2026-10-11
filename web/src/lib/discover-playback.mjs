@@ -12,7 +12,7 @@ export class DiscoverPlaybackController {
   update(intent) {
     this.intent = intent;
     const version = ++this.version;
-    const shouldPlay = intent.selected && intent.foreground && !intent.paused && !intent.scrubbing && !intent.failed;
+    const shouldPlay = this.canAdvance();
     if (this.disposed || !shouldPlay) {
       this.video.pause();
       return;
@@ -22,6 +22,11 @@ export class DiscoverPlaybackController {
       if (error?.name === 'NotAllowedError') this.onBlocked();
       else this.onError();
     });
+  }
+
+  canAdvance() {
+    const intent = this.intent;
+    return !this.disposed && intent.selected && intent.foreground && !intent.paused && !intent.scrubbing && !intent.failed && !intent.ended;
   }
 
   seek(seconds) {

@@ -75,6 +75,21 @@ test('seeking clamps to real duration and rejects non-finite metadata', () => {
   s.video.duration = NaN; s.controller.seek(8); assert.equal(s.video.currentTime, 0);
 });
 
+test('finished final reel stays paused through background recovery until explicit replay', () => {
+  const s = setup();
+  s.controller.update(active);
+  s.controller.update({ ...active, ended: true });
+  s.controller.update({ ...active, foreground: false, ended: true });
+  s.controller.update({ ...active, foreground: true, ended: true });
+  assert.equal(s.video.paused, true);
+  assert.equal(s.controller.canAdvance(), false);
+  s.controller.seek(0);
+  s.controller.update({ ...active, ended: false });
+  assert.equal(s.video.paused, false);
+  s.controller.update({ ...active, scrubbing: true });
+  assert.equal(s.controller.canAdvance(), false);
+});
+
 test('refresh discards stale pages without cancelling the new request', () => {
   const cursor = new DiscoverPageCursor();
   const old = cursor.begin();

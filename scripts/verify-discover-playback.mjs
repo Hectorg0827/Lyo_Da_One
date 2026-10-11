@@ -13,7 +13,7 @@ const android = read('android/app/src/main/java/com/lyo/app/ui/screens/clips/Cli
 const gradle = read('android/app/build.gradle.kts');
 
 for (const text of [
-  'if (isActive && foreground && !scrubbing) onEnded()',
+  'if (controllerRef.current?.canAdvance()) onEnded()',
   'onEnded={() => advanceFrom(i)}',
   'shouldLoad={Math.abs(i - activeIndex) <= 1}',
   'preload="auto"',

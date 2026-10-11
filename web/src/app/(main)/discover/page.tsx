@@ -272,6 +272,7 @@ function ReelSlide({
   foreground,
   muted,
   onMutedChange,
+  onInteraction,
   onEnded,
   onAsk,
   onCourse,
@@ -286,6 +287,7 @@ function ReelSlide({
   foreground: boolean;
   muted: boolean;
   onMutedChange: (muted: boolean) => void;
+  onInteraction: () => void;
   onEnded: () => void;
   onAsk: () => void;
   onCourse: () => void;
@@ -304,7 +306,7 @@ function ReelSlide({
   const [duration, setDuration] = useState(0);
   const [ended, setEnded] = useState(false);
   const controllerRef = useRef<DiscoverPlaybackController | null>(null);
-  const intent = { selected: isActive, foreground, paused, scrubbing, failed: loadFailed };
+  const intent = { selected: isActive, foreground, paused, scrubbing, failed: loadFailed, ended };
 
   // One owner per element; pause/dispose invalidates outstanding play promises.
   useEffect(() => {
@@ -319,8 +321,8 @@ function ReelSlide({
   }, [retryKey, shouldLoad, reel.videoUrl]);
 
   useEffect(() => {
-    controllerRef.current?.update({ selected: isActive, foreground, paused, scrubbing, failed: loadFailed });
-  }, [isActive, foreground, paused, scrubbing, loadFailed, retryKey, shouldLoad, reel.videoUrl, muted]);
+    controllerRef.current?.update({ selected: isActive, foreground, paused, scrubbing, failed: loadFailed, ended });
+  }, [isActive, foreground, paused, scrubbing, loadFailed, ended, retryKey, shouldLoad, reel.videoUrl, muted]);
 
   useEffect(() => {
     if (!isActive) {
@@ -340,21 +342,29 @@ function ReelSlide({
   }, [reel.videoUrl]);
 
   const retry = () => {
+    onInteraction();
     setLoadFailed(false);
     setPaused(false);
     setAutoplayBlocked(false);
+    setEnded(false);
     setRetryKey((key) => key + 1);
   };
 
   const togglePlayback = () => {
     if (!isActive || !foreground || loadFailed) return;
+    onInteraction();
     const nextPaused = !(paused || autoplayBlocked || ended);
     if (ended) controllerRef.current?.seek(0);
     setEnded(false);
     setPaused(nextPaused);
     setAutoplayBlocked(false);
     // Invoke play inside the gesture for browsers requiring user activation.
-    controllerRef.current?.update({ ...intent, paused: nextPaused });
+    controllerRef.current?.update({ ...intent, paused: nextPaused, ended: false });
+  };
+  const setSeeking = (value: boolean) => {
+    if (value) onInteraction();
+    setScrubbing(value);
+    controllerRef.current?.update({ ...intent, scrubbing: value });
   };
   const timeLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 
@@ -380,7 +390,7 @@ function ReelSlide({
           onDurationChange={(event) => { const value = event.currentTarget.duration; setDuration(Number.isFinite(value) ? value : 0); }}
           onTimeUpdate={(event) => { if (!scrubbing) setPosition(event.currentTarget.currentTime); }}
           onPlaying={() => { setAutoplayBlocked(false); setEnded(false); }}
-          onEnded={() => { setEnded(true); if (isActive && foreground && !scrubbing) onEnded(); }}
+          onEnded={() => { if (controllerRef.current?.canAdvance()) onEnded(); setEnded(true); }}
           className="absolute inset-0 w-full h-full object-cover"
         />
       ) : reel.posterUrl ? (
@@ -455,7 +465,8 @@ function ReelSlide({
             {paused || autoplayBlocked || ended ? <Play size={20} /> : <Pause size={20} />}
           </button>
           <input type="range" aria-label="Seek video" className="min-w-0 flex-1 accent-white touch-none" min={0} max={duration || 1} step={0.1} value={Math.min(position, duration || 0)} disabled={duration <= 0}
-            onPointerDown={() => setScrubbing(true)} onPointerUp={() => setScrubbing(false)} onPointerCancel={() => setScrubbing(false)} onBlur={() => setScrubbing(false)}
+            onPointerDown={() => setSeeking(true)} onPointerUp={() => setSeeking(false)} onPointerCancel={() => setSeeking(false)} onBlur={() => setSeeking(false)}
+            onKeyDown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) setSeeking(true); }} onKeyUp={() => setSeeking(false)}
             onChange={(event) => { const value = Number(event.target.value); setPosition(value); controllerRef.current?.seek(value); }} />
           <span className="text-xs tabular-nums">{timeLabel(position)} / {timeLabel(duration)}</span>
           <button aria-label={muted ? 'Unmute video' : 'Mute video'} className="p-2" onClick={() => {
@@ -756,6 +767,7 @@ function DiscoverContent() {
               foreground={foreground && !composing && !commentsFor}
               muted={muted}
               onMutedChange={setMuted}
+              onInteraction={() => setPendingAdvanceId(null)}
               onEnded={() => advanceFrom(i)}
               onAsk={() => handleAsk(reel)}
               onCourse={() => handleCourse(reel)}

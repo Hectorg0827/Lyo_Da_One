@@ -201,6 +201,7 @@ struct DiscoverView: View {
                         shouldLoad: shouldLoad(item.id),
                         playbackAllowed: playbackAllowed,
                         onFinished: { advanceAfter(item.id) },
+                        onPlaybackInteraction: { pendingAdvanceId = nil },
                         onLike: { 
                             viewModel.toggleLike(for: item)
                         },

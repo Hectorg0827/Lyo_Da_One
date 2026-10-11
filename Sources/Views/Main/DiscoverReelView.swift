@@ -9,6 +9,7 @@ struct DiscoverReelView: View {
     var playbackAllowed: Bool = true
     @Environment(\.scenePhase) private var scenePhase
     var onFinished: () -> Void = {}
+    var onPlaybackInteraction: () -> Void = {}
     let onLike: () -> Void
     let onComment: () -> Void
     let onShare: () -> Void
@@ -74,6 +75,7 @@ struct DiscoverReelView: View {
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundStyle(.white)
                                 Button("Retry") {
+                                    onPlaybackInteraction()
                                     playback.retry(url: videoURL)
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -102,7 +104,7 @@ struct DiscoverReelView: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { playback.togglePause() }
+            .onTapGesture { onPlaybackInteraction(); playback.togglePause() }
             .ignoresSafeArea()
             
             // Gradient Overlay
@@ -184,13 +186,13 @@ struct DiscoverReelView: View {
     private var playbackControls: some View {
         VStack(spacing: 4) {
             Slider(value: $playback.position, in: 0...max(playback.duration, 1), onEditingChanged: { editing in
-                if editing { playback.beginScrubbing() } else { playback.endScrubbing() }
+                if editing { onPlaybackInteraction(); playback.beginScrubbing() } else { playback.endScrubbing() }
             })
             .disabled(playback.duration <= 0)
             .tint(.white)
             .accessibilityLabel("Seek video")
             HStack {
-                Button { playback.togglePause() } label: {
+                Button { onPlaybackInteraction(); playback.togglePause() } label: {
                     Image(systemName: playback.state.userPaused || playback.ended ? "play.fill" : "pause.fill")
                         .frame(width: 40, height: 32)
                 }

@@ -411,7 +411,7 @@ fun ClipsScreen(nav: NavHostController) {
                         muted = muted,
                         onToggleMute = { muted = !muted },
                         onScrubbingChange = { scrubbing ->
-                            if (scrubbing) scrubbingClipId = id
+                            if (scrubbing) { pendingAdvanceId = null; scrubbingClipId = id }
                             else if (scrubbingClipId == id) scrubbingClipId = null
                         },
                         onSeek = { position ->
@@ -419,6 +419,7 @@ fun ClipsScreen(nav: NavHostController) {
                         },
                         onRetry = {
                             if (pagerState.currentPage == page && playbackAllowed) {
+                                pendingAdvanceId = null
                                 pausedClipId = null
                                 players[id]?.prepare()
                                 players[id]?.playWhenReady = scrubbingClipId != id
@@ -426,8 +427,8 @@ fun ClipsScreen(nav: NavHostController) {
                         },
                         onExternalPause = { if (pagerState.currentPage == page) pausedClipId = id },
                         onTogglePlayback = {
+                            pendingAdvanceId = null
                             if (players[id]?.playbackState == Player.STATE_ENDED) {
-                                pendingAdvanceId = null
                                 players[id]?.seekTo(0)
                                 pausedClipId = null
                             } else pausedClipId = if (pausedClipId == id) null else id

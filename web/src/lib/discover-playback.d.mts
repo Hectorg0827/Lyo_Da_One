@@ -1,7 +1,8 @@
-export interface PlaybackIntent { selected: boolean; foreground: boolean; paused: boolean; scrubbing: boolean; failed: boolean; }
+export interface PlaybackIntent { selected: boolean; foreground: boolean; paused: boolean; scrubbing: boolean; failed: boolean; ended?: boolean; }
 export class DiscoverPlaybackController {
   constructor(video: HTMLVideoElement, callbacks?: { onBlocked?: () => void; onError?: () => void });
   update(intent: PlaybackIntent): void;
+  canAdvance(): boolean;
   seek(seconds: number): void;
   dispose(): void;
 }
