@@ -111,11 +111,10 @@ enum ClassroomSessionContract {
 
     /// The session id this entry should connect with.
     ///
-    /// The first class on a topic still sends exactly the id every client sent
-    /// before this contract existed, so nothing changes for a learner meeting
-    /// a topic for the first time. Opening the same topic again starts a new
-    /// session beside it, and resuming is something the learner asks for
-    /// rather than the only thing on offer.
+    /// Every new class receives a fresh server session ID. A newly installed
+    /// client has no local history, but the backend may still hold an older
+    /// failed session under the plain topic name. Resume is explicit; course
+    /// progress remains keyed by the separate course identity.
     static func sessionStart(
         courseKey rawKey: String,
         saved: ClassroomSavedSession?,
@@ -131,12 +130,10 @@ enum ClassroomSessionContract {
                 resumed: true
             )
         }
-        guard let saved, !saved.id.isEmpty else {
-            return ClassroomSessionStart(sessionId: key, generation: 1, resumed: false)
-        }
-        let generation = max(1, saved.generation) + 1
+        let generation = saved.map { max(1, $0.generation) + 1 } ?? 1
+        let uniqueId = "\(key)~\(generation)-\(Int64(now.timeIntervalSince1970 * 1000))"
         return ClassroomSessionStart(
-            sessionId: "\(key)~\(generation)",
+            sessionId: uniqueId,
             generation: generation,
             resumed: false
         )
