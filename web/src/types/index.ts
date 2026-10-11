@@ -170,6 +170,8 @@ export interface RungRecord {
 /** Everything this learner has shown about one concept. */
 export interface ConceptRecord {
   concept_id: string;
+  /** Canonical human skill name from the backend; the ID is not a label. */
+  display_name?: string | null;
   state:
     | 'NOT_SEEN' | 'EXPOSED' | 'RECOGNIZED' | 'EXPLAINED'
     | 'APPLIED' | 'TRANSFERRED' | 'RETAINED' | 'MASTERED';
