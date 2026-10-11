@@ -11,7 +11,10 @@
  * import it directly, matching classroom-contract.mjs.
  */
 
-import { normalizeClassroomMode } from './classroom-contract.mjs';
+import {
+  defaultClassroomObjective,
+  normalizeClassroomMode,
+} from './classroom-contract.mjs';
 
 /**
  * The opening turn behind Home's "I have a test".
@@ -24,9 +27,15 @@ import { normalizeClassroomMode } from './classroom-contract.mjs';
 export const TEST_PREP_OPENING_TURN =
   'I have a test coming up and I want to get ready for it.';
 
-/** A default objective, so the Director always receives an intent. */
+/**
+ * A default objective, so the Director always receives an intent.
+ *
+ * Re-exported from the wire contract rather than written twice: the opening
+ * card names the objective the Classroom was opened with, and two copies of
+ * this sentence is how the card and the lesson come to disagree.
+ */
 export function defaultObjective(topic) {
-  return `Understand and apply ${topic}`;
+  return defaultClassroomObjective(topic);
 }
 
 /**
@@ -121,6 +130,7 @@ export function normalizeSessionMinutes(minutes) {
  */
 export function classroomEntryHref({
   topic, mode, objective, courseId, lessonId, reviewConceptId, level, minutes, language, recordScope,
+  resume,
 } = {}) {
   const cleanTopic = (topic ?? '').trim();
   if (!cleanTopic) return null;
@@ -137,6 +147,10 @@ export function classroomEntryHref({
   if (lessonId) params.set('lessonId', lessonId);
   if (reviewConceptId) params.set('reviewConceptId', reviewConceptId);
   if (recordScope === 'unit') params.set('recordScope', 'unit');
+  // Opening a topic is starting a class. Returning to the one left half-
+  // finished is a different request, and has to say so: see
+  // classroomSessionStart in the wire contract.
+  if (resume === true) params.set('resume', '1');
 
   const cleanLevel = normalizeLevel(level);
   if (cleanLevel) params.set('difficulty', cleanLevel);

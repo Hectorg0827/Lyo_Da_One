@@ -24,6 +24,7 @@ data class ClassroomSceneMetadata(
     val target_evidence_type: String? = null,
     val teaching_policy_version: String? = null,
     val target_concepts: List<String>? = null,
+    val course_complete: Boolean = false,
 )
 
 /** One selectable answer inside a `QuizCard` component's `options`. */

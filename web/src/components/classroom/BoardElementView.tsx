@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import {
-  BookOpenCheck, CheckCircle2, FileText, HelpCircle, ImageIcon, Mic, Send, XCircle,
+  BookOpenCheck, CheckCircle2, FileText, GraduationCap, HelpCircle, ImageIcon, Mic, Send, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -14,6 +14,7 @@ import {
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
 import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
+import type { ClassroomOpening } from '@/lib/classroom-contract.mjs';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 import { TeachingVisualView } from './TeachingVisualView';
@@ -610,6 +611,52 @@ function TransferView({
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
+/**
+ * The first thing on the board: what this class is, before any of it is
+ * taught.
+ *
+ * A lesson used to open on whatever the engine generated first, which left a
+ * learner no way to tell the start of a class from the middle of one — worst
+ * of all on a resumed session, where the teacher really did carry on from a
+ * place the learner had been given no reminder of. This says the subject,
+ * what the session is for, how long it runs, and that they are allowed to
+ * interrupt. It teaches nothing, and claims nothing the class was not asked
+ * for.
+ */
+function OpeningView({ opening }: { opening: ClassroomOpening }) {
+  return (
+    <section
+      aria-label="What this class is"
+      className="rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/10 to-[#8B5CF6]/10 px-4 py-4"
+    >
+      <div className="flex items-center gap-2">
+        <GraduationCap className="h-5 w-5 shrink-0 text-teal-300" aria-hidden="true" />
+        <h2 className="font-rounded text-base font-bold text-white">{opening.title}</h2>
+      </div>
+      {opening.resumed && (
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
+          Picking up where you left off
+        </p>
+      )}
+      <p className="mt-2 text-sm leading-relaxed text-white/85">
+        <span className="font-semibold text-white">By the end: </span>
+        {opening.objective}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {opening.facts.map((fact) => (
+          <span
+            key={fact}
+            className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/70"
+          >
+            {fact}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-white/60">{opening.note}</p>
+    </section>
+  );
+}
+
 export function BoardElementView({
   el, onQuizAnswer, onTransferSubmit, onLearnerInputStart,
   onSkipQuestion, onUnskipQuestion, onAskHelp, awaitingFeedback = false, reducedMotion = false,
@@ -632,6 +679,8 @@ export function BoardElementView({
       className="board-element"
       data-board-element-id={el.id}
     >
+      {el.kind === 'opening' && <OpeningView opening={el.opening} />}
+
       {el.kind === 'teaching_visual' && <TeachingVisualView key={el.id} id={el.id} visual={el.visual} />}
       {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
 

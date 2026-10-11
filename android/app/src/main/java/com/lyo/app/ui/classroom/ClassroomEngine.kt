@@ -12,8 +12,13 @@ import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiSurfaceState
 import com.lyo.app.data.a2ui.resolvePointer
 import com.lyo.app.data.classroom.ClassroomComponent
+import com.lyo.app.data.classroom.ClassroomOpening
+import com.lyo.app.data.classroom.ClassroomSavedSession
 import com.lyo.app.data.classroom.ClassroomServerEvent
+import com.lyo.app.data.classroom.ClassroomSessionContract
+import com.lyo.app.data.classroom.ClassroomSessionStore
 import com.lyo.app.data.classroom.ClassroomSocketClient
+import com.lyo.app.data.classroom.ClassroomStallPhase
 import com.lyo.app.data.classroom.DirectorTurn
 import com.lyo.app.ui.classroom.a2ui.BasicCatalog
 import com.lyo.app.ui.classroom.a2ui.A2uiCatalog
@@ -66,8 +71,63 @@ class ClassroomEngine(
     private val courseBacked: Boolean = true,
     private val reviewConceptId: String? = null,
     private val voicePlayer: ClassroomVoicePlayer? = null,
+    private val resume: Boolean = false,
+    /**
+     * Which seat to resume, when it is not simply the last one stored.
+     * Starting a class overwrites that stored record, so by the time the
+     * learner reads "pick up where you left off" the storage no longer holds
+     * the session the offer is about — it has to be carried.
+     */
+    private val resumeSession: ClassroomSavedSession? = null,
 ) {
-    val sessionId: String = sessionIdParam?.takeIf { it.isNotBlank() } ?: topic
+    /**
+     * The course this class belongs to, which is what Stacks progress is
+     * filed under. Kept apart from the session id so starting a lesson over
+     * does not start the learner's progress over with it.
+     */
+    val courseId: String = sessionIdParam?.takeIf { it.isNotBlank() } ?: topic
+
+    private val courseKey: String =
+        ClassroomSessionContract.courseKey(courseId, topic)
+
+    /**
+     * Which session this is. The course's history decides whether this is a
+     * new class or the old one carried on — opening a topic a second time
+     * used to hand back the session the learner left, mid-unit, with no
+     * opening and no way to ask for a clean start.
+     */
+    private val sessionStart = ClassroomSessionContract.sessionStart(
+        courseKey = courseKey,
+        saved = resumeSession ?: ClassroomSessionStore.saved(courseKey),
+        resume = resume,
+    )
+
+    /** The id the live teaching session is keyed by server-side. */
+    val sessionId: String = sessionStart.sessionId
+
+    /** True when this class picked up a session the learner had started. */
+    val resumedSession: Boolean = sessionStart.resumed
+
+    /** A session the learner could still return to, if they want it. */
+    var resumableSession: ClassroomSavedSession? by mutableStateOf(
+        ClassroomSessionStore.saved(courseKey)
+            ?.takeIf { !sessionStart.resumed && ClassroomSessionContract.canResume(it) }
+    )
+        private set
+
+    /**
+     * The cover page: what this class is, before any of it is taught. Built
+     * from the request this screen just made, so it is on screen in the time
+     * it takes to open a socket rather than after a generation.
+     */
+    val opening: ClassroomOpening = ClassroomSessionContract.opening(
+        topic = topic,
+        objective = objective,
+        durationMinutes = durationMinutes,
+        difficulty = difficulty,
+        mode = mode,
+        resumed = sessionStart.resumed,
+    )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var collectorJob: Job? = null
@@ -86,6 +146,28 @@ class ClassroomEngine(
 
     var status by mutableStateOf("connecting"); private set
     var errorMessage by mutableStateOf<String?>(null); private set
+
+    /**
+     * How far past "the next step is coming" the current wait has gone.
+     *
+     * Waiting is the one classroom state with no natural end: every other one
+     * is left by something the learner or the teacher does, so when a
+     * generation fails the class does not break, it simply stops, with a
+     * board that never changes again.
+     */
+    var stallPhase by mutableStateOf(ClassroomStallPhase.NONE); private set
+
+    /**
+     * Something the classroom reported and is carrying on from. Distinct from
+     * [errorMessage], which means the class itself is over.
+     */
+    var notice by mutableStateOf<String?>(null); private set
+
+    /** True while the class is waiting on a step from the teaching engine. */
+    private var awaitingStep = true
+    private var waitingSince: Long? = null
+    private var stallNudged = false
+    private var stallJob: Job? = null
     var isPaused by mutableStateOf(false); private set
     var isVoiceEnabled by mutableStateOf(true); private set
     private var voiceLanguage: String = "auto"
@@ -108,6 +190,22 @@ class ClassroomEngine(
 
     /** The notebook drawer's content — see TranscriptLine's doc comment. */
     val transcript = mutableStateListOf<TranscriptLine>()
+
+    /**
+     * True once the teacher has put anything on the board, and true from then
+     * on.
+     *
+     * The cover page and the resume offer used to key off `transcript`, which
+     * only grows when something is *said*. A scene whose first component is a
+     * QuizCard, InputField or LessonBlock renders straight to the board
+     * without a transcript line, so the cover page stayed drawn on top of a
+     * live board and could cover the learner's first checkpoint.
+     *
+     * A latch rather than a live reading of the board: `clearBoard()` empties
+     * it between scenes, and a cover page that reappeared mid-lesson every
+     * time the teacher wiped the board would be worse than the bug it fixes.
+     */
+    var hasBoardContent by mutableStateOf(false); private set
 
     /** Server-owned evidence only. Never derived from transcript or local UI state. */
     var learnerRecord by mutableStateOf<LearnerEvidenceRecordDto?>(null); private set
@@ -134,6 +232,12 @@ class ClassroomEngine(
 
     fun start() {
         surface.applyCreateSurface(ClassroomBridge.createInitialSurface())
+        // Recorded after resumableSession read the previous entry, so the
+        // seat being offered back is the old one and not this class.
+        ClassroomSessionStore.save(
+            ClassroomSavedSession(sessionId, System.currentTimeMillis(), sessionStart.generation),
+            courseKey,
+        )
         collectorJob = scope.launch {
             ClassroomSocketClient.events.collect { event -> handleServerEvent(event) }
         }
@@ -145,13 +249,16 @@ class ClassroomEngine(
             reducedMotion = ClassroomPreferences.reducedMotion,
             objective = objective,
             difficulty = difficulty,
-            courseId = sessionId.takeIf { courseBacked },
+            courseId = courseId.takeIf { courseBacked },
             reviewConceptId = reviewConceptId,
         )
+        startStallWatch()
     }
 
     fun dispose() {
         flushActivities()
+        stallJob?.cancel()
+        stallJob = null
         voicePlayer?.close()
         ClassroomSocketClient.disconnect()
         scope.cancel()
@@ -189,6 +296,7 @@ class ClassroomEngine(
         when (event) {
             is ClassroomServerEvent.ComponentRenderEvent -> {
                 status = "live"
+                clearWait()
                 processComponent(event.component)
             }
 
@@ -198,6 +306,10 @@ class ClassroomEngine(
                 hasActiveCheckpoint = false
                 status = "live"
                 recordConcepts = event.metadata?.target_concepts.orEmpty()
+                if (event.metadata?.course_complete == true) {
+                    ClassroomSessionStore.markFinished(sessionId, courseKey)
+                    resumableSession = null
+                }
                 // Lazy erase: don't clear the board the instant scene_start
                 // arrives on its own — wait until real content actually
                 // lands, so the board never flashes empty during ordinary
@@ -207,6 +319,7 @@ class ClassroomEngine(
                 // content IS the next thing landing, so erase happens
                 // immediately before rendering it, not deferred further.
                 pendingErase = true
+                clearWait()
                 event.components.forEach { processComponent(it) }
             }
 
@@ -214,10 +327,134 @@ class ClassroomEngine(
             ClassroomServerEvent.IgnoredEvent -> Unit // system_state / scene_update — acknowledged, nothing to act on yet
 
             is ClassroomServerEvent.ErrorEvent -> {
-                status = "error"
-                errorMessage = event.message ?: "The classroom hit a snag."
+                // The classroom saying something went wrong is not the same
+                // as the class being over. Only a failure that stops the
+                // class running ends it; everything else is a notice beside
+                // a lesson the learner can still finish.
+                if (event.fatal) {
+                    status = "error"
+                    errorMessage = event.message ?: "The classroom hit a snag."
+                } else {
+                    notice = event.message ?: "The classroom hit a snag."
+                }
             }
         }
+    }
+
+    // ── The watchdog ──────────────────────────────────────────────────────
+
+    /**
+     * One tick of the wait watchdog.
+     *
+     * A wait that is merely slow is said out loud and left alone. A wait that
+     * passes the recovery threshold is asked after once, with `continue` —
+     * the one intent that cannot be mistaken for a second answer — and only
+     * if that second wait also runs out does the class admit the step is not
+     * coming and put recovery controls in front of the learner.
+     *
+     * It ticks rather than arming a timer at each of the places a wait
+     * begins: a wait that started without arming its own timer is exactly the
+     * wait nobody would notice was never ending.
+     */
+    private fun startStallWatch() {
+        stallJob?.cancel()
+        stallJob = scope.launch {
+            while (true) {
+                delay(STALL_TICK_MS)
+                stallTick(System.currentTimeMillis())
+            }
+        }
+    }
+
+    internal fun stallTick(now: Long) {
+        // Not `status == "live"`. Android only reaches "live" when the first
+        // server event arrives, so requiring it made the watchdog blind to
+        // exactly the wait it matters most for: a socket that opens and then
+        // never produces an opening scene. The learner sat on "Preparing your
+        // classroom…" with no recovery controls, for ever. An errored session
+        // has its own banner and is the only state with nothing to wait for.
+        if (!awaitingStep || status == "error" || isPaused || hasActiveCheckpoint) {
+            waitingSince = null
+            stallNudged = false
+            if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
+            return
+        }
+        val since = waitingSince
+        if (since == null) {
+            waitingSince = now
+            return
+        }
+        val waited = now - since
+        if (waited >= ClassroomSessionContract.STALL_RECOVERY_MS) {
+            if (!stallNudged) {
+                // One unprompted ask, then the learner decides. Resending the
+                // learner's own answer here would risk grading it twice, so
+                // the nudge is always `continue`.
+                stallNudged = true
+                waitingSince = now
+                val sent = ClassroomSocketClient.send(
+                    ClassroomBridge.continueLessonAction(sessionId, "continue", "android_continue"),
+                )
+                stallPhase =
+                    if (sent) ClassroomStallPhase.SLOW else ClassroomStallPhase.STALLED
+                return
+            }
+            if (stallPhase != ClassroomStallPhase.STALLED) {
+                stallPhase = ClassroomStallPhase.STALLED
+            }
+            return
+        }
+        if (waited >= ClassroomSessionContract.STALL_NOTICE_MS &&
+            stallPhase == ClassroomStallPhase.NONE
+        ) {
+            stallPhase = ClassroomStallPhase.SLOW
+        }
+    }
+
+    /** The class is waiting on the engine again. */
+    private fun beginWait() {
+        awaitingStep = true
+        waitingSince = System.currentTimeMillis()
+        stallNudged = false
+        if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
+    }
+
+    /** Content arrived: the wait is over now, not on the next tick. */
+    private fun clearWait() {
+        awaitingStep = false
+        waitingSince = null
+        stallNudged = false
+        if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
+    }
+
+    // ── Recovery ──────────────────────────────────────────────────────────
+
+    /**
+     * The step did not come; ask for it again.
+     *
+     * Always `continue`, never the learner's own submission replayed. A
+     * resent answer is a second answer as far as the grader is concerned, and
+     * a learner who waited out a slow network must not pay for it with a
+     * duplicate attempt on their record.
+     */
+    fun nudgeTeacher() {
+        notice = null
+        val sent = ClassroomSocketClient.send(
+            ClassroomBridge.continueLessonAction(sessionId, "continue", "android_continue"),
+        )
+        if (!sent) return
+        awaitingStep = true
+        waitingSince = System.currentTimeMillis()
+        stallNudged = true
+        stallPhase = ClassroomStallPhase.SLOW
+    }
+
+    fun dismissNotice() {
+        notice = null
+    }
+
+    private companion object {
+        const val STALL_TICK_MS = 1000L
     }
 
     private fun processComponent(component: ClassroomComponent) {
@@ -255,7 +492,7 @@ class ClassroomEngine(
         val total = (component.total ?: 1).coerceAtLeast(1)
         val current = (component.current ?: 0).coerceIn(0, total)
         scope.launch {
-            StackRepository.updateCourseProgress(sessionId, current.toFloat() / total.toFloat())
+            StackRepository.updateCourseProgress(courseId, current.toFloat() / total.toFloat())
         }
     }
 
@@ -267,6 +504,7 @@ class ClassroomEngine(
 
     private fun applyMutation(mutation: ClassroomBridge.BoardMutation) {
         boardChildren = mutation.boardChildren
+        if (boardChildren.isNotEmpty()) hasBoardContent = true
         mutation.messages.forEach { applyMessage(it) }
     }
 
@@ -330,10 +568,15 @@ class ClassroomEngine(
                     }
                 }
             }
-            "session_end" -> pushTranscript(
-                "Teacher",
-                "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
-            )
+            "session_end" -> {
+                // The class reached its end, so its seat stops being an
+                // unfinished one however recently it was started.
+                ClassroomSessionStore.markFinished(sessionId, courseKey)
+                pushTranscript(
+                    "Teacher",
+                    "🔔 Class dismissed." + (turn.homework?.let { " Homework: $it" } ?: ""),
+                )
+            }
         }
 
         if (turn.type == "user_prompt") {
@@ -412,6 +655,7 @@ class ClassroomEngine(
                 applyMessage(ClassroomBridge.closePromptPanel(promptId))
             }
             // Wait for the server response; old queued teaching is obsolete.
+            beginWait()
         }
     }
 
@@ -452,9 +696,12 @@ class ClassroomEngine(
         stopNarration()
         flushActivities()
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
-        ClassroomSocketClient.send(
-            ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
-        )
+        if (ClassroomSocketClient.send(
+                ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
+            )
+        ) {
+            beginWait()
+        }
     }
 
     private fun flushActivities() {
@@ -472,6 +719,7 @@ class ClassroomEngine(
         if (trimmed.isEmpty()) return
         if (ClassroomSocketClient.send(ClassroomBridge.askQuestionAction(sessionId, trimmed))) {
             pushTranscript("You", "✋ $trimmed")
+            beginWait()
         }
     }
 
@@ -480,6 +728,7 @@ class ClassroomEngine(
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))) {
             pushTranscript("You", "Requested a hint")
+            beginWait()
         }
     }
 
@@ -488,6 +737,7 @@ class ClassroomEngine(
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))) {
             pushTranscript("You", "Requested a small nudge")
+            beginWait()
         }
     }
 
@@ -496,6 +746,7 @@ class ClassroomEngine(
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.signalTooEasyAction(sessionId))) {
             pushTranscript("You", "Requested a harder case")
+            beginWait()
         }
     }
 }
