@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.google.gson.JsonPrimitive
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.LearnerEvidenceRecordDto
@@ -124,6 +125,10 @@ class ClassroomEngine(
         get() = surface.dataModel.resolvePointer("/canContinue")
             ?.takeIf { it.isJsonPrimitive }?.asBoolean == true
 
+    val lessonRecovery: Boolean
+        get() = surface.dataModel.resolvePointer("/lessonRecovery")
+            ?.takeIf { it.isJsonPrimitive }?.asBoolean == true
+
     val continueLabel: String
         get() = surface.dataModel.resolvePointer("/continueLabel")
             ?.takeIf { it.isJsonPrimitive }?.asString ?: "Continue"
@@ -198,6 +203,7 @@ class ClassroomEngine(
                 hasActiveCheckpoint = false
                 status = "live"
                 recordConcepts = event.metadata?.target_concepts.orEmpty()
+                surface.applyUpdateDataModel(A2uiMessage.UpdateDataModel(ClassroomBridge.SURFACE_ID, "/lessonRecovery", JsonPrimitive(event.metadata?.presentation_focus == "recovery")))
                 // Lazy erase: don't clear the board the instant scene_start
                 // arrives on its own — wait until real content actually
                 // lands, so the board never flashes empty during ordinary

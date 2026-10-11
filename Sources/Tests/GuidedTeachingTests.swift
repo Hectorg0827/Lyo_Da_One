@@ -15,6 +15,23 @@ final class GuidedTeachingTests: XCTestCase {
         return try JSONDecoder().decode(Fixtures.self, from: Data(contentsOf: url))
     }
 
+    private func assertExamplesPreserved(
+        _ step: ActiveLessonView.LessonStep,
+        from components: [SDUIComponent],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let expected = components.filter { $0.type == .exampleBlock }
+        XCTAssertFalse(expected.isEmpty, "The fixture must include a worked example", file: file, line: line)
+        XCTAssertEqual(
+            step.workspaceComponents.filter { $0.type == .exampleBlock },
+            expected,
+            "Every original example must survive in the teaching workspace",
+            file: file,
+            line: line
+        )
+    }
+
     func testOrientationAndModelsKeepWorkedExamplesVisualsAndCanonicalContinue() throws {
         let fixture = try fixtures()
         for name in ["orientation", "model_1", "model_2"] {
@@ -22,7 +39,7 @@ final class GuidedTeachingTests: XCTestCase {
             let steps = ActiveLessonAdapter.steps(from: components)
             XCTAssertEqual(steps.count, 1)
             let step = try XCTUnwrap(steps.first)
-            XCTAssertFalse(step.teachingExamples.isEmpty, "Adding the CTA must preserve the example")
+            assertExamplesPreserved(step, from: components)
             XCTAssertNotNil(step.teachingVisual)
             XCTAssertEqual(step.activityId, components.first { $0.teachingVisual != nil }?.id)
             XCTAssertEqual(step.primaryActionComponentId, components.first { $0.type == .ctaButton }?.id)
@@ -79,7 +96,7 @@ final class GuidedTeachingTests: XCTestCase {
         let components = try XCTUnwrap(fixture.scenes["focused_example"]?.components)
         let step = try XCTUnwrap(ActiveLessonAdapter.steps(from: components).first)
 
-        XCTAssertFalse(step.teachingExamples.isEmpty)
+        assertExamplesPreserved(step, from: components)
         XCTAssertNotNil(step.teachingVisual)
         XCTAssertEqual(step.primaryActionIntent, "continue")
         // Teaching, not a question: the checkpoint comes after the step.
@@ -93,13 +110,13 @@ final class GuidedTeachingTests: XCTestCase {
         let guided = try XCTUnwrap(ActiveLessonAdapter.steps(from: fixture.scenes["guided"]!.components).first)
         guard case .classroomQuiz(let question)? = guided.supporting else { return XCTFail("Guided practice must be a choice") }
         XCTAssertEqual(question.options?.count, 2)
-        XCTAssertFalse(guided.teachingExamples.isEmpty)
+        assertExamplesPreserved(guided, from: fixture.scenes["guided"]!.components)
         XCTAssertEqual(guided.teachingVisual?.kind, "comparison")
         let faded = try XCTUnwrap(ActiveLessonAdapter.steps(from: fixture.scenes["faded"]!.components).first)
         guard case .classroomInput(let input)? = faded.supporting else { return XCTFail("Faded practice must retain the short answer input") }
         XCTAssertTrue(input.question?.contains("1/__") == true)
         XCTAssertEqual(input.minWords, 1)
-        XCTAssertFalse(faded.teachingExamples.isEmpty)
+        assertExamplesPreserved(faded, from: fixture.scenes["faded"]!.components)
     }
 
     func testEveryTeachingToolDecodesAndRoundTripsItsSavedValues() throws {

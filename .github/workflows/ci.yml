@@ -126,6 +126,8 @@ jobs:
             -scheme Lyo
 
       - name: Build & test
+        id: ios-build
+        continue-on-error: true
         run: |
           set -o pipefail
           DEST=$(xcrun simctl list devices available --json | python3 -c "
@@ -144,12 +146,25 @@ jobs:
             exit 1
           fi
           echo "Simulator: $DEST"
-          xcodebuild test \
+          xcodebuild test -quiet \
             -project Lyo.xcodeproj \
             -scheme Lyo \
             -destination "platform=iOS Simulator,name=$DEST" \
             -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee ios-build.log
+
+      - name: Upload iOS build and test diagnostics
+        if: steps.ios-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-diagnostics
+          path: ios-build.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce iOS build result
+        if: steps.ios-build.outcome == 'failure'
+        run: exit 1
 
   android:
     name: Build (Android)

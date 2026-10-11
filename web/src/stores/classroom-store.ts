@@ -7,6 +7,7 @@ import { buildClassroomWsUrl, classroomSceneStart } from '@/lib/classroom-contra
 import { updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
+import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -98,9 +99,9 @@ export interface DirectorTurn {
   prompt?: string;
 }
 
-// ─── Board model — the main attraction ───────────────────────────────────────
+// ─── Supporting teaching workspace ───────────────────────────────────────
 
-export type BoardElement =
+export type BoardElement = (
   | { id: string; kind: 'teaching_visual'; visual: TeachingVisual }
   | { id: string; kind: 'chalk'; text: string; highlightedTerm?: string }
   | { id: string; kind: 'highlight'; term: string }
@@ -115,7 +116,8 @@ export type BoardElement =
   | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
-  | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string };
+  | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string }
+) & { presentationRole?: PresentationRole; boardDocument?: BoardDocument | null };
 
 export interface TranscriptItem {
   id: string;
@@ -809,19 +811,21 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         enqueueTurns([{ type: 'speech', speaker: comp.student_name || 'Maya', text: comp.text ?? '' }]);
         break;
       case 'QuizCard':
-        addBoardElement({ id: nextId(), kind: 'quiz', quiz: comp });
+        addBoardElement({ id: comp.component_id || nextId(), kind: 'quiz', quiz: comp, presentationRole: 'practice' });
         pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
         set({ canContinue: false });
         break;
       case 'InputField':
-        addBoardElement({ id: nextId(), kind: 'transfer', input: comp });
+        addBoardElement({ id: comp.component_id || nextId(), kind: 'transfer', input: comp, presentationRole: 'practice' });
         pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
         addSources(comp.source_attributions);
         set({ canContinue: false, waitingForScene: false });
         break;
       case 'ExampleBlock':
         addBoardElement({
-          id: nextId(),
+          id: comp.component_id || nextId(),
+          presentationRole: presentationRoleFor(comp),
+          boardDocument: parseBoardDocument(comp.board_document),
           kind: 'summary',
           title: comp.title || 'Worked example',
           content: comp.content,
@@ -831,10 +835,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'LessonBlock':
         if (comp.block_type === 'teaching_visual') {
           const visual = parseTeachingVisual(comp.block);
-          if (visual) addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual });
+          if (visual) addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual, presentationRole: presentationRoleFor(comp) });
         } else if (comp.block_type === 'summary' && comp.block) {
           addBoardElement({
-            id: nextId(),
+            id: comp.component_id || nextId(),
+            presentationRole: presentationRoleFor(comp),
             kind: 'summary',
             title: comp.block.title || 'Lesson summary',
             content: comp.block.content,

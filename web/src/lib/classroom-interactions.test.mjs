@@ -7,6 +7,7 @@ import * as audio from './classroom-audio.mjs';
 import * as contract from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
+import * as boardPresentation from './board-presentation.mjs';
 
 function classroom() {
   const sockets = [], timers = [], canceled = [];
@@ -28,7 +29,7 @@ function classroom() {
   const deps = {
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
-    '@/lib/teaching-activity.mjs': visuals, '@/lib/classroom-sounds': { playSound() {} },
+    '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
     '@/lib/stack': { updateCourseProgress: async () => {} },
   };
   const context = {

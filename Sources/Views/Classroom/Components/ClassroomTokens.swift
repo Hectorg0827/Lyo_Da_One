@@ -3,7 +3,7 @@ import SwiftUI
 /// Design tokens for the Active Lesson screen.
 ///
 /// Composes with the global `DesignTokens` (typography, spacing, radius)
-/// and adds the cinematic classroom-specific palette: deep navy gradient,
+/// and uses the shared brand palette for the teaching workspace:
 /// frosted glass surfaces, lavender accents, calm restraint.
 enum ClassroomTokens {
 
@@ -14,9 +14,9 @@ enum ClassroomTokens {
     /// the page has a sense of depth without being busy.
     static let backgroundGradient = LinearGradient(
         colors: [
-            Color(hex: "1A1B3D"),  // top — soft indigo
-            Color(hex: "0F1028"),  // mid — deep navy
-            Color(hex: "0A0B1F"),  // bottom — almost black
+            DesignTokens.Colors.surface,  // top — soft indigo
+            DesignTokens.Colors.background,  // mid — deep navy
+            DesignTokens.Colors.background,  // bottom — almost black
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -25,8 +25,8 @@ enum ClassroomTokens {
     /// Subtle radial glow centered behind the teaching card to draw the eye.
     static let ambientGlow = RadialGradient(
         colors: [
-            Color(hex: "6D5BF5").opacity(0.18),
-            Color(hex: "6D5BF5").opacity(0.0),
+            DesignTokens.Colors.accent.opacity(0.18),
+            DesignTokens.Colors.accent.opacity(0.0),
         ],
         center: .center,
         startRadius: 40,
@@ -37,35 +37,35 @@ enum ClassroomTokens {
 
     /// Standard frosted-glass card fill. Pairs with `glassBorder` and the
     /// system `.ultraThinMaterial` background.
-    static let glassFill = Color.white.opacity(0.04)
+    static let glassFill = DesignTokens.Colors.surface
 
     /// Slightly more opaque glass for the primary teaching card so it reads
     /// as the page hero.
-    static let glassFillElevated = Color.white.opacity(0.06)
+    static let glassFillElevated = DesignTokens.Colors.surfaceElevated
 
     /// Hairline luminous border around glass cards. Soft enough to read as
     /// "edge of light," not as a hard outline.
-    static let glassBorder = Color(hex: "8B7CF6").opacity(0.22)
+    static let glassBorder = DesignTokens.Colors.accentSecondary.opacity(0.22)
 
     /// Stronger border for the focused/elevated card.
-    static let glassBorderElevated = Color(hex: "A78BFA").opacity(0.35)
+    static let glassBorderElevated = DesignTokens.Colors.accentSecondaryLight.opacity(0.35)
 
     // MARK: - Accents
 
     /// Primary lavender — used for the avatar, "Lyo" label, primary button.
-    static let accent = Color(hex: "A78BFA")
+    static let accent = DesignTokens.Colors.accentSecondaryLight
 
     /// Deeper purple used in the primary button gradient.
-    static let accentDeep = Color(hex: "6D5BF5")
+    static let accentDeep = DesignTokens.Colors.accent
 
     /// Soft glow color for highlighted elements (avatar ring, button shadow).
-    static let accentGlow = Color(hex: "8B7CF6")
+    static let accentGlow = DesignTokens.Colors.accentSecondary
 
     // MARK: - Text
 
-    static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.72)
-    static let textTertiary = Color.white.opacity(0.45)
+    static let textPrimary = DesignTokens.Colors.textPrimary
+    static let textSecondary = DesignTokens.Colors.textSecondary
+    static let textTertiary = DesignTokens.Colors.textTertiary
     static let textOnAccent = Color.white
 
     // MARK: - Spacing & radius
@@ -94,7 +94,7 @@ enum ClassroomTokens {
     static let cardShadow = Color.black.opacity(0.45)
 
     /// Faint accent halo under the primary teaching card.
-    static let elevatedShadow = Color(hex: "6D5BF5").opacity(0.28)
+    static let elevatedShadow = DesignTokens.Colors.accent.opacity(0.28)
 
     // MARK: - Typography
     //

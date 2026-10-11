@@ -17,6 +17,7 @@ import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transc
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 import { TeachingVisualView } from './TeachingVisualView';
+import { BoardDocumentView } from './BoardDocumentView';
 
 let mermaidReady: Promise<typeof import('mermaid')> | null = null;
 function loadMermaid() {
@@ -608,11 +609,30 @@ function TransferView({
   );
 }
 
+function SummaryView({ el, compactText }: { el: Extract<BoardElement, { kind: 'summary' }>; compactText: boolean }) {
+  const recovery = el.presentationRole === 'recovery';
+  const proseOnly = !el.boardDocument || el.boardDocument.blocks.every(block => block.kind === 'text');
+  const collapse = compactText && proseOnly && (el.content?.length ?? 0) > 240 && !recovery;
+  const content = <BoardDocumentView document={el.boardDocument} fallback={el.content} />;
+  return (
+    <section className={cn('space-y-3 rounded-xl border p-4', recovery
+      ? 'border-[var(--warning)] bg-[var(--surface-2)]'
+      : 'border-[var(--border)] bg-[var(--surface)]')} role={recovery ? 'status' : undefined}>
+      <h3 className="flex items-start gap-2 text-base font-semibold text-[var(--text-primary)]">
+        <BookOpenCheck className={cn('mt-0.5 h-4 w-4 shrink-0', recovery ? 'text-[var(--warning)]' : 'text-lyo-300')} /> {el.title}
+      </h3>
+      {collapse ? <details className="text-sm text-[var(--text-secondary)]"><summary className="cursor-pointer">Read supporting notes</summary><div className="mt-3">{content}</div></details> : content}
+      {el.items.length > 0 && <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">{el.items.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+      {el.retrievalScheduled && <p className="text-xs font-semibold text-lyo-300">Spaced retrieval scheduled</p>}
+    </section>
+  );
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 export function BoardElementView({
   el, onQuizAnswer, onTransferSubmit, onLearnerInputStart,
-  onSkipQuestion, onUnskipQuestion, onAskHelp, awaitingFeedback = false, reducedMotion = false,
+  onSkipQuestion, onUnskipQuestion, onAskHelp, awaitingFeedback = false, reducedMotion = false, compactText = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
@@ -623,6 +643,7 @@ export function BoardElementView({
   onAskHelp: () => void;
   awaitingFeedback?: boolean;
   reducedMotion?: boolean;
+  compactText?: boolean;
 }) {
   return (
     <motion.div
@@ -632,7 +653,7 @@ export function BoardElementView({
       className="board-element"
       data-board-element-id={el.id}
     >
-      {el.kind === 'teaching_visual' && <TeachingVisualView key={el.id} id={el.id} visual={el.visual} />}
+      {el.kind === 'teaching_visual' && <fieldset disabled={el.presentationRole === 'reference'} className="min-w-0"><TeachingVisualView key={el.id} id={el.id} visual={el.visual} /></fieldset>}
       {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
 
       {el.kind === 'highlight' && <HighlightView term={el.term} />}
@@ -736,22 +757,7 @@ export function BoardElementView({
         />
       )}
 
-      {el.kind === 'summary' && (
-        <section className="space-y-3 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
-          <h2 className="flex items-center gap-2 text-base font-bold text-green-100">
-            <BookOpenCheck className="h-5 w-5" /> {el.title}
-          </h2>
-          {el.content && <p className="text-sm leading-relaxed text-white/80">{el.content}</p>}
-          {el.items.length > 0 && (
-            <ul className="list-disc space-y-1 pl-5 text-sm text-white/75">
-              {el.items.map((item, index) => <li key={index}>{item}</li>)}
-            </ul>
-          )}
-          {el.retrievalScheduled && (
-            <p className="text-xs font-semibold text-lyo-200">Spaced retrieval scheduled</p>
-          )}
-        </section>
-      )}
+      {el.kind === 'summary' && <SummaryView el={el} compactText={compactText} />}
 
       {el.kind === 'source' && (
         <aside className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">
