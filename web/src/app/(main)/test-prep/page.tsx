@@ -25,7 +25,7 @@ import {
 } from '@/lib/test-prep-state.mjs';
 import type { ReadinessPayload, StudySessionRow } from '@/types';
 import { PrepManagement } from '@/components/test-prep/PrepManagement';
-import type { PrepMaterial, PrepSnapshot } from '@/lib/test-prep-api';
+import type { PrepMaterial, PrepProfile, PrepSnapshot } from '@/lib/test-prep-api';
 import type { CoachToday } from '@/lib/coach-api';
 import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
 
@@ -80,13 +80,21 @@ export default function TestPrepPage() {
   const [materials, setMaterials] = useState<PrepMaterial[]>([]);
   const [uploading, setUploading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<PrepProfile[]>([]);
+  const [startingNew, setStartingNew] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const selectedProfileIdRef = useRef<string | null>(null);
+  // Preserve this ID across a network timeout to make Retry idempotent.
+  const pendingNewTestIdRef = useRef<string | null>(null);
   const retryTurn = useRef<{ text: string; id: string } | null>(null);
   const busy = useRef(false);
 
   const loadPlan = useCallback(async () => {
     dispatch({ type: 'load_started' });
     try {
-      const saved = await api.testPrep.state();
+      const saved = await api.testPrep.state(selectedProfileIdRef.current ?? undefined);
+      // A failed history request must not hide the selected exam or its lessons.
+      void api.testPrep.profiles().then(setProfiles).catch(() => undefined);
       setSnapshot(saved);
       setProfileId(saved.profile?.id);
       setTurns((saved.profile?.intake_transcript ?? []).map(t => ({
@@ -117,7 +125,9 @@ export default function TestPrepPage() {
       dispatch({
         type: 'details_loaded',
         readiness: readinessResult.status === 'fulfilled' ? readinessResult.value : undefined,
-        sessions: sessionsResult.status === 'fulfilled' ? sessionsResult.value ?? [] : undefined,
+        sessions: sessionsResult.status === 'fulfilled'
+          ? (sessionsResult.value ?? []).filter((session) => saved.sessions.some((s) => s.id === session.id))
+          : undefined,
       });
     } catch {
       dispatch({ type: 'load_failed' });
@@ -215,6 +225,65 @@ export default function TestPrepPage() {
     [finishing, loadPlan]
   );
 
+  const startNewTest = async () => {
+    if (busy.current || startingNew) return;
+    setStartingNew(true);
+    setStartError(null);
+    const requestId = pendingNewTestIdRef.current ?? crypto.randomUUID();
+    pendingNewTestIdRef.current = requestId;
+    try {
+      const created = await api.testPrep.startNew(requestId);
+      selectedProfileIdRef.current = created.profile_id;
+      pendingNewTestIdRef.current = null;
+      setMaterials([]);
+      setDraft('');
+      setIntakeError(null);
+      retryTurn.current = null;
+      await loadPlan();
+    } catch {
+      setStartError('Could not create a new test. Your existing test was not changed. Try again.');
+    } finally {
+      setStartingNew(false);
+    }
+  };
+
+  // This is navigation, not modification: switching tests must never change
+  // the old plan, its schedule, or its demonstrated mastery.
+  const testSwitcher = (
+    <div className="mb-6 flex flex-wrap items-center gap-3">
+      {profiles.length > 0 && (
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-white/60">
+          Your tests
+          <select
+            aria-label="Choose a test"
+            value={snapshot?.profile?.id ?? ''}
+            onChange={(event) => {
+              selectedProfileIdRef.current = event.target.value;
+              void loadPlan();
+            }}
+            className="max-w-[240px] rounded-lg border border-white/20 bg-gray-900 px-3 py-2 text-sm text-white"
+          >
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.subject === 'Pending Test' ? 'New test (in progress)' : profile.subject}
+                {profile.test_date && profile.subject !== 'Pending Test' ? ` — ${profile.test_date}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <button
+        type="button"
+        onClick={() => void startNewTest()}
+        disabled={startingNew || sending || building}
+        className="rounded-xl border border-violet-400/40 bg-violet-500/15 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500/25 disabled:opacity-50"
+      >
+        {startingNew ? 'Starting new test…' : '+ New test'}
+      </button>
+      {startError && <p role="alert" className="w-full text-xs text-amber-200">{startError}</p>}
+    </div>
+  );
+
   if (authLoading || loading) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16 text-center text-white/60">
@@ -252,6 +321,7 @@ export default function TestPrepPage() {
   if (stage === 'intake') {
     return (
       <main className="mx-auto max-w-2xl px-4 py-10">
+        {testSwitcher}
         <h1 className="text-2xl font-semibold text-white">Tell me about your test</h1>
         <p className="mt-2 text-sm text-white/60">
           A few questions — the subject, the date, what&apos;s on it — and I&apos;ll build you a
@@ -380,6 +450,7 @@ export default function TestPrepPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
+      {testSwitcher}
       <header>
         <h1 className="text-2xl font-semibold text-white">
           {readiness?.subject ?? 'Your test'}
