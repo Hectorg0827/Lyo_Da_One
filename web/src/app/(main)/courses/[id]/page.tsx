@@ -8,6 +8,7 @@ import { Course } from '@/types';
 import CoursePlayer from '@/components/courses/CoursePlayer';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { courseLessonBlocks, courseLessonMinutes } from '@/lib/course-durable-content.mjs';
 
 // ── Adapter: backend course detail → frontend Course type ───────────────────
 
@@ -24,14 +25,13 @@ function adaptCourseDetail(raw: Record<string, unknown>): Course {
               id: String(l.id ?? `l_${li}`),
               title: String(l.title ?? ''),
               type: (l.type as 'text') ?? 'text',
-              duration: (l.duration as number) ?? 10,
+              duration: courseLessonMinutes(l),
               order: (l.order as number) ?? li + 1,
               isCompleted: (l.is_completed as boolean) ?? false,
-              content: Array.isArray(l.content)
-                ? (l.content as Course['modules'][0]['lessons'][0]['content'])
-                : Array.isArray(l.blocks)
-                ? (l.blocks as Course['modules'][0]['lessons'][0]['content'])
-                : [],
+              content: courseLessonBlocks(
+                Array.isArray(l.blocks) ? l.blocks : l.content,
+                String(l.id ?? `l_${li}`),
+              ) as Course['modules'][0]['lessons'][0]['content'],
             }))
           : [],
       }))
