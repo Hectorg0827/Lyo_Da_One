@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import CourseCard from '@/components/courses/CourseCard';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { courseLessonBlocks, courseLessonMinutes } from '@/lib/course-durable-content.mjs';
 
 // ── Adapter: backend course → frontend Course type ──────────────────────────
 
@@ -26,10 +27,10 @@ function adaptCourse(raw: Record<string, unknown>): Course {
               id: String(l.id ?? `l_${li}`),
               title: String(l.title ?? ''),
               type: (l.type as 'text') ?? 'text',
-              duration: (l.duration as number) ?? 10,
+              duration: courseLessonMinutes(l),
               order: (l.order as number) ?? li + 1,
               isCompleted: (l.is_completed as boolean) ?? false,
-              content: Array.isArray(l.content) ? (l.content as Course['modules'][0]['lessons'][0]['content']) : [],
+              content: courseLessonBlocks(l.content, String(l.id ?? `l_${li}`)) as Course['modules'][0]['lessons'][0]['content'],
             }))
           : [],
       }))
@@ -80,10 +81,11 @@ function adaptCourse(raw: Record<string, unknown>): Course {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'inProgress' | 'completed' | 'browse';
+type TabId = 'saved' | 'inProgress' | 'completed' | 'browse';
 type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'saved', label: 'Saved' },
   { id: 'inProgress', label: 'In Progress' },
   { id: 'completed', label: 'Completed' },
   { id: 'browse', label: 'Browse' },
@@ -100,7 +102,7 @@ const DIFFICULTY_FILTERS: { id: DifficultyFilter; label: string }[] = [
 
 export default function CoursesPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabId>('browse');
+  const [activeTab, setActiveTab] = useState<TabId>('saved');
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
 
@@ -111,24 +113,32 @@ export default function CoursesPage() {
   );
   const { data: rawCourses, isLoading, error, refetch } = useApi<Record<string, unknown>[]>(fetcher, [difficultyFilter]);
 
+  const fetchSaved = useCallback(() => api.courses.mine(), []);
+  const { data: rawSaved, isLoading: savedLoading, error: savedError, refetch: refetchSaved } =
+    useApi<Record<string, unknown>[]>(fetchSaved, []);
+
   // Adapt raw API data to frontend Course type
   const courses = useMemo<Course[]>(() => {
     if (!rawCourses) return [];
     return rawCourses.map(adaptCourse);
   }, [rawCourses]);
 
+  const savedCourses = useMemo<Course[]>(() => (rawSaved ?? []).map(adaptCourse), [rawSaved]);
+
   // Derive tab-specific lists
   const tabCourses = useMemo<Course[]>(() => {
     switch (activeTab) {
+      case 'saved':
+        return savedCourses;
       case 'inProgress':
-        return courses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100);
+        return savedCourses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100);
       case 'completed':
-        return courses.filter((c) => c.progress === 100);
+        return savedCourses.filter((c) => c.progress === 100);
       case 'browse':
       default:
         return courses;
     }
-  }, [activeTab, courses]);
+  }, [activeTab, courses, savedCourses]);
 
   // Apply search filter
   const filteredCourses = useMemo<Course[]>(() => {
@@ -138,16 +148,19 @@ export default function CoursesPage() {
         c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesSearch;
+      return matchesSearch && (difficultyFilter === 'all' || c.difficulty === difficultyFilter);
     });
-  }, [tabCourses, searchQuery]);
+  }, [tabCourses, searchQuery, difficultyFilter]);
 
   const handleCourseClick = (course: Course) => {
     router.push(`/courses/${course.id}`);
   };
 
-  const inProgressCount = courses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100).length;
-  const completedCount = courses.filter((c) => c.progress === 100).length;
+  const inProgressCount = savedCourses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100).length;
+  const completedCount = savedCourses.filter((c) => c.progress === 100).length;
+  const pageLoading = activeTab === 'browse' ? isLoading : savedLoading;
+  const pageError = activeTab === 'browse' ? error : savedError;
+  const retryPage = activeTab === 'browse' ? refetch : refetchSaved;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
@@ -254,7 +267,7 @@ export default function CoursesPage() {
         </motion.div>
 
         {/* ── Loading State ── */}
-        {isLoading && (
+        {pageLoading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -266,7 +279,7 @@ export default function CoursesPage() {
         )}
 
         {/* ── Error State ── */}
-        {error && !isLoading && (
+        {pageError && !pageLoading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -277,10 +290,10 @@ export default function CoursesPage() {
             </div>
             <div className="text-center">
               <p className="text-white/60 font-medium">Failed to load courses</p>
-              <p className="text-white/30 text-sm mt-1">{error}</p>
+              <p className="text-white/30 text-sm mt-1">{pageError}</p>
             </div>
             <button
-              onClick={refetch}
+              onClick={retryPage}
               className="text-lyo-400 text-sm hover:text-lyo-300 transition-colors"
             >
               Try again
@@ -289,7 +302,7 @@ export default function CoursesPage() {
         )}
 
         {/* ── Course Grid ── */}
-        {!isLoading && !error && (
+        {!pageLoading && !pageError && (
           <AnimatePresence mode="wait">
             {filteredCourses.length > 0 ? (
               <motion.div
@@ -331,6 +344,8 @@ export default function CoursesPage() {
                   <p className="text-white/30 text-sm mt-1">
                     {searchQuery
                       ? `No results for "${searchQuery}"`
+                      : activeTab === 'saved'
+                      ? 'No saved courses yet. Create a course with LYO and it will appear here after it is saved.'
                       : activeTab === 'inProgress'
                       ? 'You have no courses in progress yet.'
                       : activeTab === 'completed'
