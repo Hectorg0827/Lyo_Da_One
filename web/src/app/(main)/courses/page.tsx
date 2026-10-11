@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import CourseCard from '@/components/courses/CourseCard';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth-store';
 import { courseLessonBlocks, courseLessonMinutes } from '@/lib/course-durable-content.mjs';
 
 // ── Adapter: backend course → frontend Course type ──────────────────────────
@@ -102,7 +103,11 @@ const DIFFICULTY_FILTERS: { id: DifficultyFilter; label: string }[] = [
 
 export default function CoursesPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabId>('saved');
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) setActiveTab('browse');
+  }, [authLoading, isAuthenticated]);
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
 
@@ -113,9 +118,12 @@ export default function CoursesPage() {
   );
   const { data: rawCourses, isLoading, error, refetch } = useApi<Record<string, unknown>[]>(fetcher, [difficultyFilter]);
 
-  const fetchSaved = useCallback(() => api.courses.mine(), []);
+  const fetchSaved = useCallback(
+    () => isAuthenticated ? api.courses.mine() : Promise.resolve([] as Record<string, unknown>[]),
+    [isAuthenticated],
+  );
   const { data: rawSaved, isLoading: savedLoading, error: savedError, refetch: refetchSaved } =
-    useApi<Record<string, unknown>[]>(fetchSaved, []);
+    useApi<Record<string, unknown>[]>(fetchSaved, [isAuthenticated]);
 
   // Adapt raw API data to frontend Course type
   const courses = useMemo<Course[]>(() => {
@@ -200,7 +208,7 @@ export default function CoursesPage() {
           transition={{ duration: 0.3, delay: 0.05 }}
           className="flex items-center gap-2 mb-6"
         >
-          {TABS.map((tab) => (
+          {TABS.filter(tab => isAuthenticated || tab.id === 'browse').map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
