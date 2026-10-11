@@ -84,15 +84,28 @@ export default function TestPrepPage() {
   const [startingNew, setStartingNew] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const selectedProfileIdRef = useRef<string | null>(null);
+  // A learner can keep multiple exams open. Older asynchronous responses must
+  // never paint the details of a different test over the current selection.
+  const loadVersionRef = useRef(0);
   // Preserve this ID across a network timeout to make Retry idempotent.
   const pendingNewTestIdRef = useRef<string | null>(null);
   const retryTurn = useRef<{ text: string; id: string } | null>(null);
   const busy = useRef(false);
 
   const loadPlan = useCallback(async () => {
+    const version = ++loadVersionRef.current;
+    const requestedProfileId = selectedProfileIdRef.current;
     dispatch({ type: 'load_started' });
     try {
-      const saved = await api.testPrep.state(selectedProfileIdRef.current ?? undefined);
+      const saved = await api.testPrep.state(requestedProfileId ?? undefined);
+      if (version !== loadVersionRef.current) return;
+      selectedProfileIdRef.current = saved.profile?.id ?? null;
+      // A URL preserves the learner's selected exam on refresh and deep link.
+      if (saved.profile?.id) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('profileId', saved.profile.id);
+        window.history.replaceState(window.history.state, '', url.toString());
+      }
       // A failed history request must not hide the selected exam or its lessons.
       void api.testPrep.profiles().then(setProfiles).catch(() => undefined);
       setSnapshot(saved);
@@ -114,6 +127,7 @@ export default function TestPrepPage() {
         api.testPrep.todaySessions(),
         api.coach.today(),
       ]);
+      if (version !== loadVersionRef.current) return;
       if (coachResult.status === 'fulfilled') {
         setCoach(coachResult.value);
         setCoachFailed(false);
@@ -130,9 +144,9 @@ export default function TestPrepPage() {
           : undefined,
       });
     } catch {
-      dispatch({ type: 'load_failed' });
+      if (version === loadVersionRef.current) dispatch({ type: 'load_failed' });
     } finally {
-      dispatch({ type: 'load_settled' });
+      if (version === loadVersionRef.current) dispatch({ type: 'load_settled' });
     }
   }, []);
 
@@ -144,6 +158,9 @@ export default function TestPrepPage() {
       dispatch({ type: 'load_settled' });
       return;
     }
+    // Read the selected profile before the first state request. Without this
+    // deep-link restoration a refresh silently switches to the newest exam.
+    selectedProfileIdRef.current = new URLSearchParams(window.location.search).get('profileId');
     void loadPlan();
   }, [authLoading, isAuthenticated, loadPlan]);
 
