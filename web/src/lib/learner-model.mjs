@@ -474,6 +474,16 @@ export function conceptLabel(conceptId) {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Untitled concept';
 }
 
+/** Prefer the human-readable concept title already returned by the API.
+ * Keep the identifier untouched as the evidence key in all state and requests.
+ */
+export function conceptDisplayName(concept) {
+  const display = typeof concept?.display_name === 'string' ? concept.display_name.trim() : '';
+  const identity = (concept?.concept_id ?? '').toString().trim();
+  if (display && display !== identity) return display;
+  return conceptLabel(identity);
+}
+
 // ─── Which of a learner's concepts belong to the class they are in ───────────
 
 /**
