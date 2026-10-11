@@ -41,9 +41,9 @@ class ClassroomSessionContractTest {
     // ── Starting a class, and starting it over ────────────────────────────
 
     @Test
-    fun `first class sends the id every client always sent`() {
+    fun `first class does not reuse an old server seat after reinstall`() {
         val start = ClassroomSessionContract.sessionStart("course-7", null)
-        assertEquals("course-7", start.sessionId)
+        assertTrue(start.sessionId.startsWith("course-7~1-"))
         assertEquals(1, start.generation)
         assertFalse(start.resumed)
     }
@@ -74,7 +74,7 @@ class ClassroomSessionContractTest {
         assertTrue(resumed.resumed)
 
         val fresh = ClassroomSessionContract.sessionStart("course-7", saved)
-        assertEquals("course-7~3", fresh.sessionId)
+        assertTrue(fresh.sessionId.startsWith("course-7~3-"))
         assertFalse(fresh.resumed)
     }
 
@@ -89,7 +89,7 @@ class ClassroomSessionContractTest {
         assertFalse(ClassroomSessionContract.canResume(stale, now))
         val start = ClassroomSessionContract.sessionStart("course-7", stale, resume = true, now = now)
         assertFalse(start.resumed)
-        assertEquals("course-7~3", start.sessionId)
+        assertTrue(start.sessionId.startsWith("course-7~3-"))
     }
 
     @Test
