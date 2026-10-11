@@ -174,9 +174,9 @@ test('the cover page stays out of the way of the teaching', () => {
 
 // ─── A second class is a second class ────────────────────────────────────────
 
-test('a first class sends the session id every client always sent', () => {
+test('a first class creates a clean session even when the backend retains the old topic ID', () => {
   const { store } = classroom({ connection: { topic: 'Minecraft' } });
-  assert.equal(store.getState().sessionId, 'Minecraft');
+  assert.match(store.getState().sessionId, /^Minecraft~1-\d+$/);
   assert.equal(store.getState().resumedSession, false);
   store.getState().disconnect();
 });
@@ -342,7 +342,7 @@ test('a web entry that names only its course still gets a session of its own', (
     connection: { topic: 'Fractions', courseId: 'course-7' },
     storage: { 'lyo_classroom_session:course-7': JSON.stringify(left) },
   });
-  assert.equal(store.getState().sessionId, 'course-7~2');
+  assert.match(store.getState().sessionId, /^course-7~2-\d+$/);
   assert.equal(store.getState().courseId, 'course-7');
   assert.equal(store.getState().resumable.id, 'course-7');
   store.getState().disconnect();
