@@ -3,13 +3,16 @@ import AVKit
 
 struct DiscoverReelView: View {
     let item: DiscoverItem
+    // Page selection is authoritative; offscreen neighbours preroll silently.
+    var isActive: Bool = true
+    var onFinished: () -> Void = {}
     let onLike: () -> Void
     let onComment: () -> Void
     let onShare: () -> Void
     let onSave: () -> Void
     let onAskLio: () -> Void
     let onStart: () -> Void
-    
+
     // New interaction callbacks
     var onConvertToCourse: () -> Void = {}
     
@@ -162,6 +165,17 @@ struct DiscoverReelView: View {
             isLiked = item.isLiked
             isSaved = item.isSaved
         }
+        .onChange(of: isActive) { active in
+            if active {
+                if player == nil, let url = item.previewURL ?? item.videoURL {
+                    setupPlayer(url: url)
+                } else {
+                    player?.play()
+                }
+            } else {
+                player?.pause()
+            }
+        }
     }
     
     // MARK: - Logic
@@ -172,16 +186,23 @@ struct DiscoverReelView: View {
 
         let newPlayer = AVPlayer(url: url)
         player = newPlayer
-        newPlayer.play()
+        if isActive {
+            newPlayer.play()
+        } else {
+            // AVPlayer preroll prepares the adjacent item without audible
+            // playback or consuming another active decoder.
+            newPlayer.preroll(atRate: 1.0) { _ in }
+        }
 
-        // Loop on end. Capture the token so we can remove the observer on disappear.
+        // Advance the feed rather than looping the same clip.
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: newPlayer.currentItem,
             queue: .main
-        ) { [weak newPlayer] _ in
-            newPlayer?.seek(to: .zero)
-            newPlayer?.play()
+        ) { _ in
+            if isActive && !showQuiz {
+                onFinished()
+            }
         }
 
         // Replace the polling Timer with AVPlayer's own time observer — fires on the

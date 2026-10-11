@@ -2,7 +2,12 @@ package com.lyo.app.ui.screens.clips
 
 import android.content.Intent
 import android.net.Uri
-import android.widget.VideoView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -29,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Share
@@ -49,6 +55,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -114,6 +122,19 @@ fun ClipsScreen(nav: NavHostController) {
     var commentsClipId by remember { mutableStateOf<String?>(null) }
     var pendingVideoUri by remember { mutableStateOf<Uri?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+    var nextPage by remember { mutableIntStateOf(2) }
+    var hasMore by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var pausedClipId by remember { mutableStateOf<String?>(null) }
+    // Exactly three small player instances at most: current, previous, next.
+    // Unlike VideoView, ExoPlayer prepares upcoming clips before a swipe.
+    val players = remember { mutableStateMapOf<String, ExoPlayer>() }
+    DisposableEffect(Unit) {
+        onDispose {
+            players.values.forEach { it.release() }
+            players.clear()
+        }
+    }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -144,6 +165,9 @@ fun ClipsScreen(nav: NavHostController) {
             likedIds = resolved.filter { it.isLiked == true }.map { it.idStr }.toSet()
             savedIds = resolved.filter { it.isSaved == true }.map { it.idStr }.toSet()
             loaded = true
+            nextPage = 2
+            hasMore = resolved.size >= 20
+            loadingMore = false
         } else {
             val cause = fallback?.exceptionOrNull() ?: discovery.exceptionOrNull()
             loadError = clipFailureMessage(cause, "load clips")
@@ -245,6 +269,47 @@ fun ClipsScreen(nav: NavHostController) {
                 val pagerState = rememberPagerState(pageCount = { clips.size })
                 val currentClipId = clips.getOrNull(pagerState.currentPage)?.idStr
 
+                // Keep only the visible reel and its immediate neighbours in
+                // memory. Preparing the next clip ahead of the swipe removes
+                // the per-item buffering delay of VideoView.
+                LaunchedEffect(clips.map { it.idStr to it.videoUrl }, pagerState.currentPage, pausedClipId) {
+                    val index = pagerState.currentPage
+                    val neighbours = (index - 1..index + 1)
+                        .mapNotNull { clips.getOrNull(it) }
+                        .filter { !it.videoUrl.isNullOrBlank() }
+                    val keep = neighbours.map { it.idStr }.toSet()
+                    players.keys.toList().filterNot { it in keep }.forEach { key ->
+                        players.remove(key)?.release()
+                    }
+                    neighbours.forEach { clip ->
+                        val player = players[clip.idStr] ?: ExoPlayer.Builder(context).build().apply {
+                            repeatMode = Player.REPEAT_MODE_OFF
+                            setMediaItem(MediaItem.fromUri(clip.videoUrl!!))
+                            prepare()
+                        }.also { players[clip.idStr] = it }
+                        player.playWhenReady = clip.idStr == currentClipId && pausedClipId != clip.idStr
+                    }
+                }
+
+                LaunchedEffect(pagerState.currentPage, clips.size, hasMore) {
+                    if (!hasMore || loadingMore || pagerState.currentPage < clips.size - 4) return@LaunchedEffect
+                    loadingMore = true
+                    val page = nextPage
+                    runCatching { ApiClient.api.discoverClips(page, 20).clips.orEmpty() }
+                        .onSuccess { batch ->
+                            val known = clips.map { it.idStr }.toSet()
+                            clips = clips + batch.filterNot { it.idStr in known }
+                            nextPage = page + 1
+                            hasMore = batch.size == 20
+                        }
+                        .onFailure {
+                            // Playback of already fetched clips continues.
+                            hasMore = false
+                            interactionError = "More clips could not be loaded. Refresh Discover to retry."
+                        }
+                    loadingMore = false
+                }
+
                 LaunchedEffect(currentClipId) {
                     currentClipId?.let(::syncView)
                 }
@@ -259,6 +324,16 @@ fun ClipsScreen(nav: NavHostController) {
                         clip = clip,
                         index = page,
                         isCurrent = pagerState.currentPage == page,
+                        player = players[id],
+                        isPaused = pausedClipId == id,
+                        onTogglePlayback = {
+                            pausedClipId = if (pausedClipId == id) null else id
+                        },
+                        onPlaybackEnded = {
+                            if (pagerState.currentPage == page && page + 1 < clips.size) {
+                                scope.launch { pagerState.animateScrollToPage(page + 1) }
+                            }
+                        },
                         liked = id in likedIds,
                         saved = id in savedIds,
                         likePending = id in pendingLikeIds,
@@ -684,7 +759,7 @@ private fun ClipsHeader(modifier: Modifier = Modifier) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(
-            "Clips",
+            "Discover",
             style = MaterialTheme.typography.headlineMedium,
             color = Color.White,
         )
@@ -696,6 +771,10 @@ private fun ClipPage(
     clip: ClipDto,
     index: Int,
     isCurrent: Boolean,
+    player: ExoPlayer?,
+    isPaused: Boolean,
+    onTogglePlayback: () -> Unit,
+    onPlaybackEnded: () -> Unit,
     liked: Boolean,
     saved: Boolean,
     likePending: Boolean,
@@ -708,37 +787,80 @@ private fun ClipPage(
     onComments: () -> Unit,
     onShare: () -> Unit,
 ) {
+    var playbackError by remember(clip.idStr) { mutableStateOf<String?>(null) }
+
+    DisposableEffect(player, isCurrent) {
+        if (player == null || !isCurrent) {
+            onDispose { }
+        } else {
+            val listener = object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) playbackError = null
+                    if (state == Player.STATE_ENDED) onPlaybackEnded()
+                }
+                override fun onPlayerError(error: PlaybackException) {
+                    playbackError = "This video could not be played."
+                }
+            }
+            player.addListener(listener)
+            onDispose { player.removeListener(listener) }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        when {
-            isCurrent && !clip.videoUrl.isNullOrBlank() -> AndroidView(
-                factory = { context ->
-                    VideoView(context).apply {
-                        setOnPreparedListener { player ->
-                            player.isLooping = true
-                            player.start()
-                        }
-                    }
-                },
-                update = { view ->
-                    if (view.tag != clip.videoUrl) {
-                        view.tag = clip.videoUrl
-                        view.setVideoURI(Uri.parse(clip.videoUrl))
-                    }
-                },
-                onRelease = { it.stopPlayback() },
-                modifier = Modifier.fillMaxSize(),
-            )
-            !clip.thumbnailUrl.isNullOrBlank() -> AsyncImage(
+        if (!clip.thumbnailUrl.isNullOrBlank()) {
+            AsyncImage(
                 model = clip.thumbnailUrl,
-                contentDescription = clip.title ?: "Clip",
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            else -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize()
                     .background(CardGradients[index % CardGradients.size]),
             )
+        }
+
+        if (player != null) {
+            AndroidView(
+                factory = { context ->
+                    PlayerView(context).apply {
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    }
+                },
+                update = { view -> view.player = player },
+                onRelease = { view -> view.player = null },
+                modifier = Modifier.fillMaxSize().clickable(onClick = onTogglePlayback),
+            )
+        }
+        if (isPaused && isCurrent) {
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = "Paused — tap to resume",
+                tint = Color.White,
+                modifier = Modifier.align(Alignment.Center).size(44.dp),
+            )
+        }
+        if (playbackError != null && isCurrent) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.align(Alignment.Center)
+                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Text(playbackError.orEmpty(), color = Color.White)
+                Row {
+                    TextButton(onClick = { playbackError = null; player?.prepare(); player?.play() }) {
+                        Text("Retry", color = Color.White)
+                    }
+                    TextButton(onClick = onPlaybackEnded) {
+                        Text("Next clip", color = Color.White)
+                    }
+                }
+            }
         }
 
         Box(

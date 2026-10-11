@@ -16,6 +16,7 @@ struct DiscoverView: View {
     @State private var showLioChat = false
     @State private var itemToShare: DiscoverItem?
     @State private var animateHeader = false
+    @State private var selectedReelId = ""
     
     var body: some View {
         NavigationStack {
@@ -177,10 +178,15 @@ struct DiscoverView: View {
     
     private var feedContent: some View {
         GeometryReader { geometry in
-            TabView {
+            TabView(selection: Binding(
+                get: { selectedReelId.isEmpty ? (viewModel.filteredItems.first?.id ?? "") : selectedReelId },
+                set: { selectedReelId = $0 }
+            )) {
                 ForEach(viewModel.filteredItems) { item in
                     DiscoverReelView(
                         item: item,
+                        isActive: (selectedReelId.isEmpty ? viewModel.filteredItems.first?.id : selectedReelId) == item.id,
+                        onFinished: { advanceAfter(item.id) },
                         onLike: { 
                             viewModel.toggleLike(for: item)
                         },
@@ -198,7 +204,20 @@ struct DiscoverView: View {
                         onConvertToCourse: { viewModel.convertToCourse(item: item) }
                     )
                     .frame(width: geometry.size.width, height: geometry.size.height)
+                    .tag(item.id)
                 }
+            }
+            .onChange(of: viewModel.filteredItems.map(\.id)) { ids in
+                if !ids.contains(selectedReelId) {
+                    selectedReelId = ids.first ?? ""
+                }
+            }
+            .onChange(of: selectedReelId) { current in
+                let visible = viewModel.filteredItems
+                guard viewModel.searchQuery.isEmpty,
+                      let index = visible.firstIndex(where: { $0.id == current }),
+                      index >= visible.count - 4 else { return }
+                Task { await viewModel.loadMore() }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
@@ -206,6 +225,13 @@ struct DiscoverView: View {
         .ignoresSafeArea()
     }
     
+    private func advanceAfter(_ clipId: String) {
+        let reels = viewModel.filteredItems
+        guard let index = reels.firstIndex(where: { $0.id == clipId }),
+              reels.indices.contains(index + 1) else { return }
+        selectedReelId = reels[index + 1].id
+    }
+
     // MARK: - Empty State
     
     private var emptyState: some View {

@@ -69,6 +69,10 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Decode and prebuffer adjacent Discover reels; VideoView cannot do this.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
+
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation("junit:junit:4.13.2")
