@@ -102,11 +102,10 @@ object ClassroomSessionContract {
     /**
      * The session id this entry should connect with.
      *
-     * The first class on a topic still sends exactly the id every client sent
-     * before this contract existed, so nothing changes for a learner meeting a
-     * topic for the first time. Opening the same topic again starts a new
-     * session beside it, and resuming is something the learner asks for rather
-     * than the only thing on offer.
+     * Every fresh lesson needs a distinct server session, including the first
+     * run after reinstall. Otherwise a topic-keyed failed session can be
+     * restored despite an empty local store. Resumption remains explicit;
+     * progress still belongs to courseKey.
      */
     fun sessionStart(
         courseKey: String,
@@ -118,11 +117,8 @@ object ClassroomSessionContract {
         if (resume && canResume(saved, now) && saved != null) {
             return ClassroomSessionStart(saved.id, maxOf(1, saved.generation), resumed = true)
         }
-        if (saved == null || saved.id.isEmpty()) {
-            return ClassroomSessionStart(key, 1, resumed = false)
-        }
-        val generation = maxOf(1, saved.generation) + 1
-        return ClassroomSessionStart("$key~$generation", generation, resumed = false)
+        val generation = if (saved == null || saved.id.isEmpty()) 1 else maxOf(1, saved.generation) + 1
+        return ClassroomSessionStart("$key~$generation-$now", generation, resumed = false)
     }
 
     fun opening(
