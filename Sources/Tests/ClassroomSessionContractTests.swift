@@ -12,9 +12,9 @@ final class ClassroomSessionContractTests: XCTestCase {
 
     // MARK: Starting a class, and starting it over
 
-    func testFirstClassSendsTheIdEveryClientAlwaysSent() {
+    func testFirstClassCannotResumeOldServerSeatAfterReinstall() {
         let start = ClassroomSessionContract.sessionStart(courseKey: "course-7", saved: nil)
-        XCTAssertEqual(start.sessionId, "course-7")
+        XCTAssertTrue(start.sessionId.hasPrefix("course-7~1-"))
         XCTAssertEqual(start.generation, 1)
         XCTAssertFalse(start.resumed)
     }
@@ -45,7 +45,7 @@ final class ClassroomSessionContractTests: XCTestCase {
         XCTAssertTrue(resumed.resumed)
 
         let fresh = ClassroomSessionContract.sessionStart(courseKey: "course-7", saved: saved)
-        XCTAssertEqual(fresh.sessionId, "course-7~3")
+        XCTAssertTrue(fresh.sessionId.hasPrefix("course-7~3-"))
         XCTAssertFalse(fresh.resumed)
     }
 
@@ -61,7 +61,7 @@ final class ClassroomSessionContractTests: XCTestCase {
             courseKey: "course-7", saved: stale, resume: true, now: now
         )
         XCTAssertFalse(start.resumed)
-        XCTAssertEqual(start.sessionId, "course-7~3")
+        XCTAssertTrue(start.sessionId.hasPrefix("course-7~3-"))
     }
 
     func testFreeTopicEntriesFindTheirOwnHistory() {
