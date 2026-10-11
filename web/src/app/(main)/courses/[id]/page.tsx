@@ -37,7 +37,7 @@ function adaptCourseDetail(raw: Record<string, unknown>): Course {
       }))
     : [];
 
-  const lessonsCount = (raw.lessons_count as number) ?? modules.reduce((acc, m) => acc + m.lessons.length, 0);
+  const lessonsCount = (raw.lesson_count as number) ?? (raw.lessons_count as number) ?? modules.reduce((acc, m) => acc + m.lessons.length, 0);
   const durationHours = (raw.estimated_duration_hours as number) ?? 0;
 
   return {
@@ -64,7 +64,7 @@ function adaptCourseDetail(raw: Record<string, unknown>): Course {
       createdAt: '',
       isPremium: false,
     },
-    category: String(raw.subject ?? raw.category ?? 'General'),
+    category: String(raw.subject ?? raw.topic ?? raw.category ?? 'General'),
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
     difficulty: (['beginner', 'intermediate', 'advanced'].includes(String(raw.difficulty_level ?? raw.difficulty ?? ''))
       ? String(raw.difficulty_level ?? raw.difficulty) as Course['difficulty']
@@ -74,7 +74,7 @@ function adaptCourseDetail(raw: Record<string, unknown>): Course {
     rating: (raw.rating as number) ?? (raw.average_rating as number) ?? 0,
     reviewCount: (raw.review_count as number) ?? (raw.reviews_count as number) ?? 0,
     progress: raw.progress != null ? (raw.progress as number) : undefined,
-    isAIGenerated: (raw.is_ai_generated as boolean) ?? false,
+    isAIGenerated: (raw.is_ai_generated as boolean) ?? (raw.generation_metadata != null),
     createdAt: String(raw.created_at ?? new Date().toISOString()),
     modules,
   };
