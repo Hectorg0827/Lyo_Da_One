@@ -335,6 +335,8 @@ test('a concept key is made readable without changing its identity', () => {
   assert.equal(conceptLabel('quadratic-formula'), 'Quadratic formula');
   assert.equal(conceptLabel('  '), 'Untitled concept');
   assert.equal(conceptLabel(null), 'Untitled concept');
+  assert.equal(conceptLabel('8ba15a41-c4f7-49d4-a734-091ac900b234'), 'Skill name unavailable');
+  assert.equal(conceptLabel('quadratic_formula'), 'Quadratic formula');
 });
 
 test('the record reads the server, never a local counter', () => {
