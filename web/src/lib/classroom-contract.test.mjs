@@ -77,9 +77,11 @@ test('transfer evidence requires a substantive response', () => {
 
 // ─── Starting a class, and starting it over ─────────────────────────────────
 
-test('a first class sends exactly the id every client sent before', () => {
-  const start = classroomSessionStart('course-7', null);
-  assert.deepEqual(start, { sessionId: 'course-7', generation: 1, resumed: false });
+test('a first class never resurrects an old topic-keyed server session', () => {
+  const now = 1_789_000_000_000;
+  const start = classroomSessionStart('course-7', null, { now });
+  assert.deepEqual(start, { sessionId: `course-7~1-${now}`, generation: 1, resumed: false });
+  assert.notEqual(start.sessionId, 'course-7');
 });
 
 test('opening the same topic again is a new class, not the old seat', () => {
@@ -101,7 +103,7 @@ test('resuming is honoured only when the learner asks for it', () => {
   const saved = { id: 'course-7~2', startedAt: Date.now(), generation: 2 };
   assert.equal(classroomSessionStart('course-7', saved, { resume: true }).sessionId, 'course-7~2');
   assert.equal(classroomSessionStart('course-7', saved, { resume: true }).resumed, true);
-  assert.equal(classroomSessionStart('course-7', saved).sessionId, 'course-7~3');
+  assert.match(classroomSessionStart('course-7', saved).sessionId, /^course-7~3-\d+$/);
 });
 
 test('a class too old to remember sitting is started, not resumed', () => {
@@ -110,7 +112,7 @@ test('a class too old to remember sitting is started, not resumed', () => {
   assert.equal(canResumeClassroom(stale, now), false);
   const start = classroomSessionStart('course-7', stale, { resume: true, now });
   assert.equal(start.resumed, false);
-  assert.equal(start.sessionId, 'course-7~3');
+  assert.equal(start.sessionId, `course-7~3-${now}`);
 });
 
 test('the session id survives the wire as the id the engine is keyed by', () => {
@@ -173,5 +175,5 @@ test('a class that reached its end is not an unfinished one', () => {
   assert.equal(canResumeClassroom({ ...seat, finished: true }, now), false);
   const start = classroomSessionStart('course-7', { ...seat, finished: true }, { resume: true, now });
   assert.equal(start.resumed, false, 'a finished class is started again, not resumed');
-  assert.equal(start.sessionId, 'course-7~2');
+  assert.equal(start.sessionId, `course-7~2-${now}`);
 })
