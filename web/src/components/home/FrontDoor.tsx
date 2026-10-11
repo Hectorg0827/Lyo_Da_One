@@ -272,6 +272,18 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
             )}
           </button>
         </form>
+        <p className="mt-3 text-xs leading-relaxed text-white/60">
+          <span className="font-semibold text-white/80">Live Classroom</span> is a guided lesson with
+          teacher narration, a visual board and check-ins. Prefer asking questions at your own pace?
+          {' '}
+          <button
+            type="button"
+            onClick={() => router.push(trimmed ? `/chat?prompt=${encodeURIComponent(trimmed)}` : '/chat')}
+            className="font-semibold text-violet-200 underline underline-offset-2 hover:text-white"
+          >
+            Ask LYO Tutor in chat
+          </button>.
+        </p>
 
         {/* ── Suggestions ──
             One row that scrolls sideways, not a wrapping block. Four example
