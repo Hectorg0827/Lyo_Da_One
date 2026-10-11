@@ -92,7 +92,11 @@ final class ClassroomRecoveryServiceTests: XCTestCase {
         XCTAssertFalse(service.lessonComplete)
         XCTAssertFalse(service.resumedSession)
         XCTAssertNil(service.resumableSession)
-        XCTAssertEqual(store.saved(courseKey: "fractions")?.id, "fractions~2")
+        // The reopen is a second generation of the same course, and its id
+        // now carries a stamp so it cannot land on a server seat still filed
+        // under the bare course key.
+        let reopened = try XCTUnwrap(store.saved(courseKey: "fractions")).id
+        XCTAssertTrue(reopened.hasPrefix("fractions~2-"), "unexpected reopened id \(reopened)")
     }
 
     func testDirectorCompletionInTheLiveComponentStreamIsRecorded() async throws {
