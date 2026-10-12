@@ -139,6 +139,20 @@ test('refresh restores a selected exam before making the first state request', a
   assert.equal(title(view), 'Biology');
 });
 
+test('selected completed or archived history keeps its schedule without reopening old sessions', async t => {
+  const { exams } = setup();
+  exams.algebra.plan.status = 'completed';
+  exams.biology.plan.status = 'archived';
+  const view = await mount(t);
+  assert.equal(title(view), 'Algebra');
+  assert.ok(view.container.textContent.includes('Algebra practice'));
+  assert.ok(![...view.container.querySelectorAll('a')].some(a => a.textContent === 'Start session'));
+  await choose(view, 'biology');
+  assert.equal(title(view), 'Biology');
+  assert.ok(view.container.textContent.includes('Biology practice'));
+  assert.ok(![...view.container.querySelectorAll('a')].some(a => a.textContent === 'Start session'));
+});
+
 test('late state from a rapid earlier selection cannot overwrite the latest exam', async t => {
   const { exams } = setup();
   const view = await mount(t);
