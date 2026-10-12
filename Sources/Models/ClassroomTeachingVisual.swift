@@ -57,8 +57,8 @@ struct ClassroomTeachingVisual: Codable, Equatable {
 
     var isValid: Bool {
         switch kind {
-        case "fraction_bar":
-            return (2...20).contains(parts) && (0...parts).contains(value) && whole.isFinite && whole > 0
+        case "fraction_bar", "fraction_pie":
+            return ((kind == "fraction_pie" ? 1 : 2)...20).contains(parts) && (0...parts).contains(value) && whole.isFinite && whole > 0
         case "comparison", "sequence", "process_flow", "timeline":
             return (2...8).contains(entries.count) && entries.indices.contains(value)
         case "number_line":

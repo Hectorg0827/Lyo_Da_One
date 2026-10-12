@@ -479,6 +479,10 @@ interface LyoApiService {
     @POST("api/v1/lyo2/chat/check")
     suspend fun checkChatAnswer(@Body body: CheckAnswerRequest): CheckAnswerResult
 
+    /** Save diagram exploration separately from quiz answers. */
+    @POST("api/v1/lyo2/chat/visual")
+    suspend fun updateChatVisual(@Body body: VisualUpdateRequest): VisualUpdateResponse
+
     @POST("api/v1/ai/chat")
     suspend fun simpleChat(@Body body: SimpleChatRequest): SimpleChatResponse
 }

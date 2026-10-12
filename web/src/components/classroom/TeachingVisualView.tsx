@@ -5,14 +5,28 @@ import { ArrowRight, Minus, Plus } from 'lucide-react';
 import type { TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { useClassroomStore } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
+import { FractionPie } from '@/components/shared/FractionPie';
 
-export function TeachingVisualView({ id, visual }: { id: string; visual: TeachingVisual }) {
-  const rangeId = useId();
-  const [value, setValue] = useState(visual.value);
+export function TeachingVisualView({ id, visual, readOnly = false }: { id: string; visual: TeachingVisual; readOnly?: boolean }) {
   const update = useClassroomStore(s => s.updateActivity);
   const spanish = useClassroomStore(s => s.languageCode.startsWith('es'));
+  return <TeachingVisualCard id={id} visual={visual} spanish={spanish} readOnly={readOnly} onUpdate={values => { update(id, values); }} />;
+}
+
+/** Surface-independent renderer; only its caller decides where updates go. */
+export function TeachingVisualCard({ id, visual, spanish = false, readOnly = false, onUpdate }: {
+  id: string;
+  visual: TeachingVisual;
+  spanish?: boolean;
+  readOnly?: boolean;
+  onUpdate?: (values: Record<string, unknown>) => void;
+}) {
+  const rangeId = useId();
+  const [value, setValue] = useState(visual.value);
   const change = (next: number) => {
-    if (update(id, { value: next })) setValue(next);
+    if (readOnly) return;
+    setValue(next);
+    onUpdate?.({ value: next });
   };
 
   const entryButtons = (numbered = false) => (
@@ -32,6 +46,7 @@ export function TeachingVisualView({ id, visual }: { id: string; visual: Teachin
   );
 
   return (
+    <fieldset disabled={readOnly} className="min-w-0">
     <section aria-label={visual.title} className="overflow-hidden rounded-2xl border border-lyo-300/20 bg-gradient-to-br from-lyo-400/[0.08] via-[var(--surface)] to-lyo-400/[0.08] p-5 sm:p-6">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="space-y-2">
@@ -41,6 +56,11 @@ export function TeachingVisualView({ id, visual }: { id: string; visual: Teachin
         <span className="rounded-full border border-lyo-300/20 bg-lyo-300/5 px-3 py-1.5 text-xs text-lyo-200">{spanish ? 'Visual' : 'Visual'}</span>
       </div>
       <p className="mb-5 max-w-prose text-sm leading-relaxed text-[var(--text-secondary)]">{visual.caption}</p>
+
+      {visual.kind === 'fraction_pie' && <FractionPie key={visual.visual_id || id}
+        initial={{ parts: visual.parts, value: visual.value }} whole={visual.whole} unit={visual.unit} spanish={spanish}
+        disabled={readOnly}
+        onChange={next => onUpdate?.({ parts: next.parts, value: next.value })} />}
 
       {visual.kind === 'fraction_bar' && (
         <div className="space-y-5">
@@ -160,9 +180,10 @@ export function TeachingVisualView({ id, visual }: { id: string; visual: Teachin
 
       {visual.kind === 'graph' && <Explorable expression={visual.expression} params={visual.params} xMin={visual.x_min} xMax={visual.x_max}
         yMin={visual.y_min} yMax={visual.y_max}
-        onValuesChange={params => update(id, { params })} />}
+        onValuesChange={params => onUpdate?.({ params })} />}
 
       <p className="sr-only">{visual.description}</p>
     </section>
+    </fieldset>
   );
 }

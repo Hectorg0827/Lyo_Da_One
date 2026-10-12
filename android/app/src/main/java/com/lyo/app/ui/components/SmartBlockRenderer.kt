@@ -55,6 +55,9 @@ import com.lyo.app.data.api.QuizBlockPayload
 import com.lyo.app.data.api.SmartBlock
 import com.lyo.app.data.api.SmartBlockContent
 import com.lyo.app.data.api.TextBlockPayload
+import com.lyo.app.ui.classroom.catalog.TeachingVisualCard
+import com.lyo.app.data.classroom.isTeachingVisualValid
+import com.google.gson.JsonElement
 import com.lyo.app.ui.classroom.catalog.WebViewBlock
 import com.lyo.app.ui.classroom.catalog.WebViewBlockKind
 import com.lyo.app.ui.theme.BorderColor
@@ -80,6 +83,7 @@ fun SmartBlockList(
     onQuizAnswer: (blockId: String, selectedIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
     contentColor: Color = TextPrimary,
+    onVisualUpdate: (String, Map<String, JsonElement>) -> Unit = { _, _ -> },
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         blocks.forEach { block ->
@@ -88,6 +92,7 @@ fun SmartBlockList(
                 checkResult = checkResults[block.id],
                 onAnswer = { index -> onQuizAnswer(block.id, index) },
                 color = contentColor,
+                onVisualUpdate = { onVisualUpdate(block.id, it) },
             )
         }
     }
@@ -99,6 +104,7 @@ private fun SmartBlockView(
     checkResult: CheckAnswerResult?,
     onAnswer: (Int) -> Unit,
     color: Color,
+    onVisualUpdate: (Map<String, JsonElement>) -> Unit,
 ) {
     when (val content = block.content) {
         is SmartBlockContent.Text -> TextBlockView(content.payload, block.subtype, color)
@@ -108,7 +114,14 @@ private fun SmartBlockView(
         is SmartBlockContent.DataViz -> DataVizBlockView(content.payload, color)
         is SmartBlockContent.Media -> MediaBlockView(content.payload)
         is SmartBlockContent.Progress -> ProgressBlockView(content.payload)
-        is SmartBlockContent.Interactive -> InteractiveBlockView(content.payload, block.subtype, color)
+        is SmartBlockContent.Interactive -> {
+            val visual = content.payload.visual
+            if (block.subtype == "teaching_visual" && visual != null && visual.isTeachingVisualValid()) {
+                TeachingVisualCard(visual, block.id, onVisualUpdate)
+            } else {
+                InteractiveBlockView(content.payload, block.subtype, color)
+            }
+        }
         is SmartBlockContent.MasteryMap -> MasteryMapBlockView(content.payload, color)
         is SmartBlockContent.Unknown -> UnknownBlockView()
     }

@@ -245,6 +245,9 @@ struct LyoOverlayView: View {
             },
             onSmartQuizAnswer: { blockId, index in
                 viewModel.answerSmartQuizCheck(messageId: message.id, blockId: blockId, selectedIndex: index)
+            },
+            onSmartVisualUpdate: { blockId, values in
+                viewModel.updateSmartVisual(messageId: message.id, blockId: blockId, values: values)
             }
         )
         .id(message.id)

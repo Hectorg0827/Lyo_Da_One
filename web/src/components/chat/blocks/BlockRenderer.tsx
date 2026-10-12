@@ -13,6 +13,8 @@ import {
 } from '../markdown-config';
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
+import TeachingVisualBlock from './TeachingVisualBlock';
+import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { MermaidView, ChartView } from '@/components/classroom/BoardElementView';
 
 const inlineMarkdownComponents = {
@@ -382,6 +384,9 @@ export default function BlockRenderer({
           case 'quiz':
             return <CheckBlock key={block.id} block={block} message={message} />;
           case 'interactive':
+            if (block.subtype === 'teaching_visual' && parseTeachingVisual(block.content?.visual)) {
+              return <TeachingVisualBlock key={block.id} block={block} message={message} />;
+            }
             if (block.subtype === 'explorable') {
               return <ExplorableBlock key={block.id} block={block} />;
             }

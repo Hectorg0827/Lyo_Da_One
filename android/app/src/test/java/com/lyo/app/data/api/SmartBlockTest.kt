@@ -1,7 +1,9 @@
 package com.lyo.app.data.api
 
 import com.google.gson.GsonBuilder
+import com.lyo.app.data.classroom.isTeachingVisualValid
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,6 +24,27 @@ class SmartBlockTest {
         .create()
 
     private fun decode(json: String): SmartBlock = gson.fromJson(json, SmartBlock::class.java)
+
+    @Test
+    fun `chat and test prep pie decodes as the classroom visual and retains saved values`() {
+        val wire = javaClass.getResource("/SharedFractionPie.json")!!.readText()
+        val block = decode(wire)
+        assertEquals("teaching_visual", block.subtype)
+        val payload = (block.content as SmartBlockContent.Interactive).payload
+        val visual = payload.visual!!
+        assertTrue(visual.isTeachingVisualValid())
+        assertEquals("fraction_pie", visual.kind)
+        assertEquals(4, visual.parts)
+        assertEquals(3, visual.value)
+        assertEquals(visual.description, payload.items.first().detail)
+        val saved = gson.fromJson(gson.toJson(visual.copy(parts = 8, value = 3)), com.lyo.app.data.classroom.ClassroomBlock::class.java)
+        assertTrue(saved.isTeachingVisualValid())
+        assertEquals(8, saved.parts)
+        assertEquals(3, saved.value)
+        assertFalse(visual.copy(parts = 0).isTeachingVisualValid())
+        assertFalse(visual.copy(parts = 2, value = 3).isTeachingVisualValid())
+        assertTrue(visual.copy(parts = 1, value = 1).isTeachingVisualValid())
+    }
 
     @Test
     fun `decodes a text block with subtype`() {
