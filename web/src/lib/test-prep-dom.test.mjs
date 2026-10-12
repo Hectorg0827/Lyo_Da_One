@@ -153,6 +153,20 @@ test('selected completed or archived history keeps its schedule without reopenin
   assert.ok(![...view.container.querySelectorAll('a')].some(a => a.textContent === 'Start session'));
 });
 
+test('ordinary entry upgrades a legacy completed-profile snapshot to explicit history', async t => {
+  const { exams, calls } = setup();
+  exams.algebra.plan.status = 'completed';
+  api.testPrep.state = async id => {
+    calls.state.push(id);
+    return id ? exams[id] : { ...exams.algebra, plan: null, sessions: [] };
+  };
+  const view = await mount(t);
+  assert.deepEqual(calls.state, [undefined, 'algebra']);
+  assert.equal(title(view), 'Algebra');
+  assert.ok(view.container.textContent.includes('Algebra practice'));
+  assert.equal(view.container.querySelector('[aria-label="Your answer"]'), null);
+});
+
 test('late state from a rapid earlier selection cannot overwrite the latest exam', async t => {
   const { exams } = setup();
   const view = await mount(t);

@@ -130,8 +130,14 @@ export default function TestPrepPage() {
     const requestedProfileId = selectedProfileIdRef.current;
     dispatch({ type: 'load_started' });
     try {
-      const saved = await api.testPrep.state(requestedProfileId ?? undefined);
+      let saved = await api.testPrep.state(requestedProfileId ?? undefined);
       if (!mountedRef.current || selection !== selectionVersionRef.current || version !== loadVersionRef.current) return;
+      // Legacy no-ID reads intentionally omit completed/archived plans. The
+      // web entry can select that returned profile explicitly to show history.
+      if (!requestedProfileId && saved.profile?.intake_complete && !saved.plan) {
+        saved = await api.testPrep.state(saved.profile.id);
+        if (!mountedRef.current || selection !== selectionVersionRef.current || version !== loadVersionRef.current) return;
+      }
       selectedProfileIdRef.current = saved.profile?.id ?? null;
       // A URL preserves the learner's selected exam on refresh and deep link.
       if (saved.profile?.id) {
