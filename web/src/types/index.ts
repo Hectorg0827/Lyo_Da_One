@@ -894,6 +894,7 @@ export interface TestPrepState {
 }
 
 export type TestPrepAction =
+  | { type: 'profile_selected' }
   | { type: 'load_started' }
   | { type: 'plan_loaded'; planId: string }
   | { type: 'no_plan' }

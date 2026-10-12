@@ -84,6 +84,8 @@ export default function TestPrepPage() {
   const [startingNew, setStartingNew] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const selectedProfileIdRef = useRef<string | null>(null);
+  const selectionVersionRef = useRef(0);
+  const mountedRef = useRef(true);
   // A learner can keep multiple exams open. Older asynchronous responses must
   // never paint the details of a different test over the current selection.
   const loadVersionRef = useRef(0);
@@ -92,13 +94,44 @@ export default function TestPrepPage() {
   const retryTurn = useRef<{ text: string; id: string } | null>(null);
   const busy = useRef(false);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      selectionVersionRef.current++;
+      loadVersionRef.current++;
+    };
+  }, []);
+
+  const selectionIsCurrent = useCallback((version: number) =>
+    mountedRef.current && version === selectionVersionRef.current, []);
+
+  const selectProfile = (id: string) => {
+    selectedProfileIdRef.current = id;
+    const version = ++selectionVersionRef.current;
+    loadVersionRef.current++;
+    dispatch({ type: 'profile_selected' });
+    setSnapshot(null);
+    setProfileId(undefined);
+    setTurns([]);
+    setMaterials([]);
+    setDraft('');
+    setIntakeError(null);
+    setStartError(null);
+    setCoach(null);
+    setCoachFailed(false);
+    retryTurn.current = null;
+    return version;
+  };
+
   const loadPlan = useCallback(async () => {
     const version = ++loadVersionRef.current;
+    const selection = selectionVersionRef.current;
     const requestedProfileId = selectedProfileIdRef.current;
     dispatch({ type: 'load_started' });
     try {
       const saved = await api.testPrep.state(requestedProfileId ?? undefined);
-      if (version !== loadVersionRef.current) return;
+      if (!mountedRef.current || selection !== selectionVersionRef.current || version !== loadVersionRef.current) return;
       selectedProfileIdRef.current = saved.profile?.id ?? null;
       // A URL preserves the learner's selected exam on refresh and deep link.
       if (saved.profile?.id) {
@@ -107,7 +140,9 @@ export default function TestPrepPage() {
         window.history.replaceState(window.history.state, '', url.toString());
       }
       // A failed history request must not hide the selected exam or its lessons.
-      void api.testPrep.profiles().then(setProfiles).catch(() => undefined);
+      void api.testPrep.profiles().then(list => {
+        if (mountedRef.current && selection === selectionVersionRef.current && version === loadVersionRef.current) setProfiles(list);
+      }).catch(() => undefined);
       setSnapshot(saved);
       setProfileId(saved.profile?.id);
       setTurns((saved.profile?.intake_transcript ?? []).map(t => ({
@@ -127,7 +162,7 @@ export default function TestPrepPage() {
         api.testPrep.todaySessions(),
         api.coach.today(),
       ]);
-      if (version !== loadVersionRef.current) return;
+      if (!mountedRef.current || selection !== selectionVersionRef.current || version !== loadVersionRef.current) return;
       if (coachResult.status === 'fulfilled') {
         setCoach(coachResult.value);
         setCoachFailed(false);
@@ -144,9 +179,9 @@ export default function TestPrepPage() {
           : undefined,
       });
     } catch {
-      if (version === loadVersionRef.current) dispatch({ type: 'load_failed' });
+      if (mountedRef.current && selection === selectionVersionRef.current && version === loadVersionRef.current) dispatch({ type: 'load_failed' });
     } finally {
-      if (version === loadVersionRef.current) dispatch({ type: 'load_settled' });
+      if (mountedRef.current && selection === selectionVersionRef.current && version === loadVersionRef.current) dispatch({ type: 'load_settled' });
     }
   }, []);
 
@@ -167,7 +202,8 @@ export default function TestPrepPage() {
   const sendTurn = useCallback(
     async (message: string) => {
       const text = message.trim();
-      if (!text || busy.current || uploading) return;
+      if (!text || busy.current || uploading || startingNew) return;
+      const selection = selectionVersionRef.current;
       // Checked here and not only on the controls. This call ends in
       // `plans/generate`, which creates a plan unconditionally, and a plan
       // must not be created while we do not know whether one already exists.
@@ -182,37 +218,45 @@ export default function TestPrepPage() {
       setDraft('');
       try {
         const turn = await api.testPrep.intakeTurn(text, profileId, materials, retryTurn.current.id);
+        if (!selectionIsCurrent(selection)) return;
         retryTurn.current = null;
         setMaterials([]);
         setProfileId(turn.test_profile_id);
+        selectedProfileIdRef.current = turn.test_profile_id;
         setTurns((prev) => [...prev, { role: 'coach', text: turn.message_to_user }]);
 
         // The server decides when it has enough, not a turn count here.
         if (intakeIsComplete(turn)) {
           setBuilding(true);
           await api.testPrep.generatePlan(turn.test_profile_id);
+          if (!selectionIsCurrent(selection)) return;
           await loadPlan();
         }
       } catch (error) {
+        if (!selectionIsCurrent(selection)) return;
         setIntakeError(error instanceof Error ? error.message : 'Your message could not be sent. Please retry.');
         setDraft(text);
         // Reload server-owned state: a timeout may have occurred after saving.
         await loadPlan();
       } finally {
-        busy.current = false;
-        setSending(false);
-        setBuilding(false);
+        if (selectionIsCurrent(selection)) {
+          busy.current = false;
+          setSending(false);
+          setBuilding(false);
+        }
       }
     },
-    [loadPlan, profileId, materials, state, uploading]
+    [loadPlan, profileId, materials, state, uploading, startingNew, selectionIsCurrent]
   );
 
   const finishSession = useCallback(
     async (sessionId: string) => {
       if (finishing) return;
+      const selection = selectionVersionRef.current;
       dispatch({ type: 'finish_started', sessionId });
       try {
         const summary = completionSummary(await api.testPrep.completeSession(sessionId));
+        if (!selectionIsCurrent(selection)) return;
 
         // Say what the server measured, including when it measured nothing.
         // The client sends no score and must not imply one: "done" with a
@@ -233,34 +277,38 @@ export default function TestPrepPage() {
         dispatch({ type: 'finish_succeeded', sessionId, notice: text });
         await loadPlan();
       } catch {
+        if (!selectionIsCurrent(selection)) return;
         dispatch({
           type: 'finish_failed',
           notice: 'I could not mark that done just now.',
         });
       }
     },
-    [finishing, loadPlan]
+    [finishing, loadPlan, selectionIsCurrent]
   );
 
   const startNewTest = async () => {
-    if (busy.current || startingNew) return;
+    if (busy.current || startingNew || uploading || finishing) return;
+    busy.current = true;
+    let selection = selectionVersionRef.current;
     setStartingNew(true);
     setStartError(null);
     const requestId = pendingNewTestIdRef.current ?? crypto.randomUUID();
     pendingNewTestIdRef.current = requestId;
     try {
       const created = await api.testPrep.startNew(requestId);
-      selectedProfileIdRef.current = created.profile_id;
+      if (!selectionIsCurrent(selection)) return;
       pendingNewTestIdRef.current = null;
-      setMaterials([]);
-      setDraft('');
-      setIntakeError(null);
-      retryTurn.current = null;
+      selection = selectProfile(created.profile_id);
       await loadPlan();
     } catch {
+      if (!selectionIsCurrent(selection)) return;
       setStartError('Could not create a new test. Your existing test was not changed. Try again.');
     } finally {
-      setStartingNew(false);
+      if (selectionIsCurrent(selection)) {
+        busy.current = false;
+        setStartingNew(false);
+      }
     }
   };
 
@@ -273,9 +321,11 @@ export default function TestPrepPage() {
           Your tests
           <select
             aria-label="Choose a test"
-            value={snapshot?.profile?.id ?? ''}
+            value={selectedProfileIdRef.current ?? snapshot?.profile?.id ?? ''}
+            disabled={startingNew || sending || building || uploading || !!finishing}
             onChange={(event) => {
-              selectedProfileIdRef.current = event.target.value;
+              if (busy.current || uploading || finishing) return;
+              selectProfile(event.target.value);
               void loadPlan();
             }}
             className="max-w-[240px] rounded-lg border border-white/20 bg-gray-900 px-3 py-2 text-sm text-white"
@@ -292,7 +342,7 @@ export default function TestPrepPage() {
       <button
         type="button"
         onClick={() => void startNewTest()}
-        disabled={startingNew || sending || building}
+        disabled={startingNew || sending || building || uploading || !!finishing}
         className="rounded-xl border border-violet-400/40 bg-violet-500/15 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500/25 disabled:opacity-50"
       >
         {startingNew ? 'Starting new test…' : '+ New test'}
@@ -304,6 +354,7 @@ export default function TestPrepPage() {
   if (authLoading || loading) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16 text-center text-white/60">
+        {isAuthenticated && testSwitcher}
         <Loader2 className="mx-auto h-6 w-6 animate-spin" aria-hidden />
         <p className="mt-3 text-sm">Loading your test prep…</p>
       </main>
@@ -392,24 +443,27 @@ export default function TestPrepPage() {
           <button className="mt-4 rounded-xl bg-violet-600 px-5 py-3 text-white disabled:opacity-50"
             disabled={building} onClick={async () => {
               if (!profileId || busy.current) return;
+              const selection = selectionVersionRef.current;
               busy.current = true; setBuilding(true); setIntakeError(null);
-              try { await api.testPrep.generatePlan(profileId); await loadPlan(); }
-              catch (e) { setIntakeError(e instanceof Error ? e.message : 'Could not build your plan.'); }
-              finally { busy.current = false; setBuilding(false); }
+              try { await api.testPrep.generatePlan(profileId); if (selectionIsCurrent(selection)) await loadPlan(); }
+              catch (e) { if (selectionIsCurrent(selection)) setIntakeError(e instanceof Error ? e.message : 'Could not build your plan.'); }
+              finally { if (selectionIsCurrent(selection)) { busy.current = false; setBuilding(false); } }
             }}>{building ? 'Building your plan…' : 'Build my saved plan'}</button>
         )}
         <label className="mt-4 block text-sm text-white/70">Add notes, a photo or a PDF
-          <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf,text/plain" disabled={sending || uploading || failed}
+          <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf,text/plain" disabled={sending || uploading || building || startingNew || failed}
             className="mt-2 block w-full text-sm" onChange={async event => {
               const file = event.target.files?.[0];
               if (!file) return;
+              const selection = selectionVersionRef.current;
               setUploading(true); setIntakeError(null);
               try {
                 const uploaded = await api.media.upload(file, 'test-prep');
+                if (!selectionIsCurrent(selection)) return;
                 setMaterials(prev => [...prev, { name: file.name, uri: uploaded.url,
                   modality: file.type.startsWith('image/') ? 'IMAGE' : 'DOCUMENT', mime_type: file.type }]);
-              } catch { setIntakeError('The file could not be uploaded. Please try again.'); }
-              finally { setUploading(false); event.target.value = ''; }
+              } catch { if (selectionIsCurrent(selection)) setIntakeError('The file could not be uploaded. Please try again.'); }
+              finally { if (selectionIsCurrent(selection)) setUploading(false); event.target.value = ''; }
             }} />
         </label>
         <p className="mt-2 text-sm text-white/60" aria-live="polite">{uploading ? 'Uploading…' : materials.map(m => m.name).join(', ')}</p>
@@ -425,12 +479,12 @@ export default function TestPrepPage() {
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Type your answer…"
             aria-label="Your answer"
-            disabled={!canStartIntake(state)}
+            disabled={startingNew || building || !canStartIntake(state)}
             className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/40 disabled:opacity-40"
           />
           <button
             type="submit"
-            disabled={sending || uploading || !draft.trim() || !canStartIntake(state)}
+            disabled={sending || uploading || building || startingNew || !draft.trim() || !canStartIntake(state)}
             className="rounded-xl bg-white px-4 py-3 text-black disabled:opacity-40"
             aria-label="Send"
           >
@@ -456,10 +510,14 @@ export default function TestPrepPage() {
   // overstate one failed call, and saying nothing understates it — badly, in
   // the moment right after finishing a session.
   const readinessStale = readinessNote(state);
-  const testGoal = coach?.active_goals.find(goal =>
+  const testGoals = coach?.active_goals.filter(goal =>
     goal.goal_type === 'test' &&
-    (!snapshot?.profile?.subject || goal.subject === snapshot.profile.subject)
-  ) ?? coach?.active_goals.find(goal => goal.goal_type === 'test') ?? null;
+    goal.subject === snapshot?.profile?.subject
+  ) ?? [];
+  // Subject alone cannot distinguish two Algebra exams. Show a mission only
+  // when it can be tied unambiguously to the selected test.
+  const testGoal = testGoals.length === 1 && profiles.filter(p =>
+    p.subject === snapshot?.profile?.subject).length <= 1 ? testGoals[0] : null;
   const coachReadiness = testGoal ? coach?.readiness[testGoal.id] : undefined;
   const coachMission = testGoal
     ? (coach?.mission ?? []).filter(item => item.goal_id === testGoal.id)
@@ -470,7 +528,7 @@ export default function TestPrepPage() {
       {testSwitcher}
       <header>
         <h1 className="text-2xl font-semibold text-white">
-          {readiness?.subject ?? 'Your test'}
+          {snapshot?.profile?.subject ?? readiness?.subject ?? 'Your test'}
         </h1>
         {countdown && <p className="mt-1 text-sm text-white/60">{countdown}</p>}
         {stale && (
@@ -480,7 +538,7 @@ export default function TestPrepPage() {
         )}
       </header>
 
-      {snapshot && <PrepManagement snapshot={snapshot} onSaved={loadPlan} />}
+      {snapshot && <PrepManagement key={snapshot.profile?.id} snapshot={snapshot} onSaved={loadPlan} />}
 
       {coachReadiness && (
         <section className="mt-6 rounded-2xl border border-violet-400/20 bg-violet-400/[0.07] p-5">

@@ -22,6 +22,38 @@ const loaded = (planId = 'p1') =>
     { type: 'load_settled' }
   );
 
+test('switching plan clears another exam readiness, sessions and completion notice', () => {
+  const algebra = { ...loaded('algebra'), notice: 'Algebra completed' };
+  let biology = testPrepReducer(algebra, { type: 'plan_loaded', planId: 'biology' });
+  assert.equal(biology.readiness, null);
+  assert.deepEqual(biology.sessions, []);
+  assert.equal(biology.notice, null);
+  biology = testPrepReducer(biology, { type: 'details_loaded' });
+  assert.equal(biology.readiness, null);
+  assert.deepEqual(biology.sessions, []);
+  assert.equal(biology.readinessFailed, true);
+  assert.equal(biology.sessionsFailed, true);
+});
+
+test('explicit profile navigation blocks the old view before the new state arrives', () => {
+  const selected = testPrepReducer(loaded(), { type: 'profile_selected' });
+  assert.equal(selected.loading, true);
+  assert.equal(selected.loadedOnce, false);
+  assert.equal(selected.planId, null);
+  assert.equal(selected.readiness, null);
+  assert.deepEqual(selected.sessions, []);
+  const failed = testPrepReducer(selected, { type: 'load_failed' });
+  assert.equal(failed.planLoadFailed, true);
+  assert.equal(failed.refreshFailed, false);
+});
+
+test('refreshing the same plan preserves only that exam stale details', () => {
+  const before = loaded('algebra');
+  const refreshed = testPrepReducer(before, { type: 'plan_loaded', planId: 'algebra' });
+  assert.deepEqual(refreshed.readiness, before.readiness);
+  assert.deepEqual(refreshed.sessions, before.sessions);
+});
+
 // ─── A refresh never destroys what is on screen ──────────────────────────────
 
 test('the first load blanks the page, a refresh does not', () => {

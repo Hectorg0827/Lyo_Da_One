@@ -56,7 +56,15 @@ sealed class ClassroomServerEvent {
      *  extracted from them yet. */
     data object IgnoredEvent : ClassroomServerEvent()
 
-    data class ErrorEvent(val message: String?) : ClassroomServerEvent()
+    /**
+     * Something went wrong.
+     *
+     * [fatal] separates "this class cannot run" (no token, no socket) from
+     * "the classroom reported a problem and is carrying on", which web and
+     * iOS both show as a notice beside a class that is still open. Treating
+     * the second as the first ended a lesson the learner could have finished.
+     */
+    data class ErrorEvent(val message: String?, val fatal: Boolean = false) : ClassroomServerEvent()
 }
 
 private val COMPONENT_RENDER_TYPES = setOf("component_render", "component_stream", "COMPONENT_RENDER")
