@@ -315,6 +315,11 @@ struct LivingClassroomView: View {
                 .zIndex(102)
             }
 
+            // One slot for everything the class needs to say about itself
+            // while it is still open. Deliberately a single ZStack child:
+            // ViewBuilder takes ten, and this stage was already at eight.
+            classroomStatusOverlay
+
             // Lesson complete — celebration + shareable recap card. Every
             // finished lesson becomes a share moment (clips ↔ classroom flywheel).
             if service.lessonComplete, !recapDismissed {
@@ -1316,6 +1321,12 @@ struct LivingClassroomView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 14) {
+                    // The cover page, until the teaching replaces it. A
+                    // learner should never be looking at a blank board
+                    // wondering whether the class has begun.
+                    if let opening = service.opening, service.renderedComponents.isEmpty {
+                        openingCard(opening)
+                    }
                     if service.renderedComponents.isEmpty {
                         whiteboardLoadingState
                     } else {
@@ -2045,6 +2056,215 @@ struct LivingClassroomView: View {
             .overlay(Capsule().stroke(borderColor, lineWidth: 1))
         }
         .accessibilityLabel(label)
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - OPENING CARD
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// What this class is, before any of it is taught.
+    ///
+    /// A lesson used to open on whatever the engine generated first, which
+    /// left a learner no way to tell the start of a class from the middle of
+    /// one — worst of all on a resumed session, where the teacher really did
+    /// carry on from a place the learner had been given no reminder of. This
+    /// teaches nothing, and claims nothing the class was not asked for.
+    private func openingCard(_ opening: ClassroomOpening) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "graduationcap.fill")
+                    .foregroundStyle(accentBlue)
+                Text(opening.title)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            if opening.resumed {
+                Text("Picking up where you left off")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(accentBlue)
+            }
+            Text("By the end: \(opening.objective)")
+                .font(.system(size: 14))
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                ForEach(opening.facts, id: \.self) { fact in
+                    Text(fact)
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(.white.opacity(0.08)))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            Text(opening.note)
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(bgPanel.opacity(0.9))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(accentBlue.opacity(0.3), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("What this class is. \(opening.title). By the end: \(opening.objective)")
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - STALL RECOVERY
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// What the class has to say about itself while it is still open.
+    ///
+    /// At most one of these is ever on screen, in priority order: a step that
+    /// is not coming outranks a problem the classroom merely reported, which
+    /// outranks the offer of an unfinished class. The disconnect banner is a
+    /// separate case — there is no class to recover there, only a socket.
+    @ViewBuilder
+    private var classroomStatusOverlay: some View {
+        if service.isConnected {
+            VStack {
+                if service.stallPhase == .stalled {
+                    stallRecoveryBanner
+                } else if let notice = service.notice {
+                    noticeBanner(notice)
+                } else if service.resumableSession != nil,
+                          service.renderedComponents.isEmpty {
+                    resumeOfferBanner
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .zIndex(102)
+        }
+    }
+
+    /// The step never arrived.
+    ///
+    /// Says so, says it is not the learner's fault, and gives them two things
+    /// that actually move the class on — asking again, and leaving the stuck
+    /// session behind. A retry that silently re-enters the same dead session
+    /// is what made this a loop rather than a hiccup.
+    private var stallRecoveryBanner: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "hourglass.badge.plus")
+                    .foregroundStyle(.orange)
+                Text("This step is stuck")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            Text(ClassroomSessionContract.stallRecovery)
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button {
+                    service.nudgeTeacher()
+                } label: {
+                    Text("Ask Lyo again")
+                        .font(.system(size: 13, weight: .bold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(.white))
+                        .foregroundStyle(.black)
+                }
+                .buttonStyle(.plain)
+                Button {
+                    service.restartLesson()
+                } label: {
+                    Text("Start this lesson over")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().stroke(.white.opacity(0.25)))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(bgPanel.opacity(0.95))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// A problem the classroom reported and recovered from, said out loud.
+    /// It used to reach the log alone, while the learner watched a board
+    /// that had simply stopped.
+    private func noticeBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.bubble")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button {
+                service.notice = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss this message")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(bgPanel.opacity(0.95))
+        )
+    }
+
+    /// A seat the learner left part-way through, offered rather than forced
+    /// on them. Opening the same topic again now starts a new class, so the
+    /// old one has to be reachable on purpose or it is simply gone.
+    private var resumeOfferBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.uturn.backward.circle")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(accentBlue)
+            Text("You have an unfinished class on this topic.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.8))
+            Spacer(minLength: 8)
+            Button {
+                service.resumeLesson()
+            } label: {
+                Text("Pick up")
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(accentBlue))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(bgPanel.opacity(0.95))
+        )
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

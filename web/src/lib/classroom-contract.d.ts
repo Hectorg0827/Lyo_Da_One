@@ -29,3 +29,55 @@ export function buildClassroomWsUrl(
   token: string | null,
 ): string;
 export function isTransferReady(response: string, minWords?: number): boolean;
+
+export interface ClassroomSavedSession {
+  id: string;
+  startedAt: number;
+  generation: number;
+  /** The class reached its end, so it is not an unfinished one to resume. */
+  finished?: boolean;
+}
+
+export interface ClassroomSessionStart {
+  sessionId: string;
+  generation: number;
+  resumed: boolean;
+}
+
+export interface ClassroomOpening {
+  title: string;
+  objective: string;
+  facts: string[];
+  note: string;
+  resumed: boolean;
+}
+
+export function classroomCourseKey(connection: {
+  courseId?: string;
+  topic?: string;
+} | null | undefined): string;
+export function classroomSessionStorageKey(courseKey: string): string;
+export const CLASSROOM_RESUME_WINDOW_MS: number;
+export function canResumeClassroom(
+  saved: ClassroomSavedSession | null | undefined,
+  now?: number,
+): boolean;
+export function classroomSessionStart(
+  courseKey: string,
+  saved: ClassroomSavedSession | null | undefined,
+  options?: { resume?: boolean; now?: number },
+): ClassroomSessionStart;
+export const CLASSROOM_STALL_NOTICE_MS: number;
+export const CLASSROOM_STALL_RECOVERY_MS: number;
+export const CLASSROOM_STALL_NOTICE: string;
+export const CLASSROOM_STALL_RECOVERY: string;
+export const CLASSROOM_OPENING_NOTE: string;
+export function classroomOpening(input?: {
+  topic?: string;
+  objective?: string;
+  durationMinutes?: number;
+  difficulty?: string;
+  mode?: string;
+  resumed?: boolean;
+}): ClassroomOpening;
+export function defaultClassroomObjective(topic: string): string;

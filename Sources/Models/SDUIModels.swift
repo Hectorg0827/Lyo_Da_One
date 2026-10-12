@@ -349,12 +349,14 @@ struct SDUISceneMetadata: Codable {
     let targetEvidenceType: String?
     let teachingPolicyVersion: String?
     let targetConcepts: [String]?
+    var courseComplete: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case teachingAction = "teaching_action"
         case targetEvidenceType = "target_evidence_type"
         case teachingPolicyVersion = "teaching_policy_version"
         case targetConcepts = "target_concepts"
+        case courseComplete = "course_complete"
     }
 }
 

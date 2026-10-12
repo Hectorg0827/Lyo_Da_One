@@ -1184,3 +1184,218 @@ mean a server rolled back below this change cannot read a session saved above
 it. That is how every earlier field here arrived, and it bounds a rollback to
 in-flight sessions rather than to saved learner evidence, which lives in the
 record and not in the session.
+
+---
+
+## 13. Phase I — a class has a beginning, and a stuck one has a way out
+
+> Unusually for this document, this phase changed both repos. The backend rows
+> below are edits that landed, not contract decisions: `LyoBackendJune` was
+> writable for this work.
+
+### 13.1 What a learner actually saw
+
+A learner opened a free-topic class on Minecraft. The first thing the teacher
+said was *"Let's stay with Navigating the Minecraft World a moment longer."*
+Below it sat the board's paused notice — §11.4's `paused_notice`, the one that
+says the next step didn't load — and a Retry that produced the same notice
+again.
+
+Two different things went wrong and read as one failure:
+
+1. **A generation failed.** That is a backend fault, and the recovery copy on
+   the board is working as designed: the teacher does not apologise, the
+   notice does, and Retry is offered. Nothing in this repo fixes the
+   generation itself.
+2. **Retry could not get out of it.** `session_id` was the course id — or, for
+   a free topic, the topic text — on all three clients. The engine keys the
+   learner's place (`GuidedState`) to that id, so every re-entry resumed the
+   same session: the same stuck one, with the same first line. There was no
+   way, anywhere in the product, to ask for a clean start.
+
+The opening compounded it. Phase G/H made the first *teaching* move a
+diagnostic probe, which is the right opening question — but nothing above it
+said what the class was. A learner had no way to tell the start of a class
+from the middle of one, and on a resumed session they really were in the
+middle of one, with nothing on screen admitting it.
+
+### 13.2 What a session id is for
+
+The rule is now explicit and identical on three platforms:
+
+| Entry | `session_id` sent | Resumed? |
+| --- | --- | --- |
+| First class on a course or topic | the course key, exactly as before | no |
+| Opening it again | `<course key>~2`, `~3`, … | no |
+| "Pick up where I left off" | the saved id, carried by the offer | yes |
+| Saved session older than 6 hours | a new generation | no |
+
+The first row matters: a learner meeting a topic for the first time sends the
+id every client always sent, so this change cannot regress a first class. The
+offer carries the seat it is about rather than reading storage, because
+starting a class overwrites the stored record — reading it back would resume
+the class the learner is already sitting in.
+
+Course progress moved off the session id onto the course id at the same time.
+They were the same string, so nothing noticed; once a second class gets its
+own session, filing progress under it would reset the learner's progress every
+time they restarted a lesson.
+
+### 13.3 Waiting is the one state with no natural end
+
+Every other classroom state is left by something the learner or the teacher
+does. A wait for a generated step is left only by that step arriving — so when
+generation fails, the class does not break, it stops, with a "preparing the
+next step…" line that stays true forever.
+
+Each client now runs a one-second watch over that wait:
+
+- **12s** — say so. The caption stops claiming progress it isn't making.
+- **30s** — ask once, with `continue`.
+- **30s more** — admit it: recovery controls, *Ask Lyo again* and *Start this
+  lesson over*.
+
+The nudge is always `continue`, never the learner's own submission replayed.
+A resent answer is a second answer as far as the grader is concerned, and a
+learner who waited out a slow generation must not pay for it with a duplicate
+attempt on their record. That is asserted on all three platforms by the parity
+gate and by a test per platform.
+
+A wire `error` event also stopped being invisible. Web filed it in the
+transcript drawer, iOS in the log, and Android treated it as fatal and ended
+the class. All three now show it beside a class that is still open; only a
+failure that stops the class running (no token, no socket) ends it.
+
+### 13.4 What landed
+
+| Change | Where (`LyoBackendJune`) |
+| --- | --- |
+| `recovery_attempts` on `GuidedState`, counted on the saved state and reset by any success | `adaptive_teaching.py`, `adaptive_session.py` |
+| A retried step escalated to a more capable already-configured provider | `adaptive_teaching.py` (`model_json`, `_escalate`) |
+| A step that has failed twice asking for a question falls back to teaching | `adaptive_session.py` (`RELAX_RECOVERY_AFTER`, `TEACHING_MOVES`) |
+| The dead end proved dead, and proved fixed | `tests/test_classroom_recovery.py` |
+
+| Change | Where (this repo) |
+| --- | --- |
+| Session start, resume window, stall thresholds and opening copy | `web/src/lib/classroom-contract.mjs`, `Sources/Models/ClassroomSessionContract.swift`, `android/.../data/classroom/ClassroomSessionContract.kt` |
+| The wait watchdog and the recovery actions | `web/src/stores/classroom-store.ts`, `Sources/Services/LivingClassroomService.swift`, `android/.../ui/classroom/ClassroomEngine.kt` |
+| The opening card, the stall card, the notice and the resume offer | `web/src/components/classroom/BoardElementView.tsx` + `web/src/app/(main)/classroom/page.tsx`, `Sources/Views/Main/Classroom/LivingClassroomView.swift`, `android/.../ui/classroom/ClassroomChrome.kt` + `ClassroomScreen.kt` |
+| A recoverable classroom error told apart from a fatal one | `android/.../data/classroom/ClassroomServerEvent.kt` (`ErrorEvent.fatal`) |
+| `?resume=1` as the only way a link asks for the old seat | `web/src/lib/entry-contract.mjs` |
+| The three contracts held to the same numbers and the same words | `scripts/verify-classroom-parity.mjs` |
+
+### 13.5 Verification, and its limits
+
+- 339 web unit tests pass, including 13 new ones driving the real store
+  through a controllable clock: the cover page, a second class getting its own
+  session, the offered seat, the slow/ask-once/stall sequence, a paused class
+  not being accused of stalling, and a stalled quiz answer being asked after
+  with `continue` rather than resubmitted.
+- `npx tsc --noEmit` and `next build` are clean. All classroom and product
+  parity gates pass; the new assertions were confirmed to bite by mutating the
+  Android recovery threshold.
+- **The iOS and Android changes were not compiled or run.** This environment
+  has no Xcode, no Android SDK and no Gradle wrapper, so
+  `ClassroomSessionContractTests.swift` and `ClassroomSessionContractTest.kt`
+  are unrun here and the two UIs were reviewed by reading. CI is the gate.
+- **The backend half is fixed too, in `LyoBackendJune`.** The generation
+  failure itself is a provider outcome and will happen again; what was wrong
+  was that `unavailable` saves `before_generation`, so Retry resent a
+  byte-identical request — same move, same unit, same learner input, same
+  provider order — and a step the model could not compose once it could not
+  compose ever. `LearningTurn` was also configured for `gpt-4o-mini` and
+  `gemini-2.5-flash` only, so a unit neither could author had no path to being
+  taught at all. A retried step now escalates to `gpt-4o` (a reorder of
+  providers this module already uses — no new credential or client), and a
+  step that has failed twice stops asking for a question and teaches instead,
+  which earns no evidence and completes no unit. 433 backend classroom tests
+  pass and the full suite matches its baseline failure-for-failure.
+- **The two halves are independent on purpose.** The client watchdog still
+  earns its place: it covers a server that never answers at all, which no
+  server-side retry policy can.
+- Nobody has sat a lesson through a real stall. The thresholds are a judgement
+  about how long a learner will wait before a classroom looks broken, not a
+  measurement.
+
+---
+
+## 14. Phase J — the schema becomes a rule, and the retry gets a future
+
+Also a `LyoBackendJune` change; recorded here because §13 is where a reader
+looks for why a lesson stops, and both of these are about that.
+
+### 14.1 The contract was never enforced
+
+`model_json` built `schema.model_json_schema()`, pasted it into the system
+prompt, and set the provider's loose JSON mode. OpenAI's `{"type":
+"json_object"}` and Gemini's `responseMimeType` both mean one thing: *reply
+with some JSON*. Neither looks at the contract.
+
+So the schema was advice. A model that drifted from it produced output
+`model_validate_json` rejected — and a rejected turn is a retry, and two
+rejected retries is §13's paused board. The engine was absorbing, as a
+pedagogical failure, something that was only ever a formatting one.
+
+Both providers will take the schema itself. `strict_schema.py` converts a
+Pydantic contract into the dialect they accept: `$ref`s inlined, since support
+differs by provider and version; validation-only keywords dropped, since they
+are re-checked by the real model afterwards and the annotated contract still
+reaches the prompt; every object closed and every property required, because
+strict mode has no optional property.
+
+That last rule is the one worth guarding. It is safe **only** because it does
+not touch types. A field Pydantic marks nullable already carries `{"type":
+"null"}`; a field it does not, does not gain it. Requiring a property can
+therefore never make `null` legal where the model would reject it — which is
+the one way this conversion could hand a provider permission to produce
+something the server then throws away, i.e. reintroduce the exact failure it
+exists to remove. `test_requiring_a_field_never_makes_null_legal_where_it_was_not`
+asserts it per contract.
+
+**It ships off**, behind `CLASSROOM_STRICT_SCHEMA`. The conversion is tested;
+that a provider *accepts* the dialect is not, and cannot be from here — only
+the provider can answer it, and neither API is reachable from the environment
+this was written in. On by default would be betting every teaching turn on a
+guess. A provider that rejects the schema also gets one automatic retry in the
+old loose mode, so the worst case is the behaviour that preceded all of this
+rather than a teacher who cannot speak.
+
+### 14.2 The escalation pointed at a model being wound down
+
+§13 gave a failed step a stronger model on its retry, because `LearningTurn`
+could otherwise only ever be attempted by `gpt-4o-mini` and
+`gemini-2.5-flash` — so a unit neither could author had no path to being
+taught at all. It reached for `gpt-4o`, chosen from what the registry already
+had rather than from what has a future: a May 2024 model, pulled from ChatGPT
+in February 2026, carrying published retirement dates.
+
+It now reaches for `gemini-2.5-pro` — the one model in `ai_resilience`'s
+registry the live teaching path never asked for. Already configured, already
+keyed, already behind its own circuit breaker, and idle.
+
+The provider order is filtered against that registry downstream, so a name the
+registry does not carry is dropped **silently**: the escalation becomes a
+no-op, the retry re-runs on the models that just failed, and the symptom is
+indistinguishable from the bug the escalation exists to fix. `tests/test_model_escalation.py`
+holds the two files to each other and fails if the target is missing from the
+registry, or is one of the models the ordinary order already tried.
+
+### 14.3 What this does not claim
+
+- **No model was upgraded.** Both changes use models already in the registry
+  under keys the deployment already holds. Moving to a current generation
+  (the GPT-5 and Gemini 3 families) is a separate decision that needs model
+  names verified against the official pricing pages, which were unreachable
+  from here — published aggregator tables contradicted each other on names
+  and prices, so none were relied on.
+- **Enforcement fixes shape, not sense.** The structured-output literature is
+  consistent that schema pass rates run well above value accuracy: a model
+  held to a contract returns well-formed JSON, not a good question. The
+  pedagogical rejections in `turn()` — repeated checkpoint, wrong target,
+  tapped answer on an independent application — are untouched and should be
+  expected to continue.
+- **Nothing here was measured against production.** The right next step is the
+  counters §11.7 added and nobody has read: `lyo_classroom_model_seconds` and
+  `lyo_classroom_model_tokens_total`, by operation, provider and outcome. They
+  would say which contract actually fails, on which provider, and how often —
+  which is a better basis for the next model decision than any benchmark.
