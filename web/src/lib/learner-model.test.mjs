@@ -19,6 +19,7 @@ import {
   stateHeadline,
   nextStepLabel,
   conceptLabel,
+  conceptDisplayName,
   conceptKey,
   conceptsShownInClass,
   conceptsFromClassScene,
@@ -331,10 +332,20 @@ test('the top of the ladder has no next step to invent', () => {
   assert.equal(nextStepLabel('application'), 'Next: use it on a problem');
 });
 
+test('notebook prefers canonical names without leaking database UUIDs', () => {
+  const id = '8ba15a41-c4f7-49d4-a734-091ac900b234';
+  assert.equal(conceptDisplayName({ concept_id: id, display_name: 'Cell membranes' }), 'Cell membranes');
+  assert.equal(conceptDisplayName({ concept_id: id, display_name: null }), 'Skill name unavailable');
+  assert.equal(conceptDisplayName({ concept_id: id, display_name: id }), 'Skill name unavailable');
+  assert.equal(conceptDisplayName({ concept_id: 'fraction_addition', display_name: null }), 'Fraction addition');
+});
+
 test('a concept key is made readable without changing its identity', () => {
   assert.equal(conceptLabel('quadratic-formula'), 'Quadratic formula');
   assert.equal(conceptLabel('  '), 'Untitled concept');
   assert.equal(conceptLabel(null), 'Untitled concept');
+  assert.equal(conceptLabel('8ba15a41-c4f7-49d4-a734-091ac900b234'), 'Skill name unavailable');
+  assert.equal(conceptLabel('quadratic_formula'), 'Quadratic formula');
 });
 
 test('the record reads the server, never a local counter', () => {

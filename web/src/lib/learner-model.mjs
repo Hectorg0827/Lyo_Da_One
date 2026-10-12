@@ -465,8 +465,23 @@ export function nextStepLabel(nextRung) {
 export function conceptLabel(conceptId) {
   const raw = (conceptId ?? '').toString().trim();
   if (!raw) return 'Untitled concept';
+  // UUIDs are storage identities, not instructional labels. Do not expose
+  // them as a supposed skill name or invent what the learner studied.
+  if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(raw)) {
+    return 'Skill name unavailable';
+  }
   const words = raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Untitled concept';
+}
+
+/** Prefer the human-readable concept title already returned by the API.
+ * Keep the identifier untouched as the evidence key in all state and requests.
+ */
+export function conceptDisplayName(concept) {
+  const display = typeof concept?.display_name === 'string' ? concept.display_name.trim() : '';
+  const identity = (concept?.concept_id ?? '').toString().trim();
+  if (display && display !== identity) return display;
+  return conceptLabel(identity);
 }
 
 // ─── Which of a learner's concepts belong to the class they are in ───────────
