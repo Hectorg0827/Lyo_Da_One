@@ -141,9 +141,9 @@ def run():
             # replace an explicitly selected exam with a default stale exam.
             for transient in (429, 503):
                 blocked = {"count": 0}
-                def fail_verification(route, code=transient):
+                def fail_verification(route):
                     blocked["count"] += 1
-                    route.fulfill(status=code, content_type="application/json",
+                    route.fulfill(status=transient, content_type="application/json",
                                   body='{"detail":"Synthetic temporary verification error"}')
                 page.route("**/api/v1/auth/me", fail_verification)
                 page.reload(wait_until="domcontentloaded")
