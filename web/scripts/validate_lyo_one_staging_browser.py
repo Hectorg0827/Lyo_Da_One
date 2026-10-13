@@ -101,7 +101,8 @@ def run():
             start = coach.get_by_text("Start this step")
             tag = start.evaluate("(node) => node.closest('button,a')?.tagName || 'unknown'")
             if tag != "BUTTON":
-                print(f"DIAGNOSTIC Coach entry rendered as {tag} instead of tracked button", flush=True)
+                fallback = start.evaluate("(node) => node.closest('a')?.getAttribute('data-journey-fallback') || 'not-specified'")
+                print(f"DIAGNOSTIC Coach entry rendered as {tag} fallback={fallback}", flush=True)
             start.click()
             page.wait_for_url("**/classroom?*", timeout=35000)
             first_url = urllib.parse.urlparse(page.url)
