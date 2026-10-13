@@ -140,12 +140,21 @@ def run():
             # Transient verifier errors must never destroy the learner token or
             # replace an explicitly selected exam with a default stale exam.
             for transient in (429, 503):
+                blocked = {"count": 0}
                 def fail_verification(route, code=transient):
+                    blocked["count"] += 1
                     route.fulfill(status=code, content_type="application/json",
                                   body='{"detail":"Synthetic temporary verification error"}')
                 page.route("**/api/v1/auth/me", fail_verification)
                 page.reload(wait_until="domcontentloaded")
-                expect(page.get_by_role("heading", name="Session verification unavailable")).to_be_visible(timeout=30000)
+                try:
+                    expect(page.get_by_role("heading", name="Session verification unavailable")).to_be_visible(timeout=12000)
+                except Exception:
+                    # Synthetic staging account only; never log token values.
+                    excerpt = page.locator("body").inner_text(timeout=5000)[:350]
+                    has_token = page.evaluate("Boolean(window.localStorage.getItem('lyo_token'))")
+                    print(f"DIAGNOSTIC auth HTTP {transient}: intercepted={blocked['count']} url={page.url} token-present={has_token} page={excerpt!r}", flush=True)
+                    raise
                 assert page.evaluate("window.localStorage.getItem('lyo_token')") == token, (
                     "Transient auth error discarded an existing access token"
                 )
