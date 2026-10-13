@@ -699,9 +699,14 @@ function DiscoverContent() {
   const handleSave = useCallback(
     (reel: Reel) => {
       patch(reel.id, { isSaved: !reel.isSaved });
-      api.clips.save(reel.id).catch(() => {});
+      api.clips.save(reel.id).then((result) => {
+        patch(reel.id, { isSaved: result.isSaved });
+        // An unsaved clip should immediately leave the Saved tab after the
+        // server confirms it. No stale items or fake client-side membership.
+        if (feedMode === 'saved') refetch();
+      }).catch(() => patch(reel.id, { isSaved: reel.isSaved }));
     },
-    [patch]
+    [patch, feedMode, refetch]
   );
 
   const handleAsk = useCallback((reel: Reel) => {
