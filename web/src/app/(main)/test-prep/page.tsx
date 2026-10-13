@@ -685,9 +685,9 @@ export default function TestPrepPage() {
         </div>
 
         {returnedSessionId && snapshot?.profile?.id === profileId &&
-          snapshot.sessions.some((s) => s.id === returnedSessionId) && (
+          snapshot?.sessions.some((s) => s.id === returnedSessionId) && (
           <p role="status" className="mt-3 rounded-xl border border-violet-400/40 bg-violet-500/10 px-4 py-3 text-sm text-white/85">
-            Returned to study session: <strong>{snapshot.sessions.find((s) => s.id === returnedSessionId)?.topic}</strong>.
+            Returned to study session: <strong>{snapshot?.sessions.find((s) => s.id === returnedSessionId)?.topic}</strong>.
             Your exam and session were preserved. Only the teaching and assessment engines can record completed work.
           </p>
         )}
