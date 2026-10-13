@@ -4,13 +4,17 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { CoachGoal, CoachMissionItem } from '@/lib/coach-api';
+import type { StudySessionRow } from '@/types';
 import { missionEntryHref } from '@/lib/coach.mjs';
-import { beginMissionJourney, missionJourneyPlan } from '@/lib/journey-handoff.mjs';
+import { sessionEntryHref } from '@/lib/test-prep.mjs';
+import { beginMissionJourney, missionJourneyPlan, studySessionJourneyPlan } from '@/lib/journey-handoff.mjs';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 
 type Props = {
-  mission: CoachMissionItem;
+  mission?: CoachMissionItem;
+  /** Existing scheduled session, not a generated Coach mission. */
+  session?: StudySessionRow;
   goal?: CoachGoal | null;
   origin: 'coach' | 'test_prep' | 'chat';
   profileId?: string | null;
@@ -25,7 +29,7 @@ type Props = {
  * With the flag ON and a valid goal, save the journey and its handoff
  * before navigation. Failures do not silently claim state persistence.
  */
-export default function CoachMissionEntry({ mission, goal, origin, profileId, className, children }: Props) {
+export default function CoachMissionEntry({ mission, session, goal, origin, profileId, className, children }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -39,11 +43,13 @@ export default function CoachMissionEntry({ mission, goal, origin, profileId, cl
     return () => { mounted.current = false; };
   }, []);
 
-  const href = missionEntryHref(mission);
+  const href = session ? sessionEntryHref(session) : missionEntryHref(mission);
   if (!href) return <div className={className}>{children}</div>;
 
   const enabled = process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED === '1';
-  const plan = enabled ? missionJourneyPlan(mission, goal, origin, profileId) : null;
+  const plan = enabled
+    ? session ? studySessionJourneyPlan(session, goal, profileId) : missionJourneyPlan(mission, goal, origin, profileId)
+    : null;
 
   if (!plan || !isAuthenticated) {
     // Visible contract marker for staging QA: why an entry did not persist.
