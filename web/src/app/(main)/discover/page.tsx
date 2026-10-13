@@ -4,10 +4,8 @@
  * Discover — the learning reel, and the only one.
  *
  * Mirrors iOS `Sources/Views/Main/DiscoverView.swift`: a full-bleed,
- * vertically paged video feed with a floating search overlay, top/bottom
- * scrims, an info overlay on the left and an action strip on the right.
- * Client-side search filters title + subtitle + tags, same as the iOS
- * DiscoverViewModel.
+ * vertically paged video feed with dynamic topic tabs and top/bottom scrims.
+ * The single global TopBar search filters the entire library via URL state.
  *
  * There used to be a second reel at `/clips`, on the same clips API. Discover
  * was what everything pointed at — the mobile nav, the search bar, the empty
@@ -811,24 +809,57 @@ function DiscoverContent() {
         )}
       </div>
 
-      {/* Floating search header */}
-      <div
-        className="absolute inset-x-0 top-0 z-10 px-4 pt-6 pb-4"
-        style={{
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0.4), transparent)',
-        }}
+      {/* Search lives in the global TopBar. Filters are navigable with touch,
+          trackpad, keyboard and buttons; the gradient protects readability. */}
+      <nav
+        aria-label="Discover video filters"
+        className="absolute inset-x-0 top-0 z-20 overflow-hidden bg-gradient-to-b from-[#10101c]/95 via-black/60 to-transparent pt-2 pb-5"
       >
-        <label className="flex items-center gap-3 p-3.5 rounded-2xl bg-black/40 border border-white/20">
-          <Search className="w-[17px] h-[17px] text-white/80 shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search discoveries…"
-            aria-label="Search discoveries"
-            className="flex-1 bg-transparent text-white placeholder-white/70 text-[15px] focus:outline-none"
-          />
-        </label>
-      </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar px-4 snap-x snap-proximity [scrollbar-width:none]">
+          {([
+            { id: 'for_you', label: 'For You', mode: 'for_you' },
+            { id: 'latest', label: 'Latest', mode: 'latest' },
+            { id: 'popular', label: 'Popular', mode: 'popular' },
+            { id: 'saved', label: 'Saved', mode: 'saved' },
+          ] as const).map((tab) => {
+            const active = !subject && feedMode === tab.mode;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                aria-pressed={active}
+                onClick={(event) => {
+                  chooseFilter(tab.mode);
+                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }}
+                className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
+              >
+                {tab.label}
+                {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
+              </button>
+            );
+          })}
+          {subjectChoices.map((name) => {
+            const active = subject === name;
+            return (
+              <button
+                key={`subject:${name}`}
+                type="button"
+                aria-pressed={active}
+                onClick={(event) => {
+                  chooseFilter('for_you', name);
+                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }}
+                className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
+              >
+                {name}
+                {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
+              </button>
+            );
+          })}
+        </div>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-9 bg-gradient-to-l from-[#10101c]/95 to-transparent" />
+      </nav>
 
       {composing && (
         <CreateClipModal
