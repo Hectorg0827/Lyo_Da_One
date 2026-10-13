@@ -135,19 +135,6 @@ struct EnhancedMessageBubble: View {
                 
                 Spacer()
                 
-                // Read Aloud (TTS) in Header — only when there's text to speak
-                if !message.content.isEmpty {
-                Button(action: {
-                    onTTSToggle?()
-                }) {
-                    Image(systemName: audioService.isPlaying ? "stop.circle.fill" : "speaker.wave.2")
-                        .font(.system(size: 14))
-                        .foregroundColor(audioService.isPlaying ? .red : .white.opacity(0.6))
-                        .padding(8)
-                        .background(Color.white.opacity(0.05))
-                        .clipShape(Circle())
-                }
-                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
