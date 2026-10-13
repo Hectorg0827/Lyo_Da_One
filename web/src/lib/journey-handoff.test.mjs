@@ -85,6 +85,20 @@ test('a backend handoff failure cannot pretend that navigation was saved', async
   );
 });
 
+test('Coach vs Test Prep handoffs never redirect through user-supplied URLs', () => {
+  assert.equal(returnFromJourney({
+    origin_surface: 'coach',
+    origin_ref: 'https://malicious.example/login',
+    context: { test_profile_id: 'exam-A' },
+  }), '/');
+  assert.equal(returnFromJourney({
+    origin_surface: 'test_prep',
+    origin_ref: 'https://malicious.example/login',
+    context: { test_profile_id: 'exam-A' },
+  }), '/test-prep?profileId=exam-A');
+  assert.equal(withJourneyId('/classroom?topic=x&journeyId=old', 'new-id').includes('journeyId=new-id'), true);
+});
+
 test('malformed plan and IDs never navigate', async () => {
   await assert.rejects(beginMissionJourney(null, {}, { start: 'a', handoff: 'b' }), /Missing journey plan/);
   await assert.rejects(
