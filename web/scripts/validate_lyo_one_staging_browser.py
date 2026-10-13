@@ -93,7 +93,7 @@ def run():
         try:
             page.goto(WEB + "/", wait_until="domcontentloaded", timeout=60000)
             expect(page.get_by_role("heading", name="What would you like to explore today?")).to_be_visible(timeout=35000)
-            expect(page.get_by_role("link", name="AI Chat")).to_be_visible(timeout=15000)
+            expect(page.get_by_role("button", name="AI Chat Ask anything")).to_be_visible(timeout=15000)
             print("PASS unified Home loads with direct capability shortcuts", flush=True)
 
             coach = page.get_by_role("region", name="Lyo Coach next learning step")
