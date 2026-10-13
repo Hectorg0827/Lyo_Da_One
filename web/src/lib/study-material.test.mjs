@@ -2,10 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DECK_BATCH_SIZE,
+  DECK_MAX_CARDS,
   MIN_INLINE_CARDS,
   balancedObject,
   classifyStudyAsk,
   extractStudyBlocks,
+  mergeCards,
+  moreCardsPrompt,
+  nextDeckStep,
+  parseMoreCards,
 } from './study-material.mjs';
 
 const deckOf = (result) => result?.blocks.find((block) => block.type === 'flashcard');
@@ -261,4 +267,113 @@ test('brace balancing survives a nested array', () => {
   // A brace inside a string must not close the object.
   assert.equal(balancedObject('{"a":"}"}'), '{"a":"}"}');
   assert.equal(balancedObject('no object here'), null);
+});
+
+// ─── Growing the deck ────────────────────────────────────────────────────────
+
+test('the next-batch prompt asks for a fixed count and names what to avoid', () => {
+  const prompt = moreCardsPrompt('photosynthesis', ['Chlorophyll', 'Stroma']);
+  assert.match(prompt, new RegExp(`exactly ${DECK_BATCH_SIZE} more flashcards`));
+  assert.match(prompt, /photosynthesis/);
+  assert.match(prompt, /- Chlorophyll/);
+  assert.match(prompt, /- Stroma/);
+});
+
+test('the prompt names only the most recent cards, so it cannot grow unbounded', () => {
+  const fronts = Array.from({ length: 50 }, (_, i) => `Card ${i}`);
+  const prompt = moreCardsPrompt('history', fronts);
+  assert.ok(!prompt.includes('- Card 0'));
+  assert.ok(prompt.includes('- Card 49'));
+});
+
+test('a JSON batch is read', () => {
+  const reply = '```json\n{"cards":[{"front":"ATP","back":"energy currency"}]}\n```';
+  assert.deepEqual(parseMoreCards(reply), [{ front: 'ATP', back: 'energy currency' }]);
+});
+
+test('a batch that ignored "JSON only" is still read', () => {
+  // The model answered in Markdown. The cards are still there.
+  const reply = [
+    'Here are three more:',
+    '- Osmosis: water across a membrane',
+    '- Diffusion: particles spreading out',
+    '- Turgor: pressure inside a plant cell',
+  ].join('\n');
+  assert.equal(parseMoreCards(reply).length, 3);
+});
+
+test('a batch with nothing usable yields no cards', () => {
+  assert.deepEqual(parseMoreCards('Sorry, I cannot help with that.'), []);
+});
+
+test('merging skips cards the deck already has, however they are punctuated', () => {
+  const existing = [{ front: 'What is ATP?', back: 'Energy currency' }];
+  const merged = mergeCards(existing, [
+    { front: 'what is atp', back: 'Energy currency again' },
+    { front: 'What is ADP?', back: 'What ATP becomes' },
+  ]);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[1].front, 'What is ADP?');
+});
+
+test('merging never grows a deck past the cap', () => {
+  const existing = Array.from({ length: DECK_MAX_CARDS }, (_, i) => ({
+    front: `Front ${i}`,
+    back: `Back ${i}`,
+  }));
+  const merged = mergeCards(existing, [{ front: 'One more', back: 'Please' }]);
+  assert.equal(merged.length, DECK_MAX_CARDS);
+});
+
+test('merging drops half-formed cards rather than showing a blank face', () => {
+  const merged = mergeCards([], [
+    { front: 'Has both', back: 'Yes' },
+    { front: 'Missing back' },
+    { back: 'Missing front' },
+  ]);
+  assert.equal(merged.length, 1);
+});
+
+// ─── When the next batch happens ─────────────────────────────────────────────
+
+test('mid-batch, a deck sits still', () => {
+  // Three cards shown, learner on the first two: nothing to do.
+  assert.equal(nextDeckStep({ index: 0, revealed: 3, total: 3 }), 'idle');
+  assert.equal(nextDeckStep({ index: 1, revealed: 3, total: 3 }), 'idle');
+});
+
+test('arriving at the third card asks for three more', () => {
+  // This is the whole point: the fetch fires on arrival at the last card,
+  // so the next swipe is already paid for.
+  assert.equal(nextDeckStep({ index: 2, revealed: 3, total: 3 }), 'fetch');
+});
+
+test('cards already parsed from the reply are shown rather than re-fetched', () => {
+  // The reply gave eight; only three are revealed. Reaching the third costs
+  // nothing — the next three are already in hand.
+  assert.equal(nextDeckStep({ index: 2, revealed: 3, total: 8 }), 'reveal');
+});
+
+test('a request in flight is never duplicated', () => {
+  assert.equal(nextDeckStep({ index: 2, revealed: 3, total: 3, loading: true }), 'idle');
+});
+
+test('a deck that has run dry stops asking', () => {
+  assert.equal(nextDeckStep({ index: 2, revealed: 3, total: 3, exhausted: true }), 'idle');
+});
+
+test('the cap ends the deck even while the learner keeps swiping', () => {
+  assert.equal(
+    nextDeckStep({ index: DECK_MAX_CARDS - 1, revealed: DECK_MAX_CARDS, total: DECK_MAX_CARDS }),
+    'idle'
+  );
+});
+
+test('an empty deck asks for nothing', () => {
+  assert.equal(nextDeckStep({ index: 0, revealed: 3, total: 0 }), 'idle');
+});
+
+test('batches continue after the first: card six asks again', () => {
+  assert.equal(nextDeckStep({ index: 5, revealed: 6, total: 6 }), 'fetch');
+  assert.equal(nextDeckStep({ index: 4, revealed: 6, total: 6 }), 'idle');
 });

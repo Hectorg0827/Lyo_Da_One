@@ -1,14 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
   AlertTriangle,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   FileText,
-  Layers,
   NotebookPen,
   ShieldCheck,
 } from 'lucide-react';
@@ -23,6 +19,7 @@ import {
 } from '../markdown-config';
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
+import FlashcardDeckBlock from './FlashcardDeckBlock';
 
 const inlineMarkdownComponents = {
   ...markdownComponents,
@@ -151,110 +148,6 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
 }
 
 // ── Study material ───────────────────────────────────────────────────────────
-
-/**
- * A flashcard deck the learner can actually work through.
- *
- * Both sides are kept in the DOM so screen readers and find-in-page still
- * reach the answer, but only the current face is shown — a card that reveals
- * its own back is a paragraph with a border, not a flashcard.
- */
-function FlashcardDeckBlock({ block }: { block: ChatBlock }) {
-  const content = (block.content ?? {}) as Record<string, unknown>;
-  const cards = (Array.isArray(content.cards) ? content.cards : [])
-    .map((card) => (card ?? {}) as Record<string, unknown>)
-    .filter((card) => typeof card.front === 'string' && card.front.length > 0);
-
-  const [index, setIndex] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-
-  if (!cards.length) return null;
-
-  const safeIndex = Math.min(index, cards.length - 1);
-  const card = cards[safeIndex];
-  const front = String(card.front ?? '');
-  const back = typeof card.back === 'string' ? card.back : '';
-  const title = typeof content.title === 'string' ? content.title : 'Study deck';
-
-  const go = (delta: number) => {
-    setIndex((current) => {
-      const next = current + delta;
-      if (next < 0 || next > cards.length - 1) return current;
-      return next;
-    });
-    setFlipped(false);
-  };
-
-  return (
-    <div className="rounded-2xl border border-lyo-500/20 bg-lyo-500/5 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Layers className="w-4 h-4 text-lyo-300 shrink-0" aria-hidden="true" />
-        <div className="text-sm font-semibold text-white/85 min-w-0 truncate">{title}</div>
-        <div className="ml-auto text-[11px] text-white/40 tabular-nums shrink-0">
-          {safeIndex + 1} / {cards.length}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setFlipped((value) => !value)}
-        aria-pressed={flipped}
-        aria-label={flipped ? 'Show the question' : 'Show the answer'}
-        className={cn(
-          'w-full text-left rounded-xl border border-white/10 bg-black/25 p-4',
-          'min-h-[128px] flex flex-col justify-center',
-          'hover:border-white/20 hover:bg-black/30 transition-colors',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-lyo-400/70'
-        )}
-      >
-        <div className="text-[11px] uppercase tracking-wide text-white/35 mb-2">
-          {flipped ? 'Answer' : 'Question'}
-        </div>
-        <div
-          className="prose-invert prose-sm max-w-none text-white/90"
-          // Keep the hidden face in the DOM: assistive tech and find-in-page
-          // should still reach it, even while it is not on screen.
-          hidden={flipped}
-        >
-          <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-            {normalizeLatexDelimiters(front)}
-          </ReactMarkdown>
-        </div>
-        <div className="prose-invert prose-sm max-w-none text-white/80" hidden={!flipped}>
-          {back ? (
-            <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
-              {normalizeLatexDelimiters(back)}
-            </ReactMarkdown>
-          ) : (
-            <span className="text-white/40">No answer on this card.</span>
-          )}
-        </div>
-      </button>
-
-      <div className="flex items-center gap-2 mt-3">
-        <button
-          type="button"
-          onClick={() => go(-1)}
-          disabled={safeIndex === 0}
-          className="p-1.5 rounded-lg border border-white/10 text-white/70 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5"
-          aria-label="Previous card"
-        >
-          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={() => go(1)}
-          disabled={safeIndex === cards.length - 1}
-          className="p-1.5 rounded-lg border border-white/10 text-white/70 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5"
-          aria-label="Next card"
-        >
-          <ChevronRight className="w-4 h-4" aria-hidden="true" />
-        </button>
-        <span className="text-[11px] text-white/35 ml-1">Tap the card to flip it</span>
-      </div>
-    </div>
-  );
-}
 
 /** A day-by-day revision schedule. */
 function StudyPlanBlock({ block }: { block: ChatBlock }) {
@@ -525,7 +418,7 @@ export default function BlockRenderer({
             // A deck carries `cards`; a lone card carries `front`/`back` and
             // still goes through GenericBlock's single-card treatment.
             return Array.isArray(block.content?.cards) ? (
-              <FlashcardDeckBlock key={block.id} block={block} />
+              <FlashcardDeckBlock key={block.id} block={block} message={message} />
             ) : (
               <GenericBlock key={block.id} block={block} />
             );

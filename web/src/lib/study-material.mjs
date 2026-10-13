@@ -22,6 +22,18 @@
 export const STUDY_ASKS = Object.freeze(['flashcards', 'studyPlan', 'notes', 'unrelated']);
 
 /**
+ * How many cards the learner is given at a time.
+ *
+ * A deck arrives in batches rather than all at once: reaching the last card of
+ * a batch asks for the next one, so the deck keeps pace with how far the
+ * learner actually got instead of dumping forty cards on them up front.
+ */
+export const DECK_BATCH_SIZE = 3;
+
+/** Hard stop, so a deck cannot grow without bound while someone keeps swiping. */
+export const DECK_MAX_CARDS = 60;
+
+/**
  * Fewest cards worth turning a prose answer into a deck.
  *
  * A line that literally says `Flashcard Front:` / `Back:` is unambiguous, so
@@ -117,6 +129,113 @@ export function extractStudyBlocks(reply, userAsk, idPrefix = 'study') {
   }
   blocks.push({ ...found.block, id: `${idPrefix}-${found.block.subtype}` });
   return { blocks, displayText: found.displayText };
+}
+
+// ─── Growing a deck ──────────────────────────────────────────────────────────
+
+/**
+ * What a deck should do when the learner lands on a card.
+ *
+ * The rule the component follows, kept here as a pure decision so it can be
+ * tested without a browser: while the learner is mid-batch, nothing happens;
+ * arriving at the last reachable card either shows cards already parsed from
+ * the reply (free) or asks the model for the next batch (a request).
+ *
+ * The batch is fetched on *arrival* at the last card, not on leaving it, so
+ * the next swipe is usually already paid for.
+ *
+ * @returns 'idle' | 'reveal' | 'fetch'
+ */
+export function nextDeckStep({
+  index,
+  revealed,
+  total,
+  loading = false,
+  exhausted = false,
+  max = DECK_MAX_CARDS,
+}) {
+  const visible = Math.min(revealed, total);
+  if (visible <= 0) return 'idle';
+  if (index < visible - 1) return 'idle';
+  if (total > visible) return 'reveal';
+  if (loading || exhausted || total >= max) return 'idle';
+  return 'fetch';
+}
+
+/**
+ * The request for the next batch.
+ *
+ * Names the cards already seen, newest last, so the model writes different
+ * ones rather than rephrasing the deck the learner just worked through.
+ */
+export function moreCardsPrompt(topic, seenFronts = [], count = DECK_BATCH_SIZE) {
+  const seen = (seenFronts || []).filter(Boolean).slice(-24);
+  const lines = [
+    `Write exactly ${count} more flashcards on: ${topic || 'this topic'}.`,
+    'Reply with JSON only, no commentary, in exactly this shape:',
+    '{"cards":[{"front":"...","back":"..."}]}',
+    'Each front is a short question or term. Each back answers it in one or two sentences.',
+  ];
+  if (seen.length) {
+    lines.push('', 'Do not repeat any of these, which the learner already has:');
+    for (const front of seen) lines.push(`- ${front}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Cards from a reply to `moreCardsPrompt`.
+ *
+ * "JSON only" is a request, not a guarantee, so a Markdown answer is read with
+ * the same parsers as any other reply rather than being thrown away.
+ */
+export function parseMoreCards(reply) {
+  const text = String(reply || '');
+
+  for (const fenced of fencedJSONBlocks(text)) {
+    let root;
+    try {
+      root = JSON.parse(fenced.json);
+    } catch {
+      continue;
+    }
+    if (!root || typeof root !== 'object') continue;
+    const cards = decodeCards(payloadBody(root)) ?? decodeCards(root);
+    if (cards && cards.length) return cards;
+  }
+
+  const lines = text.split(/\r?\n/);
+  const paired = pairedCards(lines);
+  if (paired.cards.length) return paired.cards;
+  return inlineCards(lines).cards;
+}
+
+/**
+ * `existing` plus the incoming cards it does not already hold, capped.
+ *
+ * Compared on a loosened front, because a model asked for new cards will
+ * happily return the same question with different punctuation.
+ */
+export function mergeCards(existing, incoming, max = DECK_MAX_CARDS) {
+  const merged = (existing || []).filter((card) => card && card.front && card.back);
+  const seen = new Set(merged.map((card) => frontKey(card.front)));
+
+  for (const card of incoming || []) {
+    if (merged.length >= max) break;
+    if (!card || !card.front || !card.back) continue;
+    const key = frontKey(card.front);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ front: card.front, back: card.back });
+  }
+  return merged;
+}
+
+function frontKey(front) {
+  return String(front || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 // ─── Fenced JSON payloads ────────────────────────────────────────────────────

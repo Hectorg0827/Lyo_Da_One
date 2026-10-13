@@ -18,7 +18,13 @@ import {
   reduceTeachingPolicy,
   teachingStateSummary,
 } from '@/lib/teaching-runtime.mjs';
-import { extractStudyBlocks } from '@/lib/study-material.mjs';
+import {
+  DECK_MAX_CARDS,
+  extractStudyBlocks,
+  mergeCards,
+  moreCardsPrompt,
+  parseMoreCards,
+} from '@/lib/study-material.mjs';
 
 export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
@@ -181,6 +187,12 @@ interface ChatStore {
     timeTakenMs?: number,
     hintUsed?: boolean
   ) => Promise<CheckAnswerResult | null>;
+  /**
+   * Fetch the next batch of flashcards for a deck block and append them.
+   * Resolves with how many cards were actually added — 0 means the deck is
+   * done, which the caller shows rather than retrying.
+   */
+  extendFlashcardDeck: (messageId: string, blockId: string) => Promise<number>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
   fetchSessionSummary: (conversationId: string, forScreenGeneration: number) => Promise<void>;
@@ -1092,6 +1104,72 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ courseRevisionUndo: null });
     await get().reviseActiveCourse(previous);
     set({ courseRevisionUndo: null });
+  },
+
+  extendFlashcardDeck: async (messageId, blockId) => {
+    const conversationId = get().activeConversationId;
+    if (!conversationId) return 0;
+
+    const conversation = get().conversations.find((c) => c.id === conversationId);
+    const message = conversation?.messages.find((m) => m.id === messageId);
+    const block = message?.blocks?.find((b) => b.id === blockId);
+    if (!block) return 0;
+
+    const content = (block.content ?? {}) as {
+      title?: unknown;
+      cards?: unknown;
+    };
+    const existing = (Array.isArray(content.cards) ? content.cards : []) as {
+      front: string;
+      back: string;
+    }[];
+    if (existing.length >= DECK_MAX_CARDS) return 0;
+
+    // A one-off completion, not a conversation turn: asking for more cards
+    // must not litter the thread with a prompt and an answer the learner
+    // never wrote or wanted to read.
+    let reply = '';
+    try {
+      const result = await api.chat.sendSimple(
+        moreCardsPrompt(
+          typeof content.title === 'string' ? content.title : '',
+          existing.map((card) => card.front)
+        )
+      );
+      reply = result?.response ?? '';
+    } catch {
+      // Offline or the model refused. The deck keeps the cards it has; the
+      // caller surfaces that rather than looping on a failing request.
+      return 0;
+    }
+
+    const merged = mergeCards(existing, parseMoreCards(reply));
+    const added = merged.length - existing.length;
+    if (added <= 0) return 0;
+
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id !== conversationId
+          ? c
+          : {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id !== messageId
+                  ? m
+                  : {
+                      ...m,
+                      blocks: (m.blocks ?? []).map((b) =>
+                        b.id !== blockId
+                          ? b
+                          : { ...b, content: { ...b.content, cards: merged } }
+                      ),
+                    }
+              ),
+            }
+      ),
+    }));
+
+    return added;
   },
 
   answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0, hintUsed = false) => {
