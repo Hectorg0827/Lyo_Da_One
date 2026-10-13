@@ -33,7 +33,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ user, token: accessToken, isAuthenticated: true, isLoading: false, authVerificationError: false });
       get().enrichWithGamification();
     } catch (err) {
-      set({ isLoading: false });
+      if (version === authVersion) set({ isLoading: false });
       throw err;
     }
   },
@@ -58,7 +58,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (version !== authVersion) return;
       set({ user, token: accessToken, isAuthenticated: true, isLoading: false, authVerificationError: false });
     } catch (err) {
-      set({ isLoading: false });
+      if (version === authVersion) set({ isLoading: false });
       throw err;
     }
   },
@@ -116,6 +116,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   enrichWithGamification: async () => {
+    const owner = get().user?.id;
+    const originalToken = getAccessToken();
+    if (!owner || !get().isAuthenticated) return;
     try {
       const overview = await api.gamification.overview();
       const userLevel = overview.user_level as Record<string, unknown> | undefined;
@@ -124,7 +127,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const achievements = overview.achievements as Record<string, unknown> | undefined;
 
       set((state) => {
-        if (!state.user) return state;
+        if (!state.user || !state.isAuthenticated || state.user.id !== owner ||
+            getAccessToken() !== originalToken) return state;
         return {
           user: {
             ...state.user,
