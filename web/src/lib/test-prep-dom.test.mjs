@@ -262,3 +262,42 @@ test('unsent draft and attached material do not carry to another exam', async t 
   assert.equal(calls.intake.at(-1)[1], 'biology');
   assert.deepEqual(calls.intake.at(-1)[2], []);
 });
+
+
+test('a Classroom return reopens the exact Test Prep study session', async t => {
+  const { calls } = setup();
+  window.history.replaceState({}, '', '/test-prep?profileId=biology&sessionId=biology-session');
+  const view = await mount(t);
+  assert.equal(title(view), 'Biology');
+  assert.equal(calls.state[0], 'biology');
+  assert.match(view.container.textContent, /Returned to study session: Biology practice/);
+  const selected = view.container.querySelector('#test-prep-session-biology-session');
+  assert.ok(selected, 'returned session must be present and highlighted');
+  assert.match(selected.className, /ring-violet/);
+  await choose(view, 'algebra');
+  assert.equal(new URL(window.location.href).searchParams.get('sessionId'), null);
+  assert.equal(title(view), 'Algebra');
+  assert.ok(!view.container.textContent.includes('Returned to study session:'));
+});
+
+test('a temporary /auth/me failure offers verification retry without claiming sign-out', async t => {
+  setup();
+  let retries = 0;
+  const auth = mocks['@/stores/auth-store'];
+  const original = auth.useAuthStore;
+  auth.useAuthStore = () => ({
+    isAuthenticated: false, isLoading: false, authVerificationError: true,
+    hydrate: async () => { retries += 1; },
+  });
+  t.after(() => { auth.useAuthStore = original; });
+  window.history.replaceState({}, '', '/test-prep?profileId=biology');
+  const view = await mount(t);
+  assert.match(view.container.textContent, /Session verification unavailable/);
+  assert.ok(!view.container.textContent.includes('Create account'));
+  const retry = [...view.container.querySelectorAll('button')]
+    .find(button => button.textContent === 'Retry verification');
+  assert.ok(retry);
+  await act(async () => retry.click());
+  assert.equal(retries, 1);
+  assert.equal(new URL(window.location.href).searchParams.get('profileId'), 'biology');
+});
