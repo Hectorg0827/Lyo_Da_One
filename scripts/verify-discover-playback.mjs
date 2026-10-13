@@ -19,7 +19,7 @@ for (const text of [
   'preload="auto"',
   'Retry video',
   'Next clip',
-  'api.clips.discover(page)',
+  'api.clips.discover(page, 20, { ...requestOptions, sort: feedMode })',
   'aria-label="Seek video"',
   'Unmute video',
   'visibilitychange',
