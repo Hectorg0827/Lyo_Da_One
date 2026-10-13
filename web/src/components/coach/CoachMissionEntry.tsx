@@ -46,7 +46,13 @@ export default function CoachMissionEntry({ mission, goal, origin, profileId, cl
   const plan = enabled ? missionJourneyPlan(mission, goal, origin, profileId) : null;
 
   if (!plan || !isAuthenticated) {
-    return <Link href={href} className={className}>{children}</Link>;
+    // Visible contract marker for staging QA: why an entry did not persist.
+    // Never expose learner IDs, private goal data or bearer tokens.
+    const fallback = !enabled ? 'feature-disabled'
+      : !isAuthenticated ? 'signed-out'
+      : !goal ? 'missing-goal'
+      : 'unlinked-goal';
+    return <Link href={href} className={className} data-journey-fallback={fallback}>{children}</Link>;
   }
 
   const begin = async () => {
