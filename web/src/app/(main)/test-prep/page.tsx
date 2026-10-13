@@ -58,7 +58,7 @@ import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 type Turn = { role: 'coach' | 'learner'; text: string };
 
 export default function TestPrepPage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading, authVerificationError, hydrate } = useAuthStore();
 
   // One reducer rather than eighteen useStates. Four consecutive review
   // findings on this page were different combinations of that state, the last
@@ -368,6 +368,17 @@ export default function TestPrepPage() {
     );
   }
 
+  if (!isAuthenticated && authVerificationError) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16" role="status">
+        <h1 className="text-2xl font-semibold text-white">Session verification unavailable</h1>
+        <p className="mt-3 text-white/70">Your existing session has not been invalidated. We could not confirm it right now. Retry without losing your selected exam.</p>
+        <button type="button" onClick={() => void hydrate()} className="mt-6 rounded-xl bg-white px-5 py-3 font-medium text-black">
+          Retry verification
+        </button>
+      </main>
+    );
+  }
   if (!isAuthenticated) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16">
