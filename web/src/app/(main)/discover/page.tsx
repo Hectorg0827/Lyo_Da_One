@@ -149,7 +149,7 @@ function ActionStrip({
   onShare: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 shrink-0">
+    <div className="flex flex-col items-center gap-3 shrink-0">
       <ActionButton label="Ask Lio" onClick={onAsk}>
         <span
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center"
@@ -447,7 +447,7 @@ function ReelSlide({
       />
 
       {/* Bottom content */}
-      <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-[130px] md:pb-20">
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-20">
         <InfoOverlay reel={reel} />
         <ActionStrip
           reel={reel}
@@ -631,32 +631,25 @@ function DiscoverContent() {
   }, [data, overrides, namedReel, moreClips, feedMode, subject, query]);
 
   useEffect(() => {
-    if (isLoading || !data || query) return;
+    if (isLoading || !data) return;
     const loadedCount = (data.clips?.length || 0) + moreClips.length;
     if (activeIndex < reels.length - 4 || loadedCount >= (data.total || 0)) return;
     const request = pageCursor.current.begin();
     if (!request) return;
     const page = request.page;
-    api.clips.discover(page).then((result) => {
+    const load = feedMode === 'saved'
+      ? api.clips.saved(page, 20, requestOptions)
+      : api.clips.discover(page, 20, { ...requestOptions, sort: feedMode });
+    load.then((result) => {
       if (!pageCursor.current.complete(request)) return;
       setMoreClips((current) => mergeClipPage(current, result.clips || []));
     }).catch(() => {
-      // Don't hold playback hostage to pagination; retry as the user moves.
       pageCursor.current.fail(request);
     });
-  }, [activeIndex, isLoading, data, moreClips.length, reels.length, query]);
+  }, [activeIndex, isLoading, data, moreClips.length, reels.length, filterKey]);
 
-  // Client-side filter over title + subtitle + tags (iOS DiscoverViewModel)
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return reels;
-    return reels.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.subtitle.toLowerCase().includes(q) ||
-        r.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  }, [reels, query]);
+  // Search and topic filters run on the server before pagination.
+  const filtered = reels;
 
   // Snap instantly to the next ready clip on natural completion. The last
   // clip stays paused when there is no subsequent item to advance into.
@@ -680,7 +673,7 @@ function DiscoverContent() {
     setActiveIndex(0);
     setPendingAdvanceId(null);
     scrollerRef.current?.scrollTo({ top: 0 });
-  }, [query]);
+  }, [filterKey]);
 
   // Track which slide is in view so only it plays
   useEffect(() => {
@@ -788,9 +781,11 @@ function DiscoverContent() {
         ) : filtered.length === 0 ? (
           <EmptyState
             message={
-              query
-                ? 'Try a different search term or check back later for new discoveries.'
-                : 'New discoveries will appear here as clips are published.'
+              feedMode === 'saved'
+                ? 'No saved videos match this selection. Save a clip to find it here.'
+                : query || subject
+                  ? 'No videos match this search or topic. Try For You or another subject.'
+                  : 'New discoveries will appear here as clips are published.'
             }
           />
         ) : (
