@@ -7,8 +7,6 @@
 import {
   classroomEntryHref,
   defaultObjective,
-  practiceEntryHref,
-  reviewEntryHref,
 } from './entry-contract.mjs';
 
 export function readinessLabel(readiness) {
