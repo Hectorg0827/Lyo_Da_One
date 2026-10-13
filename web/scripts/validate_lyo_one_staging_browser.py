@@ -77,7 +77,7 @@ def run():
     goal = request("/api/v1/me/coach/goals", method="POST", token=token,
                    data={"goal_type": "mastery", "title": "Synthetic music harmony",
                          "subject": "Music",
-                         "skills": [{"name": "Harmonic intervals", "concept_id": "harmonic-intervals"}]})
+                         "skills": [{"name": "Harmonic intervals", "concept_id": "harmonic-intervals"}]}, expected=201)
     goal_id = goal["goal"]["id"]
     print("PASS synthetic learner, authenticated goal and isolated API", flush=True)
 
