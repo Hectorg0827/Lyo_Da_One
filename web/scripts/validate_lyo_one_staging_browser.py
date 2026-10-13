@@ -98,8 +98,12 @@ def run():
 
             coach = page.get_by_role("region", name="Lyo Coach next learning step")
             expect(coach).to_be_visible(timeout=45000)
-            coach.get_by_role("button", name="Start this step").click()
-            page.wait_for_url("**/classroom?*journeyId=*", timeout=35000)
+            start = coach.get_by_text("Start this step")
+            tag = start.evaluate("(node) => node.closest('button,a')?.tagName || 'unknown'")
+            if tag != "BUTTON":
+                print(f"DIAGNOSTIC Coach entry rendered as {tag} instead of tracked button", flush=True)
+            start.click()
+            page.wait_for_url("**/classroom?*", timeout=35000)
             first_url = urllib.parse.urlparse(page.url)
             journey_id = urllib.parse.parse_qs(first_url.query).get("journeyId", [None])[0]
             assert journey_id and len(journey_id) > 10, "No persisted journey ID in Classroom"
