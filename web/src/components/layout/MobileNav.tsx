@@ -94,7 +94,7 @@ export function MobileNav() {
             on tap (shared layoutId). */}
         <Link
           href="/chat"
-          aria-label="LYO"
+          aria-label="LYO Tutor chat"
           aria-current={isChat ? 'page' : undefined}
           className="relative flex items-center justify-center -mt-10"
         >

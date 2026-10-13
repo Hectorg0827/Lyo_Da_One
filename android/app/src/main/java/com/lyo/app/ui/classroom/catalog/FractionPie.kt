@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.lyo.app.data.classroom.ClassroomBlock
+import com.lyo.app.ui.theme.LyoVioletLight
 import java.text.NumberFormat
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -30,12 +31,12 @@ import kotlin.math.min
 
 /** Shared by Chat, Classroom, and Test Prep; exploration does not grade. */
 @Composable
-fun FractionPieCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, JsonElement>) -> Unit) {
+fun FractionPieCard(visual: ClassroomBlock, id: String, readOnly: Boolean = false, onUpdate: (Map<String, JsonElement>) -> Unit) {
     var parts by remember(id) { mutableIntStateOf(visual.parts ?: 1) }
     var selected by remember(id) { mutableStateOf((0 until (visual.value ?: 0)).toSet()) }
     val original = remember(id) { (visual.parts ?: 1) to (visual.value ?: 0) }
     val spanish = visual.caption.orEmpty().contains("numerador", ignoreCase = true)
-    val cyan = Color(0xFF7DD3FC)
+    val cyan = LyoVioletLight
     val value = selected.size
     val fraction = "$value/$parts"
     val decimal = value.toDouble() / parts
@@ -45,8 +46,9 @@ fun FractionPieCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, J
     while (b != 0) { val remainder = a % b; a = b; b = remainder }
     val reduced = "${value / a}/${parts / a}"
 
-    fun save() { onUpdate(mapOf("parts" to JsonPrimitive(parts), "value" to JsonPrimitive(selected.size))) }
+    fun save() { if (!readOnly) onUpdate(mapOf("parts" to JsonPrimitive(parts), "value" to JsonPrimitive(selected.size))) }
     fun toggle(index: Int) {
+        if (readOnly) return
         selected = if (index in selected) selected - index else selected + index
         save()
     }
@@ -59,7 +61,8 @@ fun FractionPieCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, J
             Text("${format.format(visual.whole!! * decimal)} ${visual.unit.orEmpty()}", color = Color.White)
         }
         Canvas(Modifier.fillMaxWidth().height(260.dp)
-            .pointerInput(parts, selected) {
+            .pointerInput(parts, selected, readOnly) {
+                if (readOnly) return@pointerInput
                 detectTapGestures { tap ->
                     val center = Offset(size.width / 2f, size.height / 2f)
                     val delta = tap - center
@@ -73,7 +76,7 @@ fun FractionPieCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, J
             .semantics {
                 contentDescription = if (spanish) "Diagrama de fracciones" else "Fraction pie"
                 stateDescription = fraction
-                customActions = (0 until parts).map { index ->
+                customActions = if (readOnly) emptyList() else (0 until parts).map { index ->
                     CustomAccessibilityAction(
                         label = if (spanish) "Cambiar parte ${index + 1} de $parts" else "Toggle slice ${index + 1} of $parts",
                         action = { toggle(index); true },
@@ -93,7 +96,7 @@ fun FractionPieCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, J
         Text("${if (spanish) "Numerador · partes sombreadas" else "Numerator · shaded slices"}: $value", color = Color.White)
         Slider(value.toFloat(), onValueChange = {
             selected = (0 until it.toInt().coerceIn(0, parts)).toSet(); save()
-        }, valueRange = 0f..parts.toFloat(), steps = parts - 1,
+        }, enabled = !readOnly, valueRange = 0f..parts.toFloat(), steps = parts - 1,
             modifier = Modifier.heightIn(min = 48.dp).semantics {
                 contentDescription = if (spanish) "Numerador" else "Numerator"; stateDescription = fraction
             })
@@ -101,13 +104,13 @@ fun FractionPieCard(visual: ClassroomBlock, id: String, onUpdate: (Map<String, J
         Slider(parts.toFloat(), onValueChange = {
             val next = it.toInt().coerceIn(1, 20)
             selected = (0 until min(selected.size, next)).toSet(); parts = next; save()
-        }, valueRange = 1f..20f, steps = 18,
+        }, enabled = !readOnly, valueRange = 1f..20f, steps = 18,
             modifier = Modifier.heightIn(min = 48.dp).semantics {
                 contentDescription = if (spanish) "Denominador" else "Denominator"; stateDescription = parts.toString()
             })
         TextButton(onClick = {
             parts = original.first; selected = (0 until original.second).toSet(); save()
-        }, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (spanish) "Reiniciar" else "Reset") }
+        }, enabled = !readOnly, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (spanish) "Reiniciar" else "Reset") }
         Text(if (spanish) "El entero permanece igual. Cambiar el denominador cambia el tamaño de cada parte."
              else "The whole stays the same. Changing the denominator changes the size of each slice.",
              color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall)

@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,8 +32,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
+import com.lyo.app.data.classroom.ClassroomSavedSession
+import com.lyo.app.data.classroom.ClassroomStallPhase
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
-import com.lyo.app.ui.classroom.a2ui.RenderNode
 import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoRed
@@ -44,7 +46,7 @@ import com.lyo.app.ui.theme.TextSecondary
  * genuinely dynamic, server-driven content), and hand-authored chrome
  * (ClassroomChrome.kt) around it, per the implementation plan's
  * Architecture section: chrome auto-hides Netflix/YouTube-style; the
- * board, the teacher's caption, and both mascots (Teacher badge + Lyo)
+ * board and Lyo's explanation
  * never do.
  *
  * `courseId` mirrors `RecentCourseStore.save()`'s pattern in LyoNavHost's
@@ -62,10 +64,20 @@ fun ClassroomScreen(
     reviewConceptId: String? = null,
 ) {
     val context = LocalContext.current
-    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked) {
+    // Restarting a lesson, or returning to an unfinished one, is a new engine
+    // on a different server session — the server holds the learner's place
+    // inside the session, so a session that cannot produce its next step
+    // cannot be argued out of it. Bumping this key is what rebuilds it.
+    var sessionAttempt by remember(topic, courseId) { mutableIntStateOf(0) }
+    var resumeSeat by remember(topic, courseId) { mutableStateOf<ClassroomSavedSession?>(null) }
+    // Keyed on the attempt too: engine.dispose() closes this player, so a
+    // rebuilt engine inheriting the old one would teach in silence.
+    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked, sessionAttempt) {
         ClassroomVoicePlayer(context)
     }
-    val engine = remember(topic, courseId, teachingMode, courseBacked, reviewConceptId) {
+    val engine = remember(
+        topic, courseId, teachingMode, courseBacked, reviewConceptId, sessionAttempt,
+    ) {
         ClassroomEngine(
             topic = topic,
             sessionIdParam = courseId,
@@ -73,6 +85,8 @@ fun ClassroomScreen(
             courseBacked = courseBacked,
             reviewConceptId = reviewConceptId,
             voicePlayer = voicePlayer,
+            resume = resumeSeat != null,
+            resumeSession = resumeSeat,
         )
     }
     DisposableEffect(engine) {
@@ -119,7 +133,7 @@ fun ClassroomScreen(
     }
 
     val chrome = rememberChromeVisibility(
-        blockAutoHide = engine.hasActiveCheckpoint || settingsOpen || notebookOpen,
+        blockAutoHide = engine.hasActiveCheckpoint || engine.lessonRecovery || settingsOpen || notebookOpen,
     )
 
     Box(
@@ -184,11 +198,15 @@ fun ClassroomScreen(
                 )
             }
 
-            // The board — permanent, fills remaining space. Lyo's mascot
-            // sits in its corner, addressed directly by id ("lyo_mascot")
-            // rather than through the board_column subtree, since it's a
-            // fixed always-on element, not board content that scrolls with
-            // lesson history.
+            // One real Lyo mascot beside the explanation, above the teaching tools.
+            TeacherBadgeAndCaption(
+                caption = engine.surface.dataModel.resolvePointer("/caption"),
+                mascotState = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                lessonRecovery = engine.lessonRecovery,
+                onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+            )
+
+            // Teaching tools scroll independently from the explanation and controls.
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -204,17 +222,21 @@ fun ClassroomScreen(
                         .verticalScroll(rememberScrollState()),
                 )
 
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(12.dp),
-                ) {
-                    RenderNode(
-                        componentId = "lyo_mascot",
-                        state = engine.surface,
-                        catalog = engine.catalog,
-                        scopePath = "/",
-                        onAction = { action -> engine.onAction(action) },
+                // The cover page: what this class is, before any of it is
+                // taught. A learner should never be looking at a blank board
+                // wondering whether the class has begun, and after a resume
+                // they should be told that it is the middle of one.
+                // Gone as soon as the teacher puts anything on the board —
+                // not merely once something has been said. A scene opening on
+                // a QuizCard adds no transcript line, and this card is drawn
+                // over the board, so keying off narration left it covering
+                // the learner's first checkpoint.
+                if (!engine.hasBoardContent) {
+                    OpeningCard(
+                        opening = engine.opening,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(8.dp),
                     )
                 }
 
@@ -237,11 +259,32 @@ fun ClassroomScreen(
                 }
             }
 
-            // Permanent — the teacher's spoken caption + Teacher badge,
-            // never wrapped in the chrome AnimatedVisibility below.
-            TeacherBadgeAndCaption(caption = engine.surface.dataModel.resolvePointer("/caption"))
+            // The step never arrived. The class says so, says it is not the
+            // learner's fault, and gives them two things that actually move
+            // it — asking again, and leaving the stuck session behind.
+            if (engine.stallPhase == ClassroomStallPhase.STALLED) {
+                StallRecoveryCard(
+                    onAskAgain = { engine.nudgeTeacher(); chrome.poke() },
+                    onStartOver = {
+                        resumeSeat = null
+                        sessionAttempt += 1
+                        chrome.poke()
+                    },
+                )
+            } else {
+                engine.notice?.let { message ->
+                    ClassroomNoticeCard(message = message, onDismiss = { engine.dismissNotice() })
+                }
+                engine.resumableSession?.takeIf { !engine.hasBoardContent }?.let { seat ->
+                    ResumeOfferCard(onResume = {
+                        resumeSeat = seat
+                        sessionAttempt += 1
+                        chrome.poke()
+                    })
+                }
+            }
 
-            AnimatedVisibility(visible = chrome.visible) {
+            AnimatedVisibility(visible = chrome.visible || engine.canContinue) {
                 BottomActionDock(
                     canContinue = engine.canContinue,
                     continueLabel = engine.continueLabel,
