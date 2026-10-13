@@ -39,6 +39,7 @@ enum ActiveLessonAdapter {
 
         var pendingSupporting: ActiveLessonView.LessonStep.SupportingBlock?
         var pendingExamples: [LiveLessonBlock] = []
+        var pendingWorkspace: [SDUIComponent] = []
         var pendingVisual: ClassroomTeachingVisual?
         var pendingActivityId: String?
         var pendingKeyTerm: ActiveLessonView.LessonStep.KeyTerm?
@@ -60,7 +61,7 @@ enum ActiveLessonAdapter {
                 pendingSpeakerName = nil; pendingSpeakerBadge = nil; pendingSpeakerImageName = nil
                 pendingLanguageCode = nil
                 pendingSupporting = nil; pendingKeyTerm = nil
-                pendingExamples = []; pendingVisual = nil; pendingActivityId = nil
+                pendingExamples = []; pendingWorkspace = []; pendingVisual = nil; pendingActivityId = nil
                 pendingPromptOptions = nil; pendingRequiresOpenResponse = false
                 return
             }
@@ -78,7 +79,8 @@ enum ActiveLessonAdapter {
                 languageCode: pendingLanguageCode,
                 teachingExamples: pendingExamples,
                 teachingVisual: pendingVisual,
-                activityId: pendingActivityId
+                activityId: pendingActivityId,
+                workspaceComponents: pendingWorkspace
             ))
             pendingId = nil
             pendingText = nil
@@ -87,7 +89,7 @@ enum ActiveLessonAdapter {
             pendingSpeakerImageName = nil
             pendingLanguageCode = nil
             pendingSupporting = nil
-            pendingExamples = []; pendingVisual = nil; pendingActivityId = nil
+            pendingExamples = []; pendingWorkspace = []; pendingVisual = nil; pendingActivityId = nil
             pendingKeyTerm = nil
             pendingPromptOptions = nil
             pendingRequiresOpenResponse = false
@@ -238,6 +240,10 @@ enum ActiveLessonAdapter {
                 }
 
             case .lessonBlock:
+                if component.resolvedPresentationRole == "reference" || component.resolvedPresentationRole == "details" {
+                    pendingWorkspace.append(component)
+                    continue
+                }
                 if let visual = component.teachingVisual {
                     pendingVisual = visual
                     pendingActivityId = component.id
@@ -253,14 +259,7 @@ enum ActiveLessonAdapter {
                 }
 
             case .exampleBlock:
-                pendingExamples.append(
-                    LiveLessonBlock(
-                        id: component.id,
-                        type: .callout,
-                        title: component.title ?? "Worked example",
-                        content: component.content
-                    )
-                )
+                pendingWorkspace.append(component)
 
             case .ctaButton:
                 finalCtaLabel = component.content.isEmpty ? "Continue" : component.content
@@ -319,7 +318,8 @@ enum ActiveLessonAdapter {
                 languageCode: last.languageCode,
                 teachingExamples: last.teachingExamples,
                 teachingVisual: last.teachingVisual,
-                activityId: last.activityId
+                activityId: last.activityId,
+                workspaceComponents: last.workspaceComponents
             )
         }
         return result

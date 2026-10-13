@@ -61,6 +61,7 @@ fun A2uiRenderScope.QuizCardRenderer() {
     val actionName = literalString("action") ?: "submitQuiz"
 
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
         Text(text = question, color = TextPrimary)
         ClassroomChipRow(
             options = options.map { it.label },

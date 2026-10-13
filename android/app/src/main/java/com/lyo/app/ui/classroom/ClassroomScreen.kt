@@ -35,7 +35,6 @@ import com.lyo.app.data.a2ui.resolvePointer
 import com.lyo.app.data.classroom.ClassroomSavedSession
 import com.lyo.app.data.classroom.ClassroomStallPhase
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
-import com.lyo.app.ui.classroom.a2ui.RenderNode
 import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoRed
@@ -47,7 +46,7 @@ import com.lyo.app.ui.theme.TextSecondary
  * genuinely dynamic, server-driven content), and hand-authored chrome
  * (ClassroomChrome.kt) around it, per the implementation plan's
  * Architecture section: chrome auto-hides Netflix/YouTube-style; the
- * board, the teacher's caption, and both mascots (Teacher badge + Lyo)
+ * board and Lyo's explanation
  * never do.
  *
  * `courseId` mirrors `RecentCourseStore.save()`'s pattern in LyoNavHost's
@@ -134,7 +133,7 @@ fun ClassroomScreen(
     }
 
     val chrome = rememberChromeVisibility(
-        blockAutoHide = engine.hasActiveCheckpoint || settingsOpen || notebookOpen,
+        blockAutoHide = engine.hasActiveCheckpoint || engine.lessonRecovery || settingsOpen || notebookOpen,
     )
 
     Box(
@@ -199,11 +198,15 @@ fun ClassroomScreen(
                 )
             }
 
-            // The board — permanent, fills remaining space. Lyo's mascot
-            // sits in its corner, addressed directly by id ("lyo_mascot")
-            // rather than through the board_column subtree, since it's a
-            // fixed always-on element, not board content that scrolls with
-            // lesson history.
+            // One real Lyo mascot beside the explanation, above the teaching tools.
+            TeacherBadgeAndCaption(
+                caption = engine.surface.dataModel.resolvePointer("/caption"),
+                mascotState = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                lessonRecovery = engine.lessonRecovery,
+                onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+            )
+
+            // Teaching tools scroll independently from the explanation and controls.
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -218,20 +221,6 @@ fun ClassroomScreen(
                         .padding(12.dp)
                         .verticalScroll(rememberScrollState()),
                 )
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(12.dp),
-                ) {
-                    RenderNode(
-                        componentId = "lyo_mascot",
-                        state = engine.surface,
-                        catalog = engine.catalog,
-                        scopePath = "/",
-                        onAction = { action -> engine.onAction(action) },
-                    )
-                }
 
                 // The cover page: what this class is, before any of it is
                 // taught. A learner should never be looking at a blank board
@@ -295,11 +284,7 @@ fun ClassroomScreen(
                 }
             }
 
-            // Permanent — the teacher's spoken caption + Teacher badge,
-            // never wrapped in the chrome AnimatedVisibility below.
-            TeacherBadgeAndCaption(caption = engine.surface.dataModel.resolvePointer("/caption"))
-
-            AnimatedVisibility(visible = chrome.visible) {
+            AnimatedVisibility(visible = chrome.visible || engine.canContinue) {
                 BottomActionDock(
                     canContinue = engine.canContinue,
                     continueLabel = engine.continueLabel,

@@ -8,6 +8,7 @@ import * as contract from './classroom-contract.mjs';
 import { canResumeClassroom } from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
+import * as boardPresentation from './board-presentation.mjs';
 
 function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
@@ -30,7 +31,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
   const deps = {
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
-    '@/lib/teaching-activity.mjs': visuals, '@/lib/classroom-sounds': { playSound() {} },
+    '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
     '@/lib/stack': { updateCourseProgress: async () => {} },
   };
   // A real key/value store, not a stub that answers every key with a token:

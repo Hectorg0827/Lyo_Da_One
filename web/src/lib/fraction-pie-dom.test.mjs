@@ -121,6 +121,31 @@ test('Classroom and Test Prep renderer routes atomic exploration to the activity
   } finally { await view.close(); }
 });
 
+test('reference pies keep their saved values and cannot dispatch exploratory updates', async () => {
+  classroomUpdates = [];
+  const view = await mount(TeachingVisualView, {
+    id: 'memory-visual:step-1', visual: fixture.content.visual, readOnly: true,
+  });
+  try {
+    const before = readout(view.container);
+    const slice = view.container.querySelector('[aria-label="Slice 2 of 4"]');
+    assert.equal(slice.getAttribute('aria-disabled'), 'true');
+    assert.equal(slice.getAttribute('tabindex'), '-1');
+    assert.ok([...view.container.querySelectorAll('input, button')].every(control => control.disabled));
+    await act(async () => {
+      slice.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      for (const key of ['Enter', ' ']) {
+        slice.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+      }
+    });
+    await range(view.container, 'Numerator', 0);
+    await range(view.container, 'Denominator', 8);
+    await act(async () => view.container.querySelector('button').click());
+    assert.equal(readout(view.container), before);
+    assert.deepEqual(classroomUpdates, []);
+  } finally { await view.close(); }
+});
+
 test('all 230 supported numerator/denominator states render exact fractions and matching slice counts', async () => {
   for (let parts = 1; parts <= 20; parts++) for (let value = 0; value <= parts; value++) {
     const view = await mount(TeachingVisualCard, { id: `pie-${parts}-${value}`,
