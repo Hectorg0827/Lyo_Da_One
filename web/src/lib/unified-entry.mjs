@@ -9,7 +9,7 @@
  */
 import { classroomEntryHref, testPrepEntryHref } from './entry-contract.mjs';
 
-const EXAM = /\b(?:i have (?:a|an|my) (?:test|exam)|(?:test|exam|midterm|final|certification) (?:on|in|next|tomorrow|this|coming)|(?:study|prepare|revise|practice) for (?:a|an|my|the) (?:test|exam)|tengo (?:un )?examen|preparar(?:me)? para (?:un |el )?examen)\b/i;
+const EXAM = /\b(?:i have (?:a|an|my) (?:[a-z]+ ){0,5}(?:test|exam)|(?:test|exam|midterm|final|certification) (?:on|in|next|tomorrow|this|coming)|(?:study|prepare|revise|practice) for (?:a|an|my|the) (?:[a-z]+ ){0,5}(?:test|exam)|tengo (?:un )?examen|preparar(?:me)? para (?:un |el )?examen)\b/i;
 const COACH = /\b(?:what should i (?:study|work on|learn|review)|(?:what(?:'s| is) my|give me (?:my|a)) (?:mission|study plan)|how ready am i|(?:i have|i've got) \d+ minutes? (?:to study|for studying)|qu[eé] (?:debo|deber[ií]a) estudiar)\b/i;
 const TEACH = /\b(?:teach me|walk me through|start (?:a |my )?(?:lesson|course)|(?:make|create|build) (?:me )?(?:a )?course|i want to learn|i'd like to learn|help me learn|learn (?:to|how to)|ens[eé][nñ]ame|quiero aprender|ay[uú]dame a aprender)\b/i;
 const QUESTION = /^(?:what|who|when|where|why|how|which|is |are |can |could |should |do |does |did |will |would |tell me|explain|summari[sz]e|compare|analy[sz]e|find|search|show me|translate|write|draft|help me (?:with|fix)|qu[eé]|qui[eé]n|cu[aá]ndo|d[oó]nde|por qu[eé]|c[oó]mo|explica|resume|traduce)\b/i;
