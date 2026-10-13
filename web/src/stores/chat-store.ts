@@ -702,6 +702,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               convoId!,
               reduceTeachingPolicy(teachingRuntimeFor(convoId!), chunk)
             );
+          } else if (chunk.type === 'coach_mission') {
+            const view =
+              chunk.view && typeof chunk.view === 'object'
+                ? chunk.view as Record<string, unknown>
+                : undefined;
+            if (view && Array.isArray(view.active_goals) && Array.isArray(view.mission)) {
+              // The prose answer is the durable fallback on older clients.
+              receivedContent = true;
+              patchAiMessage({
+                metadata: {
+                  coach: view,
+                  coachTimeBudgetMinutes:
+                    typeof chunk.time_budget_minutes === 'number'
+                      ? chunk.time_budget_minutes
+                      : null,
+                },
+              });
+            }
           } else if (chunk.type === 'sources') {
             const sources = Array.isArray(chunk.sources) ? chunk.sources : [];
             if (sources.length) {
