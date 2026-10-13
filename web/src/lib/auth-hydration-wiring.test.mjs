@@ -16,7 +16,7 @@ test('Test Prep prompts a retry instead of losing its deep-linked exam after tra
   assert.match(page, /Session verification unavailable/);
   assert.match(page, /Retry verification/);
   assert.match(page, /void hydrate\(\)/);
-  assert.match(page, /searchParams\.get\('profileId'\)/);
+  assert.match(page, /query\.get\('profileId'\)/);
 });
 
 test('scheduled exam handoff does not award grades or quietly replace original profile', () => {
