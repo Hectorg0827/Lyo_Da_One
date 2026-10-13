@@ -65,7 +65,6 @@ export async function createMissionJourney({ start, handoff }, journeyApi, ids) 
   if (!ids?.start || !ids?.handoff) throw Error('Missing journey idempotency keys');
   const journey = await journeyApi.start({ ...start, request_id: ids.start });
   const event = await journeyApi.handoff(journey.id, { ...handoff, request_id: ids.handoff });
-  const href = withJourneyId(missionEntryHref({}) || '', journey.id);
   // The actual Classroom destination comes from the caller's validated plan.
   return { journey, event };
 }
