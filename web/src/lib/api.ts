@@ -909,6 +909,25 @@ export const api = {
     async today() {
       return request<import('./coach-api').CoachToday>('/api/v1/me/coach/today');
     },
+    /** Navigation continuity only: no scoring or lesson generation. */
+    journeys: {
+      async start(payload: import('./journey-api').JourneyStartPayload) {
+        return request<import('./journey-api').LearningJourney>('/api/v1/me/coach/journeys', {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      },
+      async get(id: string) {
+        return request<import('./journey-api').LearningJourney>(
+          `/api/v1/me/coach/journeys/${encodeURIComponent(id)}`
+        );
+      },
+      async handoff(id: string, payload: import('./journey-api').JourneyHandoffPayload) {
+        return request<import('./journey-api').JourneyHandoff>(
+          `/api/v1/me/coach/journeys/${encodeURIComponent(id)}/handoffs`,
+          { method: 'POST', body: JSON.stringify(payload) }
+        );
+      },
+    },
   },
 
   // ── Test prep ──
