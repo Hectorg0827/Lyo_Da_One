@@ -159,6 +159,7 @@ function ClassroomStage() {
   const [visualHeight, setVisualHeight] = useState<number | null>(null);
   const [journey, setJourney] = useState<LearningJourney | null>(null);
   const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeyReload, setJourneyReload] = useState(0);
   const [journeyError, setJourneyError] = useState<string | null>(null);
   const [journeyLeaving, setJourneyLeaving] = useState(false);
   const journeyLeaveId = useRef<string | null>(null);
@@ -198,11 +199,15 @@ function ClassroomStage() {
       if (!cancelled) setJourneyLoading(false);
     });
     return () => { cancelled = true; };
-  }, [journeyId]);
+  }, [journeyId, journeyReload]);
 
   const leaveClassroom = async () => {
-    if (!journeyId || !journey) {
+    if (!journeyId) {
       router.back();
+      return;
+    }
+    if (!journey) {
+      setJourneyError('Saved learning context is unavailable. Reload it or leave without recording.');
       return;
     }
     if (journeyLeaving) return;
@@ -463,7 +468,9 @@ function ClassroomStage() {
         <div role="alert" className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-xs text-amber-100">
           <span>{journeyError}</span>
           <button type="button" className="underline underline-offset-2"
-            onClick={() => void leaveClassroom()}>Retry return</button>
+            onClick={() => journey ? void leaveClassroom() : setJourneyReload((revision) => revision + 1)}>
+            {journey ? 'Retry return' : 'Reload context'}
+          </button>
           <button type="button" className="underline underline-offset-2"
             onClick={() => router.back()}>Leave without recording</button>
         </div>
