@@ -27,3 +27,12 @@ test('scheduled exam handoff does not award grades or quietly replace original p
   assert.match(entry, /studySessionJourneyPlan/);
   assert.doesNotMatch(entry, /completeSession\(/);
 });
+
+
+test('old 401 and refresh replies cannot clear or replace credentials for a newer account', () => {
+  const api = read('./api.ts');
+  assert.match(api, /getAccessToken\(\) !== requestAccessToken/);
+  assert.match(api, /Session changed during request/);
+  assert.match(api, /getRefreshToken\(\) !== refresh/);
+  assert.match(api, /localStorage\.removeItem\('lyo_refresh_token'\)/);
+});
