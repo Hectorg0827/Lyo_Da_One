@@ -54,6 +54,10 @@ export const initialState = {
  */
 export function testPrepReducer(state = initialState, action) {
   switch (action?.type) {
+    case 'profile_selected':
+      // A different exam is a new load, not a stale refresh of the old one.
+      return { ...initialState, sessions: [] };
+
     case 'load_started':
       return {
         ...state,
@@ -65,13 +69,18 @@ export function testPrepReducer(state = initialState, action) {
       };
 
     case 'plan_loaded':
-      return { ...state, stage: 'plan', planId: action.planId };
+      return state.planId === action.planId
+        ? { ...state, stage: 'plan' }
+        : { ...state, stage: 'plan', planId: action.planId,
+            readiness: null, sessions: [], notice: null, finishing: null,
+            readinessFailed: false, sessionsFailed: false };
 
     case 'no_plan':
       // Only ever reached from a *successful* call that returned no plans.
       // A failure takes `load_failed`, which does not conclude anything about
       // whether the learner has a plan.
-      return { ...state, stage: 'intake', planId: null };
+      return { ...state, stage: 'intake', planId: null, readiness: null,
+        sessions: [], notice: null, finishing: null };
 
     case 'details_loaded': {
       const next = { ...state };

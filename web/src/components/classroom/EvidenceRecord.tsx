@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import type { ConceptRecord, LearnerRecord, RungRecord } from '@/types';
 import {
   EVIDENCE_KINDS,
-  conceptLabel,
+  conceptDisplayName,
   nextStepLabel,
   partitionRecordBySubject,
   rungClaim,
@@ -168,7 +168,7 @@ function ConceptCard({ concept }: { concept: ConceptRecord }) {
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
       <h4 className="text-[13.5px] font-bold text-white">
-        {conceptLabel(concept.concept_id)}
+        {conceptDisplayName(concept)}
       </h4>
       <p className="mt-0.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-teal-300/90">
         {stateHeadline(concept.state)}
