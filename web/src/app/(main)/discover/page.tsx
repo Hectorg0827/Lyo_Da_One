@@ -40,6 +40,7 @@ import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
 import CreateClipModal from '@/components/clips/CreateClipModal';
 import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 import { DiscoverPlaybackController, DiscoverPageCursor, mergeClipPage, nextClipIndex } from '@/lib/discover-playback.mjs';
+import { normalizeDiscoverFeed, discoverFilterHref, discoverSubjects } from '@/lib/discover-filters.mjs';
 
 interface Reel {
   id: string;
@@ -517,10 +518,7 @@ function DiscoverContent() {
   const clipParam = searchParams.get('clip');
   const [composing, setComposing] = useState(composeParam === 'clip');
   const query = queryParam;
-  const requestedFeed = searchParams.get('feed');
-  const feedMode: 'for_you' | 'latest' | 'popular' | 'saved' =
-    requestedFeed === 'latest' || requestedFeed === 'popular' || requestedFeed === 'saved'
-      ? requestedFeed : 'for_you';
+  const feedMode: 'for_you' | 'latest' | 'popular' | 'saved' = normalizeDiscoverFeed(searchParams.get('feed'));
   const subject = searchParams.get('subject')?.trim() ?? '';
   const filterKey = `${feedMode}::${subject}::${query}`;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -560,28 +558,14 @@ function DiscoverContent() {
   const [moreClips, setMoreClips] = useState<Record<string, unknown>[]>([]);
   const pageCursor = useRef(new DiscoverPageCursor());
 
-  const subjectChoices = useMemo(() => {
-    const names = new Set<string>();
-    for (const entry of availableFilters?.subjects || []) {
-      if (entry.name && !['general', 'unknown'].includes(entry.name.toLowerCase())) names.add(entry.name);
-    }
-    for (const raw of (data?.clips || []) as Record<string, unknown>[]) {
-      const metadata = (raw.metadata || {}) as Record<string, unknown>;
-      const name = String(raw.subject || metadata.subject || '').trim();
-      if (name && !['general', 'unknown'].includes(name.toLowerCase())) names.add(name);
-    }
-    if (subject) names.add(subject);
-    return Array.from(names);
-  }, [availableFilters, data, subject]);
+  const subjectChoices = useMemo(
+    () => discoverSubjects(availableFilters?.subjects || [], (data?.clips || []) as Record<string, unknown>[], subject),
+    [availableFilters, data, subject],
+  );
 
   const chooseFilter = (mode: 'for_you' | 'latest' | 'popular' | 'saved', nextSubject = '') => {
     if (mode === feedMode && nextSubject === subject) return;
-    const next = new URLSearchParams(searchParams.toString());
-    for (const key of ['clip', 'subject', 'feed', 'compose', 'topic']) next.delete(key);
-    if (nextSubject) next.set('subject', nextSubject);
-    else if (mode !== 'for_you') next.set('feed', mode);
-    const qs = next.toString();
-    router.replace(`/discover${qs ? `?${qs}` : ''}`, { scroll: false });
+    router.replace(discoverFilterHref(searchParams.toString(), mode, nextSubject), { scroll: false });
   };
 
   // Load subsequent pages before the user reaches the end. Discover is a
