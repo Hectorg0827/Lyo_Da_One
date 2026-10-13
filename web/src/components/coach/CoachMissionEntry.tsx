@@ -43,12 +43,12 @@ export default function CoachMissionEntry({ mission, session, goal, origin, prof
     return () => { mounted.current = false; };
   }, []);
 
-  const href = session ? sessionEntryHref(session) : missionEntryHref(mission);
+  const href = session ? sessionEntryHref(session) : mission ? missionEntryHref(mission) : null;
   if (!href) return <div className={className}>{children}</div>;
 
   const enabled = process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED === '1';
   const plan = enabled
-    ? session ? studySessionJourneyPlan(session, goal, profileId) : missionJourneyPlan(mission, goal, origin, profileId)
+    ? session ? studySessionJourneyPlan(session, goal, profileId) : mission ? missionJourneyPlan(mission, goal, origin, profileId) : null
     : null;
 
   if (!plan || !isAuthenticated) {
