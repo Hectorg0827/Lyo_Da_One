@@ -10,7 +10,7 @@ export interface MissionJourneyPlan {
 export function withJourneyId(href: string, journeyId: string): string | null;
 export function returnFromJourney(journey: LearningJourney | null | undefined): string;
 export function missionJourneyPlan(item: CoachMissionItem, goal: CoachGoal | null | undefined,
-  originSurface?: 'coach' | 'test_prep', profileId?: string | null): MissionJourneyPlan | null;
+  originSurface?: 'coach' | 'test_prep' | 'chat', profileId?: string | null): MissionJourneyPlan | null;
 export function beginMissionJourney(plan: MissionJourneyPlan, journeyApi: {
   start: (body: JourneyStartPayload) => Promise<LearningJourney>;
   handoff: (id: string, body: JourneyHandoffPayload) => Promise<JourneyHandoff>;
