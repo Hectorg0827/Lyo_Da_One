@@ -125,9 +125,9 @@ def run():
             # Two distinct Test Prep exam identities should remain selectable
             # by URL, including after refresh (not silently newest exam).
             exam1 = request("/api/v1/me/study_plans/profiles/start", method="POST", token=token,
-                            data={"request_id": "browser-exam-" + uuid.uuid4().hex})["profile_id"]
+                            data={"request_id": "browser-exam-" + uuid.uuid4().hex}, expected=201)["profile_id"]
             exam2 = request("/api/v1/me/study_plans/profiles/start", method="POST", token=token,
-                            data={"request_id": "browser-exam-" + uuid.uuid4().hex})["profile_id"]
+                            data={"request_id": "browser-exam-" + uuid.uuid4().hex}, expected=201)["profile_id"]
             assert exam1 != exam2
             page.goto(WEB + "/test-prep?profileId=" + urllib.parse.quote(exam1, safe=""),
                       wait_until="domcontentloaded", timeout=60000)
