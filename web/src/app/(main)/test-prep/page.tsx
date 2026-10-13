@@ -82,6 +82,7 @@ export default function TestPrepPage() {
   const [uploading, setUploading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<PrepProfile[]>([]);
+  const [returnedSessionId, setReturnedSessionId] = useState<string | null>(null);
   const [startingNew, setStartingNew] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const selectedProfileIdRef = useRef<string | null>(null);
@@ -109,6 +110,10 @@ export default function TestPrepPage() {
 
   const selectProfile = (id: string) => {
     selectedProfileIdRef.current = id;
+    setReturnedSessionId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('sessionId');
+    window.history.replaceState(window.history.state, '', url.toString());
     const version = ++selectionVersionRef.current;
     loadVersionRef.current++;
     dispatch({ type: 'profile_selected' });
@@ -202,7 +207,9 @@ export default function TestPrepPage() {
     }
     // Read the selected profile before the first state request. Without this
     // deep-link restoration a refresh silently switches to the newest exam.
-    selectedProfileIdRef.current = new URLSearchParams(window.location.search).get('profileId');
+    const query = new URLSearchParams(window.location.search);
+    selectedProfileIdRef.current = query.get('profileId');
+    setReturnedSessionId(query.get('sessionId'));
     void loadPlan();
   }, [authLoading, isAuthenticated, loadPlan]);
 
@@ -704,16 +711,21 @@ export default function TestPrepPage() {
                 </>
               );
               return (
-                <li key={session.id}>
+                <li key={session.id} id={`test-prep-session-${session.id}`}
+                    className={returnedSessionId === session.id ? 'rounded-xl ring-2 ring-violet-400/70' : undefined}>
                   <div className="flex items-stretch gap-2">
                     {href ? (
-                      <Link
-                        href={href}
-                        className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 hover:bg-white/[0.07]"
+                      <CoachMissionEntry
+                        session={session}
+                        goal={coach?.active_goals.find((goal) =>
+                          goal.source_ref_type === 'test_profile' && goal.source_ref_id === profileId)}
+                        origin="test_prep"
+                        profileId={profileId}
+                        className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left hover:bg-white/[0.07]"
                       >
                         <GraduationCap className="h-4 w-4 text-white/50" aria-hidden />
                         {body}
-                      </Link>
+                      </CoachMissionEntry>
                     ) : (
                       // No topic means nothing to teach. A dead link into an
                       // empty Classroom is worse than a row that plainly is
