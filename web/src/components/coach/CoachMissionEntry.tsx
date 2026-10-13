@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth-store';
 type Props = {
   mission: CoachMissionItem;
   goal?: CoachGoal | null;
-  origin: 'coach' | 'test_prep';
+  origin: 'coach' | 'test_prep' | 'chat';
   profileId?: string | null;
   className: string;
   children: ReactNode;
