@@ -137,6 +137,26 @@ def run():
             expect(page.get_by_role("combobox", name="Choose a test")).to_have_value(exam1, timeout=35000)
             print("PASS Test Prep selects and reloads exact exam without replacing it", flush=True)
 
+            # Transient verifier errors must never destroy the learner token or
+            # replace an explicitly selected exam with a default stale exam.
+            for transient in (429, 503):
+                def fail_verification(route, code=transient):
+                    route.fulfill(status=code, content_type="application/json",
+                                  body='{"detail":"Synthetic temporary verification error"}')
+                page.route("**/api/v1/auth/me", fail_verification)
+                page.reload(wait_until="domcontentloaded")
+                expect(page.get_by_role("heading", name="Session verification unavailable")).to_be_visible(timeout=30000)
+                assert page.evaluate("window.localStorage.getItem('lyo_token')") == token, (
+                    "Transient auth error discarded an existing access token"
+                )
+                assert urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query).get("profileId") == [exam1], (
+                    "Transient auth error replaced the selected exam URL"
+                )
+                page.unroute("**/api/v1/auth/me", fail_verification)
+                page.get_by_role("button", name="Retry verification").click()
+                expect(page.get_by_role("combobox", name="Choose a test")).to_have_value(exam1, timeout=30000)
+                print(f"PASS transient HTTP {transient} preserves token, exam and retry", flush=True)
+
             # A Chat Coach turn is generated deterministically from the same
             # learning goal (without an external model provider in staging).
             page.goto(WEB + "/chat", wait_until="domcontentloaded", timeout=60000)
