@@ -10,6 +10,7 @@ export interface JourneyContext {
   lesson_id?: string;
   concept_id?: string;
   question_id?: string;
+  study_session_id?: string;
 }
 
 export interface LearningJourney {
