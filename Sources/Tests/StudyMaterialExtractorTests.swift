@@ -37,6 +37,36 @@ final class StudyMaterialExtractorTests: XCTestCase {
 
     // MARK: Flashcards from Markdown
 
+    /// Verbatim from a real answer: one explicitly labelled card, with the key
+    /// points the model hung underneath the back.
+    func testSingleLabelledFlashcardBecomesADeck() {
+        let reply = """
+            Here's a flashcard to help you study for your algebra exam:
+
+            **Flashcard Front:** What is the quadratic formula?
+
+            **Flashcard Back:** The quadratic formula is used to find the solutions of \
+            a quadratic equation. It is given by:
+
+            - **Key Points:**
+              - a, b and c are coefficients of the equation.
+              - The discriminant determines the nature of the roots.
+
+            Would you like to create more flashcards or focus on a different topic?
+            """
+        let found = deck(
+            StudyMaterialExtractor.extract(
+                from: reply, userAsk: "make me a flashcard for my algebra exam"))
+
+        XCTAssertEqual(found?.cards.count, 1)
+        XCTAssertEqual(found?.cards.first?.front, "What is the quadratic formula?")
+        // The back keeps its trailing colon and absorbs the bulleted continuation.
+        XCTAssertTrue(found?.cards.first?.back.contains("It is given by:") ?? false)
+        XCTAssertTrue(found?.cards.first?.back.contains("Key Points") ?? false)
+        XCTAssertTrue(found?.cards.first?.back.contains("discriminant") ?? false)
+    }
+
+
     func testBoldTermWithEmDashBecomesDeck() {
         let reply = """
             Here are 3 flashcards on photosynthesis:

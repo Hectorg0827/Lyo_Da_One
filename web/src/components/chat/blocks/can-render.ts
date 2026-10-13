@@ -38,6 +38,12 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
         str('question') && Array.isArray(content.options) && content.options.length > 0
       );
 
+    // A deck needs cards; a lone card falls back to GenericBlock's chain.
+    case 'flashcard':
+      return Array.isArray(content.cards)
+        ? content.cards.length > 0
+        : genericChain(str, content);
+
     // Delegated, not re-implemented. This branch previously accepted any
     // string `kind`, while ExplorableBlock draws only the kinds it knows — so
     // an unrecognised or future kind passed here, MessageBubble hid the prose
@@ -48,9 +54,16 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
     // the same chain as the default case — not by falling out of the switch,
     // which would return undefined and hide the fallback just as quietly.
     case 'interactive':
-      return block.subtype === 'explorable'
-        ? canRenderExplorable(content)
-        : genericChain(str, content);
+      if (block.subtype === 'explorable') return canRenderExplorable(content);
+      // Study material synthesized from a prose reply. Each mirrors exactly
+      // what its renderer needs, for the same reason as every branch here.
+      if (block.subtype === 'studyPlan') {
+        return Array.isArray(content.schedule) && content.schedule.length > 0;
+      }
+      if (block.subtype === 'studyNotes') {
+        return Array.isArray(content.sections) && content.sections.length > 0;
+      }
+      return genericChain(str, content);
 
     // Mirrors GenericBlock's fallback chain, in the same order.
     default:

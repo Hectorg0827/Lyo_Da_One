@@ -18,6 +18,7 @@ import {
   reduceTeachingPolicy,
   teachingStateSummary,
 } from '@/lib/teaching-runtime.mjs';
+import { extractStudyBlocks } from '@/lib/study-material.mjs';
 
 export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
@@ -545,6 +546,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       receivedContent = true;
       patchAiMessage({ blocks });
     };
+    /**
+     * Build the study material a prose reply is describing.
+     *
+     * Chat can only show a deck, a plan or notes as blocks, and the model
+     * usually answers "make me flashcards" in Markdown instead — so without
+     * this the learner gets a paragraph and no cards at all. Runs once the
+     * turn is complete, since it reads the whole reply.
+     *
+     * The backend's own structured answer always wins: a turn that already
+     * carries blocks is left exactly as it arrived.
+     */
+    const attachStudyMaterialFallback = () => {
+      const conversation = get().conversations.find((c) => c.id === convoId);
+      const message = conversation?.messages.find((m) => m.id === aiMessageId);
+      if (!message || (Array.isArray(message.blocks) && message.blocks.length > 0)) return;
+
+      // Read the reply off the message, not the accumulator: a turn whose text
+      // arrived through any path other than a delta still has it here.
+      const reply = message.content || accumulated;
+      const extracted = extractStudyBlocks(reply, userMessage.content, `study-${aiMessageId}`);
+      if (!extracted) return;
+      patchAiMessage({ blocks: extracted.blocks as ChatBlock[] });
+    };
+
     const attachActionsToAiMessage = (labels: string[]) => {
       // Same reason as blocks: a turn that produced only follow-up chips is
       // still a real turn, and must not be wiped as an empty response.
@@ -861,6 +886,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (!receivedContent) {
             recoverCanonicalConversation(convoId!);
           } else {
+            attachStudyMaterialFallback();
             set((state) => ({
               isGenerating: false,
               generationProgress: 0,

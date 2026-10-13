@@ -33,7 +33,13 @@ enum StudyMaterialExtractor {
     }
 
     /// Fewest cards worth turning a prose answer into a deck.
-    private static let minimumCards = 3
+    ///
+    /// A line that literally says `Flashcard Front:` / `Back:` is unambiguous,
+    /// so one of those is already a deck — models routinely answer "make me a
+    /// flashcard" with exactly one. The looser one-line heuristic infers its
+    /// pairs from list shape, so it needs several before it will believe them.
+    private static let minimumLabelledCards = 1
+    private static let minimumInlineCards = 3
     private static let minimumPlanDays = 2
     private static let minimumNoteSections = 2
 
@@ -266,16 +272,20 @@ enum StudyMaterialExtractor {
     private struct ParsedCards {
         var cards: [Flashcard] = []
         var consumed: Set<Int> = []
+        /// True when the cards came from explicit `Front:` / `Back:` labels
+        /// rather than being inferred from list shape.
+        var labelled = false
     }
 
     private static func flashcardResult(
         from lines: [String], userAsk: String, reply: String
     ) -> Result? {
         var parsed = pairedCards(in: lines)
-        if parsed.cards.count < minimumCards {
+        if parsed.cards.count < minimumLabelledCards {
             parsed = inlineCards(in: lines)
         }
-        guard parsed.cards.count >= minimumCards else { return nil }
+        guard !parsed.cards.isEmpty else { return nil }
+        guard parsed.labelled || parsed.cards.count >= minimumInlineCards else { return nil }
 
         let leftovers =
             lines
@@ -294,10 +304,20 @@ enum StudyMaterialExtractor {
             ])
     }
 
-    private static let frontLabels = ["front:", "term:", "q:", "question:", "word:"]
-    private static let backLabels = ["back:", "definition:", "a:", "answer:", "meaning:"]
+    // Longest first, so `flashcard front:` is not shadowed by a shorter prefix.
+    private static let frontLabels = [
+        "flashcard front:", "card front:", "front:", "term:", "question:", "word:", "q:",
+    ]
+    private static let backLabels = [
+        "flashcard back:", "card back:", "back:", "definition:", "answer:", "meaning:", "a:",
+    ]
 
-    /// `Front: …` / `Back: …` and `Q: …` / `A: …` across two lines.
+    /// `Flashcard Front: …` / `Back: …`, `Front:` / `Back:`, `Q:` / `A:`.
+    ///
+    /// The back is not always one line. Models commonly follow it with a
+    /// bulleted "Key points" list that plainly belongs to the card, so those
+    /// continuation lines are folded into the back rather than left behind as
+    /// stray prose.
     private static func pairedCards(in lines: [String]) -> ParsedCards {
         var parsed = ParsedCards()
         var index = 0
@@ -310,26 +330,72 @@ enum StudyMaterialExtractor {
             var next = index + 1
             while next < lines.count, listBody(lines[next]).isEmpty { next += 1 }
             guard next < lines.count,
-                let back = labelledValue(lines[next], labels: backLabels)
+                let head = labelledValue(lines[next], labels: backLabels)
             else {
                 index += 1
                 continue
             }
-            parsed.cards.append(Flashcard(front: front, back: back))
             parsed.consumed.insert(index)
             parsed.consumed.insert(next)
-            index = next + 1
+
+            // Continuation lines stay verbatim so their bullets still render.
+            var back = [head]
+            var cursor = next + 1
+            while cursor < lines.count {
+                let raw = lines[cursor]
+                if raw.trimmingCharacters(in: .whitespaces).isEmpty {
+                    cursor += 1
+                    continue
+                }
+                if labelledValue(raw, labels: frontLabels) != nil { break }
+                if !isContinuation(raw) { break }
+                back.append(raw)
+                parsed.consumed.insert(cursor)
+                cursor += 1
+            }
+
+            parsed.cards.append(
+                Flashcard(front: front, back: back.joined(separator: "\n")))
+            index = cursor
         }
+        parsed.labelled = !parsed.cards.isEmpty
         return parsed
+    }
+
+    /// A line that carries on the card above it rather than starting new prose.
+    private static func isContinuation(_ rawLine: String) -> Bool {
+        if rawLine.range(of: "^\\s{2,}\\S", options: .regularExpression) != nil { return true }
+        return rawLine
+            .trimmingCharacters(in: .whitespaces)
+            .range(of: listMarkerPattern, options: .regularExpression) != nil
     }
 
     private static func labelledValue(_ rawLine: String, labels: [String]) -> String? {
         let line = listBody(rawLine)
         let lowered = line.lowercased()
         for label in labels where lowered.hasPrefix(label) {
-            return tidy(String(line.dropFirst(label.count)))
+            return tidyValue(String(line.dropFirst(label.count)))
         }
         return nil
+    }
+
+    /// Like `tidy`, but keeps trailing punctuation.
+    ///
+    /// A labelled value is already delimited by its label, so a trailing colon
+    /// is the author's ("It is given by:" leading into a list), not leftover
+    /// markup.
+    private static func tidyValue(_ text: String) -> String? {
+        var value =
+            text
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "`", with: "")
+        while let first = value.first, " \t*_—–-:".contains(first) {
+            value.removeFirst()
+        }
+        while let last = value.last, last == " " || last == "\t" {
+            value.removeLast()
+        }
+        return value.isEmpty ? nil : value
     }
 
     /// One card per line: `- Term: definition`, `**Term** — definition`, `| Term | Definition |`.
