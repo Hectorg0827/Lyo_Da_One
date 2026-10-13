@@ -28,6 +28,7 @@ import { PrepManagement } from '@/components/test-prep/PrepManagement';
 import type { PrepMaterial, PrepProfile, PrepSnapshot } from '@/lib/test-prep-api';
 import type { CoachToday } from '@/lib/coach-api';
 import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
+import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 
 /**
  * Test Prep — the face on a learner loop that had none.
@@ -584,10 +585,14 @@ export default function TestPrepPage() {
                     </>
                   );
                   return href ? (
-                    <Link key={item.skill_id} href={href}
-                      className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 px-3 py-3 transition hover:bg-white/[0.06]">
+                    <CoachMissionEntry key={item.skill_id}
+                      mission={item}
+                      goal={coach?.active_goals.find((goal) => goal.id === item.goal_id)}
+                      origin="test_prep"
+                      profileId={profileId}
+                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-black/10 px-3 py-3 text-left transition hover:bg-white/[0.06] disabled:opacity-60">
                       {content}
-                    </Link>
+                    </CoachMissionEntry>
                   ) : (
                     <div key={item.skill_id} className="flex items-center gap-3 rounded-xl border border-white/10 px-3 py-3">
                       {content}
