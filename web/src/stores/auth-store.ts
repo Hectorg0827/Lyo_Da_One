@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import type { User, AuthState } from '@/types';
-import { api, getAccessToken, clearTokens, adaptUser } from '@/lib/api';
+import { api, getAccessToken, clearTokens } from '@/lib/api';
+import { hydrationFailureKind } from '@/lib/auth-hydration.mjs';
+
+// Ignore verification responses from an account already switched or signed out.
+let authVersion = 0;
 
 interface AuthStore extends AuthState {
   login: (email: string, password: string) => Promise<void>;
@@ -9,6 +13,7 @@ interface AuthStore extends AuthState {
   setUser: (user: User) => void;
   updateUser: (updates: Partial<User>) => void;
   hydrate: () => Promise<void>;
+  authVerificationError: boolean;
   enrichWithGamification: () => Promise<void>;
 }
 
@@ -17,12 +22,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   token: null,
   isAuthenticated: false,
   isLoading: true,
+  authVerificationError: false,
 
   login: async (email: string, password: string) => {
-    set({ isLoading: true });
+    const version = ++authVersion;
+    set({ isLoading: true, authVerificationError: false });
     try {
       const { user, accessToken } = await api.auth.login(email, password);
-      set({ user, token: accessToken, isAuthenticated: true, isLoading: false });
+      if (version !== authVersion) return;
+      set({ user, token: accessToken, isAuthenticated: true, isLoading: false, authVerificationError: false });
       get().enrichWithGamification();
     } catch (err) {
       set({ isLoading: false });
@@ -31,7 +39,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   signup: async (email: string, password: string, displayName: string) => {
-    set({ isLoading: true });
+    const version = ++authVersion;
+    set({ isLoading: true, authVerificationError: false });
     try {
       const nameParts = displayName.trim().split(' ');
       const firstName = nameParts[0] || displayName;
@@ -46,7 +55,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         firstName,
         lastName,
       });
-      set({ user, token: accessToken, isAuthenticated: true, isLoading: false });
+      if (version !== authVersion) return;
+      set({ user, token: accessToken, isAuthenticated: true, isLoading: false, authVerificationError: false });
     } catch (err) {
       set({ isLoading: false });
       throw err;
@@ -54,9 +64,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   logout: () => {
+    ++authVersion;
     api.auth.logout().catch(() => {});
     clearTokens();
-    set({ user: null, token: null, isAuthenticated: false });
+    set({ user: null, token: null, isAuthenticated: false, isLoading: false, authVerificationError: false });
   },
 
   setUser: (user) => set({ user }),
@@ -67,18 +78,40 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     })),
 
   hydrate: async () => {
+    const version = ++authVersion;
     const token = getAccessToken();
     if (!token) {
-      set({ isLoading: false, isAuthenticated: false });
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false, authVerificationError: false });
       return;
     }
+    set({ isLoading: true, authVerificationError: false });
     try {
       const user = await api.auth.me();
-      set({ user, token, isAuthenticated: true, isLoading: false });
-      get().enrichWithGamification();
-    } catch {
-      clearTokens();
-      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      if (version !== authVersion) return;
+      const current = getAccessToken();
+      if (!current) {
+        set({ user: null, token: null, isAuthenticated: false, isLoading: false, authVerificationError: false });
+        return;
+      }
+      set({ user, token: current, isAuthenticated: true, isLoading: false, authVerificationError: false });
+      void get().enrichWithGamification();
+    } catch (error) {
+      if (version !== authVersion) return;
+      if (hydrationFailureKind(error) === 'invalid_session') {
+        clearTokens();
+        set({ user: null, token: null, isAuthenticated: false, isLoading: false, authVerificationError: false });
+        return;
+      }
+      // 429/5xx/network errors are not proof of revoked credentials.
+      // An unverified cold start remains unverified; do not invent identity.
+      const current = getAccessToken();
+      set((state) => ({
+        user: state.isAuthenticated && current ? state.user : null,
+        token: current,
+        isAuthenticated: Boolean(current && state.isAuthenticated && state.user),
+        isLoading: false,
+        authVerificationError: Boolean(current),
+      }));
     }
   },
 
