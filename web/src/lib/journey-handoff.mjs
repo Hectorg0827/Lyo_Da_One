@@ -19,12 +19,10 @@ export function returnFromJourney(journey) {
   if (journey?.origin_surface === 'test_prep') {
     const profileId = journey.context?.test_profile_id;
     if (typeof profileId !== 'string' || !profileId) return '/test-prep';
-    const qs = new URLSearchParams({ profileId });
     const sessionId = journey.context?.study_session_id;
-    if (typeof sessionId === 'string' && /^[a-zA-Z0-9-]{1,36}$/.test(sessionId)) {
-      qs.set('sessionId', sessionId);
-    }
-    return '/test-prep?' + qs.toString();
+    const suffix = typeof sessionId === 'string' && /^[a-zA-Z0-9-]{1,36}$/.test(sessionId)
+      ? '&sessionId=' + encodeURIComponent(sessionId) : '';
+    return '/test-prep?profileId=' + encodeURIComponent(profileId) + suffix;
   }
   if (journey?.origin_surface === 'chat') return '/chat';
   return '/'; // Coach/Home — no untrusted redirect URL
