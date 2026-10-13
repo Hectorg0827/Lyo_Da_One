@@ -16,7 +16,7 @@ export function resolveApiEndpoint(apiBase, endpoint) {
   }
   const path = base.pathname.replace(/\/+$/, '');
   if (path !== '' && path !== '/api/v1') {
-    throw Error('API base must end at its host or /api/v1');
+    throw Error('Invalid API base path: expected host or /api/v1');
   }
   const target = endpoint.startsWith('/api/v1/') || endpoint === '/api/v1'
     ? endpoint
