@@ -20,6 +20,7 @@ const mocks = {
   '@/lib/api': { api },
   '@/stores/auth-store': { useAuthStore: () => ({ isAuthenticated: true, isLoading: false }) },
   'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
+  'next/navigation': { useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {} }) },
 };
 const modules = new Map();
 // Render the actual page, reducer, controls and schedule. Only network and
