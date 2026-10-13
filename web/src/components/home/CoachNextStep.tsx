@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 import { ArrowRight, BrainCircuit, Clock3 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { CoachToday } from '@/lib/coach-api';
@@ -67,10 +67,12 @@ export default function CoachNextStep({
             <Clock3 size={13} aria-hidden="true" /> {item.estimated_minutes} min suggested
           </span>
         </div>
-        <Link href={href}
+        <CoachMissionEntry mission={item}
+          goal={today.active_goals.find((goal) => goal.id === item.goal_id)}
+          origin="coach"
           className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#1b1035] hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
           Start this step <ArrowRight size={16} aria-hidden="true" />
-        </Link>
+        </CoachMissionEntry>
       </div>
     </section>
   );
