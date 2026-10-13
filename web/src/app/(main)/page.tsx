@@ -412,7 +412,7 @@ export default function HomePage() {
       <FrontDoor knownLearner={showLearnerDashboard} />
 
       {/* Next step comes from real Learning OS evidence, never mock progress. */}
-      <CoachNextStep enabled={isAuthenticated && !authLoading} learnerKey={String(user?.id ?? '')} />
+      <CoachNextStep key={String(user?.id ?? 'guest')} enabled={isAuthenticated && !authLoading} learnerKey={String(user?.id ?? '')} />
 
       {showLearnerDashboard && (
         /* ── The test you have coming up ────────────────────────────
