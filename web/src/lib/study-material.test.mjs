@@ -8,6 +8,8 @@ import {
   balancedObject,
   classifyStudyAsk,
   extractStudyBlocks,
+  hasStudyBlock,
+  isStudyBlock,
   mergeCards,
   moreCardsPrompt,
   nextDeckStep,
@@ -376,4 +378,39 @@ test('an empty deck asks for nothing', () => {
 test('batches continue after the first: card six asks again', () => {
   assert.equal(nextDeckStep({ index: 5, revealed: 6, total: 6 }), 'fetch');
   assert.equal(nextDeckStep({ index: 4, revealed: 6, total: 6 }), 'idle');
+});
+
+// ─── Whether a turn still needs study material ───────────────────────────────
+
+test('the backend\'s own study content suppresses the fallback', () => {
+  assert.ok(isStudyBlock({ type: 'flashcard', content: {} }));
+  assert.ok(isStudyBlock({ type: 'quiz', content: {} }));
+  assert.ok(isStudyBlock({ type: 'interactive', subtype: 'studyPlan', content: {} }));
+  assert.ok(isStudyBlock({ type: 'interactive', subtype: 'studyNotes', content: {} }));
+});
+
+test('an ordinary block does not', () => {
+  // This is the bug that made a deck never appear: the backend sends a text
+  // block on ordinary turns, and treating that as "already handled" left the
+  // learner with the paragraph they were trying to get away from.
+  assert.ok(!isStudyBlock({ type: 'text', content: { text: 'hello' } }));
+  assert.ok(!isStudyBlock({ type: 'dataViz', content: {} }));
+  assert.ok(!isStudyBlock({ type: 'interactive', subtype: 'explorable', content: {} }));
+  assert.ok(!isStudyBlock(null));
+});
+
+test('a turn carrying only text still needs its deck', () => {
+  assert.equal(hasStudyBlock([{ type: 'text', content: { text: 'Here are flashcards:' } }]), false);
+  assert.equal(hasStudyBlock([]), false);
+  assert.equal(hasStudyBlock(undefined), false);
+});
+
+test('a turn that already has a deck does not', () => {
+  assert.equal(
+    hasStudyBlock([
+      { type: 'text', content: { text: 'intro' } },
+      { type: 'flashcard', content: { cards: [] } },
+    ]),
+    true
+  );
 });

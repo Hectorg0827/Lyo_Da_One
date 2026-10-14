@@ -22,6 +22,7 @@ import {
 import {
   DECK_MAX_CARDS,
   extractStudyBlocks,
+  hasStudyBlock,
   mergeCards,
   moreCardsPrompt,
   parseMoreCards,
@@ -588,14 +589,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const attachStudyMaterialFallback = () => {
       const conversation = get().conversations.find((c) => c.id === convoId);
       const message = conversation?.messages.find((m) => m.id === aiMessageId);
-      if (!message || (Array.isArray(message.blocks) && message.blocks.length > 0)) return;
+      if (!message) return;
+
+      // Only the backend's own study content wins. Bailing on *any* block was
+      // too strict: the backend sends a `smart_blocks` text block on ordinary
+      // turns, so a reply plainly describing a deck got none — which is what
+      // "I asked for flashcards and got nothing" looked like from outside.
+      const existing = Array.isArray(message.blocks) ? message.blocks : [];
+      if (hasStudyBlock(existing)) return;
 
       // Read the reply off the message, not the accumulator: a turn whose text
       // arrived through any path other than a delta still has it here.
       const reply = message.content || accumulated;
       const extracted = extractStudyBlocks(reply, userMessage.content, `study-${aiMessageId}`);
       if (!extracted) return;
-      patchAiMessage({ blocks: extracted.blocks as ChatBlock[] });
+
+      // Those blocks already carry the prose, so adding the lead would repeat it.
+      const addition = existing.length
+        ? extracted.blocks.filter((block) => block.type !== 'text')
+        : extracted.blocks;
+      if (!addition.length) return;
+
+      patchAiMessage({ blocks: [...existing, ...addition] as ChatBlock[] });
     };
 
     const attachActionsToAiMessage = (labels: string[]) => {

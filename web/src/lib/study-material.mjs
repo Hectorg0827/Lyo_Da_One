@@ -131,6 +131,30 @@ export function extractStudyBlocks(reply, userAsk, idPrefix = 'study') {
   return { blocks, displayText: found.displayText };
 }
 
+// ─── Whether a turn still needs study material ───────────────────────────────
+
+/**
+ * Whether a block is study material the backend already supplied.
+ *
+ * Only these suppress the fallback. An ordinary text or lesson block must not:
+ * a turn that happens to arrive as blocks is still a turn whose reply may be
+ * describing a deck in prose, and treating "has any block at all" as "already
+ * handled" is what left a learner looking at a paragraph.
+ */
+export function isStudyBlock(block) {
+  if (!block || typeof block !== 'object') return false;
+  if (block.type === 'flashcard' || block.type === 'quiz') return true;
+  return (
+    block.type === 'interactive' &&
+    (block.subtype === 'studyPlan' || block.subtype === 'studyNotes')
+  );
+}
+
+/** Whether the turn already carries study material of its own. */
+export function hasStudyBlock(blocks) {
+  return Array.isArray(blocks) && blocks.some(isStudyBlock);
+}
+
 // ─── Growing a deck ──────────────────────────────────────────────────────────
 
 /**
