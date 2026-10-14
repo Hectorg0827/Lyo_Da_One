@@ -29,7 +29,7 @@ export function returnFromJourney(journey) {
 /** A Coach mission can be joined to one goal, never an arbitrary exam. */
 export function missionJourneyPlan(item, goal, originSurface = 'coach', profileId = null) {
   if (!item?.goal_id || !goal?.id || item.goal_id !== goal.id) return null;
-  if (originSurface !== 'coach' && originSurface !== 'test_prep') return null;
+  if (originSurface !== 'coach' && originSurface !== 'test_prep' && originSurface !== 'chat') return null;
   const href = missionEntryHref(item);
   if (!href || !CLASSROOM_PATH.test(href)) return null;
 
@@ -48,7 +48,7 @@ export function missionJourneyPlan(item, goal, originSurface = 'coach', profileI
     start: {
       goal_id: goal.id,
       origin_surface: originSurface,
-      origin_ref: originSurface === 'coach' ? 'today' : linkedExam,
+      origin_ref: originSurface === 'coach' ? 'today' : originSurface === 'chat' ? 'chat-coach' : linkedExam,
       context,
     },
     handoff: {

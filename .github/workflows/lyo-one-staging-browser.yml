@@ -1,0 +1,36 @@
+name: Lyo One isolated browser smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - web/scripts/validate_lyo_one_staging_browser.py
+      - .github/workflows/lyo-one-staging-browser.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install browser runner
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.55.0
+          python3 -m playwright install --with-deps chromium
+      - name: Validate isolated Lyo One UI in real Chromium
+        env:
+          LYO_ONE_STAGING_BROWSER: "1"
+          LYO_STAGING_SCREENSHOT_DIR: "${{ runner.temp }}/lyo-one-screenshots"
+        run: python3 web/scripts/validate_lyo_one_staging_browser.py
+      - name: Upload failure-only evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-one-browser-failure
+          path: ${{ runner.temp }}/lyo-one-screenshots
+          if-no-files-found: ignore
+          retention-days: 3

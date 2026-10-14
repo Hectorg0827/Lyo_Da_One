@@ -7,6 +7,9 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 ARG NEXT_PUBLIC_API_URL=https://api.lyoai.app
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# The unified journey remains off unless an environment opts in at build time.
+ARG NEXT_PUBLIC_LYO_JOURNEYS_ENABLED=0
+ENV NEXT_PUBLIC_LYO_JOURNEYS_ENABLED=$NEXT_PUBLIC_LYO_JOURNEYS_ENABLED
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

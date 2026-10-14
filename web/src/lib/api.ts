@@ -1,3 +1,4 @@
+import { resolveApiEndpoint } from '@/lib/api-url.mjs';
 import {
   classifyAuthFailure,
   NOT_SIGNED_IN,
@@ -144,7 +145,7 @@ async function request<T>(
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${endpoint}`, {
+  const res = await fetch(resolveApiEndpoint(API_URL, endpoint), {
     ...fetchOptions,
     headers,
   });
@@ -158,7 +159,7 @@ async function request<T>(
     let retry: Response | null = null;
     if (refreshed) {
       headers['Authorization'] = `Bearer ${getAccessToken()}`;
-      retry = await fetch(`${API_URL}${endpoint}`, { ...fetchOptions, headers });
+      retry = await fetch(resolveApiEndpoint(API_URL, endpoint), { ...fetchOptions, headers });
     }
 
     // The decision lives in `auth-failure.mjs`, where it can be tested. This
@@ -210,7 +211,7 @@ async function tryRefreshToken(): Promise<boolean> {
   const refresh = getRefreshToken();
   if (!refresh) return false;
   try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
+    const res = await fetch(resolveApiEndpoint(API_URL, '/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refresh }),
@@ -260,16 +261,28 @@ export const api = {
   auth: {
     async login(email: string, password: string) {
       const data = await request<{
-        user: Record<string, unknown>;
-        access_token: string;
+        user?: Record<string, unknown>;
+        access_token?: string;
         refresh_token?: string;
       }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
         skipAuth: true,
       });
+      if (!data?.access_token) throw new ApiError('Sign in did not return an access token', 502);
       setTokens(data.access_token, data.refresh_token);
-      return { user: adaptUser(data.user), accessToken: data.access_token };
+      // The v1 mobile-compatible login returns only an access token.
+      // Fetch the authenticated user rather than inventing an identity.
+      let rawUser = data.user;
+      if (!rawUser) {
+        try {
+          rawUser = await request<Record<string, unknown>>('/auth/me');
+        } catch (error) {
+          clearTokens();
+          throw error;
+        }
+      }
+      return { user: adaptUser(rawUser), accessToken: data.access_token };
     },
 
     async register(params: {
@@ -281,8 +294,9 @@ export const api = {
       lastName?: string;
     }) {
       const data = await request<{
-        user: Record<string, unknown>;
-        access_token: string;
+        user?: Record<string, unknown>;
+        user_id?: number | string;
+        access_token?: string;
         refresh_token?: string;
       }>('/auth/register', {
         method: 'POST',
@@ -293,11 +307,23 @@ export const api = {
           confirm_password: params.confirmPassword,
           first_name: params.firstName,
           last_name: params.lastName,
+          full_name: [params.firstName, params.lastName].filter(Boolean).join(' '),
         }),
         skipAuth: true,
       });
+      // v1 registration returns {message, user_id}. Only tokens issued by
+      // /auth/login authenticate a new learner; never use user_id as proof.
+      if (!data?.access_token) {
+        if (!data?.user_id) throw new ApiError('Registration did not create a learner', 502);
+        return api.auth.login(params.email, params.password);
+      }
       setTokens(data.access_token, data.refresh_token);
-      return { user: adaptUser(data.user), accessToken: data.access_token };
+      let rawUser = data.user;
+      if (!rawUser) {
+        try { rawUser = await request<Record<string, unknown>>('/auth/me'); }
+        catch (error) { clearTokens(); throw error; }
+      }
+      return { user: adaptUser(rawUser), accessToken: data.access_token };
     },
 
     async me() {
@@ -478,7 +504,7 @@ export const api = {
       const controller = new AbortController();
 
       const doFetch = (authToken: string | null) =>
-        fetch(`${API_URL}/api/v1/lyo2/chat/stream`, {
+        fetch(resolveApiEndpoint(API_URL, '/api/v1/lyo2/chat/stream'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -761,7 +787,7 @@ export const api = {
         const headers: Record<string, string> = {};
         const token = getAccessToken();
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        return fetch(`${API_URL}/api/v1/media/upload`, {
+        return fetch(resolveApiEndpoint(API_URL, '/api/v1/media/upload'), {
           method: 'POST',
           headers, // no Content-Type — the browser sets the multipart boundary
           body: form,
@@ -1446,7 +1472,7 @@ export const api = {
       formData.append('file', file);
       formData.append('folder', folder);
 
-      const res = await fetch(`${API_URL}/api/v1/storage/upload`, {
+      const res = await fetch(resolveApiEndpoint(API_URL, '/api/v1/storage/upload'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
@@ -1475,7 +1501,7 @@ export const api = {
       options: { language?: string; speed?: number; signal?: AbortSignal } = {}
     ): Promise<Blob> {
       const token = getAccessToken();
-      const res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+      const res = await fetch(resolveApiEndpoint(API_URL, '/api/v1/tts/synthesize/stream'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

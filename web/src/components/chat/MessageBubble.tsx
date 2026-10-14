@@ -6,7 +6,9 @@ import ReactMarkdown from 'react-markdown';
 import { Copy, Check, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
+import type { CoachToday } from '@/lib/coach-api';
 import CourseGenerationCard from './CourseGenerationCard';
+import CoachMissionCard from './CoachMissionCard';
 import MascotAvatar from './MascotAvatar';
 import BlockRenderer from './blocks/BlockRenderer';
 import { canRenderBlock } from './blocks/can-render';
@@ -176,6 +178,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const normalizedAssistantContent = isUser ? displayContent : normalizeLatexDelimiters(displayContent);
   const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
   const displayType = ocData ? 'course_proposal' : message.type;
+  const rawCoach = !isUser ? message.metadata?.coach : null;
+  const coachView = rawCoach && typeof rawCoach === 'object'
+    && Array.isArray((rawCoach as Record<string, unknown>).active_goals)
+    && Array.isArray((rawCoach as Record<string, unknown>).mission)
+    ? rawCoach as CoachToday : null;
+  const coachTimeBudgetMinutes = typeof message.metadata?.coachTimeBudgetMinutes === 'number'
+    ? message.metadata.coachTimeBudgetMinutes : null;
 
   // Determine if this specific card is active and currently generating in the store
   const activeConvo = getActiveConversation();
@@ -221,6 +230,15 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             isGenerating={isCurrentlyGeneratingThis}
             generationProgress={generationProgress}
             generationState={isCurrentlyGeneratingThis ? courseGenerationState : null}
+          />
+        )}
+
+        {/* Coach is the structured view of the same readable answer, not a
+            second study plan or an independent tutor. */}
+        {!isUser && coachView && (
+          <CoachMissionCard
+            view={coachView}
+            timeBudgetMinutes={coachTimeBudgetMinutes}
           />
         )}
 
