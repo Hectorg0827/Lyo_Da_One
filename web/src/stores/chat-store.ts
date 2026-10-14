@@ -19,6 +19,13 @@ import {
   reduceTeachingPolicy,
   teachingStateSummary,
 } from '@/lib/teaching-runtime.mjs';
+import {
+  DECK_MAX_CARDS,
+  extractStudyBlocks,
+  mergeCards,
+  moreCardsPrompt,
+  parseMoreCards,
+} from '@/lib/study-material.mjs';
 
 export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
@@ -190,6 +197,12 @@ interface ChatStore {
     timeTakenMs?: number,
     hintUsed?: boolean
   ) => Promise<CheckAnswerResult | null>;
+  /**
+   * Fetch the next batch of flashcards for a deck block and append them.
+   * Resolves with how many cards were actually added — 0 means the deck is
+   * done, which the caller shows rather than retrying.
+   */
+  extendFlashcardDeck: (messageId: string, blockId: string) => Promise<number>;
   deleteConversation: (id: string) => void;
   getActiveConversation: () => ChatConversation | undefined;
   fetchSessionSummary: (conversationId: string, forScreenGeneration: number) => Promise<void>;
@@ -561,6 +574,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       receivedContent = true;
       patchAiMessage({ blocks });
     };
+    /**
+     * Build the study material a prose reply is describing.
+     *
+     * Chat can only show a deck, a plan or notes as blocks, and the model
+     * usually answers "make me flashcards" in Markdown instead — so without
+     * this the learner gets a paragraph and no cards at all. Runs once the
+     * turn is complete, since it reads the whole reply.
+     *
+     * The backend's own structured answer always wins: a turn that already
+     * carries blocks is left exactly as it arrived.
+     */
+    const attachStudyMaterialFallback = () => {
+      const conversation = get().conversations.find((c) => c.id === convoId);
+      const message = conversation?.messages.find((m) => m.id === aiMessageId);
+      if (!message || (Array.isArray(message.blocks) && message.blocks.length > 0)) return;
+
+      // Read the reply off the message, not the accumulator: a turn whose text
+      // arrived through any path other than a delta still has it here.
+      const reply = message.content || accumulated;
+      const extracted = extractStudyBlocks(reply, userMessage.content, `study-${aiMessageId}`);
+      if (!extracted) return;
+      patchAiMessage({ blocks: extracted.blocks as ChatBlock[] });
+    };
+
     const attachActionsToAiMessage = (labels: string[]) => {
       // Same reason as blocks: a turn that produced only follow-up chips is
       // still a real turn, and must not be wiped as an empty response.
@@ -943,6 +980,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (!receivedContent) {
             recoverCanonicalConversation(convoId!);
           } else {
+            attachStudyMaterialFallback();
             set((state) => ({
               isGenerating: false,
               generationProgress: 0,
@@ -1174,6 +1212,72 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ courseRevisionUndo: null });
     await get().reviseActiveCourse(previous);
     set({ courseRevisionUndo: null });
+  },
+
+  extendFlashcardDeck: async (messageId, blockId) => {
+    const conversationId = get().activeConversationId;
+    if (!conversationId) return 0;
+
+    const conversation = get().conversations.find((c) => c.id === conversationId);
+    const message = conversation?.messages.find((m) => m.id === messageId);
+    const block = message?.blocks?.find((b) => b.id === blockId);
+    if (!block) return 0;
+
+    const content = (block.content ?? {}) as {
+      title?: unknown;
+      cards?: unknown;
+    };
+    const existing = (Array.isArray(content.cards) ? content.cards : []) as {
+      front: string;
+      back: string;
+    }[];
+    if (existing.length >= DECK_MAX_CARDS) return 0;
+
+    // A one-off completion, not a conversation turn: asking for more cards
+    // must not litter the thread with a prompt and an answer the learner
+    // never wrote or wanted to read.
+    let reply = '';
+    try {
+      const result = await api.chat.sendSimple(
+        moreCardsPrompt(
+          typeof content.title === 'string' ? content.title : '',
+          existing.map((card) => card.front)
+        )
+      );
+      reply = result?.response ?? '';
+    } catch {
+      // Offline or the model refused. The deck keeps the cards it has; the
+      // caller surfaces that rather than looping on a failing request.
+      return 0;
+    }
+
+    const merged = mergeCards(existing, parseMoreCards(reply));
+    const added = merged.length - existing.length;
+    if (added <= 0) return 0;
+
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id !== conversationId
+          ? c
+          : {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id !== messageId
+                  ? m
+                  : {
+                      ...m,
+                      blocks: (m.blocks ?? []).map((b) =>
+                        b.id !== blockId
+                          ? b
+                          : { ...b, content: { ...b.content, cards: merged } }
+                      ),
+                    }
+              ),
+            }
+      ),
+    }));
+
+    return added;
   },
 
   updateVisual: async (conversationId, messageId, blockId, values) => {
