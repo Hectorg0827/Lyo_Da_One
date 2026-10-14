@@ -2,7 +2,7 @@ name: Lyo One isolated browser smoke
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/lyo-one-chat-coach-current]
     paths:
       - web/scripts/validate_lyo_one_staging_browser.py
       - .github/workflows/lyo-one-staging-browser.yml
