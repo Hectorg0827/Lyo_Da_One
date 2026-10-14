@@ -24,6 +24,7 @@ import {
   extractStudyBlocks,
   hasStudyBlock,
   mergeCards,
+  mergeStudyBlocks,
   moreCardsPrompt,
   parseMoreCards,
 } from '@/lib/study-material.mjs';
@@ -604,13 +605,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const extracted = extractStudyBlocks(reply, userMessage.content, `study-${aiMessageId}`);
       if (!extracted) return;
 
-      // Those blocks already carry the prose, so adding the lead would repeat it.
-      const addition = existing.length
-        ? extracted.blocks.filter((block) => block.type !== 'text')
-        : extracted.blocks;
-      if (!addition.length) return;
+      // The text block the deck was parsed from is replaced rather than kept:
+      // leaving it renders every card twice, once as the prose it came from.
+      const blocks = mergeStudyBlocks(existing, extracted, reply);
+      if (!blocks) return;
 
-      patchAiMessage({ blocks: [...existing, ...addition] as ChatBlock[] });
+      patchAiMessage({ blocks: blocks as ChatBlock[] });
     };
 
     const attachActionsToAiMessage = (labels: string[]) => {

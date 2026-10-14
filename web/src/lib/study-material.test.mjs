@@ -11,6 +11,7 @@ import {
   hasStudyBlock,
   isStudyBlock,
   mergeCards,
+  mergeStudyBlocks,
   moreCardsPrompt,
   nextDeckStep,
   parseMoreCards,
@@ -413,4 +414,62 @@ test('a turn that already has a deck does not', () => {
     ]),
     true
   );
+});
+
+// ─── Placing the deck among blocks the turn already has ──────────────────────
+
+const deckExtraction = {
+  displayText: 'Here you go!',
+  blocks: [
+    { id: 'study-lead', type: 'text', content: { text: 'Here you go!' } },
+    { id: 'study-deck', type: 'flashcard', subtype: 'deck', content: { cards: [] } },
+  ],
+};
+
+test('a turn with no blocks gets the lead and the deck', () => {
+  const merged = mergeStudyBlocks([], deckExtraction, 'anything');
+  assert.deepEqual(merged.map((block) => block.type), ['text', 'flashcard']);
+});
+
+test('the text block the deck came from is replaced, not kept beside it', () => {
+  // Keeping it renders every card twice: once as the prose the deck was parsed
+  // out of, once as the deck. That is the paragraph this feature removes.
+  const reply = 'Here you go!\n- Alpha: first\n- Beta: second\n- Gamma: third';
+  const existing = [{ id: 'b1', type: 'text', content: { text: reply } }];
+
+  const merged = mergeStudyBlocks(existing, deckExtraction, reply);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'b1');
+  assert.equal(merged[0].content.text, 'Here you go!');
+  assert.ok(!merged[0].content.text.includes('Alpha'));
+  assert.equal(merged[1].type, 'flashcard');
+});
+
+test('with no leftover prose the original text block goes entirely', () => {
+  const reply = '- Alpha: first\n- Beta: second\n- Gamma: third';
+  const existing = [{ id: 'b1', type: 'text', content: { text: reply } }];
+  const bare = { displayText: '', blocks: [deckExtraction.blocks[1]] };
+
+  const merged = mergeStudyBlocks(existing, bare, reply);
+
+  assert.deepEqual(merged.map((block) => block.type), ['flashcard']);
+});
+
+test('blocks the deck did not come from are left alone', () => {
+  const reply = 'Here you go!';
+  const existing = [
+    { id: 'b1', type: 'dataViz', content: { source: 'x^2' } },
+    { id: 'b2', type: 'text', content: { text: 'a different paragraph' } },
+  ];
+
+  const merged = mergeStudyBlocks(existing, deckExtraction, reply);
+
+  assert.deepEqual(merged.map((block) => block.id), ['b1', 'b2', 'study-deck']);
+});
+
+test('an extraction with no study block adds nothing', () => {
+  const textOnly = { displayText: 'hi', blocks: [deckExtraction.blocks[0]] };
+  assert.equal(mergeStudyBlocks([], textOnly, 'hi'), null);
+  assert.equal(mergeStudyBlocks([], null, 'hi'), null);
 });

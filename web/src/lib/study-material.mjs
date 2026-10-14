@@ -155,6 +155,54 @@ export function hasStudyBlock(blocks) {
   return Array.isArray(blocks) && blocks.some(isStudyBlock);
 }
 
+/**
+ * The blocks a turn should end up with once its deck has been lifted out.
+ *
+ * When the turn already carries blocks, the text block the deck was parsed
+ * from has to be *replaced*, not kept beside it: it holds the same Front/Back
+ * prose the cards now show, so appending the deck renders every card twice —
+ * the paragraph the deck exists to replace, with a deck underneath it.
+ *
+ * Only a text block holding the whole reply is swapped. When a turn splits its
+ * prose across several blocks there is no way to tell which parts the cards
+ * came from, so they are all kept: showing something twice is recoverable,
+ * deleting a learner's lesson is not.
+ *
+ * @returns the new block list, or null when there is nothing to add
+ */
+export function mergeStudyBlocks(existingBlocks, extraction, reply) {
+  if (!extraction || !Array.isArray(extraction.blocks)) return null;
+
+  const lead = extraction.blocks.find((block) => block && block.type === 'text') ?? null;
+  const study = extraction.blocks.filter((block) => block && block.type !== 'text');
+  if (!study.length) return null;
+
+  const existing = Array.isArray(existingBlocks) ? existingBlocks : [];
+  if (!existing.length) return [...extraction.blocks];
+
+  const consumed = String(reply || '').trim();
+  let swapped = false;
+  const kept = [];
+
+  for (const block of existing) {
+    const text =
+      block && block.type === 'text' && typeof block.content?.text === 'string'
+        ? block.content.text.trim()
+        : '';
+    if (!swapped && text && text === consumed) {
+      swapped = true;
+      // The leftover framing takes its place, or it goes entirely.
+      if (lead) {
+        kept.push({ ...block, content: { ...block.content, text: lead.content.text } });
+      }
+      continue;
+    }
+    kept.push(block);
+  }
+
+  return [...kept, ...study];
+}
+
 // ─── Growing a deck ──────────────────────────────────────────────────────────
 
 /**
