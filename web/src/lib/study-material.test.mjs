@@ -8,7 +8,10 @@ import {
   balancedObject,
   classifyStudyAsk,
   extractStudyBlocks,
+  hasStudyBlock,
+  isStudyBlock,
   mergeCards,
+  mergeStudyBlocks,
   moreCardsPrompt,
   nextDeckStep,
   parseMoreCards,
@@ -376,4 +379,97 @@ test('an empty deck asks for nothing', () => {
 test('batches continue after the first: card six asks again', () => {
   assert.equal(nextDeckStep({ index: 5, revealed: 6, total: 6 }), 'fetch');
   assert.equal(nextDeckStep({ index: 4, revealed: 6, total: 6 }), 'idle');
+});
+
+// ─── Whether a turn still needs study material ───────────────────────────────
+
+test('the backend\'s own study content suppresses the fallback', () => {
+  assert.ok(isStudyBlock({ type: 'flashcard', content: {} }));
+  assert.ok(isStudyBlock({ type: 'quiz', content: {} }));
+  assert.ok(isStudyBlock({ type: 'interactive', subtype: 'studyPlan', content: {} }));
+  assert.ok(isStudyBlock({ type: 'interactive', subtype: 'studyNotes', content: {} }));
+});
+
+test('an ordinary block does not', () => {
+  // This is the bug that made a deck never appear: the backend sends a text
+  // block on ordinary turns, and treating that as "already handled" left the
+  // learner with the paragraph they were trying to get away from.
+  assert.ok(!isStudyBlock({ type: 'text', content: { text: 'hello' } }));
+  assert.ok(!isStudyBlock({ type: 'dataViz', content: {} }));
+  assert.ok(!isStudyBlock({ type: 'interactive', subtype: 'explorable', content: {} }));
+  assert.ok(!isStudyBlock(null));
+});
+
+test('a turn carrying only text still needs its deck', () => {
+  assert.equal(hasStudyBlock([{ type: 'text', content: { text: 'Here are flashcards:' } }]), false);
+  assert.equal(hasStudyBlock([]), false);
+  assert.equal(hasStudyBlock(undefined), false);
+});
+
+test('a turn that already has a deck does not', () => {
+  assert.equal(
+    hasStudyBlock([
+      { type: 'text', content: { text: 'intro' } },
+      { type: 'flashcard', content: { cards: [] } },
+    ]),
+    true
+  );
+});
+
+// ─── Placing the deck among blocks the turn already has ──────────────────────
+
+const deckExtraction = {
+  displayText: 'Here you go!',
+  blocks: [
+    { id: 'study-lead', type: 'text', content: { text: 'Here you go!' } },
+    { id: 'study-deck', type: 'flashcard', subtype: 'deck', content: { cards: [] } },
+  ],
+};
+
+test('a turn with no blocks gets the lead and the deck', () => {
+  const merged = mergeStudyBlocks([], deckExtraction, 'anything');
+  assert.deepEqual(merged.map((block) => block.type), ['text', 'flashcard']);
+});
+
+test('the text block the deck came from is replaced, not kept beside it', () => {
+  // Keeping it renders every card twice: once as the prose the deck was parsed
+  // out of, once as the deck. That is the paragraph this feature removes.
+  const reply = 'Here you go!\n- Alpha: first\n- Beta: second\n- Gamma: third';
+  const existing = [{ id: 'b1', type: 'text', content: { text: reply } }];
+
+  const merged = mergeStudyBlocks(existing, deckExtraction, reply);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'b1');
+  assert.equal(merged[0].content.text, 'Here you go!');
+  assert.ok(!merged[0].content.text.includes('Alpha'));
+  assert.equal(merged[1].type, 'flashcard');
+});
+
+test('with no leftover prose the original text block goes entirely', () => {
+  const reply = '- Alpha: first\n- Beta: second\n- Gamma: third';
+  const existing = [{ id: 'b1', type: 'text', content: { text: reply } }];
+  const bare = { displayText: '', blocks: [deckExtraction.blocks[1]] };
+
+  const merged = mergeStudyBlocks(existing, bare, reply);
+
+  assert.deepEqual(merged.map((block) => block.type), ['flashcard']);
+});
+
+test('blocks the deck did not come from are left alone', () => {
+  const reply = 'Here you go!';
+  const existing = [
+    { id: 'b1', type: 'dataViz', content: { source: 'x^2' } },
+    { id: 'b2', type: 'text', content: { text: 'a different paragraph' } },
+  ];
+
+  const merged = mergeStudyBlocks(existing, deckExtraction, reply);
+
+  assert.deepEqual(merged.map((block) => block.id), ['b1', 'b2', 'study-deck']);
+});
+
+test('an extraction with no study block adds nothing', () => {
+  const textOnly = { displayText: 'hi', blocks: [deckExtraction.blocks[0]] };
+  assert.equal(mergeStudyBlocks([], textOnly, 'hi'), null);
+  assert.equal(mergeStudyBlocks([], null, 'hi'), null);
 });

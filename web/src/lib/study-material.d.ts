@@ -63,3 +63,20 @@ export interface DeckStepInput {
 
 /** Whether a deck should sit still, show more parsed cards, or fetch a batch. */
 export function nextDeckStep(input: DeckStepInput): 'idle' | 'reveal' | 'fetch';
+
+/** Whether a block is study material the backend already supplied. */
+export function isStudyBlock(block: unknown): boolean;
+
+/** Whether the turn already carries study material of its own. */
+export function hasStudyBlock(blocks: readonly unknown[] | null | undefined): boolean;
+
+/**
+ * The blocks a turn should end up with once its deck has been lifted out,
+ * or null when there is nothing to add. Replaces the text block the deck was
+ * parsed from rather than leaving the same material on screen twice.
+ */
+export function mergeStudyBlocks(
+  existingBlocks: readonly ChatBlock[] | null | undefined,
+  extraction: StudyExtraction | null | undefined,
+  reply: string | null | undefined,
+): ChatBlock[] | null;
