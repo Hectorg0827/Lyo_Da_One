@@ -10,7 +10,12 @@ on:
     # listing them here too ran every job twice per push.
     branches: [main]
   pull_request:
-    branches: [main, chat-course-builder-ux-20261001, feature/lyo-one-chat-coach-current]
+    branches:
+      - main
+      - chat-course-builder-ux-20261001
+      - feature/lyo-unified-learning-entry-coach
+      - feature/lyo-one-web-journey-handoffs
+      - feature/lyo-one-chat-coach-current
 
 concurrency:
   group: ci-${{ github.ref }}

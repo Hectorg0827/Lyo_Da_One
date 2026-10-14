@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { CoachGoal, CoachMissionItem } from '@/lib/coach-api';
@@ -19,6 +19,9 @@ type Props = {
   origin: 'coach' | 'test_prep' | 'chat';
   profileId?: string | null;
   className: string;
+  wrapperClassName?: string;
+  style?: CSSProperties;
+  title?: string;
   children: ReactNode;
 };
 
@@ -29,7 +32,7 @@ type Props = {
  * With the flag ON and a valid goal, save the journey and its handoff
  * before navigation. Failures do not silently claim state persistence.
  */
-export default function CoachMissionEntry({ mission, session, goal, origin, profileId, className, children }: Props) {
+export default function CoachMissionEntry({ mission, session, goal, origin, profileId, className, wrapperClassName, style, title, children }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -58,7 +61,8 @@ export default function CoachMissionEntry({ mission, session, goal, origin, prof
       : !isAuthenticated ? 'signed-out'
       : !goal ? 'missing-goal'
       : 'unlinked-goal';
-    return <Link href={href} className={className} data-journey-fallback={fallback}>{children}</Link>;
+    return <Link href={href} className={className} style={style} title={title}
+      data-study-session-id={session?.id} data-journey-fallback={fallback}>{children}</Link>;
   }
 
   const begin = async () => {
@@ -89,9 +93,10 @@ export default function CoachMissionEntry({ mission, session, goal, origin, prof
   };
 
   return (
-    <div>
+    <div className={wrapperClassName}>
       <button type="button" onClick={() => void begin()} disabled={pending}
-        className={className} aria-busy={pending}>
+        className={className} style={style} title={title} aria-busy={pending}
+        data-study-session-id={session?.id}>
         {children}
         {pending && <span className="text-xs text-white/55">Saving your place…</span>}
       </button>
