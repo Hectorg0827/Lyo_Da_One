@@ -35,7 +35,8 @@ import type { ReadinessPayload, StudySessionRow } from '@/types';
 import { PrepManagement } from '@/components/test-prep/PrepManagement';
 import type { PrepMaterial, PrepProfile, PrepSnapshot } from '@/lib/test-prep-api';
 import type { CoachToday } from '@/lib/coach-api';
-import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
+import { goalForTestProfile } from '@/lib/coach.mjs';
+import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 
 /**
  * Test Prep — the face on a learner loop that had none.
@@ -564,14 +565,7 @@ export default function TestPrepPage() {
   // overstate one failed call, and saying nothing understates it — badly, in
   // the moment right after finishing a session.
   const readinessStale = readinessNote(state);
-  const testGoals = coach?.active_goals.filter(goal =>
-    goal.goal_type === 'test' &&
-    goal.subject === snapshot?.profile?.subject
-  ) ?? [];
-  // Subject alone cannot distinguish two Algebra exams. Show a mission only
-  // when it can be tied unambiguously to the selected test.
-  const testGoal = testGoals.length === 1 && profiles.filter(p =>
-    p.subject === snapshot?.profile?.subject).length <= 1 ? testGoals[0] : null;
+  const testGoal = goalForTestProfile(coach?.active_goals, profileId);
   const coachReadiness = testGoal ? coach?.readiness[testGoal.id] : undefined;
   const coachMission = testGoal
     ? (coach?.mission ?? []).filter(item => item.goal_id === testGoal.id)
@@ -660,6 +654,8 @@ export default function TestPrepPage() {
             <CoachHero
               coachReadiness={coachReadiness}
               mission={coachMission}
+              goal={testGoal}
+              profileId={profileId}
               sessions={snapshot?.sessions ?? []}
               coachFailed={coachFailed}
             />

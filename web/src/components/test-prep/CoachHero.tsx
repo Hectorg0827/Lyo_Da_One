@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { Check, ChevronRight, Clock, FileText, Play, Sparkles, Target } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
 import { missionChecklist, readinessRing } from '@/lib/test-prep-view.mjs';
-import type { CoachMissionItem, CoachReadiness } from '@/lib/coach-api';
+import type { CoachGoal, CoachMissionItem, CoachReadiness } from '@/lib/coach-api';
+import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 import type { StudySessionRow } from '@/types';
 
 /**
@@ -28,6 +28,8 @@ export interface CoachHeroProps {
   mission: CoachMissionItem[];
   sessions: StudySessionRow[];
   coachFailed: boolean;
+  goal?: CoachGoal | null;
+  profileId?: string | null;
   /** The first step's entry point, for the hero's own call to action. */
   materialsByConcept?: Record<string, string> | undefined;
 }
@@ -37,6 +39,8 @@ export function CoachHero({
   mission,
   sessions,
   coachFailed,
+  goal,
+  profileId,
   materialsByConcept,
 }: CoachHeroProps) {
   const ring = readinessRing(coachReadiness, null);
@@ -149,14 +153,17 @@ export function CoachHero({
           {coachFailed && (
             <p className="mt-2 text-xs text-amber-200">This mission may not include your latest evidence.</p>
           )}
-          {firstHref && (
-            <Link
-              href={firstHref}
+          {firstHref && firstOpen && (
+            <CoachMissionEntry
+              mission={firstOpen}
+              goal={goal}
+              origin="test_prep"
+              profileId={profileId}
               className="mt-4 inline-flex min-h-[44px] items-center gap-2 self-start rounded-2xl bg-gradient-to-b from-white to-sky-50 px-5 py-3 text-sm font-bold text-violet-700 shadow-[0_5px_12px_rgba(0,0,0,0.2)] transition hover:to-white"
             >
               <Play className="h-4 w-4 fill-current" aria-hidden />
               Start today&rsquo;s mission
-            </Link>
+            </CoachMissionEntry>
           )}
         </div>
       </div>
@@ -180,6 +187,8 @@ export function CoachHero({
                 step={step}
                 index={index}
                 expanded={step === firstOpen}
+                goal={goal}
+                profileId={profileId}
                 material={step.concept_id ? materialsByConcept?.[step.concept_id] : undefined}
               />
             ))}
@@ -195,11 +204,15 @@ function MissionStep({
   index,
   expanded,
   material,
+  goal,
+  profileId,
 }: {
   step: CoachMissionItem & { done: boolean };
   index: number;
   expanded: boolean;
   material?: string | undefined;
+  goal?: CoachGoal | null;
+  profileId?: string | null;
 }) {
   const href = missionEntryHref(step);
   const critical = (step.priority_score ?? 0) >= 0.8;
@@ -247,8 +260,11 @@ function MissionStep({
         )}
 
         {href ? (
-          <Link
-            href={href}
+          <CoachMissionEntry
+            mission={step}
+            goal={goal}
+            origin="test_prep"
+            profileId={profileId}
             className={cn(
               'inline-flex min-h-[36px] shrink-0 items-center rounded-xl px-4 py-2 text-[13px] font-semibold transition',
               step.done
@@ -259,7 +275,7 @@ function MissionStep({
             )}
           >
             {step.done ? 'Again' : 'Start'}
-          </Link>
+          </CoachMissionEntry>
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
         )}
