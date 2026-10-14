@@ -154,6 +154,11 @@ export function weekTimeline(sessions, options) {
       done,
       startOfDayMinutes: zoned.minutes,
       durationMinutes: duration,
+      // The row itself, not a reshaped copy. `sessionEntryHref` switches on
+      // `session_type`, and a block carrying the camelCased `sessionType`
+      // read as undefined there — so every review and practice block fell
+      // through to the teaching URL and entered the wrong evidence workflow.
+      session,
     });
     day.totalMinutes += duration;
 
@@ -423,6 +428,38 @@ export function missionChecklist(mission, sessions) {
     ...item,
     done: Boolean(item?.concept_id) && completed.has(item.concept_id),
   }));
+}
+
+/**
+ * The milestone for the week on screen, or none.
+ *
+ * Week 1 is the week holding the plan's earliest session, so the displayed
+ * week's ordinal is the gap between its Monday and that one. A week the plan
+ * has no milestone for returns null rather than falling back to the first:
+ * labelling week 3 "Week 1: Cells & the basics" is worse guidance than
+ * labelling it nothing.
+ */
+export function milestoneForWeek(milestones, weekStartKey, sessions, timeZone) {
+  const list = Array.isArray(milestones) ? milestones : [];
+  if (list.length === 0 || !weekStartKey) return null;
+
+  let earliest = null;
+  for (const session of Array.isArray(sessions) ? sessions : []) {
+    if (!session?.scheduled_at) continue;
+    const at = sessionDate(session.scheduled_at);
+    if (Number.isNaN(at.getTime())) continue;
+    if (earliest === null || at < earliest) earliest = at;
+  }
+  if (earliest === null) return null;
+
+  const firstWeekStart = weekDates(zonedParts(earliest, timeZone || 'UTC'))[0].key;
+  const shown = Date.parse(`${weekStartKey}T00:00:00Z`);
+  const first = Date.parse(`${firstWeekStart}T00:00:00Z`);
+  if (Number.isNaN(shown) || Number.isNaN(first)) return null;
+
+  const days = Math.round((shown - first) / 86400000);
+  if (days < 0 || days % 7 !== 0) return null;
+  return list[days / 7] ?? null;
 }
 
 /** How far through the plan the learner is, for the schedule card's footer. */

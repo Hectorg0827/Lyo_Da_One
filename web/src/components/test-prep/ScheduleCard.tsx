@@ -6,7 +6,7 @@ import { CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight } from 'lu
 
 import { cn } from '@/lib/utils';
 import { sessionEntryHref } from '@/lib/test-prep.mjs';
-import { hourLabel, planProgress, sessionDate, weekTimeline } from '@/lib/test-prep-view.mjs';
+import { hourLabel, milestoneForWeek, planProgress, sessionDate, weekTimeline } from '@/lib/test-prep-view.mjs';
 import type { PrepSnapshot } from '@/lib/test-prep-api';
 
 /**
@@ -46,7 +46,12 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
   }, [snapshot.sessions, timezone, weekOffset]);
 
   const progress = planProgress(snapshot.sessions);
-  const milestones = snapshot.plan?.weekly_milestones ?? [];
+  const milestone = milestoneForWeek(
+    snapshot.plan?.weekly_milestones,
+    timeline.days[0]?.key,
+    snapshot.sessions,
+    timezone,
+  );
   const gridHeight = timeline.hours.length * 48;
 
   return (
@@ -64,7 +69,10 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
         <CalendarClock className="h-4 w-4 shrink-0 text-lyo-300" aria-hidden />
         <h3 className="min-w-0 font-rounded text-lg font-bold text-white">Full Study Schedule</h3>
         <span className="flex-1" />
-        {snapshot.sessions.length > 0 && (
+        {/* Only while the card is open: the list it toggles lives inside the
+            open branch, so a collapsed card's button flipped its own label to
+            "Hide list" while showing nothing. */}
+        {open && snapshot.sessions.length > 0 && (
           <button
             type="button"
             onClick={() => setShowAll(!showAll)}
@@ -173,7 +181,7 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
                 }}
               >
                 {day.blocks.map((block) => {
-                  const href = historical || block.done ? null : sessionEntryHref(block as never);
+                  const href = historical || block.done ? null : sessionEntryHref(block.session);
                   const inner = (
                     <>
                       <span className="block truncate">{block.topic || 'Session'}</span>
@@ -242,14 +250,14 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
           </div>
 
           {/* ── Milestone + progress ── */}
-          {(milestones.length > 0 || progress.total > 0) && (
+          {(milestone || progress.total > 0) && (
             <div className="mt-3.5 flex flex-wrap items-center gap-2.5 rounded-2xl bg-lyo-500/[0.12] px-3.5 py-2.5">
-              {milestones[0] && (
+              {milestone && (
                 <>
                   <span className="shrink-0 rounded-md bg-lyo-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-lyo-100">
-                    Week {milestones[0].week}
+                    Week {milestone.week}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-lyo-100">{milestones[0].focus}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-lyo-100">{milestone.focus}</span>
                 </>
               )}
               {progress.total > 0 && (

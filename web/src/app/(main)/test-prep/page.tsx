@@ -66,11 +66,19 @@ type Turn = { role: 'coach' | 'learner'; text: string };
 
 export default function TestPrepPage() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuthStore();
-  // The streak is the one KPI this page does not already fetch. It is
-  // supplementary by design: `useApi` failing leaves `gamification`
-  // undefined, `streakFrom` reads that as a zero streak, and the tile says
-  // "Day 1" rather than blocking or blanking the rest of the strip.
-  const { data: gamification } = useApi(() => api.gamification.overview(), []);
+  // The streak is the one KPI this page does not already fetch. It waits for
+  // authentication to settle, because `/gamification/overview` is a
+  // required-auth call: a signed-out visitor's 401 takes `request()`'s
+  // default branch, which clears tokens and sends the browser to
+  // `/auth/login` — so firing it on mount made this page's own
+  // sign-in/sign-up screen unreachable for the guests it was written for.
+  // Beyond that it stays supplementary: a failure leaves `gamification` null,
+  // `streakFrom` reads that as no streak, and the tile says "Day 1" rather
+  // than blocking or blanking the rest of the strip.
+  const { data: gamification } = useApi(
+    !authLoading && isAuthenticated ? () => api.gamification.overview() : null,
+    [authLoading, isAuthenticated],
+  );
 
   // One reducer rather than eighteen useStates. Four consecutive review
   // findings on this page were different combinations of that state, the last

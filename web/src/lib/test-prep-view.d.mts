@@ -22,6 +22,8 @@ export interface TimelineBlock {
   /** Minutes from the top of the rendered window. */
   startMinutes: number;
   durationMinutes: number;
+  /** The row as the server sent it, for `sessionEntryHref`. */
+  session: StudySessionRow;
 }
 
 export interface TimelineDay {
@@ -101,6 +103,14 @@ export function missionChecklist<T extends { concept_id?: string | undefined }>(
   mission: readonly T[] | null | undefined,
   sessions: readonly StudySessionRow[] | null | undefined,
 ): Array<T & { done: boolean }>;
+
+export function milestoneForWeek<T extends { week: number; focus: string }>(
+  milestones: readonly T[] | null | undefined,
+  /** The displayed week's Monday, as `TimelineDay.key`. */
+  weekStartKey: string | null | undefined,
+  sessions: readonly StudySessionRow[] | null | undefined,
+  timeZone?: string | undefined,
+): T | null;
 
 export function planProgress(
   sessions: readonly StudySessionRow[] | null | undefined,

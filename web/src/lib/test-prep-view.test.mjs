@@ -7,12 +7,14 @@ import {
   hourLabel,
   materialFilters,
   materialKind,
+  milestoneForWeek,
   missionChecklist,
   planProgress,
   readinessRing,
   sessionDate,
   weekTimeline,
 } from './test-prep-view.mjs';
+import { sessionEntryHref } from './test-prep.mjs';
 
 const NY = 'America/New_York';
 // A Tuesday. 2025-12-02T20:00Z is 3pm in New York.
@@ -148,6 +150,17 @@ test('a malformed session cannot throw the whole schedule away', () => {
     { timezone: NY, now: TUESDAY },
   );
   assert.equal(days.reduce((sum, day) => sum + day.blocks.length, 0), 1);
+});
+
+test('a block keeps the row, so the entry contract still sees session_type', () => {
+  // The block used to carry a camelCased `sessionType`, which read as
+  // undefined in `sessionEntryHref` — so a review session opened in teach
+  // mode and recorded the wrong kind of evidence.
+  const review = session({ session_type: 'review' });
+  const { days } = weekTimeline([review], { timezone: NY, now: TUESDAY });
+  const block = days.flatMap((d) => d.blocks)[0];
+  assert.equal(block.session.session_type, 'review');
+  assert.equal(sessionEntryHref(block.session), sessionEntryHref(review));
 });
 
 test('hour labels read as a person says them', () => {
@@ -348,4 +361,34 @@ test('plan progress counts completed sessions out of all of them', () => {
     { done: 2, total: 3 },
   );
   assert.deepEqual(planProgress(undefined), { done: 0, total: 0 });
+});
+
+// ─── Milestones follow the week on screen ────────────────────────────────────
+
+const MILESTONES = [
+  { week: 1, focus: 'Cells & the basics' },
+  { week: 2, focus: 'Metabolism & energy transfer' },
+];
+// Week 1 is the week of the earliest session: Mon 2025-12-01.
+const PLAN = [session({ id: 'first', scheduled_at: '2025-12-02T23:00:00' })];
+
+test('the first week gets the first milestone', () => {
+  assert.deepEqual(milestoneForWeek(MILESTONES, '2025-12-01', PLAN, NY), MILESTONES[0]);
+});
+
+test('a later week gets its own milestone, not the first one', () => {
+  // The schedule card used to print milestones[0] whatever week was shown,
+  // so week 2 was labelled "Week 1: Cells & the basics".
+  assert.deepEqual(milestoneForWeek(MILESTONES, '2025-12-08', PLAN, NY), MILESTONES[1]);
+});
+
+test('a week the plan has no milestone for shows none rather than the first', () => {
+  assert.equal(milestoneForWeek(MILESTONES, '2025-12-22', PLAN, NY), null);
+  assert.equal(milestoneForWeek(MILESTONES, '2025-11-24', PLAN, NY), null);
+});
+
+test('milestones need a plan with sessions to be placed at all', () => {
+  assert.equal(milestoneForWeek(MILESTONES, '2025-12-01', [], NY), null);
+  assert.equal(milestoneForWeek([], '2025-12-01', PLAN, NY), null);
+  assert.equal(milestoneForWeek(MILESTONES, undefined, PLAN, NY), null);
 });
