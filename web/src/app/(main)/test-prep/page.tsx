@@ -2,10 +2,18 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CalendarClock, GraduationCap, Loader2, Send, Target } from 'lucide-react';
+import { CalendarClock, GraduationCap, Loader2, Play, Send, Target } from 'lucide-react';
 
 import { api } from '@/lib/api';
+import { useApi } from '@/hooks/use-api';
+import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
+import { streakFrom } from '@/lib/learner-stats.mjs';
+import { buildKpis } from '@/lib/test-prep-view.mjs';
+import { WorkspaceHeader } from '@/components/test-prep/WorkspaceHeader';
+import { CoachHero } from '@/components/test-prep/CoachHero';
+import { ScheduleCard } from '@/components/test-prep/ScheduleCard';
+import { MaterialsCard } from '@/components/test-prep/MaterialsCard';
 import {
   completionSummary,
   daysLabel,
@@ -27,7 +35,7 @@ import type { ReadinessPayload, StudySessionRow } from '@/types';
 import { PrepManagement } from '@/components/test-prep/PrepManagement';
 import type { PrepMaterial, PrepProfile, PrepSnapshot } from '@/lib/test-prep-api';
 import type { CoachToday } from '@/lib/coach-api';
-import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
+import { goalForTestProfile } from '@/lib/coach.mjs';
 import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 
 /**
@@ -58,7 +66,20 @@ import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 type Turn = { role: 'coach' | 'learner'; text: string };
 
 export default function TestPrepPage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuthStore();
+  // The streak is the one KPI this page does not already fetch. It waits for
+  // authentication to settle, because `/gamification/overview` is a
+  // required-auth call: a signed-out visitor's 401 takes `request()`'s
+  // default branch, which clears tokens and sends the browser to
+  // `/auth/login` — so firing it on mount made this page's own
+  // sign-in/sign-up screen unreachable for the guests it was written for.
+  // Beyond that it stays supplementary: a failure leaves `gamification` null,
+  // `streakFrom` reads that as no streak, and the tile says "Day 1" rather
+  // than blocking or blanking the rest of the strip.
+  const { data: gamification } = useApi(
+    !authLoading && isAuthenticated ? () => api.gamification.overview() : null,
+    [authLoading, isAuthenticated],
+  );
 
   // One reducer rather than eighteen useStates. Four consecutive review
   // findings on this page were different combinations of that state, the last
@@ -84,6 +105,9 @@ export default function TestPrepPage() {
   const [profiles, setProfiles] = useState<PrepProfile[]>([]);
   const [startingNew, setStartingNew] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // The details form is revealed by the workspace header's pencil, so the
+  // page owns whether it is open rather than the form owning its own toggle.
+  const [editingDetails, setEditingDetails] = useState(false);
   const selectedProfileIdRef = useRef<string | null>(null);
   const selectionVersionRef = useRef(0);
   const mountedRef = useRef(true);
@@ -119,6 +143,9 @@ export default function TestPrepPage() {
     setDraft('');
     setIntakeError(null);
     setStartError(null);
+    // The form is bound to one test's revision. Leaving it open across a
+    // switch would show the previous test's values over the new one.
+    setEditingDetails(false);
     setCoach(null);
     setCoachFailed(false);
     retryTurn.current = null;
@@ -445,7 +472,28 @@ export default function TestPrepPage() {
         </div>
 
         {intakeError && <p role="alert" className="mt-4 text-amber-200">{intakeError}</p>}
-        {snapshot?.profile?.intake_complete && <PrepManagement snapshot={snapshot} onSaved={loadPlan} />}
+        {/* Intake has no workspace header to hang the pencil off, so the
+            toggle that used to live inside PrepManagement lives here. */}
+        {snapshot?.profile?.intake_complete && (
+          <>
+            <button
+              type="button"
+              onClick={() => setEditingDetails(!editingDetails)}
+              aria-expanded={editingDetails}
+              className="mt-5 rounded-xl border border-white/20 px-4 py-2.5 text-sm text-white transition hover:bg-white/[0.07]"
+            >
+              {editingDetails ? 'Close details' : 'Edit test details'}
+            </button>
+            <div className="mt-4">
+              <PrepManagement
+                snapshot={snapshot}
+                onSaved={loadPlan}
+                open={editingDetails}
+                onClose={() => setEditingDetails(false)}
+              />
+            </div>
+          </>
+        )}
         {snapshot?.profile?.intake_complete && (
           <button className="mt-4 rounded-xl bg-violet-600 px-5 py-3 text-white disabled:opacity-50"
             disabled={building} onClick={async () => {
@@ -517,198 +565,300 @@ export default function TestPrepPage() {
   // overstate one failed call, and saying nothing understates it — badly, in
   // the moment right after finishing a session.
   const readinessStale = readinessNote(state);
-  const testGoals = coach?.active_goals.filter(goal =>
-    goal.goal_type === 'test' &&
-    goal.subject === snapshot?.profile?.subject
-  ) ?? [];
-  // Subject alone cannot distinguish two Algebra exams. Show a mission only
-  // when it can be tied unambiguously to the selected test.
-  const testGoal = testGoals.length === 1 && profiles.filter(p =>
-    p.subject === snapshot?.profile?.subject).length <= 1 ? testGoals[0] : null;
+  const testGoal = goalForTestProfile(coach?.active_goals, profileId);
   const coachReadiness = testGoal ? coach?.readiness[testGoal.id] : undefined;
   const coachMission = testGoal
     ? (coach?.mission ?? []).filter(item => item.goal_id === testGoal.id)
     : [];
 
+  // Four tiles, decided in one tested place. The rule they exist to hold is
+  // the page's oldest one: a plan with nothing assessed reads "Not measured",
+  // never "0%".
+  const kpis = buildKpis({
+    readiness,
+    coachReadiness,
+    profile: snapshot?.profile,
+    streak: streakFrom(gamification, user),
+    missionMinutes: coachMission.reduce((sum, item) => sum + item.estimated_minutes, 0),
+    missionCount: coachMission.length,
+    dueCount: due.length,
+  });
+
+  const controlsBusy = startingNew || sending || building || uploading || !!finishing;
+
+  // The first thing a learner with a fresh plan can actually do: today's
+  // session if there is one, else the next one still scheduled. A session with
+  // no topic has no entry point, so it is skipped rather than linked nowhere.
+  const firstSession =
+    due.find((session) => sessionEntryHref(session)) ??
+    (snapshot?.sessions ?? []).find(
+      (session) => session.status === 'scheduled' && sessionEntryHref(session),
+    );
+  const firstSessionHref = firstSession ? sessionEntryHref(firstSession) : null;
+
+  // 55/45 on a desktop, stacked on a phone. The basis values are what make it
+  // wrap rather than a breakpoint: a column narrower than its basis cannot
+  // share a row, so the same markup is two columns on a monitor and one on a
+  // phone, with the bottom nav rather than the sidebar underneath it.
+  const LEFT = 'min-w-0 flex-[55_1_600px]';
+  const RIGHT = 'min-w-0 flex-[45_1_460px]';
+
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
-      {testSwitcher}
-      <header>
-        <h1 className="text-2xl font-semibold text-white">
-          {snapshot?.profile?.subject ?? readiness?.subject ?? 'Your test'}
-        </h1>
-        {countdown && <p className="mt-1 text-sm text-white/60">{countdown}</p>}
-        {stale && (
-          <p className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">
-            {stale}
-          </p>
-        )}
-      </header>
+    <div className="flex flex-col gap-[18px]">
+      <WorkspaceHeader
+        subject={snapshot?.profile?.subject ?? readiness?.subject ?? 'Your test'}
+        profiles={profiles}
+        selectedProfileId={selectedProfileIdRef.current ?? snapshot?.profile?.id ?? ''}
+        onSelectProfile={(id) => {
+          if (controlsBusy) return;
+          selectProfile(id);
+          void loadPlan();
+        }}
+        onNewTest={() => void startNewTest()}
+        {...(snapshot?.profile ? { onEditDetails: () => setEditingDetails(!editingDetails) } : {})}
+        editing={editingDetails}
+        busy={controlsBusy}
+        startingNew={startingNew}
+        startError={startError}
+        kpis={kpis}
+      />
 
-      {snapshot && <PrepManagement key={snapshot.profile?.id} snapshot={snapshot} onSaved={loadPlan} />}
+      {countdown && <p className="sr-only">{countdown}</p>}
 
-      {coachReadiness && (
-        <section className="mt-6 rounded-2xl border border-violet-400/20 bg-violet-400/[0.07] p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-violet-200/70">Lyo Coach</p>
-              <h2 className="mt-1 text-2xl font-semibold text-white">{readinessLabel(coachReadiness)}</h2>
-            </div>
-            <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">
-              {coachMission.reduce((sum, item) => sum + item.estimated_minutes, 0)} min today
-            </div>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-white/70">{readinessExplanation(coachReadiness)}</p>
-          <p className="mt-2 text-xs text-white/45">
-            Readiness is based on demonstrated evidence, not a predicted exam grade.
-          </p>
-          {coachFailed && (
-            <p className="mt-3 text-xs text-amber-200">This mission may not include your latest evidence.</p>
-          )}
-          {coachMission.length > 0 && (
-            <div className="mt-5">
-              <p className="text-sm font-medium text-white/80">Today&apos;s mission</p>
-              <div className="mt-3 space-y-2">
-                {coachMission.map((item, index) => {
-                  const href = missionEntryHref(item);
-                  const content = (
-                    <>
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white/70">
-                        {index + 1}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block font-medium text-white">{item.title}</span>
-                        <span className="block text-xs text-white/50">
-                          {actionLabel(item.action)} · {item.estimated_minutes} min
-                        </span>
-                      </span>
-                    </>
-                  );
-                  return href ? (
-                    <CoachMissionEntry key={item.skill_id}
-                      mission={item}
-                      goal={coach?.active_goals.find((goal) => goal.id === item.goal_id)}
-                      origin="test_prep"
-                      profileId={profileId}
-                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-black/10 px-3 py-3 text-left transition hover:bg-white/[0.06] disabled:opacity-60">
-                      {content}
-                    </CoachMissionEntry>
-                  ) : (
-                    <div key={item.skill_id} className="flex items-center gap-3 rounded-xl border border-white/10 px-3 py-3">
-                      {content}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
+      {stale && (
+        <p className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm text-amber-200">
+          {stale}
+        </p>
       )}
 
-      <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-        <div className="flex items-center gap-2 text-sm text-white/60">
-          <Target className="h-4 w-4" aria-hidden />
-          {coachReadiness ? 'Evidence by topic' : 'How ready you are'}
-        </div>
-        {readinessStale && (
-          <p className="mt-2 text-sm text-white/50">{readinessStale}</p>
-        )}
+      {notice && (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/80">
+          {notice}
+        </p>
+      )}
 
-        {/* Each branch is a different claim. A plan with nothing assessed has
-            a readiness of 0, and rendering that as "0%" would tell a learner
-            they failed something nobody ever asked them. */}
-        {!coachReadiness && headline.kind === 'measured' && (
-          <p className="mt-2 text-4xl font-semibold text-white">{headline.percent}%</p>
-        )}
-        {!coachReadiness && headline.kind === 'unmeasured' && (
-          <p className="mt-2 text-lg text-white/80">
-            You haven&apos;t been assessed on any of this yet — start a session below and this
-            will start filling in.
-          </p>
-        )}
-        {!coachReadiness && headline.kind === 'unknown' && (
-          <p className="mt-2 text-lg text-white/80">
-            {readiness
-              ? 'This plan has no topics on it yet, so there is nothing to measure.'
-              : 'I could not load your readiness just now.'}
-          </p>
-        )}
+      {snapshot && (
+        <PrepManagement
+          key={snapshot.profile?.id}
+          snapshot={snapshot}
+          onSaved={loadPlan}
+          open={editingDetails}
+          onClose={() => setEditingDetails(false)}
+        />
+      )}
 
-        {readiness && readiness.topics.length > 0 && (
-          <ul className="mt-5 space-y-2">
-            {readiness.topics.map((topic) => {
-              const standing = topicStanding(topic);
-              return (
-                <li
-                  key={topic.concept_id}
-                  className="flex items-center justify-between gap-3 text-sm"
+      {/* ── Row 1: the coach, beside the plan ── */}
+      <div className="flex flex-wrap items-start gap-[18px]">
+        <div className={LEFT}>
+          {coachReadiness || coachMission.length > 0 ? (
+            <CoachHero
+              coachReadiness={coachReadiness}
+              mission={coachMission}
+              goal={testGoal}
+              profileId={profileId}
+              sessions={snapshot?.sessions ?? []}
+              coachFailed={coachFailed}
+            />
+          ) : (
+            // No coach mission yet. This card still carries the weight of the
+            // column beside it, so it says what the learner gets by starting
+            // and gives them the way in — three lines of prose left a hole on
+            // the left of the page the size of the schedule and materials.
+            <section className="rounded-[22px] border border-lyo-400/25 bg-[linear-gradient(140deg,rgba(139,92,246,0.16)_0%,rgba(99,102,241,0.08)_45%,rgba(255,255,255,0.025)_100%)] p-6 sm:p-7">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-lyo-300/85">Lyo Coach</p>
+              <h2 className="mt-1.5 font-rounded text-[30px] font-extrabold leading-[1.1] text-white sm:text-4xl">
+                Your plan is ready
+              </h2>
+              <p className="mt-3 max-w-[60ch] text-sm leading-6 text-white/75">
+                You haven&apos;t been assessed on any of this yet, so there is no readiness score to
+                show. Start the first session and this page fills in as you go.
+              </p>
+
+              {firstSessionHref && (
+                <Link
+                  href={firstSessionHref}
+                  className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-gradient-to-b from-white to-sky-50 px-5 py-3 text-sm font-bold text-violet-700 shadow-[0_5px_12px_rgba(0,0,0,0.2)] transition hover:to-white"
                 >
-                  <span className="text-white/80">{topic.topic}</span>
-                  <span className="shrink-0 text-white/50">
-                    {standing.kind === 'measured' ? `${standing.percent}%` : 'Not started'}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                  <Play className="h-4 w-4 fill-current" aria-hidden />
+                  Start your first session
+                </Link>
+              )}
 
-        {readiness && readiness.focus_next.length > 0 && (
-          <p className="mt-5 text-sm text-white/70">
-            Start with <span className="text-white">{readiness.focus_next[0]}</span>.
-          </p>
-        )}
-      </section>
-
-      <section className="mt-6">
-        <div className="flex items-center gap-2 text-sm text-white/60">
-          <CalendarClock className="h-4 w-4" aria-hidden />
-          Today
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <h3 className="font-rounded text-xl font-bold text-white">What happens next</h3>
+                <ol className="mt-4 flex flex-col gap-2.5">
+                  {[
+                    'Work through a session — Lyo watches what you actually get right.',
+                    'Your topic bars and readiness start filling in from that evidence.',
+                    'Each day you get a mission aimed at your weakest topics first.',
+                  ].map((step, index) => (
+                    <li
+                      key={step}
+                      className="flex items-center gap-3.5 rounded-[18px] border border-white/12 bg-black/[0.18] p-4"
+                    >
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-[13px] font-bold text-white"
+                        aria-hidden
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm text-white/85">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </section>
+          )}
         </div>
 
-        {notice && (
-          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/80">
-            {notice}
-          </p>
-        )}
+        <div className={cn(RIGHT, 'flex flex-col gap-[18px]')}>
+          {snapshot && <ScheduleCard snapshot={snapshot} />}
+          {snapshot && <MaterialsCard snapshot={snapshot} onSaved={loadPlan} />}
+        </div>
+      </div>
 
-        {today.note && (
-          <p className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-200">
-            {today.note}
-          </p>
-        )}
+      {/* ── Row 2: the evidence, beside today ── */}
+      <div className="flex flex-wrap items-start gap-[18px]">
+        <section className={cn(LEFT, 'rounded-[22px] border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.025] p-5 shadow-[0_6px_12px_rgba(0,0,0,0.18)] sm:p-6')}>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Target className="h-4 w-4 shrink-0 text-lyo-300" aria-hidden />
+            <h3 className="font-rounded text-lg font-bold text-white">
+              {coachReadiness ? 'Evidence by topic' : 'How ready you are'}
+            </h3>
+            <span className="flex-1" />
+            {readiness && readiness.focus_next.length > 0 && (
+              <span className="text-xs text-white/50">
+                Start with <span className="font-semibold text-white">{readiness.focus_next[0]}</span>
+              </span>
+            )}
+          </div>
 
-        {today.emptyMessage ? (
-          <p className="mt-3 text-sm text-white/60">{today.emptyMessage}</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {due.map((session) => {
-              const href = sessionEntryHref(session);
-              const body = (
-                <>
-                  <span className="flex-1 text-white/90">{session.topic}</span>
-                  <span className="shrink-0 text-xs uppercase tracking-wide text-white/40">
-                    {session.session_type}
-                  </span>
-                </>
-              );
-              return (
-                <li key={session.id}>
-                  <div className="flex items-stretch gap-2">
+          {readinessStale && <p className="mt-2 text-sm text-white/50">{readinessStale}</p>}
+
+          {/* Each branch is a different claim. A plan with nothing assessed has
+              a readiness of 0, and rendering that as "0%" would tell a learner
+              they failed something nobody ever asked them. */}
+          {!coachReadiness && headline.kind === 'measured' && (
+            <p className="mt-2 font-rounded text-4xl font-extrabold text-white">{headline.percent}%</p>
+          )}
+          {!coachReadiness && headline.kind === 'unmeasured' && (
+            <p className="mt-3 max-w-[80ch] text-base leading-6 text-white/80">
+              You haven&apos;t been assessed on any of this yet — start a session and this will start
+              filling in.
+            </p>
+          )}
+          {!coachReadiness && headline.kind === 'unknown' && (
+            <p className="mt-3 max-w-[80ch] text-base leading-6 text-white/80">
+              {readiness
+                ? 'This plan has no topics on it yet, so there is nothing to measure.'
+                : 'I could not load your readiness just now.'}
+            </p>
+          )}
+
+          {readiness && readiness.topics.length > 0 && (
+            <ul className="mt-5 flex flex-col gap-3.5">
+              {readiness.topics.map((topic) => {
+                const standing = topicStanding(topic);
+                // Narrowed to a number here rather than kept behind a boolean:
+                // `standing.kind === 'measured'` stored in a variable does not
+                // narrow the union for the reads further down.
+                const percent = standing.kind === 'measured' ? standing.percent : null;
+                const measured = percent !== null;
+                return (
+                  <li key={topic.concept_id}>
+                    <div className="flex items-baseline gap-3">
+                      <span className={cn('min-w-0 flex-1 truncate text-sm', measured ? 'text-white/90' : 'text-white/70')}>
+                        {topic.topic}
+                      </span>
+                      {measured ? (
+                        <span
+                          className={cn(
+                            'shrink-0 font-rounded text-sm font-bold',
+                            percent >= 70
+                              ? 'text-emerald-300'
+                              : percent >= 50
+                                ? 'text-lyo-300'
+                                : 'text-amber-300',
+                          )}
+                        >
+                          {percent}%
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-xs text-white/50">Not started</span>
+                      )}
+                    </div>
+                    {/* A never-assessed topic gets an empty track and no fill.
+                        A 0%-wide bar and "no evidence yet" look identical and
+                        are different claims. */}
+                    <div className={cn('mt-1.5 h-[7px] overflow-hidden rounded-full', measured ? 'bg-white/[0.08]' : 'bg-white/[0.055]')}>
+                      {measured && (
+                        <div
+                          className={cn(
+                            'h-full rounded-full',
+                            percent >= 70
+                              ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                              : percent >= 50
+                                ? 'bg-gradient-to-r from-lyo-600 to-lyo-400'
+                                : 'bg-gradient-to-r from-amber-600 to-amber-400',
+                          )}
+                          style={{ width: `${percent}%` }}
+                        />
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <p className="mt-5 max-w-[80ch] text-xs leading-5 text-white/45">
+            Measured from what you have actually demonstrated, not from sessions ticked off.
+          </p>
+        </section>
+
+        <section className={cn(RIGHT, 'rounded-[22px] border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.025] p-5 shadow-[0_6px_12px_rgba(0,0,0,0.18)] sm:p-[22px]')}>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <CalendarClock className="h-4 w-4 shrink-0 text-emerald-300" aria-hidden />
+            <h3 className="font-rounded text-lg font-bold text-white">Today&rsquo;s sessions</h3>
+          </div>
+
+          {today.note && (
+            <p className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm text-amber-200">
+              {today.note}
+            </p>
+          )}
+
+          {today.emptyMessage ? (
+            <p className="mt-3 text-sm text-white/60">{today.emptyMessage}</p>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-2.5">
+              {due.map((session) => {
+                const href = sessionEntryHref(session);
+                const body = (
+                  <>
+                    <GraduationCap className="h-4 w-4 shrink-0 text-white/50" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-white">{session.topic}</span>
+                      <span className="mt-0.5 block text-[11px] uppercase tracking-[0.06em] text-white/45">
+                        {session.session_type.replace('_', ' ')} · {session.duration_minutes} min
+                      </span>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={session.id} className="flex items-stretch gap-2.5">
                     {href ? (
                       <Link
                         href={href}
-                        className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 hover:bg-white/[0.07]"
+                        className="flex min-w-0 flex-1 items-center gap-3 rounded-[15px] border border-white/10 bg-white/[0.05] p-3.5 transition hover:bg-white/[0.08]"
                       >
-                        <GraduationCap className="h-4 w-4 text-white/50" aria-hidden />
                         {body}
                       </Link>
                     ) : (
                       // No topic means nothing to teach. A dead link into an
                       // empty Classroom is worse than a row that plainly is
                       // not one.
-                      <div className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 px-4 py-3 opacity-60">
-                        <GraduationCap className="h-4 w-4 text-white/50" aria-hidden />
+                      <div className="flex min-w-0 flex-1 items-center gap-3 rounded-[15px] border border-white/10 p-3.5 opacity-60">
                         {body}
                       </div>
                     )}
@@ -716,7 +866,7 @@ export default function TestPrepPage() {
                       type="button"
                       onClick={() => void finishSession(session.id)}
                       disabled={finishing === session.id}
-                      className="shrink-0 rounded-xl border border-white/10 px-3 text-sm text-white/70 hover:bg-white/[0.07] disabled:opacity-40"
+                      className="shrink-0 rounded-[15px] border border-white/12 px-4 text-[13px] font-semibold text-white/75 transition hover:bg-white/[0.07] disabled:opacity-40"
                     >
                       {finishing === session.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -724,20 +874,20 @@ export default function TestPrepPage() {
                         'Done'
                       )}
                     </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
 
       {planId && (
-        <p className="mt-8 text-xs text-white/30">
+        <p className="text-xs text-white/30">
           Readiness is measured from what you have actually demonstrated, not from sessions
           ticked off.
         </p>
       )}
-    </main>
+    </div>
   );
 }

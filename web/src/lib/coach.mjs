@@ -60,3 +60,11 @@ export function missionEntryHref(item) {
     objective: defaultObjective(item.title),
   });
 }
+
+/** Exam identity, rather than subject, selects the canonical Coach adapter. */
+export function goalForTestProfile(goals, profileId) {
+  if (!Array.isArray(goals) || typeof profileId !== 'string' || !profileId) return null;
+  const matches = goals.filter(goal => goal?.goal_type === 'test'
+    && goal.source_ref_type === 'test_profile' && goal.source_ref_id === profileId);
+  return matches.length === 1 ? matches[0] : null;
+}
