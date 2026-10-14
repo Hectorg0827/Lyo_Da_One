@@ -9,17 +9,23 @@ import { cn } from '@/lib/utils';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
+import { NAV, isActiveHref } from '@/lib/nav-items.mjs';
 
 // Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
-// the center mascot FAB — target/Focus, compass/Discover · people/Community,
-// plus/Create. Icon-only ghost tabs with a dot indicator, mascot floats in
-// the middle with a breathing glow.
+// the center mascot FAB — Focus, Discover · Community, Create. Icon-only
+// ghost tabs with a dot indicator, mascot floats in the middle with a
+// breathing glow.
+//
+// The labels come from `nav-items.mjs`, the same file the desktop rail reads.
+// They used to be written out here and in the sidebar separately, which is
+// how the two navs on this one site ended up calling the home screen
+// different things.
 const leftItems = [
-  { href: '/', icon: Target, label: 'Focus' },
-  { href: '/discover', icon: Compass, label: 'Discover' },
+  { href: NAV.focus.href, icon: Target, label: NAV.focus.label },
+  { href: NAV.discover.href, icon: Compass, label: NAV.discover.label },
 ];
 
-const rightItems = [{ href: '/community', icon: Users, label: 'Community' }];
+const rightItems = [{ href: NAV.community.href, icon: Users, label: NAV.community.label }];
 
 function GhostTab({
   href,
@@ -63,8 +69,7 @@ export function MobileNav() {
   const isChat = pathname.startsWith('/chat');
   const [createOpen, setCreateOpen] = useState(false);
 
-  const isItemActive = (href: string) =>
-    href === '/' ? pathname === '/' : pathname.startsWith(href);
+  const isItemActive = (href: string) => isActiveHref(href, pathname);
 
   // The classroom has its own teacher presence and exit control. Keeping the
   // global mascot FAB here duplicates Lyo and occupies the answer area.
@@ -94,7 +99,7 @@ export function MobileNav() {
             on tap (shared layoutId). */}
         <Link
           href="/chat"
-          aria-label="LYO Tutor chat"
+          aria-label={`${NAV.askLyo.label} chat`}
           aria-current={isChat ? 'page' : undefined}
           className="relative flex items-center justify-center -mt-10"
         >
@@ -126,7 +131,7 @@ export function MobileNav() {
           {/* Create — opens the creation sheet, mirroring the iOS plus tab */}
           <button
             onClick={() => setCreateOpen(true)}
-            aria-label="Create"
+            aria-label={NAV.create.label}
             className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
           >
             <SquarePlus
