@@ -188,11 +188,12 @@ def run():
                     except Exception:
                         event_types.append("body-unavailable")
                 body = page.locator("body").inner_text(timeout=7000)[-520:]
+                token_present = page.evaluate("Boolean(localStorage.getItem('lyo_token'))")
                 print(
                     "DIAGNOSTIC Chat Coach card missing:"
                     f" response_statuses={[r.status for r in chat_responses]}"
                     f" SSE_types={event_types[:25]!r}"
-                    f" token_present={page.evaluate('Boolean(localStorage.getItem(\"lyo_token\"))')}"
+                    f" token_present={token_present}"
                     f" url={page.url!r} visible_text={body!r}"
                     f" JS_errors={failures[-6:]!r}", flush=True
                 )
