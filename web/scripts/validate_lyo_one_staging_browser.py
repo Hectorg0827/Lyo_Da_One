@@ -168,12 +168,35 @@ def run():
 
             # A Chat Coach turn is generated deterministically from the same
             # learning goal (without an external model provider in staging).
+            chat_responses = []
+            page.on("response", lambda response: chat_responses.append(response)
+                    if "/api/v1/lyo2/chat/stream" in response.url else None)
             page.goto(WEB + "/chat", wait_until="domcontentloaded", timeout=60000)
             composer = page.get_by_placeholder("Message Lyo...")
             expect(composer).to_be_visible(timeout=30000)
             composer.fill("What should I study today?")
             composer.press("Enter")
-            expect(page.get_by_label("Lyo Coach mission")).to_be_visible(timeout=45000)
+            try:
+                expect(page.get_by_label("Lyo Coach mission")).to_be_visible(timeout=45000)
+            except Exception:
+                import re
+                event_types = []
+                for response in chat_responses:
+                    try:
+                        payload = response.body().decode("utf-8", errors="replace")
+                        event_types.extend(re.findall(r'"type"\\s*:\\s*"([^"]+)"', payload))
+                    except Exception:
+                        event_types.append("body-unavailable")
+                body = page.locator("body").inner_text(timeout=7000)[-520:]
+                print(
+                    "DIAGNOSTIC Chat Coach card missing:"
+                    f" response_statuses={[r.status for r in chat_responses]}"
+                    f" SSE_types={event_types[:25]!r}"
+                    f" token_present={page.evaluate('Boolean(localStorage.getItem(\"lyo_token\"))')}"
+                    f" url={page.url!r} visible_text={body!r}"
+                    f" JS_errors={failures[-6:]!r}", flush=True
+                )
+                raise
             print("PASS Chat displays live structured Coach mission", flush=True)
 
             assert not [x for x in failures if "TypeError" in x or "ReferenceError" in x], f"JS errors: {failures[:5]}"
