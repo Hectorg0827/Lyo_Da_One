@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CalendarClock, GraduationCap, Loader2, Send, Target } from 'lucide-react';
+import { CalendarClock, GraduationCap, Loader2, Play, Send, Target } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
@@ -577,12 +577,6 @@ export default function TestPrepPage() {
     ? (coach?.mission ?? []).filter(item => item.goal_id === testGoal.id)
     : [];
 
-  const testDateBadge = snapshot?.profile?.test_date
-    ? new Date(`${snapshot.profile.test_date}T00:00:00Z`).toLocaleDateString(undefined, {
-        weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-      })
-    : undefined;
-
   // Four tiles, decided in one tested place. The rule they exist to hold is
   // the page's oldest one: a plan with nothing assessed reads "Not measured",
   // never "0%".
@@ -598,6 +592,16 @@ export default function TestPrepPage() {
 
   const controlsBusy = startingNew || sending || building || uploading || !!finishing;
 
+  // The first thing a learner with a fresh plan can actually do: today's
+  // session if there is one, else the next one still scheduled. A session with
+  // no topic has no entry point, so it is skipped rather than linked nowhere.
+  const firstSession =
+    due.find((session) => sessionEntryHref(session)) ??
+    (snapshot?.sessions ?? []).find(
+      (session) => session.status === 'scheduled' && sessionEntryHref(session),
+    );
+  const firstSessionHref = firstSession ? sessionEntryHref(firstSession) : null;
+
   // 55/45 on a desktop, stacked on a phone. The basis values are what make it
   // wrap rather than a breakpoint: a column narrower than its basis cannot
   // share a row, so the same markup is two columns on a monitor and one on a
@@ -609,7 +613,6 @@ export default function TestPrepPage() {
     <div className="flex flex-col gap-[18px]">
       <WorkspaceHeader
         subject={snapshot?.profile?.subject ?? readiness?.subject ?? 'Your test'}
-        testDate={testDateBadge}
         profiles={profiles}
         selectedProfileId={selectedProfileIdRef.current ?? snapshot?.profile?.id ?? ''}
         onSelectProfile={(id) => {
@@ -661,15 +664,53 @@ export default function TestPrepPage() {
               coachFailed={coachFailed}
             />
           ) : (
+            // No coach mission yet. This card still carries the weight of the
+            // column beside it, so it says what the learner gets by starting
+            // and gives them the way in — three lines of prose left a hole on
+            // the left of the page the size of the schedule and materials.
             <section className="rounded-[22px] border border-lyo-400/25 bg-[linear-gradient(140deg,rgba(139,92,246,0.16)_0%,rgba(99,102,241,0.08)_45%,rgba(255,255,255,0.025)_100%)] p-6 sm:p-7">
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-lyo-300/85">Lyo Coach</p>
-              <h2 className="mt-1.5 font-rounded text-[30px] font-extrabold leading-[1.1] text-white">
+              <h2 className="mt-1.5 font-rounded text-[30px] font-extrabold leading-[1.1] text-white sm:text-4xl">
                 Your plan is ready
               </h2>
               <p className="mt-3 max-w-[60ch] text-sm leading-6 text-white/75">
-                Start a session from your schedule and this page fills in as you go — your readiness,
-                your topics and your daily mission all come from what you actually demonstrate.
+                You haven&apos;t been assessed on any of this yet, so there is no readiness score to
+                show. Start the first session and this page fills in as you go.
               </p>
+
+              {firstSessionHref && (
+                <Link
+                  href={firstSessionHref}
+                  className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-gradient-to-b from-white to-sky-50 px-5 py-3 text-sm font-bold text-violet-700 shadow-[0_5px_12px_rgba(0,0,0,0.2)] transition hover:to-white"
+                >
+                  <Play className="h-4 w-4 fill-current" aria-hidden />
+                  Start your first session
+                </Link>
+              )}
+
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <h3 className="font-rounded text-xl font-bold text-white">What happens next</h3>
+                <ol className="mt-4 flex flex-col gap-2.5">
+                  {[
+                    'Work through a session — Lyo watches what you actually get right.',
+                    'Your topic bars and readiness start filling in from that evidence.',
+                    'Each day you get a mission aimed at your weakest topics first.',
+                  ].map((step, index) => (
+                    <li
+                      key={step}
+                      className="flex items-center gap-3.5 rounded-[18px] border border-white/12 bg-black/[0.18] p-4"
+                    >
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-[13px] font-bold text-white"
+                        aria-hidden
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm text-white/85">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             </section>
           )}
         </div>

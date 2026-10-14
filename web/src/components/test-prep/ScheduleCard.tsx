@@ -182,11 +182,9 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
               >
                 {day.blocks.map((block) => {
                   const href = historical || block.done ? null : sessionEntryHref(block.session);
-                  const inner = (
-                    <>
-                      <span className="block truncate">{block.topic || 'Session'}</span>
-                    </>
-                  );
+                  const label = block.topic || 'Session';
+                  const title = `${label} · ${block.durationMinutes} min · ${block.sessionType.replace('_', ' ')}`;
+                  const inner = <span className="block truncate">{label}</span>;
                   const className = cn(
                     'absolute left-[3px] right-[3px] overflow-hidden rounded-[7px] border-l-[3px] px-2 py-1 text-[11px]',
                     block.done
@@ -198,11 +196,11 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
                     height: Math.max(MIN_BLOCK_PX, block.durationMinutes * PX_PER_MINUTE),
                   };
                   return href ? (
-                    <Link key={block.id} href={href} className={cn(className, 'transition hover:brightness-125')} style={style}>
+                    <Link key={block.id} href={href} title={title} className={cn(className, 'transition hover:brightness-125')} style={style}>
                       {inner}
                     </Link>
                   ) : (
-                    <span key={block.id} className={className} style={style}>
+                    <span key={block.id} title={title} className={className} style={style}>
                       {inner}
                     </span>
                   );

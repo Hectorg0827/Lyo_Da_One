@@ -41,7 +41,6 @@ const ICON_TONES: Record<KpiTone, string> = {
 
 export interface WorkspaceHeaderProps {
   subject: string;
-  testDate?: string | undefined;
   profiles: PrepProfile[];
   selectedProfileId: string;
   onSelectProfile: (id: string) => void;
@@ -56,7 +55,6 @@ export interface WorkspaceHeaderProps {
 
 export function WorkspaceHeader({
   subject,
-  testDate,
   profiles,
   selectedProfileId,
   onSelectProfile,
@@ -113,12 +111,6 @@ export function WorkspaceHeader({
           </div>
         ) : (
           <p className="min-w-0 truncate font-rounded text-xl font-bold text-white">{subject}</p>
-        )}
-
-        {testDate && (
-          <span className="hidden shrink-0 rounded-lg bg-lyo-500/20 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-lyo-100 sm:inline">
-            {testDate}
-          </span>
         )}
 
         <span className="flex-1" />
