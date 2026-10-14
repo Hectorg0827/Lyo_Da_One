@@ -5,16 +5,20 @@ import { motion } from 'framer-motion';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import {
-  BookOpenCheck, CheckCircle2, FileText, HelpCircle, ImageIcon, Mic, Send, XCircle,
+  BookOpenCheck, CheckCircle2, FileText, GraduationCap, HelpCircle, ImageIcon, Mic, Send, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+  configureDictation,
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
+import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
+import type { ClassroomOpening } from '@/lib/classroom-contract.mjs';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 import { TeachingVisualView } from './TeachingVisualView';
+import { BoardDocumentView } from './BoardDocumentView';
 
 let mermaidReady: Promise<typeof import('mermaid')> | null = null;
 function loadMermaid() {
@@ -41,7 +45,7 @@ function loadMermaid() {
 
 // ─── Individual renderers ─────────────────────────────────────────────────────
 
-function MermaidView({ source }: { source: string }) {
+export function MermaidView({ source }: { source: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const idRef = useRef(`mmd_${Math.random().toString(36).slice(2)}`);
@@ -115,7 +119,7 @@ function LatexView({ latex }: { latex: string }) {
   );
 }
 
-function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; labels: string[]; values: number[] }) {
+export function ChartView({ chartType, labels, values }: { chartType: 'bar' | 'line'; labels: string[]; values: number[] }) {
   const max = Math.max(...values, 1);
   const W = 560, H = 200, PAD = 30;
   const n = Math.min(labels.length, values.length);
@@ -404,6 +408,8 @@ function TransferView({
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
+  const dictatingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const minWords = el.input.min_words ?? 6;
   const isSpanish = el.input.language_code?.toLowerCase().startsWith('es') === true;
@@ -413,7 +419,10 @@ function TransferView({
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
+    return () => {
+      dictatingRef.current = false;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -423,36 +432,89 @@ function TransferView({
     node.style.height = `${node.scrollHeight}px`;
   }, [response]);
 
-  const toggleDictation = () => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
+  // Submitting or skipping hides the microphone button, so it must also end
+  // the dictation behind it — otherwise it restarts with nothing to stop it.
+  useEffect(() => {
+    if (!locked) return;
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  }, [locked]);
+
+  /**
+   * End dictation for good.
+   *
+   * Clearing the flag before stopping matters: the recognizer restarts itself
+   * after a pause, and only this flag tells a deliberate stop from a breath.
+   */
+  const stopDictation = () => {
+    dictatingRef.current = false;
+    setListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  };
+
+  // One answer may span several recognizers: each ends itself after a pause,
+  // so the transcript is accumulated here and carried across every restart.
+  const startDictation = (continuing = false): boolean => {
     const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return;
-    onInputStart();
+    if (!recognition) return false;
     recognitionRef.current = recognition;
-    dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
-    recognition.lang = el.input.language_code === 'auto'
-      ? navigator.language || 'en-US'
-      : el.input.language_code || navigator.language || 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
+    configureDictation(
+      recognition,
+      el.input.language_code === 'auto' ? null : el.input.language_code,
+    );
+    if (continuing) transcriptRef.current.carryOver();
+
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0].transcript;
-      }
-      setResponse((dictationBaseRef.current + transcript).slice(0, 1200));
+      if (recognitionRef.current !== recognition) return;
+      const { combined } = transcriptRef.current.push(event);
+      const base = dictationBaseRef.current;
+      setResponse((base + tidyTranscript(combined, { capitalize: !base })).slice(0, 1200));
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
+      if (!dictatingRef.current) {
+        setListening(false);
+        return;
+      }
+      window.setTimeout(() => {
+        if (!dictatingRef.current) return;
+        if (!startDictation(true)) {
+          dictatingRef.current = false;
+          setListening(false);
+        }
+      }, 120);
+    };
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      recognitionRef.current = null;
+      dictatingRef.current = false;
+      setListening(false);
+    };
+
     try {
       recognition.start();
-      setListening(true);
+      return true;
     } catch {
-      setListening(false);
+      recognitionRef.current = null;
+      return false;
     }
+  };
+
+  const toggleDictation = () => {
+    if (listening) {
+      stopDictation();
+      return;
+    }
+    if (!createBrowserSpeechRecognition()) return;
+    onInputStart();
+    transcriptRef.current.reset();
+    dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
+    dictatingRef.current = true;
+    if (startDictation()) setListening(true);
+    else dictatingRef.current = false;
   };
 
   return (
@@ -548,11 +610,76 @@ function TransferView({
   );
 }
 
+function SummaryView({ el, compactText }: { el: Extract<BoardElement, { kind: 'summary' }>; compactText: boolean }) {
+  const recovery = el.presentationRole === 'recovery';
+  const proseOnly = !el.boardDocument || el.boardDocument.blocks.every(block => block.kind === 'text');
+  const collapse = compactText && proseOnly && (el.content?.length ?? 0) > 240 && !recovery;
+  const content = <BoardDocumentView document={el.boardDocument} fallback={el.content} />;
+  return (
+    <section className={cn('space-y-3 rounded-xl border p-4', recovery
+      ? 'border-[var(--warning)] bg-[var(--surface-2)]'
+      : 'border-[var(--border)] bg-[var(--surface)]')} role={recovery ? 'status' : undefined}>
+      <h3 className="flex items-start gap-2 text-base font-semibold text-[var(--text-primary)]">
+        <BookOpenCheck className={cn('mt-0.5 h-4 w-4 shrink-0', recovery ? 'text-[var(--warning)]' : 'text-lyo-300')} /> {el.title}
+      </h3>
+      {collapse ? <details className="text-sm text-[var(--text-secondary)]"><summary className="cursor-pointer">Read supporting notes</summary><div className="mt-3">{content}</div></details> : content}
+      {el.items.length > 0 && <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">{el.items.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+      {el.retrievalScheduled && <p className="text-xs font-semibold text-lyo-300">Spaced retrieval scheduled</p>}
+    </section>
+  );
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
+
+/**
+ * The first thing on the board: what this class is, before any of it is
+ * taught.
+ *
+ * A lesson used to open on whatever the engine generated first, which left a
+ * learner no way to tell the start of a class from the middle of one — worst
+ * of all on a resumed session, where the teacher really did carry on from a
+ * place the learner had been given no reminder of. This says the subject,
+ * what the session is for, how long it runs, and that they are allowed to
+ * interrupt. It teaches nothing, and claims nothing the class was not asked
+ * for.
+ */
+function OpeningView({ opening }: { opening: ClassroomOpening }) {
+  return (
+    <section
+      aria-label="What this class is"
+      className="rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/10 to-[#8B5CF6]/10 px-4 py-4"
+    >
+      <div className="flex items-center gap-2">
+        <GraduationCap className="h-5 w-5 shrink-0 text-teal-300" aria-hidden="true" />
+        <h2 className="font-rounded text-base font-bold text-white">{opening.title}</h2>
+      </div>
+      {opening.resumed && (
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
+          Picking up where you left off
+        </p>
+      )}
+      <p className="mt-2 text-sm leading-relaxed text-white/85">
+        <span className="font-semibold text-white">By the end: </span>
+        {opening.objective}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {opening.facts.map((fact) => (
+          <span
+            key={fact}
+            className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/70"
+          >
+            {fact}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-white/60">{opening.note}</p>
+    </section>
+  );
+}
 
 export function BoardElementView({
   el, onQuizAnswer, onTransferSubmit, onLearnerInputStart,
-  onSkipQuestion, onUnskipQuestion, onAskHelp, awaitingFeedback = false, reducedMotion = false,
+  onSkipQuestion, onUnskipQuestion, onAskHelp, awaitingFeedback = false, reducedMotion = false, compactText = false,
 }: {
   el: BoardElement;
   onQuizAnswer: (elementId: string, option: QuizOption) => void;
@@ -563,6 +690,7 @@ export function BoardElementView({
   onAskHelp: () => void;
   awaitingFeedback?: boolean;
   reducedMotion?: boolean;
+  compactText?: boolean;
 }) {
   return (
     <motion.div
@@ -572,7 +700,9 @@ export function BoardElementView({
       className="board-element"
       data-board-element-id={el.id}
     >
-      {el.kind === 'teaching_visual' && <TeachingVisualView key={el.id} id={el.id} visual={el.visual} />}
+      {el.kind === 'opening' && <OpeningView opening={el.opening} />}
+
+      {el.kind === 'teaching_visual' && <TeachingVisualView key={el.id} id={el.id} visual={el.visual} readOnly={el.presentationRole === 'reference'} />}
       {el.kind === 'chalk' && <ChalkView text={el.text} reducedMotion={reducedMotion} />}
 
       {el.kind === 'highlight' && <HighlightView term={el.term} />}
@@ -676,22 +806,7 @@ export function BoardElementView({
         />
       )}
 
-      {el.kind === 'summary' && (
-        <section className="space-y-3 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
-          <h2 className="flex items-center gap-2 text-base font-bold text-green-100">
-            <BookOpenCheck className="h-5 w-5" /> {el.title}
-          </h2>
-          {el.content && <p className="text-sm leading-relaxed text-white/80">{el.content}</p>}
-          {el.items.length > 0 && (
-            <ul className="list-disc space-y-1 pl-5 text-sm text-white/75">
-              {el.items.map((item, index) => <li key={index}>{item}</li>)}
-            </ul>
-          )}
-          {el.retrievalScheduled && (
-            <p className="text-xs font-semibold text-lyo-200">Spaced retrieval scheduled</p>
-          )}
-        </section>
-      )}
+      {el.kind === 'summary' && <SummaryView el={el} compactText={compactText} />}
 
       {el.kind === 'source' && (
         <aside className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">

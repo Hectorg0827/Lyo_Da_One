@@ -385,13 +385,15 @@ export const api = {
       });
     },
 
-    /**
-     * Submit an answer to an in-chat check.
-     *
-     * Sends only WHICH option was picked. Correctness is decided server-side
-     * from the block the server itself emitted — the client never grades, and
-     * never trusts `correct_index` off the wire for that purpose.
-     */
+    /** Save bounded diagram exploration independently from quiz grading. */
+    async updateVisual(params: { conversationId: string; blockId: string; values: Record<string, unknown> }) {
+      return request<{ block: ChatBlock }>('/api/v1/lyo2/chat/visual', {
+        method: 'POST',
+        body: JSON.stringify({ conversation_id: params.conversationId, block_id: params.blockId, values: params.values }),
+      });
+    },
+
+    /** Submit a choice for server-authoritative grading. */
     async checkAnswer(params: {
       conversationId: string;
       blockId: string;
@@ -427,6 +429,23 @@ export const api = {
      */
     async dueReviews() {
       return request<{ items: DueReviewItem[] }>('/api/v1/lyo2/chat/reviews/due');
+    },
+
+    async reportVoiceQuality(payload: {
+      session_id: string;
+      turn_id?: string;
+      conversation_id?: string;
+      platform: 'web' | 'ios' | 'android';
+      event: string;
+      locale?: string;
+      scenario?: string;
+      metrics?: Record<string, number | boolean | string>;
+    }) {
+      return request<{ status: 'recorded' }>('/api/v1/lyo2/voice/quality', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        optionalAuth: true,
+      });
     },
 
     stream(
@@ -900,8 +919,18 @@ export const api = {
   // data. A plan is built from a conversational intake, not posted in one go:
   // `intakeTurn` until the server says it is complete, then `generatePlan`.
   testPrep: {
-    async state() {
-      return request<import('./test-prep-api').PrepSnapshot>('/api/v1/me/study_plans/state');
+    async state(profileId?: string) {
+      const selected = profileId ? `?profile_id=${encodeURIComponent(profileId)}` : '';
+      return request<import('./test-prep-api').PrepSnapshot>(`/api/v1/me/study_plans/state${selected}`);
+    },
+    async profiles() {
+      return request<import('./test-prep-api').PrepProfile[]>('/api/v1/me/study_plans/profiles');
+    },
+    async startNew(requestId: string) {
+      return request<{ profile_id: string; created: boolean }>('/api/v1/me/study_plans/profiles/start', {
+        method: 'POST',
+        body: JSON.stringify({ request_id: requestId }),
+      });
     },
     async editProfile(profileId: string, update: import('./test-prep-api').PrepUpdate) {
       return request<{ needs_plan: boolean }>(`/api/v1/me/study_plans/profiles/${encodeURIComponent(profileId)}`, {

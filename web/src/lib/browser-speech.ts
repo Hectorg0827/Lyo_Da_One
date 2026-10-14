@@ -1,14 +1,17 @@
+import type { SpeechResultEventLike } from './speech-transcript.mjs';
+import { normalizeSpeechLang } from './speech-transcript.mjs';
+
 export type BrowserSpeechRecognition = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
+  maxAlternatives?: number;
   start: () => void;
   stop: () => void;
-  onresult: ((event: {
-    results: ArrayLike<ArrayLike<{ transcript: string }>>;
-  }) => void) | null;
+  abort?: () => void;
+  onresult: ((event: SpeechResultEventLike) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event?: { error?: string }) => void) | null;
 };
 
 export function createBrowserSpeechRecognition(): BrowserSpeechRecognition | null {
@@ -20,3 +23,21 @@ export function createBrowserSpeechRecognition(): BrowserSpeechRecognition | nul
   return Recognition ? new Recognition() : null;
 }
 
+/**
+ * Settings every dictation surface shares.
+ *
+ * Asking for several alternatives lets the transcript pick the most confident
+ * wording rather than whichever one the engine happened to list first, and a
+ * region-qualified language tag keeps the recognizer on a single accent model.
+ */
+export function configureDictation(
+  recognition: BrowserSpeechRecognition,
+  lang?: string | null,
+): void {
+  recognition.lang = normalizeSpeechLang(
+    lang ?? (typeof navigator === 'undefined' ? null : navigator.language),
+  );
+  recognition.interimResults = true;
+  recognition.continuous = true;
+  recognition.maxAlternatives = 3;
+}

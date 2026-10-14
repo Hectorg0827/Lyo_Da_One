@@ -11,6 +11,7 @@ export function PrepManagement({ snapshot, onSaved }: { snapshot: PrepSnapshot; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const profile = snapshot.profile;
+  const historical = snapshot.plan?.status === 'completed' || snapshot.plan?.status === 'archived';
   if (!profile) return null;
   const inputClass = 'mt-1 w-full rounded-xl border border-white/20 bg-slate-950 px-3 py-2 text-white';
   return <section className="mt-5 space-y-4">
@@ -56,7 +57,7 @@ export function PrepManagement({ snapshot, onSaved }: { snapshot: PrepSnapshot; 
           const href = sessionEntryHref(session);
           return <article key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 p-3">
             <div><p>{session.topic}</p><p className="text-xs text-white/60">{sessionDate(session.scheduled_at).toLocaleString(undefined, { timeZone: snapshot.timezone })} · {session.duration_minutes} min · {session.session_type.replace('_', ' ')}</p></div>
-            {session.status === 'scheduled' && href ? <Link href={href} className="rounded-lg bg-violet-500/20 px-3 py-2 text-sm text-violet-100">Start session</Link> : <span className="text-sm text-white/60">{session.status}</span>}
+            {!historical && session.status === 'scheduled' && href ? <Link href={href} className="rounded-lg bg-violet-500/20 px-3 py-2 text-sm text-violet-100">Start session</Link> : <span className="text-sm text-white/60">{session.status}</span>}
           </article>;
         })}
       </div>

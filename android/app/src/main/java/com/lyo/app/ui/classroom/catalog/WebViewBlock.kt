@@ -12,24 +12,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
 
 /**
- * Real diagram/math rendering — the documented v2 upgrade over
- * MermaidBlockRenderer/LatexBlockRenderer's v1 raw-source-text fallback
- * (see those files). A single shared component rather than two separate
- * ones: both are "load a JS library from a CDN into a local HTML shell,
- * hand it one string, screenshot the result" for the price of one WebView
- * host, differing only in which `<script>` tag and render call get used.
+ * Shared visual rendering surface for Classroom and Chat. Mermaid and KaTeX
+ * render in a constrained WebView, with legible source fallback when JavaScript
+ * or the external library cannot load (offline, CSP or network failure).
  *
- * DISCLOSED, NOT VERIFIED: this cannot be exercised in the environment
- * this was written in (no Android runtime available at all — see the
- * implementation summary). The mermaid.js/KaTeX CDN URLs, the JS render
- * calls, and the JS→Kotlin height-reporting bridge are all written
- * against each library's documented API but have not been run against a
- * real WebView. Falls back to nothing visible on a JS error rather than
- * crashing (an empty rendered `<div>`) — verify on a real device before
- * relying on this over the v1 raw-text fallback in MermaidBlockRenderer/
- * LatexBlockRenderer, which stays in place as what those two currently
- * call. Wire this in by swapping RawSourceBlock(source) for
- * WebViewBlock(kind = "mermaid", source = source) once confirmed working.
+ * Device-level WebView validation is still required before deployment.
  */
 enum class WebViewBlockKind { MERMAID, LATEX }
 
@@ -50,13 +37,18 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL(
-                "https://cdn.jsdelivr.net/",
-                html,
-                "text/html",
-                "UTF-8",
-                null,
-            )
+            // Compose may recompose while the learner is answering. Re-loading
+            // a WebView on every recomposition erases the diagram and flickers.
+            if (webView.tag != html) {
+                webView.tag = html
+                webView.loadDataWithBaseURL(
+                    "https://cdn.jsdelivr.net/",
+                    html,
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            }
         },
     )
 }
@@ -69,27 +61,50 @@ private fun buildHtml(kind: WebViewBlockKind, source: String): String {
     return when (kind) {
         WebViewBlockKind.MERMAID -> """
             <!DOCTYPE html><html><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
             <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-            <style>body{margin:0;background:transparent;display:flex;align-items:center;justify-content:center;}
-            .mermaid{max-width:100%;}</style></head>
+            <style>body{margin:0;padding:8px;background:transparent;color:#eee;font:13px sans-serif;}
+            #diagram{max-width:100%;overflow:auto}#diagram svg{max-width:100%;height:auto}
+            #fallback{display:none;white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
             <body>
-              <div class="mermaid">${source.htmlEscape()}</div>
+              <div id="diagram" class="mermaid">${source.htmlEscape()}</div>
+              <pre id="fallback">${source.htmlEscape()}</pre>
               <script>
-                mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+                function showFallback(){
+                  document.getElementById('diagram').style.display='none';
+                  document.getElementById('fallback').style.display='block';
+                }
+                window.addEventListener('load',function(){
+                  if(typeof mermaid==='undefined'){showFallback();return;}
+                  try{
+                    mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'dark'});
+                    mermaid.run({nodes:[document.getElementById('diagram')]}).catch(showFallback);
+                  }catch(e){showFallback();}
+                });
               </script>
             </body></html>
         """.trimIndent()
 
         WebViewBlockKind.LATEX -> """
             <!DOCTYPE html><html><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
             <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
-            <style>body{margin:0;background:transparent;display:flex;align-items:center;justify-content:center;height:100%;color:white;}
-            .katex{font-size:1.3em;}</style></head>
+            <style>body{margin:0;padding:8px;background:transparent;color:#eee;font:13px sans-serif}
+            #fallback{display:none;white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
             <body>
               <div id="math"></div>
+              <pre id="fallback">${source.htmlEscape()}</pre>
               <script>
-                katex.render($escapedSource, document.getElementById('math'), { throwOnError: false, displayMode: true });
+                try {
+                  if (typeof katex==='undefined') throw new Error('KaTeX unavailable');
+                  katex.render($escapedSource,document.getElementById('math'),{
+                    throwOnError:false,displayMode:true
+                  });
+                } catch(e) {
+                  document.getElementById('math').style.display='none';
+                  document.getElementById('fallback').style.display='block';
+                }
               </script>
             </body></html>
         """.trimIndent()

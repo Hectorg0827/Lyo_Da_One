@@ -55,6 +55,11 @@ import com.lyo.app.data.api.QuizBlockPayload
 import com.lyo.app.data.api.SmartBlock
 import com.lyo.app.data.api.SmartBlockContent
 import com.lyo.app.data.api.TextBlockPayload
+import com.lyo.app.ui.classroom.catalog.TeachingVisualCard
+import com.lyo.app.data.classroom.isTeachingVisualValid
+import com.google.gson.JsonElement
+import com.lyo.app.ui.classroom.catalog.WebViewBlock
+import com.lyo.app.ui.classroom.catalog.WebViewBlockKind
 import com.lyo.app.ui.theme.BorderColor
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
@@ -78,6 +83,7 @@ fun SmartBlockList(
     onQuizAnswer: (blockId: String, selectedIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
     contentColor: Color = TextPrimary,
+    onVisualUpdate: (String, Map<String, JsonElement>) -> Unit = { _, _ -> },
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         blocks.forEach { block ->
@@ -86,6 +92,7 @@ fun SmartBlockList(
                 checkResult = checkResults[block.id],
                 onAnswer = { index -> onQuizAnswer(block.id, index) },
                 color = contentColor,
+                onVisualUpdate = { onVisualUpdate(block.id, it) },
             )
         }
     }
@@ -97,6 +104,7 @@ private fun SmartBlockView(
     checkResult: CheckAnswerResult?,
     onAnswer: (Int) -> Unit,
     color: Color,
+    onVisualUpdate: (Map<String, JsonElement>) -> Unit,
 ) {
     when (val content = block.content) {
         is SmartBlockContent.Text -> TextBlockView(content.payload, block.subtype, color)
@@ -106,7 +114,14 @@ private fun SmartBlockView(
         is SmartBlockContent.DataViz -> DataVizBlockView(content.payload, color)
         is SmartBlockContent.Media -> MediaBlockView(content.payload)
         is SmartBlockContent.Progress -> ProgressBlockView(content.payload)
-        is SmartBlockContent.Interactive -> InteractiveBlockView(content.payload, block.subtype, color)
+        is SmartBlockContent.Interactive -> {
+            val visual = content.payload.visual
+            if (block.subtype == "teaching_visual" && visual != null && visual.isTeachingVisualValid()) {
+                TeachingVisualCard(visual, block.id, onUpdate = onVisualUpdate)
+            } else {
+                InteractiveBlockView(content.payload, block.subtype, color)
+            }
+        }
         is SmartBlockContent.MasteryMap -> MasteryMapBlockView(content.payload, color)
         is SmartBlockContent.Unknown -> UnknownBlockView()
     }
@@ -333,21 +348,20 @@ private fun FlashcardBlockView(payload: FlashcardBlockPayload, color: Color) {
 private fun DataVizBlockView(payload: DataVizBlockPayload, color: Color) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         payload.title?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = TextSecondary) }
-        // No mermaid.js/KaTeX renderer wired in here — WebViewBlock.kt hosts
-        // one, but its own doc comment discloses it hasn't been verified on
-        // a real device. Labeled raw source is the same honest fallback iOS
-        // uses for math (UnifiedBlockRenderer.swift) and this codebase
-        // already uses for diagrams elsewhere (MermaidBlockRenderer.kt).
-        Text(
-            text = payload.source,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp,
-            color = color,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-                .padding(12.dp),
-        )
+        when (payload.format.lowercase()) {
+            "mermaid" -> WebViewBlock(WebViewBlockKind.MERMAID, payload.source)
+            "math" -> WebViewBlock(WebViewBlockKind.LATEX, payload.source)
+            else -> Text(
+                text = payload.source,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = color,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+            )
+        }
     }
 }
 

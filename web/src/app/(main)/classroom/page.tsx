@@ -5,25 +5,32 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
+  ArrowLeft, BookOpenCheck, ChevronLeft, ChevronRight, HelpCircle, Zap, Send,
   NotebookPen, Volume2, VolumeX, AudioLines, X, Hand, Sparkles,
   Accessibility, Gauge, Settings2, Timer, Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CALL_TO_ACTION, invitation } from '@/lib/teach-it.mjs';
 import {
+  configureDictation,
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
+import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
 import {
   useClassroomStore,
   type ClassroomConnection,
   type ClassroomMode,
   type HintLevel,
 } from '@/stores/classroom-store';
-import { BoardElementView } from '@/components/classroom/BoardElementView';
+import { ClassroomWorkspace } from '@/components/classroom/ClassroomWorkspace';
+import { classroomIsPaused, workspaceScrollAnchor } from '@/lib/board-presentation.mjs';
 import { upsertCourseOnStart } from '@/lib/stack';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
+import {
+  CLASSROOM_STALL_NOTICE,
+  CLASSROOM_STALL_RECOVERY,
+} from '@/lib/classroom-contract.mjs';
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
@@ -66,6 +73,10 @@ function ClassroomStage() {
   const reviewConceptId = params.get('reviewConceptId') || undefined;
   const objective = params.get('objective') || `Understand and apply ${topic}`;
   const recordScope = params.get('recordScope') === 'unit' ? 'unit' : 'topic';
+  // Default: this is a new class. A link that means "put me back where I
+  // was" has to say so, because the alternative — every entry resuming —
+  // is what made a second class on a topic open mid-lesson.
+  const resume = params.get('resume') === '1';
   const language = params.get('language') || 'auto';
   const difficultyParam = params.get('difficulty');
   const difficulty: ClassroomConnection['difficulty'] = difficultyParam === 'beginner'
@@ -91,7 +102,14 @@ function ClassroomStage() {
   const animationsOff = reduceMotion || systemReducedMotion === true;
   const connection: ClassroomConnection = {
     topic,
-    sessionId: courseId,
+    // Deliberately no `sessionId`. This route knows which *course* the
+    // learner opened, never which server session they should land in —
+    // that is what classroomSessionStart decides from the course's own
+    // history. Pinning it here (it used to send the course id) short-
+    // circuited that decision on every single web entry: repeat visits kept
+    // sending the original id, `resume=1` did nothing, and each connect
+    // reset the saved generation to 1. The stuck-session bug this whole
+    // change exists to fix, still fixed everywhere except in the app.
     courseId,
     lessonId,
     reviewConceptId,
@@ -102,15 +120,18 @@ function ClassroomStage() {
     durationMinutes,
     reducedMotion: animationsOff,
     language,
+    resume,
   };
 
   const {
     status, board, boardHistory, recordConcepts, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, soundOn, voiceOn, speechRate, languageCode,
+    progressCurrent, progressTotal, error, notice, stallPhase, resumable, soundOn, voiceOn,
+    speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
     askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
     setSpeechRate, viewBoard, interruptPrompt,
+    nudgeTeacher, restartLesson, resumeLesson, dismissNotice,
   } = useClassroomStore();
   const lessonConcepts = useMemo(
     () => conceptsShownInClass(board, boardHistory),
@@ -133,16 +154,21 @@ function ClassroomStage() {
   const boardScrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
+  const transcriptRef = useRef(createTranscriptAccumulator());
+  const dictatingRef = useRef(false);
 
   useEffect(() => {
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language]);
+  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language, resume]);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
-    return () => recognitionRef.current?.stop();
+    return () => {
+      dictatingRef.current = false;
+      recognitionRef.current?.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -170,15 +196,21 @@ function ClassroomStage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, topic]);
 
+  // Nothing has been taught yet: the board still holds only the cover page.
+  // The offer of an unfinished class belongs to that moment alone — taking it
+  // mid-lesson would discard the lesson the learner is already being taught,
+  // which is what leaving the banner up for the whole session invited.
+  const openingOnly = board.every((el) => el.kind === 'opening');
   const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
   const totalBoards = boardHistory.length;
+  const lessonPaused = classroomIsPaused(board);
   const activeCheckpoint = viewingBoard === -1
     ? [...board].reverse().find((el) =>
       (el.kind === 'quiz' && !el.answered && !el.skipped)
       || (el.kind === 'transfer' && !el.submitted && !el.skipped))
     : undefined;
-  const latestBoardId = shownBoard[shownBoard.length - 1]?.id;
-  const focusElementId = activeCheckpoint?.id ?? latestBoardId;
+  const scrollAnchorId = workspaceScrollAnchor(shownBoard);
+  const focusElementId = activeCheckpoint?.id ?? scrollAnchorId;
 
   // Bring the *start* of the new question into view. Scrolling to the bottom
   // clipped the question and left only its last sentence on short phones.
@@ -197,7 +229,7 @@ function ClassroomStage() {
     // Answering updates the same card. It must not reposition the board while
     // the learner is reading the feedback; a new board element does reposition it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestBoardId, viewingBoard, animationsOff]);
+  }, [scrollAnchorId, viewingBoard, animationsOff]);
 
   const pendingCheckpoint = board.some((el) =>
     (el.kind === 'quiz' && !el.answered && !el.skipped)
@@ -205,7 +237,7 @@ function ClassroomStage() {
   // Some scenes omit CTAButton. The server accepts `continue` once the
   // teacher finishes a scene with no unanswered checkpoint.
   const readyToContinue = status === 'live' && viewingBoard === -1
-    && !waitingForScene && !isNarrating && !prompt && !pendingCheckpoint
+    && !waitingForScene && (!isNarrating || lessonPaused) && !prompt && !pendingCheckpoint
     && (canContinue || board.length > 0);
   const primaryContinue = languageCode.toLowerCase().startsWith('es') ? 'Continuar' : 'Continue';
   const normalizedContinueLabel = continueLabel.trim();
@@ -263,8 +295,21 @@ function ClassroomStage() {
     setHintMenuOpen(false);
   };
 
+  /**
+   * End dictation for good.
+   *
+   * Clearing the flag before stopping matters: the recognizer restarts itself
+   * after a pause, and only this flag tells a deliberate stop from a breath.
+   */
+  const stopDictation = () => {
+    dictatingRef.current = false;
+    setListeningTarget(null);
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+  };
+
   const submitQuestion = () => {
     if (!question.trim()) return;
+    stopDictation();
     askQuestion(question);
     setQuestion('');
     setHandRaised(false);
@@ -274,44 +319,75 @@ function ClassroomStage() {
     if (!response.trim()) return;
     if (answerPrompt(response.trim())) {
       setPromptResponse('');
-      recognitionRef.current?.stop();
+      stopDictation();
+    }
+  };
+
+  // A dictated question may outlast one recognizer — each ends itself after a
+  // pause — so the transcript lives here and is carried across every restart.
+  const startDictation = (target: 'question' | 'prompt', continuing = false): boolean => {
+    const recognition = createBrowserSpeechRecognition();
+    if (!recognition) return false;
+    recognitionRef.current = recognition;
+    configureDictation(recognition, language === 'auto' ? null : language);
+    if (continuing) transcriptRef.current.carryOver();
+
+    recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      const { combined } = transcriptRef.current.push(event);
+      const base = dictationBaseRef.current;
+      const text = (base + tidyTranscript(combined, { capitalize: !base })).slice(0, 1000);
+      if (target === 'prompt') setPromptResponse(text);
+      else setQuestion(text);
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
+      if (!dictatingRef.current) {
+        setListeningTarget(null);
+        return;
+      }
+      window.setTimeout(() => {
+        if (!dictatingRef.current) return;
+        if (!startDictation(target, true)) {
+          dictatingRef.current = false;
+          setListeningTarget(null);
+        }
+      }, 120);
+    };
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      recognitionRef.current = null;
+      dictatingRef.current = false;
+      setListeningTarget(null);
+    };
+
+    try {
+      recognition.start();
+      return true;
+    } catch {
+      recognitionRef.current = null;
+      return false;
     }
   };
 
   const toggleDictation = (target: 'question' | 'prompt') => {
     if (listeningTarget) {
-      recognitionRef.current?.stop();
+      stopDictation();
       return;
     }
-    const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return;
+    if (!createBrowserSpeechRecognition()) return;
     if (target === 'prompt' && prompt) {
       setEngagedPromptId(prompt.id);
       interruptPrompt();
     } else takeFloor();
-    recognitionRef.current = recognition;
+    transcriptRef.current.reset();
     const currentValue = target === 'prompt' ? promptResponse : question;
     dictationBaseRef.current = currentValue ? currentValue.replace(/\s*$/, ' ') : '';
-    recognition.lang = language === 'auto' ? navigator.language || 'en-US' : language;
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0].transcript;
-      }
-      const text = (dictationBaseRef.current + transcript).slice(0, 1000);
-      if (target === 'prompt') setPromptResponse(text);
-      else setQuestion(text);
-    };
-    recognition.onend = () => setListeningTarget(null);
-    recognition.onerror = () => setListeningTarget(null);
-    try {
-      recognition.start();
-      setListeningTarget(target);
-    } catch {
-      setListeningTarget(null);
-    }
+    dictatingRef.current = true;
+    if (startDictation(target)) setListeningTarget(target);
+    else dictatingRef.current = false;
   };
 
   return (
@@ -339,12 +415,14 @@ function ClassroomStage() {
             {lessonId ? `Lesson ${lessonId}` : 'Guided lesson'} · {objective}
           </p>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em]">
-            {status === 'live' ? <span className="text-emerald-300">● Live</span>
+            {status === 'live' ? lessonPaused
+              ? <span className="text-[var(--warning)]">● Paused</span>
+              : <span className="text-[var(--success)]">● Live</span>
               : status === 'connecting' ? <span className="text-white/60">Connecting…</span> : <span className="text-white/60">{status}</span>}
           </p>
           {progressTotal > 0 && (
             <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10" aria-label={`${progressCurrent} of ${progressTotal} skills practised`}>
-              <div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
+              <div className="h-full rounded-full bg-gradient-to-r from-lyo-500 to-accent-purple transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
             </div>
           )}
         </div>
@@ -391,7 +469,7 @@ function ClassroomStage() {
         <div
           role="region"
           aria-label="Classroom settings"
-          className="mx-4 mb-2 grid gap-3 rounded-xl border border-white/10 bg-[#111a38] p-3 text-xs text-white/75 sm:grid-cols-3"
+          className="mx-4 mb-2 grid gap-3 rounded-xl border border-white/10 bg-[var(--surface)] p-3 text-xs text-white/75 sm:grid-cols-3"
         >
           <div className="flex gap-2 sm:hidden">
             <button type="button" onClick={toggleSound}
@@ -410,7 +488,7 @@ function ClassroomStage() {
             <select
               value={mode}
               onChange={(event) => setMode(event.target.value as ClassroomMode)}
-              className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
+              className="w-full rounded-lg border border-white/15 bg-[var(--background)] px-2 py-2 text-white"
             >
               <option value="solo">Solo teacher</option>
               <option value="classroom">Classroom discussion</option>
@@ -425,7 +503,7 @@ function ClassroomStage() {
             <select
               value={durationMinutes}
               onChange={(event) => setDurationMinutes(Number(event.target.value))}
-              className="w-full rounded-lg border border-white/15 bg-[#0a1026] px-2 py-2 text-white"
+              className="w-full rounded-lg border border-white/15 bg-[var(--background)] px-2 py-2 text-white"
             >
               {SESSION_LENGTHS.map((minutes) => (
                 <option key={minutes} value={minutes}>{minutes} minutes</option>
@@ -449,7 +527,7 @@ function ClassroomStage() {
               <select
                 value={speechRate}
                 onChange={(event) => setSpeechRate(Number(event.target.value))}
-                className="rounded border border-white/15 bg-[#0a1026] px-1.5 py-1 text-white"
+                className="rounded border border-white/15 bg-[var(--background)] px-1.5 py-1 text-white"
               >
                 <option value={0.75}>0.75×</option>
                 <option value={1}>1×</option>
@@ -460,13 +538,55 @@ function ClassroomStage() {
         </div>
       )}
 
+      {/* One teacher, one synchronized transcript. ClassroomCaptionSync owns
+          the visual text; this component owns the semantic live region. */}
+      <div className={cn(
+        'mx-3 mb-3 flex min-h-[92px] shrink-0 items-center gap-3 rounded-2xl border bg-[var(--surface-2)] px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl sm:mx-4 sm:px-4',
+        'border-lyo-400/30',
+      )}>
+        <motion.img
+          key={lyoState}
+          src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
+          alt={`Lyo is ${lyoState}`}
+          className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.55)]"
+          initial={animationsOff ? false : { scale: 0.7 }}
+          animate={animationsOff
+            ? { scale: 1, rotate: 0, y: 0 }
+            : lyoState === 'celebrating'
+              ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
+              : { scale: 1, rotate: 0, y: 0 }}
+          transition={{ duration: animationsOff ? 0 : 0.6 }}
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">{activeSpeaker && activeSpeaker !== 'Teacher' ? `${activeSpeaker} speaks` : 'Lyo explains'}</p>
+            {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
+          </div>
+          <div data-classroom-caption-target className={cn('relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]')}>
+          <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+            {caption ? `${caption.speaker}: ${caption.text}` : ''}
+          </span>
+          {!caption && (
+            <p className="flex h-full items-center text-sm font-medium text-white/75">
+              {stallPhase === 'slow' && status === 'live'
+                ? CLASSROOM_STALL_NOTICE
+                : waitingForScene || status === 'connecting'
+                ? board.some((el) => (el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted))
+                  ? 'Lyo is checking your answer…' : 'Lyo is preparing the next step…'
+                : pendingCheckpoint || prompt ? 'Your turn — respond to Lyo' : 'Lyo is ready'}
+            </p>
+          )}
+          </div>
+        </div>
+      </div>
+
       {/* The board grows with the lesson. Only this area scrolls when a scene
           is longer than the available phone height; the teacher stays visible. */}
       {(shownBoard.length > 0 || !prompt || error) && (
       <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 sm:mx-4">
         <div className={cn(
           'flex min-h-[180px] flex-col rounded-[22px] border border-white/10 overflow-hidden',
-          'bg-[radial-gradient(ellipse_at_top,#1b2850_0%,#101936_48%,#090f24_100%)]',
+          'bg-[var(--surface)]',
           'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_70px_rgba(2,6,23,0.45),0_18px_50px_rgba(2,6,23,0.42)]',
         )}>
           {(canGoBack || canGoNext || viewingBoard !== -1) && (
@@ -524,9 +644,81 @@ function ClassroomStage() {
                 </Link>
               </div>
             )}
+            {/* A seat the learner left part-way through, offered rather than
+                forced on them. Opening the same topic again now starts a new
+                class, so the old one has to be reachable on purpose or it is
+                simply gone. */}
+            {resumable && viewingBoard === -1 && status !== 'error' && openingOnly && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/12 bg-white/5 px-4 py-3">
+                <p className="text-sm text-white/75">
+                  You have an unfinished class on this topic.
+                </p>
+                <button
+                  onClick={resumeLesson}
+                  className="min-h-11 rounded-full border border-teal-300/40 bg-teal-400/10 px-4 py-2 text-sm font-semibold text-teal-100 hover:bg-teal-400/20"
+                >
+                  Pick up where I left off
+                </button>
+              </div>
+            )}
+
+            {/* Something the classroom reported and is carrying on from. Not
+                the fatal banner above: the class is still open. */}
+            {notice && status !== 'error' && (
+              <div
+                role="status"
+                className="flex items-start justify-between gap-3 rounded-xl border border-amber-300/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+              >
+                <span>{notice}</span>
+                <button
+                  onClick={dismissNotice}
+                  aria-label="Dismiss this message"
+                  className="shrink-0 rounded-full p-1 text-amber-200/70 hover:text-amber-100"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* The step never arrived. The class says so, says it is not the
+                learner's fault, and gives them two things that actually move
+                it — asking again, and leaving the stuck session behind. A
+                "Retry" that silently re-enters the same dead session is what
+                made this a loop rather than a hiccup. */}
+            {stallPhase === 'stalled' && status === 'live' && (
+              <div
+                role="alert"
+                className="space-y-3 rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-4"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpenCheck className="h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
+                  <p className="font-rounded text-sm font-bold text-amber-100">
+                    This step is stuck
+                  </p>
+                </div>
+                <p className="text-sm leading-relaxed text-amber-100/85">
+                  {CLASSROOM_STALL_RECOVERY}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={nudgeTeacher}
+                    className="min-h-11 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#0A0D16]"
+                  >
+                    Ask Lyo again
+                  </button>
+                  <button
+                    onClick={restartLesson}
+                    className="min-h-11 rounded-full border border-white/25 px-4 py-2 text-sm font-semibold text-white/85 hover:bg-white/10"
+                  >
+                    Start this lesson over
+                  </button>
+                </div>
+              </div>
+            )}
+
             {shownBoard.length === 0 && !prompt && status !== 'error' && status !== 'ended' && (
               <div className="flex min-h-[150px] flex-col items-center justify-center gap-3 text-center">
-                <Sparkles className="h-6 w-6 text-teal-300" aria-hidden="true" />
+                <Sparkles className="h-6 w-6 text-lyo-300" aria-hidden="true" />
                 <div className="space-y-1.5">
                   <p className="text-sm font-semibold text-white/80">
                     {status === 'connecting' ? 'Setting up your class'
@@ -541,7 +733,7 @@ function ClassroomStage() {
                   {[0, 1, 2].map((i) => (
                     <motion.span
                       key={i}
-                      className="h-1.5 w-1.5 rounded-full bg-teal-300/70"
+                      className="h-1.5 w-1.5 rounded-full bg-lyo-300/70"
                       animate={animationsOff ? undefined : { opacity: [0.25, 1, 0.25] }}
                       transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.18 }}
                     />
@@ -549,10 +741,8 @@ function ClassroomStage() {
                 </div>
               </div>
             )}
-            {shownBoard.map((el) => (
-              <BoardElementView
-                key={el.id}
-                el={el}
+            <ClassroomWorkspace
+                elements={shownBoard}
                 awaitingFeedback={waitingForScene}
                 onQuizAnswer={answerQuiz}
                 onTransferSubmit={answerTransfer}
@@ -562,47 +752,12 @@ function ClassroomStage() {
                 onAskHelp={() => requestHint('nudge')}
                 reducedMotion={animationsOff}
               />
-            ))}
           </div>
 
-          <div className="mx-8 h-px shrink-0 bg-gradient-to-r from-transparent via-teal-300/30 to-transparent" />
+          <div className="mx-8 h-px shrink-0 bg-gradient-to-r from-transparent via-lyo-400/30 to-transparent" />
         </div>
       </div>
       )}
-
-      {/* One teacher, one synchronized transcript. ClassroomCaptionSync owns
-          the visual text; this component owns the semantic live region. */}
-      <div className={cn(
-        'mx-3 mt-auto flex min-h-[72px] shrink-0 items-center gap-3 rounded-2xl border bg-[#111936]/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl sm:mx-4 sm:px-4',
-        voiceOn ? 'border-white/10' : 'border-teal-300/20',
-      )}>
-        <motion.img
-          key={lyoState}
-          src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
-          alt={`Lyo is ${lyoState}`}
-          className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.55)]"
-          initial={animationsOff ? false : { scale: 0.7 }}
-          animate={animationsOff
-            ? { scale: 1, rotate: 0, y: 0 }
-            : lyoState === 'celebrating'
-              ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
-              : { scale: 1, rotate: 0, y: 0 }}
-          transition={{ duration: animationsOff ? 0 : 0.6 }}
-        />
-        <div data-classroom-caption-target className="relative min-w-0 flex-1 self-stretch overflow-hidden">
-          <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-            {caption ? `${caption.speaker}: ${caption.text}` : ''}
-          </span>
-          {!caption && (
-            <p className="flex h-full items-center text-sm font-medium text-white/75">
-              {waitingForScene || status === 'connecting'
-                ? board.some((el) => (el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted))
-                  ? 'Lyo is checking your answer…' : 'Lyo is preparing the next step…'
-                : pendingCheckpoint || prompt ? 'Your turn — respond to Lyo' : 'Lyo is ready'}
-            </p>
-          )}
-        </div>
-      </div>
 
       {/* A director prompt can have choices or ask for an open response. */}
       <AnimatePresence>
@@ -700,7 +855,7 @@ function ClassroomStage() {
               <div
                 role="menu"
                 aria-label="Choose a hint level"
-                className="absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden rounded-xl border border-white/15 bg-[#111a38] p-1 shadow-2xl"
+                className="absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden rounded-xl border border-white/15 bg-[var(--surface)] p-1 shadow-2xl"
               >
                 {hintOptions.map((option) => (
                   <button

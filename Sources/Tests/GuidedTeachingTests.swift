@@ -15,6 +15,23 @@ final class GuidedTeachingTests: XCTestCase {
         return try JSONDecoder().decode(Fixtures.self, from: Data(contentsOf: url))
     }
 
+    private func assertExamplesPreserved(
+        _ step: ActiveLessonView.LessonStep,
+        from components: [SDUIComponent],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let expected = components.filter { $0.type == .exampleBlock }
+        XCTAssertFalse(expected.isEmpty, "The fixture must include a worked example", file: file, line: line)
+        XCTAssertEqual(
+            step.workspaceComponents.filter { $0.type == .exampleBlock },
+            expected,
+            "Every original example must survive in the teaching workspace",
+            file: file,
+            line: line
+        )
+    }
+
     func testOrientationAndModelsKeepWorkedExamplesVisualsAndCanonicalContinue() throws {
         let fixture = try fixtures()
         for name in ["orientation", "model_1", "model_2"] {
@@ -22,7 +39,7 @@ final class GuidedTeachingTests: XCTestCase {
             let steps = ActiveLessonAdapter.steps(from: components)
             XCTAssertEqual(steps.count, 1)
             let step = try XCTUnwrap(steps.first)
-            XCTAssertFalse(step.teachingExamples.isEmpty, "Adding the CTA must preserve the example")
+            assertExamplesPreserved(step, from: components)
             XCTAssertNotNil(step.teachingVisual)
             XCTAssertEqual(step.activityId, components.first { $0.teachingVisual != nil }?.id)
             XCTAssertEqual(step.primaryActionComponentId, components.first { $0.type == .ctaButton }?.id)
@@ -79,7 +96,7 @@ final class GuidedTeachingTests: XCTestCase {
         let components = try XCTUnwrap(fixture.scenes["focused_example"]?.components)
         let step = try XCTUnwrap(ActiveLessonAdapter.steps(from: components).first)
 
-        XCTAssertFalse(step.teachingExamples.isEmpty)
+        assertExamplesPreserved(step, from: components)
         XCTAssertNotNil(step.teachingVisual)
         XCTAssertEqual(step.primaryActionIntent, "continue")
         // Teaching, not a question: the checkpoint comes after the step.
@@ -93,13 +110,13 @@ final class GuidedTeachingTests: XCTestCase {
         let guided = try XCTUnwrap(ActiveLessonAdapter.steps(from: fixture.scenes["guided"]!.components).first)
         guard case .classroomQuiz(let question)? = guided.supporting else { return XCTFail("Guided practice must be a choice") }
         XCTAssertEqual(question.options?.count, 2)
-        XCTAssertFalse(guided.teachingExamples.isEmpty)
+        assertExamplesPreserved(guided, from: fixture.scenes["guided"]!.components)
         XCTAssertEqual(guided.teachingVisual?.kind, "comparison")
         let faded = try XCTUnwrap(ActiveLessonAdapter.steps(from: fixture.scenes["faded"]!.components).first)
         guard case .classroomInput(let input)? = faded.supporting else { return XCTFail("Faded practice must retain the short answer input") }
         XCTAssertTrue(input.question?.contains("1/__") == true)
         XCTAssertEqual(input.minWords, 1)
-        XCTAssertFalse(faded.teachingExamples.isEmpty)
+        assertExamplesPreserved(faded, from: fixture.scenes["faded"]!.components)
     }
 
     func testEveryTeachingToolDecodesAndRoundTripsItsSavedValues() throws {
@@ -116,5 +133,33 @@ final class GuidedTeachingTests: XCTestCase {
         XCTAssertEqual(evaluate(["x": 1, "a": 2]), 2)
         XCTAssertEqual(graph.yMin, -10)
         XCTAssertEqual(graph.yMax, 10)
+    }
+
+    func testChatAndTestPrepPieUsesTheClassroomContractAndSurvivesPersistence() throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "SharedFractionPie", withExtension: "json"))
+        let block = try JSONDecoder().decode(SmartBlock.self, from: Data(contentsOf: url))
+        XCTAssertEqual(block.subtype, "teaching_visual")
+        guard case .interactive(let payload) = block.content else { return XCTFail("Expected a shared teaching visual") }
+        let raw = try XCTUnwrap(payload.visual)
+        let visual = try JSONDecoder().decode(ClassroomTeachingVisual.self, from: JSONEncoder().encode(raw))
+        XCTAssertTrue(visual.isValid)
+        XCTAssertEqual(visual.kind, "fraction_pie")
+        XCTAssertEqual(visual.parts, 4)
+        XCTAssertEqual(visual.value, 3)
+        XCTAssertEqual(payload.items.first?.detail, visual.description)
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let restored = try decoder.decode(SmartBlock.self, from: encoder.encode(block))
+        guard case .interactive(let saved) = restored.content else { return XCTFail("Lost the interactive payload") }
+        let savedRaw = try XCTUnwrap(saved.visual)
+        XCTAssertEqual(try JSONDecoder().decode(ClassroomTeachingVisual.self, from: JSONEncoder().encode(savedRaw)), visual)
+        let componentData = try JSONSerialization.data(withJSONObject: [
+            "component_id": "visual:fractions", "type": "LessonBlock", "block_type": "teaching_visual",
+            "block": try JSONSerialization.jsonObject(with: JSONEncoder().encode(visual)),
+        ])
+        let component = try JSONDecoder().decode(SDUIComponent.self, from: componentData)
+        XCTAssertEqual(component.teachingVisual, visual)
     }
 }

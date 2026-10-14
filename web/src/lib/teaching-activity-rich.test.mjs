@@ -85,3 +85,31 @@ test('annotated images reject arbitrary model supplied URLs', () => {
   };
   assert.equal(parseTeachingVisual(invalid), null);
 });
+
+test('approved educational archives survive Classroom visual validation', () => {
+  const approved = [
+    ['https://upload.wikimedia.org/a/leaf.jpg', 'https://commons.wikimedia.org/wiki/File:Leaf.jpg'],
+    ['https://images.pexels.com/photos/123/leaf.jpeg', 'https://www.pexels.com/photo/green-leaf-123/'],
+    ['https://images-assets.nasa.gov/image/PIA1/PIA1~thumb.jpg', 'https://images.nasa.gov/details/PIA1'],
+    ['https://ids.si.edu/ids/deliveryService?id=ABC', 'https://www.si.edu/object/edanmdm-nmnh-abc'],
+  ];
+  for (const [image_url, source_url] of approved) {
+    const visual = { ...base, kind: 'annotated_image', image_query: 'scientific specimen', image_url, source_url };
+    assert.deepEqual(parseTeachingVisual(visual), visual);
+  }
+});
+
+test('image and attribution host checks reject impersonation and cross-host confusion', () => {
+  const valid = { ...base, kind: 'annotated_image', image_query: 'leaf' };
+  const forbidden = [
+    ['https://images.pexels.com.evil.test/photo.jpg', 'https://www.pexels.com/photo/leaf-2/'],
+    ['https://evil.test@images.pexels.com/photo.jpg', 'https://www.pexels.com/photo/leaf-2/'],
+    ['http://images.pexels.com/photos/a.jpg', 'https://www.pexels.com/photo/leaf-2/'],
+    ['https://images.pexels.com/photos/a.jpg', 'https://www.pexels.com.evil.test/photo/leaf/'],
+    ['https://images-assets.nasa.gov/image/file.jpg', 'https://images-assets.nasa.gov/details/PIA'],
+    ['https://images.pexels.com/photos/a.jpg', 'https://images.nasa.gov.evil.test/details/PIA'],
+  ];
+  for (const [image_url, source_url] of forbidden) {
+    assert.equal(parseTeachingVisual({ ...valid, image_url, source_url }), null);
+  }
+});

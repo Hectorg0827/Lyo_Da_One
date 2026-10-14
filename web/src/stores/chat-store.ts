@@ -13,6 +13,7 @@ import { generateId } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { parseCanonicalChatContent } from '@/lib/chat-attachments';
 import { publishVoiceStreamEvent } from '@/lib/conversational-voice';
+import { reportActiveVoiceQuality, voiceQualityNow } from '@/lib/voice-quality';
 import {
   emptyTeachingRuntimeState,
   reduceTeachingPolicy,
@@ -168,6 +169,14 @@ interface ChatStore {
   sessionSummary: SessionSummary | null;
   dueReviews: DueReviewItem[];
   voiceSessionActive: boolean;
+  /**
+   * How much of an assistant answer Lyo has actually said out loud.
+   *
+   * A streamed answer arrives far faster than it can be spoken, so during a
+   * live conversation the message is shown only as far as the voice has read,
+   * and the clamp is released (null) once the turn is over.
+   */
+  voiceSpokenText: { messageId: string; text: string } | null;
 
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
@@ -180,6 +189,7 @@ interface ChatStore {
   ) => Promise<void>;
   reviseActiveCourse: (adjustment: string | CourseRevisionInput) => Promise<void>;
   undoCourseRevision: () => Promise<void>;
+  updateVisual: (conversationId: string, messageId: string, blockId: string, values: Record<string, unknown>) => Promise<boolean>;
   answerCheck: (
     messageId: string,
     blockId: string,
@@ -200,6 +210,7 @@ interface ChatStore {
   fetchDueReviews: () => Promise<void>;
   dismissDueReview: (skillId: string) => void;
   setVoiceSessionActive: (active: boolean) => void;
+  setVoiceSpokenText: (value: { messageId: string; text: string } | null) => void;
   interruptGeneration: () => void;
 }
 
@@ -215,8 +226,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionSummary: null,
   dueReviews: [],
   voiceSessionActive: false,
+  voiceSpokenText: null,
 
-  setVoiceSessionActive: (active) => set({ voiceSessionActive: active }),
+  setVoiceSessionActive: (active) => set({
+    voiceSessionActive: active,
+    ...(active ? {} : { voiceSpokenText: null }),
+  }),
+  setVoiceSpokenText: (value) => set({ voiceSpokenText: value }),
   interruptGeneration: () => {
     activeStreamToken += 1;
     activeStreamController?.abort();
@@ -638,6 +654,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       typeof performance !== 'undefined' ? performance.now() : Date.now();
     let firstVisibleChunkRecorded = false;
     let receivedTextDelta = false;
+    let voiceHandoffTarget: string | null = null;
+    let voiceHandoffReadyReported = false;
 
     try {
       activeStreamController = api.chat.stream(
@@ -648,32 +666,50 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const block = chunk.block as Record<string, unknown> | undefined;
           const blockContent = block?.content as Record<string, unknown> | undefined;
           if (chunk.type === 'voice_text_segment') {
+            // These events are addressed to the message this client is
+            // rendering, so they carry its id. The server's own id names a
+            // row this client has never seen: anything matching on it — the
+            // display following the voice, the guard against speaking a turn
+            // twice — silently never matches.
             if (
               typeof chunk.text === 'string'
               && typeof chunk.sequence === 'number'
-              && typeof chunk.message_id === 'string'
             ) {
               publishVoiceStreamEvent({
                 type: 'voice_text_segment',
                 text: chunk.text,
                 sequence: chunk.sequence,
-                messageId: chunk.message_id,
+                messageId: aiMessageId,
               });
             }
           } else if (chunk.type === 'voice_ready') {
-            if (typeof chunk.text === 'string' && typeof chunk.message_id === 'string') {
+            if (typeof chunk.text === 'string') {
               publishVoiceStreamEvent({
                 type: 'voice_ready',
                 text: chunk.text,
-                messageId: chunk.message_id,
+                messageId: aiMessageId,
                 speak: chunk.speak !== false,
               });
+              if (
+                voiceHandoffTarget
+                && !voiceHandoffReadyReported
+                && voiceHandoffTarget !== 'course'
+              ) {
+                voiceHandoffReadyReported = true;
+                reportActiveVoiceQuality('voice_handoff_ready', {
+                  target: voiceHandoffTarget,
+                  stream_elapsed_ms: Math.max(
+                    0,
+                    Math.round(voiceQualityNow() - streamStartedAt),
+                  ),
+                }, { conversationId: convoId! });
+              }
             }
           } else if (chunk.type === 'voice_incomplete') {
             publishVoiceStreamEvent({
               type: 'voice_incomplete',
               text: typeof chunk.text === 'string' ? chunk.text : '',
-              messageId: typeof chunk.message_id === 'string' ? chunk.message_id : aiMessageId,
+              messageId: aiMessageId,
             });
           } else if (chunk.type === 'interaction_contract') {
             patchAiMessage({
@@ -686,6 +722,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 },
               },
             });
+            if (options.voiceSession || get().voiceSessionActive) {
+              const workflow = typeof chunk.workflow_intent === 'string'
+                ? chunk.workflow_intent
+                : '';
+              if (workflow) {
+                voiceHandoffTarget = workflow.toLowerCase();
+                reportActiveVoiceQuality('voice_handoff_requested', {
+                  target: voiceHandoffTarget,
+                  contract_mode: typeof chunk.mode === 'string' ? chunk.mode : 'unknown',
+                }, { conversationId: convoId! });
+              }
+            }
           } else if (chunk.type === 'teaching_policy') {
             teachingRuntimeByConversation.set(
               convoId!,
@@ -765,9 +813,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               if (chunk.type === 'text_delta') {
                 receivedTextDelta = true;
                 appendToAiMessage(text);
-              } else if (!(chunk.type === 'answer' && receivedTextDelta)) {
-                // The backend preserves a final answer snapshot for old clients.
-                // After deltas have rendered, appending it would duplicate text.
+              } else if (chunk.type === 'answer' && receivedTextDelta) {
+                // The verified final snapshot can correct streamed draft text.
+                // Reconcile it in place so copy, history and rendered text agree.
+                accumulated = text;
+                patchAiMessage({ content: accumulated });
+              } else {
                 appendToAiMessage(text);
               }
             }
@@ -789,6 +840,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             appendToAiMessage(chunk.text);
           } else if (chunk.type === 'open_classroom') {
             receivedContent = true;
+            if (options.voiceSession || get().voiceSessionActive) {
+              if (!voiceHandoffReadyReported) {
+                voiceHandoffReadyReported = true;
+                reportActiveVoiceQuality('voice_handoff_ready', {
+                  target: 'classroom',
+                  preview: chunk.preview === true,
+                  stream_elapsed_ms: Math.max(
+                    0,
+                    Math.round(voiceQualityNow() - streamStartedAt),
+                  ),
+                }, { conversationId: convoId! });
+              }
+            }
             const isPreview = chunk.preview === true;
             const classroomBlock = chunk.block as { content?: Record<string, any> } | undefined;
             const courseData = (classroomBlock?.content?.course || classroomBlock?.content) as
@@ -921,6 +985,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         () => {
           if (streamToken !== activeStreamToken) return;
           activeStreamController = null;
+          if (options.voiceSession || get().voiceSessionActive) {
+            reportActiveVoiceQuality('stream_disconnected', {
+              stream_elapsed_ms: Math.max(
+                0,
+                Math.round(voiceQualityNow() - streamStartedAt),
+              ),
+            }, { conversationId: convoId! });
+          }
           recoverCanonicalConversation(convoId!);
         },
         convoId,
@@ -972,12 +1044,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         generationActivity: 'thinking',
         courseGenerationState: null,
       });
+      const recoveryStartedAt = voiceQualityNow();
       try {
         // A broken SSE connection does not imply the server failed. Reload the
         // canonical thread so a completed answer is recovered without creating
         // a second, device-only response.
         await get().loadConversation(cId);
+        if (options.voiceSession || get().voiceSessionActive) {
+          reportActiveVoiceQuality('stream_recovered', {
+            recovery_ms: Math.max(
+              0,
+              Math.round(voiceQualityNow() - recoveryStartedAt),
+            ),
+            canonical_reload: true,
+          }, { conversationId: cId });
+        }
       } catch {
+        if (options.voiceSession || get().voiceSessionActive) {
+          reportActiveVoiceQuality('stream_recovery_failed', {
+            recovery_ms: Math.max(
+              0,
+              Math.round(voiceQualityNow() - recoveryStartedAt),
+            ),
+          }, { conversationId: cId });
+        }
         // Preserve the optimistic user turn until the next successful hydrate.
       }
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
@@ -1170,6 +1260,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
 
     return added;
+  },
+
+  updateVisual: async (conversationId, messageId, blockId, values) => {
+    if (!conversationId || conversationId.startsWith('local-')) return false;
+    try {
+      const { block } = await api.chat.updateVisual({ conversationId, blockId, values });
+      set(state => ({ conversations: state.conversations.map(conversation => conversation.id === conversationId
+        ? { ...conversation, messages: conversation.messages.map(message => message.id === messageId
+          ? { ...message, blocks: message.blocks?.map(existing => existing.id === blockId ? block : existing) }
+          : message) }
+        : conversation) }));
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   answerCheck: async (messageId, blockId, selectedIndex, timeTakenMs = 0, hintUsed = false) => {

@@ -60,6 +60,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
     getActiveConversation,
     sendMessage,
   } = useChatStore();
+  const voiceSpokenText = useChatStore((state) => state.voiceSpokenText);
 
   // A structured lesson renders as blocks; message.content still holds the
   // plain-text version of the same lesson. Only hide that fallback when the
@@ -164,7 +165,14 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   };
 
   const ocData = getOpenClassroomData(message.content);
-  const displayContent = ocData ? ocData.cleanText : message.content;
+  // While Lyo is reading this answer aloud, show only as far as it has read.
+  // The written answer arrives far ahead of the voice, and seeing it whole
+  // before the first word is spoken leaves nothing to follow.
+  const spokenSoFar = voiceSpokenText?.messageId === message.id
+    ? voiceSpokenText.text
+    : null;
+  const writtenContent = ocData ? ocData.cleanText : message.content;
+  const displayContent = !isUser && spokenSoFar !== null ? spokenSoFar : writtenContent;
   const normalizedAssistantContent = isUser ? displayContent : normalizeLatexDelimiters(displayContent);
   const displayCourse = ocData ? ocData.course : (message.type === 'course_proposal' ? message.metadata?.course : null);
   const displayType = ocData ? 'course_proposal' : message.type;

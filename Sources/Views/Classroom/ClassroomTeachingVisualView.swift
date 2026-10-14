@@ -38,18 +38,19 @@ struct ClassroomTeachingVisualView: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.cyan.opacity(0.2)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(DesignTokens.Colors.accentSecondaryLight.opacity(0.2)))
         .accessibilityElement(children: .contain)
     }
 
     private var cardBackground: LinearGradient {
-        LinearGradient(colors: [.cyan.opacity(0.08), .purple.opacity(0.06)],
+        LinearGradient(colors: [DesignTokens.Colors.accentSecondaryLight.opacity(0.08), DesignTokens.Colors.accentSecondary.opacity(0.06)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     @ViewBuilder private var activity: some View {
         switch visual.kind {
         case "fraction_bar": fractionBar
+        case "fraction_pie": FractionPieView(visual: visual, onUpdate: onUpdate)
         case "comparison", "sequence": entrySteps
         case "process_flow": processFlow
         case "timeline": timeline
@@ -64,14 +65,14 @@ struct ClassroomTeachingVisualView: View {
 
     @ViewBuilder private var fractionBar: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(progressLabel).font(.system(.title, design: .rounded).bold()).foregroundStyle(.cyan)
+            Text(progressLabel).font(.system(.title, design: .rounded).bold()).foregroundStyle(DesignTokens.Colors.accentSecondaryLight)
             Spacer()
             Text(shadedAmount).font(.title3.monospacedDigit()).foregroundStyle(.white)
         }
         HStack(spacing: 3) {
             ForEach(0..<visual.parts, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(index < value ? Color.cyan.opacity(0.8) : Color.white.opacity(0.1))
+                    .fill(index < value ? DesignTokens.Colors.accentSecondaryLight.opacity(0.8) : Color.white.opacity(0.1))
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(.white.opacity(0.2)))
             }
         }
@@ -82,7 +83,7 @@ struct ClassroomTeachingVisualView: View {
 
         let binding = Binding<Double>(get: { Double(value) }, set: { change(Int($0)) })
         Slider(value: binding, in: 0...Double(visual.parts), step: 1)
-            .tint(.cyan)
+            .tint(DesignTokens.Colors.accentSecondaryLight)
             .frame(minHeight: 44)
             .accessibilityLabel(visual.title)
             .accessibilityValue(progressLabel)
@@ -102,7 +103,7 @@ struct ClassroomTeachingVisualView: View {
         return Button { change(index) } label: {
             HStack(spacing: 12) {
                 if numbered {
-                    Text("\(index + 1)").monospacedDigit().foregroundStyle(.cyan)
+                    Text("\(index + 1)").monospacedDigit().foregroundStyle(DesignTokens.Colors.accentSecondaryLight)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(visual.entries[index].label).fontWeight(.medium)
@@ -113,14 +114,14 @@ struct ClassroomTeachingVisualView: View {
                     }
                 }
                 Spacer()
-                if selected { Image(systemName: "arrow.right").foregroundStyle(.cyan) }
+                if selected { Image(systemName: "arrow.right").foregroundStyle(DesignTokens.Colors.accentSecondaryLight) }
             }
             .padding(12)
             .frame(minHeight: 48)
-            .background(selected ? Color.cyan.opacity(0.12) : Color.white.opacity(0.04),
+            .background(selected ? DesignTokens.Colors.accentSecondaryLight.opacity(0.12) : Color.white.opacity(0.04),
                         in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12)
-                .stroke(selected ? Color.cyan.opacity(0.5) : Color.white.opacity(0.1)))
+                .stroke(selected ? DesignTokens.Colors.accentSecondaryLight.opacity(0.5) : Color.white.opacity(0.1)))
         }
         .buttonStyle(.plain)
         .foregroundStyle(.white)
@@ -144,7 +145,7 @@ struct ClassroomTeachingVisualView: View {
                 entryRow(index, numbered: false)
                 if index < visual.entries.count - 1 {
                     Image(systemName: "arrow.down")
-                        .foregroundStyle(.cyan.opacity(0.7))
+                        .foregroundStyle(DesignTokens.Colors.accentSecondaryLight.opacity(0.7))
                         .accessibilityHidden(true)
                 }
             }
@@ -159,10 +160,10 @@ struct ClassroomTeachingVisualView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 0) {
                         Circle()
-                            .fill(index == value ? Color.cyan : Color.white.opacity(0.2))
+                            .fill(index == value ? DesignTokens.Colors.accentSecondaryLight : Color.white.opacity(0.2))
                             .frame(width: 16, height: 16)
                         if index < visual.entries.count - 1 {
-                            Rectangle().fill(Color.cyan.opacity(0.25)).frame(width: 2, height: 52)
+                            Rectangle().fill(DesignTokens.Colors.accentSecondaryLight.opacity(0.25)).frame(width: 2, height: 52)
                         }
                     }
                     entryRow(index, numbered: false)
@@ -189,7 +190,7 @@ struct ClassroomTeachingVisualView: View {
                             Button { change(index) } label: {
                                 VStack(spacing: 4) {
                                     Circle()
-                                        .fill(index == value ? Color.cyan : Color.black.opacity(0.8))
+                                        .fill(index == value ? DesignTokens.Colors.accentSecondaryLight : Color.black.opacity(0.8))
                                         .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 2))
                                         .frame(width: 24, height: 24)
                                     Text(visual.entries[index].label)
@@ -227,7 +228,7 @@ struct ClassroomTeachingVisualView: View {
                             Color.white.opacity(0.05)
                                 .overlay(Text(visual.description).font(.caption).foregroundStyle(.white.opacity(0.8)).padding())
                         } else {
-                            ProgressView().tint(.cyan)
+                            ProgressView().tint(DesignTokens.Colors.accentSecondaryLight)
                         }
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
@@ -239,7 +240,7 @@ struct ClassroomTeachingVisualView: View {
                                     .font(.caption.bold())
                                     .foregroundStyle(index == value ? .black : .white)
                                     .frame(width: 30, height: 30)
-                                    .background(index == value ? Color.cyan : Color.black.opacity(0.75), in: Circle())
+                                    .background(index == value ? DesignTokens.Colors.accentSecondaryLight : Color.black.opacity(0.75), in: Circle())
                                     .overlay(Circle().stroke(.white, lineWidth: 2))
                             }
                             .buttonStyle(.plain)
@@ -284,5 +285,124 @@ struct ClassroomTeachingVisualView: View {
         return CurveExplorerView(config: config,
                                  onValuesChange: { params in _ = onUpdate(["params": params]) },
                                  yBounds: visual.yMin...visual.yMax)
+    }
+}
+
+
+/// One native manipulative reused by all three teaching surfaces.
+private struct FractionPieView: View {
+    let visual: ClassroomTeachingVisual
+    let onUpdate: ([String: Any]) -> Bool
+    @State private var parts: Int
+    @State private var selected: Set<Int>
+    @State private var original: (parts: Int, value: Int)
+
+    init(visual: ClassroomTeachingVisual, onUpdate: @escaping ([String: Any]) -> Bool) {
+        self.visual = visual
+        self.onUpdate = onUpdate
+        _parts = State(initialValue: visual.parts)
+        _selected = State(initialValue: Set(0..<visual.value))
+        _original = State(initialValue: (visual.parts, visual.value))
+    }
+
+    private var spanish: Bool { visual.caption.localizedCaseInsensitiveContains("numerador") }
+    private var numerator: Int { selected.count }
+    private var fraction: String { "\(numerator)/\(parts)" }
+    private var decimal: Double { Double(numerator) / Double(parts) }
+    private var reduced: String {
+        var a = numerator, b = parts
+        while b != 0 { let remainder = a % b; a = b; b = remainder }
+        return "\(numerator / a)/\(parts / a)"
+    }
+    private func save() { _ = onUpdate(["value": numerator, "parts": parts]) }
+    private func setNumerator(_ value: Int) {
+        selected = Set(0..<min(parts, max(0, value)))
+        save()
+    }
+    private func setParts(_ next: Int) {
+        let count = min(numerator, next)
+        parts = next
+        selected = Set(0..<count)
+        save()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(fraction).font(.system(.largeTitle, design: .rounded).bold()).foregroundStyle(DesignTokens.Colors.accentSecondaryLight)
+                Text("= \(decimal.formatted(.number.precision(.fractionLength(0...3)))) · \((decimal * 100).formatted(.number.precision(.fractionLength(0...3))))%")
+                    .font(.callout.monospacedDigit()).foregroundStyle(.white.opacity(0.8))
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+            Text("\(spanish ? "Forma simplificada" : "Simplest form"): \(reduced)")
+                .font(.subheadline).foregroundStyle(.white.opacity(0.8))
+            if visual.whole != 1 {
+                Text("\((visual.whole * decimal).formatted(.number.precision(.fractionLength(0...3)))) \(visual.unit)")
+                    .foregroundStyle(.white)
+            }
+            ZStack {
+                ForEach(0..<parts, id: \.self) { index in
+                    Button {
+                        if selected.contains(index) { selected.remove(index) } else { selected.insert(index) }
+                        save()
+                    } label: {
+                        FractionPieSlice(index: index, parts: parts)
+                            .fill(selected.contains(index) ? DesignTokens.Colors.accentSecondaryLight.opacity(0.85) : Color.white.opacity(0.12))
+                            .overlay(FractionPieSlice(index: index, parts: parts).stroke(Color.black.opacity(0.7), lineWidth: 2))
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(FractionPieSlice(index: index, parts: parts))
+                    .accessibilityLabel(spanish ? "Parte \(index + 1) de \(parts)" : "Slice \(index + 1) of \(parts)")
+                    .accessibilityValue(selected.contains(index) ? (spanish ? "Sombreada" : "Shaded") : (spanish ? "Sin sombrear" : "Clear"))
+                }
+            }
+            .frame(maxWidth: 260)
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+
+            Text("\(spanish ? "Numerador · partes sombreadas" : "Numerator · shaded slices"): \(numerator)")
+                .font(.subheadline).foregroundStyle(.white)
+            Slider(value: Binding(get: { Double(numerator) }, set: { setNumerator(Int($0)) }),
+                   in: 0...Double(parts), step: 1)
+                .tint(DesignTokens.Colors.accentSecondaryLight).frame(minHeight: 44)
+                .accessibilityLabel(spanish ? "Numerador" : "Numerator").accessibilityValue(fraction)
+            Text("\(spanish ? "Denominador · partes iguales" : "Denominator · equal slices"): \(parts)")
+                .font(.subheadline).foregroundStyle(.white)
+            Slider(value: Binding(get: { Double(parts) }, set: { setParts(Int($0)) }), in: 1...20, step: 1)
+                .tint(DesignTokens.Colors.accentSecondary).frame(minHeight: 44)
+                .accessibilityLabel(spanish ? "Denominador" : "Denominator")
+                .accessibilityValue("\(parts)")
+            Button(spanish ? "Reiniciar" : "Reset") {
+                parts = original.parts
+                selected = Set(0..<original.value)
+                save()
+            }
+            .buttonStyle(.bordered).frame(minHeight: 44)
+            Text(spanish ? "El entero permanece igual. Cambiar el denominador cambia el tamaño de cada parte."
+                 : "The whole stays the same. Changing the denominator changes the size of each slice.")
+                .font(.caption).foregroundStyle(.white.opacity(0.65))
+        }
+    }
+}
+
+private struct FractionPieSlice: Shape {
+    let index: Int
+    let parts: Int
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(rect.width, rect.height) / 2
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        var path = Path()
+        if parts == 1 {
+            path.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+        } else {
+            path.move(to: center)
+            path.addArc(center: center, radius: radius,
+                        startAngle: .degrees(Double(index) * 360 / Double(parts) - 90),
+                        endAngle: .degrees(Double(index + 1) * 360 / Double(parts) - 90), clockwise: false)
+            path.closeSubpath()
+        }
+        return path
     }
 }

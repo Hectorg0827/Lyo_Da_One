@@ -1,3 +1,4 @@
+import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { canRenderExplorable } from '@/lib/explorable.mjs';
 import type { ChatBlock } from '@/types';
 
@@ -55,6 +56,9 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
     // which would return undefined and hide the fallback just as quietly.
     case 'interactive':
       if (block.subtype === 'explorable') return canRenderExplorable(content);
+      if (block.subtype === 'teaching_visual') {
+        return !!parseTeachingVisual(content.visual) || genericChain(str, content);
+      }
       // Study material synthesized from a prose reply. Each mirrors exactly
       // what its renderer needs, for the same reason as every branch here.
       if (block.subtype === 'studyPlan') {

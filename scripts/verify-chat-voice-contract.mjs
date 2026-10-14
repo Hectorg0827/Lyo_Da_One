@@ -24,6 +24,10 @@ const contracts = [
       'bargeIn',
       'subscribeVoiceStreamEvents',
       'voiceSegmentQueueRef',
+      "reportVoiceQuality(qualityContext(), 'first_audio'",
+      "'false_barge_in'",
+      "'barge_in_confirmed'",
+      "'mic_speech_started'",
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -40,6 +44,33 @@ const contracts = [
       'publishVoiceStreamEvent',
       'interruptGeneration',
       'activeStreamController?.abort()',
+      "'stream_disconnected'",
+      "'stream_recovered'",
+      "'voice_handoff_requested'",
+      "'voice_handoff_ready'",
+    ],
+  },
+  {
+    name: 'Web voice QA is privacy-bounded and uses canonical telemetry endpoint',
+    path: 'web/src/lib/voice-quality.ts',
+    needles: [
+      'sessionId',
+      'turnId',
+      'conversationId',
+      'detectLanguageFamily',
+      'reportVoiceQuality',
+    ],
+    forbidden: [
+      'audio:',
+      'transcript:',
+    ],
+  },
+  {
+    name: 'Web API reports bounded voice quality',
+    path: 'web/src/lib/api.ts',
+    needles: [
+      'reportVoiceQuality',
+      "'/api/v1/lyo2/voice/quality'",
     ],
   },
   {
@@ -144,6 +175,142 @@ for (const contract of contracts) {
   }
   for (const forbidden of contract.forbidden ?? []) {
     if (source.includes(forbidden)) failures.push(`${contract.name}: forbidden separate voice path ${forbidden}`);
+  }
+}
+
+// A learner's turn is sent by a timer counting out the pause after they stop
+// speaking. The recognizer ends itself during that same pause and is replaced
+// moments later, so tearing the timer down with the recognizer means the
+// replacement always wins and the turn is never sent — the session transcribes
+// and then sits there. Ending the turn and stopping the recognizer must stay
+// separate concerns.
+const voiceLayer = 'web/src/components/chat/ConversationalVoiceLayer.tsx';
+if (fs.existsSync(voiceLayer)) {
+  const source = fs.readFileSync(voiceLayer, 'utf8');
+  if (!source.includes('const cancelPendingTurn = useCallback(')) {
+    failures.push('Web voice: end-of-turn cancellation must be its own callback');
+  }
+  const stopRecognition = source.match(
+    /const stopRecognition = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/,
+  );
+  if (!stopRecognition) {
+    failures.push('Web voice: stopRecognition not found in the expected shape');
+  } else if (stopRecognition[1].includes('silenceTimerRef')) {
+    failures.push(
+      'Web voice: stopRecognition must not clear the end-of-turn timer; '
+      + 'restarting the recognizer after a pause would cancel the turn being sent',
+    );
+  }
+  // A turn kept alive across a restart must not then fire into the middle of
+  // the sentence the learner has resumed.
+  const speechStart = source.match(
+    /recognition\.onspeechstart = \(\) => \{([\s\S]*?)\n    \};/,
+  );
+  if (!speechStart) {
+    failures.push('Web voice: onspeechstart not found in the expected shape');
+  } else if (!speechStart[1].includes('armTurnTimer(')) {
+    failures.push(
+      'Web voice: renewed speech must defer the turn already waiting to be sent, '
+      + 'or it submits mid-sentence and truncates the learner',
+    );
+  }
+}
+
+// Playback bleeds back into the microphone, so loudness alone cannot end a
+// turn: Lyo hears itself and cuts itself off. Loudness ducks and waits for the
+// recognizer to confirm words that are not an echo.
+const voiceLayerBarge = 'web/src/components/chat/ConversationalVoiceLayer.tsx';
+if (fs.existsSync(voiceLayerBarge)) {
+  const source = fs.readFileSync(voiceLayerBarge, 'utf8');
+  const bargeIn = source.match(/const bargeIn = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/);
+  if (!bargeIn) {
+    failures.push('Web voice: bargeIn not found in the expected shape');
+  } else {
+    if (bargeIn[1].includes('stopSpeech()')) {
+      failures.push(
+        'Web voice: a loud microphone alone must not stop playback; '
+        + "Lyo's own voice clears the bar and it interrupts itself",
+      );
+    }
+    if (!bargeIn[1].includes('duckPlayback()')) {
+      failures.push('Web voice: a suspected interruption must duck playback while unconfirmed');
+    }
+  }
+  // The bar must be built from the measured bleed, not merely mention it.
+  if (!/bleedFloorRef\.current \* BARGE_IN_EXCESS/.test(source)) {
+    failures.push(
+      "Web voice: the barge-in bar must track Lyo's own bleed, not a fixed level",
+    );
+  }
+  // Recognized words alone cannot end a turn while Lyo is audible: the
+  // microphone hears Lyo through the speaker, and that bleed transcribes into
+  // words that are in no echo of the answer, so Lyo interrupts itself.
+  if (!/shouldEndTurnOnSpeech\(\{/.test(source)) {
+    failures.push(
+      'Web voice: speech heard during playback must be weighed against the '
+      + "microphone level, or Lyo's own bleed reads as a learner",
+    );
+  }
+  // The confirmation block consumes the loudness flag, so reading it at the
+  // decision point finds it already spent by the very speech that confirmed
+  // it — holding the turn exactly when the learner did interrupt.
+  if (/loudEnough: pendingRmsBargeAtRef\.current/.test(source)) {
+    failures.push(
+      'Web voice: the microphone level must be read before the confirmation '
+      + 'block clears it, or a real interruption never registers',
+    );
+  }
+  // A suspended audio context still yields an analyser, and it reads silence
+  // forever — which is indistinguishable from a learner who never spoke.
+  if (!/context\.state !== 'running'/.test(source)) {
+    failures.push(
+      'Web voice: the monitor counts as ready only once its audio context is '
+      + 'running, or a suspended one reports silence and holds every interruption',
+    );
+  }
+  if (!/monitorState: micMonitorStateRef\.current/.test(source)) {
+    failures.push(
+      'Web voice: that decision must know whether the volume monitor is ready, '
+      + 'or the opening of playback falls back to words alone',
+    );
+  }
+  // An answer streams in far faster than it is spoken, so it is shown only as
+  // far as it has been read aloud.
+  if (!/\bsetVoiceSpokenText\(/.test(source)) {
+    failures.push('Web voice: spoken progress must be published for the answer to follow');
+  }
+}
+
+// Voice stream events are addressed to the message this client is rendering.
+// The server's own id names a row the client has never seen, so anything
+// matching on it — the display following the voice, the guard against
+// speaking a turn twice — silently never matches and the feature reads as
+// doing nothing rather than as broken.
+const chatStore = 'web/src/stores/chat-store.ts';
+if (fs.existsSync(chatStore)) {
+  const source = fs.readFileSync(chatStore, 'utf8');
+  if (/messageId:\s*(?:typeof\s*)?chunk\.message_id/.test(source)) {
+    failures.push(
+      "Web transport: voice events must carry this client's message id, "
+      + "not the server's, or nothing downstream can match them",
+    );
+  }
+  if (!/messageId: aiMessageId/.test(source)) {
+    failures.push('Web transport: voice events must carry the rendered assistant message id');
+  }
+}
+
+// Live voice renders inside the chat input, so its effects run first: a
+// passive effect would start the live recognizer before dictation released the
+// microphone. The handover has to be ordered by the control itself.
+const chatInput = 'web/src/components/chat/ChatInputBar.tsx';
+if (fs.existsSync(chatInput)) {
+  const source = fs.readFileSync(chatInput, 'utf8');
+  if (!/if \(!voiceSessionActive\) stopDictation\(\);/.test(source)) {
+    failures.push(
+      'Web chat input: the live-conversation control must stop dictation '
+      + 'before activating the session, not through an effect afterwards',
+    );
   }
 }
 

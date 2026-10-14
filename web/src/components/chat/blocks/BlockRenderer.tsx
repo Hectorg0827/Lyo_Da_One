@@ -20,6 +20,9 @@ import {
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
 import FlashcardDeckBlock from './FlashcardDeckBlock';
+import TeachingVisualBlock from './TeachingVisualBlock';
+import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
+import { MermaidView, ChartView } from '@/components/classroom/BoardElementView';
 
 const inlineMarkdownComponents = {
   ...markdownComponents,
@@ -138,10 +141,42 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
     );
   }
 
-  // Diagram formats (mermaid, chart) have no renderer here yet. Show the
-  // source rather than a blank gap, so nothing silently disappears.
+  // The Classroom already has animated, accessible renderers for both.
+  // Use that same visual vocabulary in Chat rather than showing source code.
+  if (format === 'mermaid') {
+    return (
+      <figure className="min-w-0 overflow-x-auto rounded-xl border border-white/10 bg-black/20 p-3">
+        {title && <figcaption className="mb-2 text-sm text-white/75">{title}</figcaption>}
+        <MermaidView source={source} />
+      </figure>
+    );
+  }
+  if (format === 'chart') {
+    // Chart source is a JSON-encoded, bounded data series. Do not eval LLM
+    // output or pass arbitrary objects into the chart renderer.
+    try {
+      const chart = JSON.parse(source) as {
+        chartType?: unknown; labels?: unknown; values?: unknown;
+      };
+      if (
+        (chart.chartType === 'bar' || chart.chartType === 'line') &&
+        Array.isArray(chart.labels) && Array.isArray(chart.values) &&
+        chart.labels.length > 0 && chart.labels.length <= 12 &&
+        chart.labels.length === chart.values.length &&
+        chart.labels.every((v) => typeof v === 'string') &&
+        chart.values.every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0)
+      ) {
+        return (
+          <figure className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
+            {title && <figcaption className="mb-2 text-sm text-white/75">{title}</figcaption>}
+            <ChartView chartType={chart.chartType} labels={chart.labels as string[]} values={chart.values as number[]} />
+          </figure>
+        );
+      }
+    } catch { /* Preserve readable fallback when chart data is invalid. */ }
+  }
   return (
-    <pre className="text-white/70 font-mono text-xs overflow-x-auto p-3 rounded-xl bg-black/30 border border-white/10">
+    <pre className="text-white/70 font-mono text-xs whitespace-pre-wrap overflow-x-auto p-3 rounded-xl bg-black/30 border border-white/10">
       {source}
     </pre>
   );
@@ -228,6 +263,29 @@ function StudyNotesBlock({ block }: { block: ChatBlock }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Image blocks must be real media, not a link presented as visual learning. */
+function MediaBlock({ block }: { block: ChatBlock }) {
+  const url = typeof block.content?.url === 'string' ? block.content.url : '';
+  const alt = typeof block.content?.alt === 'string' ? block.content.alt : '';
+  const caption = typeof block.content?.caption === 'string' ? block.content.caption : '';
+  const sourceUrl = typeof block.metadata?.source_url === 'string' &&
+    /^https:\/\/(?:commons\.wikimedia\.org|www\.pexels\.com|images\.nasa\.gov|www\.si\.edu)\//i.test(block.metadata.source_url)
+      ? block.metadata.source_url : null;
+  if (block.subtype !== 'image' || !/^https:\/\//i.test(url)) {
+    return <GenericBlock block={block} />;
+  }
+  return (
+    <figure className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={alt || caption || 'Educational illustration'}
+        loading="lazy" className="max-h-80 w-full object-contain" />
+      {caption && <figcaption className="px-3 py-2 text-xs text-white/70">
+        {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer" className="underline">{caption}</a> : caption}
+      </figcaption>}
+    </figure>
   );
 }
 
@@ -412,6 +470,8 @@ export default function BlockRenderer({
             );
           case 'dataViz':
             return <DataVizBlock key={block.id} block={block} />;
+          case 'media':
+            return <MediaBlock key={block.id} block={block} />;
           case 'quiz':
             return <CheckBlock key={block.id} block={block} message={message} />;
           case 'flashcard':
@@ -423,6 +483,9 @@ export default function BlockRenderer({
               <GenericBlock key={block.id} block={block} />
             );
           case 'interactive':
+            if (block.subtype === 'teaching_visual' && parseTeachingVisual(block.content?.visual)) {
+              return <TeachingVisualBlock key={block.id} block={block} message={message} />;
+            }
             if (block.subtype === 'explorable') {
               return <ExplorableBlock key={block.id} block={block} />;
             }
