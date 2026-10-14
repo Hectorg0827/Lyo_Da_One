@@ -77,6 +77,9 @@ function setup() {
   };
   api.coach = { today: async () => ({ active_goals: [], mission: [], readiness: {} }) };
   api.media = { upload: async () => ({ url: '/notes.pdf' }) };
+  // Supplementary: the KPI strip's streak. Not asserted here — it must
+  // simply never be the reason the page fails to render.
+  api.gamification = { overview: async () => ({ streaks: { current: 3, longest: 9 } }) };
   return { exams, calls };
 }
 async function mount(t) {
@@ -91,7 +94,7 @@ async function mount(t) {
 }
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; });
   return { promise, resolve, reject }; };
-const newButton = view => [...view.container.querySelectorAll('button')].find(b => b.textContent === '+ New test');
+const newButton = view => [...view.container.querySelectorAll('button')].find(b => /new test/i.test(b.getAttribute('aria-label') ?? b.textContent));
 const title = view => view.container.querySelector('h1')?.textContent;
 function selectEvent(control, id) { control.value = id; control.dispatchEvent(new window.Event('change', { bubbles: true })); }
 async function choose(view, id) { await act(async () => selectEvent(view.container.querySelector('select'), id)); }
@@ -103,6 +106,15 @@ async function answer(view, value) {
   });
 }
 async function send(view) { await act(async () => view.container.querySelector('[aria-label="Send"]').click()); }
+// One KPI tile, read as the strip renders it: the big value and the line
+// under it. Page-wide text matching cannot tell these apart from the same
+// figures printed elsewhere on the page.
+function tile(view, key) {
+  const node = view.container.querySelector(`[data-kpi="${key}"]`);
+  assert.ok(node, `no KPI tile: ${key}`);
+  const lines = [...node.querySelectorAll('p')].map(p => p.textContent);
+  return { value: lines[0], detail: lines[1] };
+}
 
 test('New test creates an independent intake and sends its explicit profile ID', async t => {
   const { calls } = setup();
@@ -260,4 +272,87 @@ test('unsent draft and attached material do not carry to another exam', async t 
   await send(view);
   assert.equal(calls.intake.at(-1)[1], 'biology');
   assert.deepEqual(calls.intake.at(-1)[2], []);
+});
+
+// ─── The desktop workspace ───────────────────────────────────────────────────
+// The page became a full-width two-column workspace: a KPI strip, a week
+// timeline and a materials library. These are the claims that layout makes
+// about the learner, checked against the same page the browser renders.
+
+test('the KPI strip reports the plan, not placeholders', async t => {
+  setup();
+  const view = await mount(t);
+  const text = view.container.textContent;
+  for (const label of ['Days left', 'Readiness', 'Study streak', 'Today']) {
+    assert.ok(text.includes(label), `missing KPI: ${label}`);
+  }
+  // Scoped to the tile, not to the page: the evidence card prints the same
+  // percentage, so a page-wide `includes` would pass whatever the tile said.
+  assert.equal(tile(view, 'readiness').value, '80%', 'readiness was not rendered at its real scale');
+  assert.equal(tile(view, 'days').value, '15');
+  assert.equal(tile(view, 'streak').value, '3 days', 'the streak was not read from gamification');
+  assert.equal(tile(view, 'today').detail, 'Scheduled for today');
+});
+
+test('a plan with nothing assessed says so rather than claiming 0%', async t => {
+  const { exams } = setup();
+  api.testPrep.readiness = async id => ({ subject: exams[id.replace('-plan', '')].profile.subject,
+    readiness: 0, topics_assessed: 0, topics_total: 4, days_remaining: 15, topics: [], focus_next: [] });
+  const view = await mount(t);
+  assert.equal(tile(view, 'readiness').value, 'Not measured');
+  assert.equal(tile(view, 'readiness').detail, '0 of 4 topics assessed');
+  assert.ok(!view.container.textContent.includes('0%'), 'rendered 0% for a learner nobody assessed');
+});
+
+test('a failed readiness call is reported as unavailable, not as zero', async t => {
+  setup();
+  api.testPrep.readiness = async () => { throw new Error('offline'); };
+  const view = await mount(t);
+  assert.equal(tile(view, 'readiness').value, 'Unavailable');
+  assert.ok(!view.container.textContent.includes('0%'));
+});
+
+test('the schedule is an open week, and the session sits on its own day', async t => {
+  setup();
+  const view = await mount(t);
+  const text = view.container.textContent;
+  assert.ok(text.includes('Full Study Schedule'));
+  // Open, not behind a <details>: the heading and the week are both present
+  // without anyone clicking anything.
+  assert.ok(view.container.querySelector('[aria-label="Collapse full study schedule"]'));
+  assert.ok(text.includes('Algebra practice'), 'the scheduled session was not drawn');
+  // 2026-11-01T17:00Z in UTC is a Sunday, so its week runs Mon 26 Oct - Sun 1 Nov.
+  for (const weekday of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+    assert.ok(text.includes(weekday), `missing day column: ${weekday}`);
+  }
+});
+
+test('materials open onto an empty state that asks for a file', async t => {
+  setup();
+  const view = await mount(t);
+  const text = view.container.textContent;
+  assert.ok(text.includes('Study Materials'));
+  assert.ok(view.container.querySelector('[aria-label="Collapse study materials"]'));
+  assert.ok(text.includes('Nothing added yet'), 'the empty state was not drawn');
+  assert.ok(view.container.querySelector('input[type="file"]'), 'no way to add a material');
+});
+
+test('test details stay closed until the header asks for them', async t => {
+  setup();
+  const view = await mount(t);
+  assert.ok(!view.container.textContent.includes('Topics — one per line'));
+  const pencil = view.container.querySelector('[aria-label="Edit test details"]');
+  assert.ok(pencil, 'the workspace header offers no way to edit details');
+  await act(async () => pencil.click());
+  assert.ok(view.container.textContent.includes('Topics — one per line'));
+});
+
+test('switching exams closes a details form bound to the old revision', async t => {
+  setup();
+  const view = await mount(t);
+  await act(async () => view.container.querySelector('[aria-label="Edit test details"]').click());
+  assert.ok(view.container.textContent.includes('Topics — one per line'));
+  await choose(view, 'biology');
+  assert.equal(title(view), 'Biology');
+  assert.ok(!view.container.textContent.includes('Topics — one per line'));
 });
