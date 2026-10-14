@@ -36,6 +36,7 @@ const ios = read('Sources/Views/MainTabView.swift');
 const android = read('android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt');
 const sidebar = read('web/src/components/layout/Sidebar.tsx');
 const mobileNav = read('web/src/components/layout/MobileNav.tsx');
+const topBar = read('web/src/components/layout/TopBar.tsx');
 
 /**
  * Source with its comments taken out.
@@ -81,6 +82,23 @@ for (const [source, where] of [[sidebar, 'The web sidebar'], [mobileNav, 'The we
 for (const [key, label] of Object.entries(CROSS_PLATFORM_LABELS)) {
   if (NAV[key]?.label !== label) {
     failures.push(`nav-items.mjs calls ${key} ${JSON.stringify(NAV[key]?.label)}, not ${JSON.stringify(label)}`);
+  }
+}
+
+// ── The classroom shows no global navigation ─────────────────────────────────
+//
+// An active lesson is an immersive surface: `MainContent` drops the shell's
+// padding and max-width there, and every global nav piece opts out by
+// returning null. Nothing checked that, so a rewrite of the sidebar silently
+// put a 264px rail back beside the lesson and no test noticed.
+for (const [source, where] of [
+  [sidebar, 'The web sidebar'],
+  [mobileNav, 'The web phone nav'],
+  [topBar, 'The web top bar'],
+]) {
+  if (!source) continue;
+  if (!/pathname\.startsWith\(\s*['"]\/classroom['"]\s*\)/.test(code(source))) {
+    failures.push(`${where} does not step aside for the classroom`);
   }
 }
 

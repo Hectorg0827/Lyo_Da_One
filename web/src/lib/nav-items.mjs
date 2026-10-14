@@ -23,9 +23,16 @@ export const NAV = {
   discover: { key: 'discover', href: '/discover', label: 'Discover' },
   create: { key: 'create', action: 'create', label: 'Create' },
   profile: { key: 'profile', href: '/profile', label: 'Profile' },
+  settings: { key: 'settings', href: '/settings', label: 'Settings' },
 };
 
-/** The sidebar, top to bottom. Profile is not here: it is the footer row. */
+/**
+ * The sidebar, top to bottom.
+ *
+ * Profile and Settings are not here: they are the two footer links, and they
+ * are two links rather than one because a cog that opens the profile page is
+ * a cog that lies.
+ */
 export const SIDEBAR_ITEMS = [
   NAV.focus,
   NAV.askLyo,

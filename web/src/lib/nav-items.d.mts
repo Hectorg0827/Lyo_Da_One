@@ -25,6 +25,7 @@ export const NAV: {
   discover: NavRoute;
   create: NavAction;
   profile: NavRoute;
+  settings: NavRoute;
 };
 
 export const SIDEBAR_ITEMS: NavItem[];

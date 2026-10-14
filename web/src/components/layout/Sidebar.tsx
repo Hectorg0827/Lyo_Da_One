@@ -72,6 +72,19 @@ export function Sidebar() {
   }, []);
 
   const open = !collapsed;
+  const profileActive = isActiveHref(NAV.profile.href, pathname);
+  const settingsActive = isActiveHref(NAV.settings.href, pathname);
+
+  // The classroom owns a focused layout. `MainContent` treats it as immersive
+  // and both `TopBar` and `MobileNav` hide themselves there, so a 264px rail
+  // beside an active lesson is exactly the chrome the rest of the shell
+  // deliberately suppresses. The rewrite of this file lost that opt-out.
+  //
+  // After the hooks, never before: every hook above still runs on every route,
+  // so this only skips the markup.
+  if (pathname.startsWith('/classroom')) {
+    return null;
+  }
 
   return (
     <>
@@ -93,12 +106,20 @@ export function Sidebar() {
           )}
         >
           <Link href={NAV.focus.href} aria-label="Lyo — go to Focus" className="block shrink-0">
+            {/* The declared size is the drawn size, not the file's 512x463:
+                Next builds its srcset from these numbers, so naming the file's
+                dimensions made every visit fetch a ~500px mark to paint 33 of
+                them. 34x31 keeps the 512:463 ratio, and the 2x candidate Next
+                adds on top stays crisp on a retina screen.
+
+                No `priority` either. This rail is only CSS-hidden on a phone —
+                it still mounts — so a priority preload here jumped the queue
+                ahead of the actual page on the devices that never show it. */}
             <Image
               src="/brand/lyo-logo.png"
               alt="Lyo"
-              width={512}
-              height={463}
-              priority
+              width={34}
+              height={31}
               className="h-[30px] w-auto object-contain"
             />
           </Link>
@@ -225,21 +246,29 @@ export function Sidebar() {
         </nav>
 
         {/* ---- The learner ---- */}
-        <div className="shrink-0 border-t border-white/[0.07] p-2.5">
+        {/* Two destinations, so two links. The cog used to sit inside the
+            profile link, which meant clicking it opened /profile — the one
+            place a settings button should never go. */}
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-1 border-t border-white/[0.07] p-2.5',
+            open ? 'flex-row' : 'flex-col',
+          )}
+        >
           <Link
             href={NAV.profile.href}
-            aria-current={isActiveHref(NAV.profile.href, pathname) ? 'page' : undefined}
+            aria-current={profileActive ? 'page' : undefined}
             title={open ? undefined : NAV.profile.label}
             className={cn(
               'relative flex min-h-[44px] items-center gap-3 rounded-[14px] transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
-              open ? 'px-3' : 'justify-center px-0',
-              isActiveHref(NAV.profile.href, pathname)
+              open ? 'min-w-0 flex-1 px-3' : 'w-full justify-center px-0',
+              profileActive
                 ? 'bg-white/[0.07] text-white'
                 : 'text-white/[0.62] hover:bg-white/5 hover:text-white',
             )}
           >
-            {isActiveHref(NAV.profile.href, pathname) && (
+            {profileActive && (
               <span
                 aria-hidden
                 className="absolute -left-[6px] top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-[#ff8c00]"
@@ -268,10 +297,28 @@ export function Sidebar() {
                 </motion.span>
               )}
             </AnimatePresence>
+          </Link>
 
-            {open && <Settings className="h-4 w-4 shrink-0 text-white/40" aria-hidden />}
+          {/* Shown collapsed too, stacked under the avatar. The old rail
+              dropped it on collapse, which put the only route to Settings
+              behind reopening the menu first. */}
+          <Link
+            href={NAV.settings.href}
+            aria-label={NAV.settings.label}
+            aria-current={settingsActive ? 'page' : undefined}
+            title={NAV.settings.label}
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
+              settingsActive
+                ? 'bg-white/[0.07] text-white'
+                : 'text-white/40 hover:bg-white/5 hover:text-white',
+            )}
+          >
+            <Settings className="h-4 w-4" aria-hidden />
           </Link>
         </div>
+
       </motion.aside>
 
       <CreateSheet isOpen={createOpen} onClose={() => setCreateOpen(false)} />
