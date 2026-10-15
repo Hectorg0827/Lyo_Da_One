@@ -28,6 +28,7 @@ import {
   moreCardsPrompt,
   parseMoreCards,
 } from '@/lib/study-material.mjs';
+import { expandVisualBlocks } from '@/lib/teaching-visuals.mjs';
 
 export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
@@ -613,6 +614,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       patchAiMessage({ blocks: blocks as ChatBlock[] });
     };
 
+    /**
+     * Draw the diagrams, charts and images the reply wrote in Markdown.
+     *
+     * Additive and independent of the study pass: a diagram is a diagram
+     * whether or not the learner asked for flashcards, and every piece of
+     * prose around one is kept in place, so lifting a visual out can never
+     * cost a sentence.
+     */
+    const attachTeachingVisuals = () => {
+      const conversation = get().conversations.find((c) => c.id === convoId);
+      const message = conversation?.messages.find((m) => m.id === aiMessageId);
+      if (!message) return;
+
+      const existing = Array.isArray(message.blocks) ? message.blocks : [];
+      const reply = message.content || accumulated;
+      // With no blocks the prose lives in message.content, so hand the
+      // expander a block to split. It returns null when there is nothing
+      // to lift, and the plain bubble is left exactly as it was.
+      const source: ChatBlock[] = existing.length
+        ? existing
+        : reply
+          ? [{ id: `visual-${aiMessageId}-prose`, type: 'text', content: { text: reply } }]
+          : [];
+      if (!source.length) return;
+
+      const blocks = expandVisualBlocks(source, `visual-${aiMessageId}`);
+      if (!blocks) return;
+      patchAiMessage({ blocks: blocks as ChatBlock[] });
+    };
+
     const attachActionsToAiMessage = (labels: string[]) => {
       // Same reason as blocks: a turn that produced only follow-up chips is
       // still a real turn, and must not be wiped as an empty response.
@@ -978,6 +1009,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             recoverCanonicalConversation(convoId!);
           } else {
             attachStudyMaterialFallback();
+            attachTeachingVisuals();
             set((state) => ({
               isGenerating: false,
               generationProgress: 0,
