@@ -411,7 +411,7 @@ export default function CreateSheet({
             style={{ background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.9))' }}
           >
             <div className="flex gap-2 overflow-x-auto no-scrollbar w-full max-w-xl mx-auto">
-              {MODES.map((m) => {
+              {visibleModes.map((m) => {
                 const selected = m.id === mode;
                 return (
                   <button
