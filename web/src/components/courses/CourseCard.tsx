@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import { Clock, Users, Star } from 'lucide-react';
 import { Course } from '@/types';
 import { cn, formatDuration, formatNumber, getInitials } from '@/lib/utils';
@@ -8,7 +9,6 @@ import CourseArtwork from '@/components/home/CourseArtwork';
 
 interface CourseCardProps {
   course: Course;
-  onClick?: () => void;
 }
 
 const difficultyStyles: Record<string, { bg: string; text: string; label: string }> = {
@@ -17,7 +17,11 @@ const difficultyStyles: Record<string, { bg: string; text: string; label: string
   advanced: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Advanced' },
 };
 
-export default function CourseCard({ course, onClick }: CourseCardProps) {
+export default function CourseCard({ course }: CourseCardProps) {
+  const persistedId = /^(?:[1-9][0-9]*)$/.test(course.id) && Number.isSafeInteger(Number(course.id));
+  const href = persistedId ? `/courses/${course.id}` : `/classroom?topic=${encodeURIComponent(course.title)}`;
+  const hasRealRating = course.reviewCount > 0 && course.rating > 0;
+
   const difficulty = difficultyStyles[course.difficulty] ?? difficultyStyles.beginner;
   const hasProgress = course.progress !== undefined && course.progress > 0;
 
@@ -36,12 +40,12 @@ export default function CourseCard({ course, onClick }: CourseCardProps) {
   };
 
   return (
+    <Link href={href} aria-label={`Open ${course.title}`} className="block rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-300">
     <motion.div
       whileHover={{ y: -4 }}
       transition={{ duration: 0.2 }}
-      onClick={onClick}
       className={cn(
-        'bg-white/5 border border-white/10 rounded-2xl overflow-hidden cursor-pointer',
+        'bg-white/5 border border-white/10 rounded-2xl overflow-hidden',
         'hover:border-lyo-500/40 transition-all flex flex-col',
       )}
     >
@@ -109,18 +113,22 @@ export default function CourseCard({ course, onClick }: CourseCardProps) {
             <Clock className="w-3 h-3" />
             {formatDuration(course.estimatedDuration)}
           </span>
-          <span className="flex items-center gap-1">
-            <Users className="w-3 h-3" />
-            {formatNumber(course.enrolledCount)} enrolled
-          </span>
+          {course.enrolledCount > 0 && (
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {formatNumber(course.enrolledCount)} enrolled
+            </span>
+          )}
         </div>
 
         {/* Rating */}
-        <div className="flex items-center gap-1.5">
-          {renderStars(course.rating)}
-          <span className="text-white/60 text-xs font-medium">{course.rating.toFixed(1)}</span>
-          <span className="text-white/30 text-xs">({formatNumber(course.reviewCount)})</span>
-        </div>
+        {hasRealRating && (
+          <div className="flex items-center gap-1.5">
+            {renderStars(course.rating)}
+            <span className="text-white/60 text-xs font-medium">{course.rating.toFixed(1)}</span>
+            <span className="text-white/30 text-xs">({formatNumber(course.reviewCount)})</span>
+          </div>
+        )}
       </div>
 
       {/* Progress bar */}
@@ -136,5 +144,6 @@ export default function CourseCard({ course, onClick }: CourseCardProps) {
         </div>
       )}
     </motion.div>
+    </Link>
   );
 }
