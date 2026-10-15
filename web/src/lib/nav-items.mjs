@@ -83,6 +83,23 @@ export const RAIL_STORAGE_KEY = 'lyo_sidebar_collapsed';
  * returns nothing on a first visit, and neither is a reason to fail to render
  * a sidebar: both mean "open".
  */
+/**
+ * The browser's storage, or null when there isn't any.
+ *
+ * `window.localStorage` can throw on the property access alone — Safari with
+ * site data blocked, a webview with storage disabled — which happens before
+ * `readCollapsed` or `writeCollapsed` get a chance to catch anything. Reaching
+ * for it directly meant a browser that refuses storage took the whole rail
+ * down with it, over a remembered menu width.
+ */
+export function safeStorage(win) {
+  try {
+    return win?.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function readCollapsed(storage) {
   try {
     return storage?.getItem(RAIL_STORAGE_KEY) === 'true';
@@ -113,6 +130,10 @@ export function writeCollapsed(storage, collapsed) {
  */
 export function isRailShortcut(event) {
   if (!event || event.key !== '[') return false;
+  // Held down, the browser repeats keydown about thirty times a second. Each
+  // one would toggle the rail and write the preference, so the menu strobed
+  // and landed wherever the repeat count left it.
+  if (event.repeat) return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
   const target = event.target;
   const tag = typeof target?.tagName === 'string' ? target.tagName.toUpperCase() : '';

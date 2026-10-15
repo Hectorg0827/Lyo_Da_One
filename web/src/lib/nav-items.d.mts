@@ -36,6 +36,7 @@ export const CROSS_PLATFORM_LABELS: Record<'focus' | 'discover' | 'community' | 
 export function isActiveHref(href: string | undefined, pathname: string): boolean;
 
 export const RAIL_STORAGE_KEY: string;
+export function safeStorage(win: Window | null | undefined): Storage | null;
 export function readCollapsed(storage: Storage | null | undefined): boolean;
 export function writeCollapsed(storage: Storage | null | undefined, collapsed: boolean): boolean;
 export function isRailShortcut(event: KeyboardEvent | null | undefined): boolean;

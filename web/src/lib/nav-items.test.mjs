@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  safeStorage,
   CROSS_PLATFORM_LABELS,
   NAV,
   RAIL_STORAGE_KEY,
@@ -145,4 +146,29 @@ test('a modified bracket belongs to the browser, not to us', () => {
 test('any other key is ignored', () => {
   assert.equal(isRailShortcut({ key: ']', target: { tagName: 'BODY' } }), false);
   assert.equal(isRailShortcut(null), false);
+});
+
+test('a browser that refuses storage does not take the rail down with it', () => {
+  // Not `getItem` throwing — the property access itself. Safari with site
+  // data blocked throws here, before any helper can catch it.
+  const hostile = {
+    get localStorage() {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    },
+  };
+  assert.equal(safeStorage(hostile), null);
+  assert.equal(readCollapsed(safeStorage(hostile)), false);
+  assert.equal(writeCollapsed(safeStorage(hostile), true), false);
+});
+
+test('safeStorage hands back real storage untouched', () => {
+  const store = { getItem: () => 'true' };
+  assert.equal(safeStorage({ localStorage: store }), store);
+  assert.equal(safeStorage(null), null);
+  assert.equal(safeStorage(undefined), null);
+});
+
+test('holding the bracket down toggles the menu once, not thirty times', () => {
+  assert.equal(isRailShortcut({ key: '[', target: { tagName: 'BODY' } }), true);
+  assert.equal(isRailShortcut({ key: '[', repeat: true, target: { tagName: 'BODY' } }), false);
 });

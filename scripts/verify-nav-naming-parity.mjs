@@ -39,15 +39,61 @@ const mobileNav = read('web/src/components/layout/MobileNav.tsx');
 const topBar = read('web/src/components/layout/TopBar.tsx');
 
 /**
- * Source with its comments taken out.
+ * Source with its comments taken out, and only its comments.
  *
  * The first version of this check read the comments too, and failed on the
  * sidebar's own note explaining which names it had replaced. A check that
  * cannot tell code from prose teaches people to delete the prose.
+ *
+ * The second version stripped whole comment lines with a regex, which left a
+ * trailing `// was "Focus"` in place — so renaming a tab and mentioning the
+ * old name in a comment on the same line still passed. This walks the source
+ * instead, because telling a comment from a string is the one thing a regex
+ * cannot do: `"https://..."` is a string, not a comment.
  */
 function code(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+  let out = '';
+  let quote = null; // the delimiter we are inside, or null
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    const next = source[i + 1];
+
+    if (quote) {
+      out += ch;
+      if (ch === '\\') {
+        out += source[i + 1] ?? '';
+        i += 1;
+      } else if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      out += ch;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i += 1;
+      out += '\n';
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i += 1;
+      i += 1;
+      out += ' ';
+      continue;
+    }
+
+    out += ch;
+  }
+  return out;
 }
+
 
 /** The label must appear in that platform's own tab bar source. */
 function requireLabel(source, where, label) {
@@ -57,9 +103,11 @@ function requireLabel(source, where, label) {
   }
 }
 
+// `code()`, not the raw source: a comment that happens to quote the old name
+// would otherwise satisfy the check for a label nobody renders any more.
 for (const [key, label] of Object.entries(CROSS_PLATFORM_LABELS)) {
-  requireLabel(ios, `iOS (${key})`, label);
-  requireLabel(android, `Android (${key})`, label);
+  requireLabel(code(ios), `iOS (${key})`, label);
+  requireLabel(code(android), `Android (${key})`, label);
 }
 
 // The web's two navs must read their labels from the shared model rather than
@@ -99,6 +147,21 @@ for (const [source, where] of [
   if (!source) continue;
   if (!/pathname\.startsWith\(\s*['"]\/classroom['"]\s*\)/.test(code(source))) {
     failures.push(`${where} does not step aside for the classroom`);
+  }
+}
+
+// ── Create opens a sheet, it does not go anywhere ────────────────────────────
+//
+// `nav-items.test.mjs` can only assert that the model gives Create no href.
+// Whether the sidebar actually opens the sheet is wiring, and wiring is what
+// quietly stops working.
+if (sidebar) {
+  const body = code(sidebar);
+  if (!body.includes('CreateSheet')) {
+    failures.push('The web sidebar never renders the create sheet');
+  }
+  if (!/onClick=\{\(\) =>\s*setCreateOpen\(true\)\}/.test(body)) {
+    failures.push('The web sidebar Create item does not open the create sheet');
   }
 }
 

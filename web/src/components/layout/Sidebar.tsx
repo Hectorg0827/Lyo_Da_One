@@ -16,6 +16,7 @@ import {
   isActiveHref,
   isRailShortcut,
   readCollapsed,
+  safeStorage,
   writeCollapsed,
 } from '@/lib/nav-items.mjs';
 import { NAV_ICONS, RailToggleIcon } from './NavIcons';
@@ -50,13 +51,13 @@ export function Sidebar() {
   // seeding state from it directly would hydrate a closed rail into an open
   // one and warn about the mismatch.
   useEffect(() => {
-    setCollapsed(readCollapsed(typeof window === 'undefined' ? null : window.localStorage));
+    setCollapsed(readCollapsed(safeStorage(typeof window === 'undefined' ? null : window)));
   }, []);
 
   const toggle = () =>
     setCollapsed((was) => {
       const next = !was;
-      writeCollapsed(typeof window === 'undefined' ? null : window.localStorage, next);
+      writeCollapsed(safeStorage(typeof window === 'undefined' ? null : window), next);
       return next;
     });
 
