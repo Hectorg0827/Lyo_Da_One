@@ -22,6 +22,7 @@ import NextForYou from '@/components/home/NextForYou';
 import CourseStack from '@/components/home/CourseStack';
 import HomeTestPrepCard from '@/components/home/HomeTestPrepCard';
 import FrontDoor from '@/components/home/FrontDoor';
+import CoachNextStep from '@/components/home/CoachNextStep';
 import LearnerStats from '@/components/stats/LearnerStats';
 import { shouldShowLearnerDashboard } from '@/lib/entry-contract.mjs';
 import { streakFrom } from '@/lib/learner-stats.mjs';
@@ -410,6 +411,9 @@ export default function HomePage() {
           activity yet, and renders compact under the courses of one who has
           (see FrontDoor's `compact`). */}
       <FrontDoor knownLearner={showLearnerDashboard} />
+
+      {/* Next step comes from real Learning OS evidence, never mock progress. */}
+      <CoachNextStep key={String(user?.id ?? 'guest')} enabled={isAuthenticated && !authLoading} learnerKey={String(user?.id ?? '')} />
 
       {showLearnerDashboard && (
         /* ── The test you have coming up ────────────────────────────
