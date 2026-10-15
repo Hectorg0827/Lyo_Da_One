@@ -1,5 +1,6 @@
 import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { canRenderExplorable } from '@/lib/explorable.mjs';
+import { slideRows } from '@/lib/study-material.mjs';
 import type { ChatBlock } from '@/types';
 
 /**
@@ -39,6 +40,12 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
         str('question') && Array.isArray(content.options) && content.options.length > 0
       );
 
+    // A deck needs cards; a lone card falls back to GenericBlock's chain.
+    case 'flashcard':
+      return Array.isArray(content.cards)
+        ? content.cards.length > 0
+        : genericChain(str, content);
+
     // Delegated, not re-implemented. This branch previously accepted any
     // string `kind`, while ExplorableBlock draws only the kinds it knows — so
     // an unrecognised or future kind passed here, MessageBubble hid the prose
@@ -49,10 +56,23 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
     // the same chain as the default case — not by falling out of the switch,
     // which would return undefined and hide the fallback just as quietly.
     case 'interactive':
-      if (block.subtype === 'teaching_visual') return !!parseTeachingVisual(content.visual) || genericChain(str, content);
-      return block.subtype === 'explorable'
-        ? canRenderExplorable(content)
-        : genericChain(str, content);
+      if (block.subtype === 'explorable') return canRenderExplorable(content);
+      if (block.subtype === 'teaching_visual') {
+        return !!parseTeachingVisual(content.visual) || genericChain(str, content);
+      }
+      // Study material synthesized from a prose reply. Each mirrors exactly
+      // what its renderer needs, for the same reason as every branch here.
+      if (block.subtype === 'studyPlan') {
+        return Array.isArray(content.schedule) && content.schedule.length > 0;
+      }
+      // Delegated, like explorables above: LessonSlidesBlock draws exactly
+      // these rows, so a block carrying `[{}]` cannot pass here and then
+      // render nothing behind a hidden prose fallback.
+      if (block.subtype === 'slides') return slideRows(content).length > 0;
+      if (block.subtype === 'studyNotes') {
+        return Array.isArray(content.sections) && content.sections.length > 0;
+      }
+      return genericChain(str, content);
 
     // Mirrors GenericBlock's fallback chain, in the same order.
     default:

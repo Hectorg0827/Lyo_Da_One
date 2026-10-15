@@ -1,7 +1,13 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
-import { AlertTriangle, FileText, ShieldCheck } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  FileText,
+  NotebookPen,
+  ShieldCheck,
+} from 'lucide-react';
 import katex from 'katex';
 import { cn } from '@/lib/utils';
 import type { ChatBlock, ChatMessage } from '@/types';
@@ -13,6 +19,8 @@ import {
 } from '../markdown-config';
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
+import FlashcardDeckBlock from './FlashcardDeckBlock';
+import LessonSlidesBlock from './LessonSlidesBlock';
 import TeachingVisualBlock from './TeachingVisualBlock';
 import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { MermaidView, ChartView } from '@/components/classroom/BoardElementView';
@@ -172,6 +180,90 @@ function DataVizBlock({ block }: { block: ChatBlock }) {
     <pre className="text-white/70 font-mono text-xs whitespace-pre-wrap overflow-x-auto p-3 rounded-xl bg-black/30 border border-white/10">
       {source}
     </pre>
+  );
+}
+
+// ── Study material ───────────────────────────────────────────────────────────
+
+/** A day-by-day revision schedule. */
+function StudyPlanBlock({ block }: { block: ChatBlock }) {
+  const content = (block.content ?? {}) as Record<string, unknown>;
+  const schedule = (Array.isArray(content.schedule) ? content.schedule : [])
+    .map((day) => (day ?? {}) as Record<string, unknown>);
+  if (!schedule.length) return null;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <CalendarDays className="w-4 h-4 text-lyo-300 shrink-0" aria-hidden="true" />
+        <div className="text-sm font-semibold text-white/85">
+          {typeof content.title === 'string' ? content.title : 'Your study plan'}
+        </div>
+      </div>
+      <ol className="space-y-3">
+        {schedule.map((day, dayIndex) => {
+          const tasks = (Array.isArray(day.tasks) ? day.tasks : [])
+            .map((task) => (task ?? {}) as Record<string, unknown>);
+          return (
+            <li key={dayIndex} className="border-l-2 border-lyo-500/30 pl-3">
+              <div className="text-xs font-medium text-white/75">
+                Day {typeof day.day === 'number' ? day.day : dayIndex + 1}
+                {typeof day.topic === 'string' && day.topic ? ` — ${day.topic}` : ''}
+              </div>
+              {tasks.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {tasks.map((task, taskIndex) => (
+                    <li key={taskIndex} className="text-sm text-white/70 flex gap-2">
+                      <span className="text-white/25 shrink-0">•</span>
+                      <span className="min-w-0">
+                        <InlineMarkdown text={String(task.title ?? '')} />
+                        {typeof task.minutes === 'number' && (
+                          <span className="text-white/35 text-xs"> · {task.minutes} min</span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/** Sectioned study notes. */
+function StudyNotesBlock({ block }: { block: ChatBlock }) {
+  const content = (block.content ?? {}) as Record<string, unknown>;
+  const sections = (Array.isArray(content.sections) ? content.sections : [])
+    .map((section) => (section ?? {}) as Record<string, unknown>)
+    .filter((section) => typeof section.title === 'string' && section.title.length > 0);
+  if (!sections.length) return null;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <NotebookPen className="w-4 h-4 text-lyo-300 shrink-0" aria-hidden="true" />
+        <div className="text-sm font-semibold text-white/85">
+          {typeof content.title === 'string' ? content.title : 'Study notes'}
+        </div>
+      </div>
+      <div className="space-y-3">
+        {sections.map((section, index) => (
+          <div key={index}>
+            <div className="text-xs font-medium text-white/70 mb-1">
+              <InlineMarkdown text={String(section.title ?? '')} />
+            </div>
+            <div className="prose-invert prose-sm max-w-none text-white/75">
+              <ReactMarkdown components={markdownComponents} {...MARKDOWN_MATH_PLUGINS}>
+                {normalizeLatexDelimiters(String(section.body ?? ''))}
+              </ReactMarkdown>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -383,6 +475,14 @@ export default function BlockRenderer({
             return <MediaBlock key={block.id} block={block} />;
           case 'quiz':
             return <CheckBlock key={block.id} block={block} message={message} />;
+          case 'flashcard':
+            // A deck carries `cards`; a lone card carries `front`/`back` and
+            // still goes through GenericBlock's single-card treatment.
+            return Array.isArray(block.content?.cards) ? (
+              <FlashcardDeckBlock key={block.id} block={block} message={message} />
+            ) : (
+              <GenericBlock key={block.id} block={block} />
+            );
           case 'interactive':
             if (block.subtype === 'teaching_visual' && parseTeachingVisual(block.content?.visual)) {
               return <TeachingVisualBlock key={block.id} block={block} message={message} />;
@@ -392,6 +492,15 @@ export default function BlockRenderer({
             }
             if (block.subtype === 'sourceNavigator') {
               return <SourceNavigatorBlock key={block.id} block={block} />;
+            }
+            if (block.subtype === 'studyPlan') {
+              return <StudyPlanBlock key={block.id} block={block} />;
+            }
+            if (block.subtype === 'slides') {
+              return <LessonSlidesBlock key={block.id} block={block} />;
+            }
+            if (block.subtype === 'studyNotes') {
+              return <StudyNotesBlock key={block.id} block={block} />;
             }
             return <GenericBlock key={block.id} block={block} />;
           case 'unknown':

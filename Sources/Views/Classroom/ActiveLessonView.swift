@@ -16,6 +16,7 @@ struct ActiveLessonView: View {
 
     let header: HeaderModel
     let steps: [LessonStep]
+    var isWaiting: Bool = false
     var onAdvance: (LessonStep) -> Void = { _ in }
     var onAskLyo: (LessonStep) -> Void = { _ in }
     var onExplainEasier: (LessonStep) -> Void = { _ in }
@@ -67,6 +68,7 @@ struct ActiveLessonView: View {
         var teachingExamples: [LiveLessonBlock] = []
         var teachingVisual: ClassroomTeachingVisual? = nil
         var activityId: String? = nil
+        var workspaceComponents: [SDUIComponent] = []
 
         enum SupportingBlock {
             case comparison(ConceptComparisonModel)
@@ -139,7 +141,7 @@ struct ActiveLessonView: View {
         withAnimation(.easeOut(duration: 0.2)) {
             chromeVisible = true
         }
-        guard !(requiresInteraction && !isInteractionCompleted) else { return }
+        guard !(requiresInteraction && !isInteractionCompleted), !lessonPaused else { return }
         chromeHideTask = Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
@@ -153,6 +155,7 @@ struct ActiveLessonView: View {
     /// it immediately; otherwise it brings chrome back and restarts the
     /// countdown.
     private func toggleChrome() {
+        guard !lessonPaused else { return }
         if chromeVisible {
             chromeHideTask?.cancel()
             withAnimation(.easeOut(duration: 0.2)) {
@@ -213,6 +216,10 @@ struct ActiveLessonView: View {
 
     // MARK: - Body
 
+    private var lessonPaused: Bool {
+        currentStep?.workspaceComponents.contains { $0.resolvedPresentationRole == "recovery" } == true
+    }
+
     var body: some View {
         ZStack {
             ClassroomTokens.backgroundGradient
@@ -239,7 +246,7 @@ struct ActiveLessonView: View {
                 if chromeVisible {
                     ClassroomHeaderView(
                         courseTitle: header.title,
-                        currentSceneText: "Warm-Up • Scene \(currentIndex + 1) of \(steps.count)",
+                        currentSceneText: lessonPaused ? "Paused · Retry to carry on" : "Scene \(currentIndex + 1) of \(steps.count)",
                         progress: progress,
                         onBack: onBack,
                         onMapTap: {
@@ -255,38 +262,17 @@ struct ActiveLessonView: View {
 
                 if let step = currentStep {
                     VStack(spacing: 12) {
-                        // ZONE 2: Classroom Stage & Avatars.
-                        // The Teacher's own portrait/status is permanent —
-                        // per the product decision that both the Teacher's
-                        // illustrated avatar and Lyo stay on screen at all
-                        // times. Only the classmate row hides with the rest
-                        // of the chrome.
-                        HStack(spacing: 12) {
-                            ClassroomTeacherStage(
-                                activeSpeaker: step.speakerName,
-                                teacherImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)",
-                                teacherName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName
-                            )
-
-                            Spacer()
-
-                            if chromeVisible {
-                                HStack(spacing: -10) {
-                                    ClassmateAvatarStage(name: "Maya", imageName: "student_genius", activeSpeaker: step.speakerName, status: "curious")
-                                    ClassmateAvatarStage(name: "Sam", imageName: "student_clever", activeSpeaker: step.speakerName, status: "thinking")
-                                    ClassmateAvatarStage(name: "Rio", imageName: "student_funny", activeSpeaker: step.speakerName, status: "grinning")
-                                    ClassmateAvatarStage(name: "Zara", imageName: "student_dumb", activeSpeaker: step.speakerName, status: "confused")
-                                }
-                                .transition(.opacity)
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.02), in: RoundedRectangle(cornerRadius: 16))
+                        // Lyo's explanation stays above the supporting teaching tools.
+                        ClassroomDialogueCard(
+                            speakerName: step.speakerName == "Teacher" ? "Lyo explains" : step.speakerName,
+                            speakerBadge: "Explanation",
+                            text: step.teachingText,
+                            speakerImageName: step.speakerName == "Teacher" ? "Mascot_Reading_1" : step.speakerImageName ?? "Mascot_Standing"
+                        )
                         .padding(.horizontal, ClassroomTokens.pagePadding)
-                        .frame(height: 70)
 
-                        // ZONE 3: Lyo Board (Interactive centerpiece) — permanent
+                        ScrollView {
+                        // Subject-independent teaching workspace.
                         LyoBoardView(
                             step: step,
                             quizSelections: quizSelections,
@@ -332,16 +318,16 @@ struct ActiveLessonView: View {
                             resetChromeTimer()
                         }
 
-                        // ZONE 4: Dialogue Card — permanent (the "teacher bubble")
-                        ClassroomDialogueCard(
-                            speakerName: step.speakerName == "Teacher" ? actualTeacherName : step.speakerName,
-                            speakerBadge: step.speakerBadge,
-                            text: step.teachingText,
-                            speakerImageName: step.speakerImageName ?? "lyo_teacher_\(teacherIndex)"
-                        )
-                        .padding(.horizontal, ClassroomTokens.pagePadding)
+                        }
+                        .frame(maxHeight: .infinity)
 
-                        Spacer()
+                        Button(action: goToNextScene) {
+                            Text(step.primaryActionLabel).font(.headline).frame(maxWidth: .infinity).padding(12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(DesignTokens.Colors.accentSecondary)
+                        .disabled(isWaiting || (requiresInteraction && !isInteractionCompleted))
+                        .padding(.horizontal, ClassroomTokens.pagePadding)
                     }
                     .id(step.id)
                     .transition(.asymmetric(
@@ -458,7 +444,7 @@ struct ActiveLessonView: View {
     // MARK: - Navigation Gestures
 
     private func goToNextScene() {
-        guard let step = currentStep else { return }
+        guard let step = currentStep, !isWaiting else { return }
 
         // Swipe locked if answer is required but not selected
         if requiresInteraction && !isInteractionCompleted {
@@ -683,7 +669,7 @@ struct LyoBoardView: View {
                 Circle()
                     .fill(ClassroomTokens.accent)
                     .frame(width: 6, height: 6)
-                Text("LYO BOARD")
+                Text("TEACHING WORKSPACE")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(ClassroomTokens.accent)
                 Spacer()
@@ -694,6 +680,9 @@ struct LyoBoardView: View {
             } else if step.requiresOpenResponse {
                 openResponseContent()
             } else {
+                ForEach(step.workspaceComponents.filter { ["recovery", "board", "feedback"].contains($0.resolvedPresentationRole) }) { component in
+                    ClassroomBoardCard(component: component, compactText: step.teachingVisual != nil)
+                }
                 ForEach(step.teachingExamples, id: \.id) { example in
                     BlockRendererView(block: example)
                 }
@@ -703,11 +692,16 @@ struct LyoBoardView: View {
                     }
                     .id(activityId)
                 }
+                ForEach(step.workspaceComponents.filter { ["reference", "details"].contains($0.resolvedPresentationRole) }) { component in
+                    ClassroomBoardCard(component: component)
+                }
                 switch step.supporting {
                 case .classroomQuiz(let component):
+                    Text("YOUR TURN").font(.caption.bold()).foregroundStyle(ClassroomTokens.accent)
                     quizContent(component)
 
                 case .classroomInput(let component):
+                    Text("YOUR TURN").font(.caption.bold()).foregroundStyle(ClassroomTokens.accent)
                     transferContent(component)
 
                 case .comparison(let model):
@@ -718,8 +712,9 @@ struct LyoBoardView: View {
                         .padding(4)
 
                 case .none:
-                    if step.teachingExamples.isEmpty && step.teachingVisual == nil {
-                        defaultExplanationContent()
+                    if step.teachingExamples.isEmpty && step.workspaceComponents.isEmpty && step.teachingVisual == nil {
+                        Text("Listen to Lyo, then continue when you're ready.")
+                            .font(.callout).foregroundStyle(ClassroomTokens.textSecondary)
                     }
                 }
             }
@@ -733,7 +728,7 @@ struct LyoBoardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(hex: "0D0E23").opacity(0.92))
+                .fill(DesignTokens.Colors.surface)
                 .shadow(color: ClassroomTokens.accentGlow.opacity(0.12), radius: 15)
         )
         .onChange(of: dictationTrigger) { _, _ in
@@ -1145,13 +1140,15 @@ struct ClassroomDialogueCard: View {
     let text: String
     let speakerImageName: String
 
+    @State private var showTranscript = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(speakerImageName)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 24, height: 24)
+                    .frame(width: 40, height: 40)
                     .background(Color.white.opacity(0.1), in: Circle())
 
                 Text(speakerName)
@@ -1165,16 +1162,26 @@ struct ClassroomDialogueCard: View {
                     .padding(.vertical, 2)
                     .background(ClassroomTokens.accent.opacity(0.15), in: Capsule())
                 Spacer()
+                Button("Transcript") { showTranscript = true }
+                    .font(.caption).foregroundStyle(ClassroomTokens.accent)
             }
 
             Text(text)
                 .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(ClassroomTokens.textSecondary)
                 .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3)
+                .accessibilityLabel(text)
         }
         .padding(14)
         .classroomGlassCard()
+        .sheet(isPresented: $showTranscript) {
+            NavigationStack {
+                ScrollView { Text(text).textSelection(.enabled).padding().frame(maxWidth: .infinity, alignment: .leading) }
+                    .navigationTitle("Lyo's explanation")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showTranscript = false } } }
+            }.presentationDetents([.medium, .large])
+        }
     }
 }
 

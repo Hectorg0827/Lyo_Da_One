@@ -117,7 +117,7 @@ private fun SmartBlockView(
         is SmartBlockContent.Interactive -> {
             val visual = content.payload.visual
             if (block.subtype == "teaching_visual" && visual != null && visual.isTeachingVisualValid()) {
-                TeachingVisualCard(visual, block.id, onVisualUpdate)
+                TeachingVisualCard(visual, block.id, onUpdate = onVisualUpdate)
             } else {
                 InteractiveBlockView(content.payload, block.subtype, color)
             }

@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookOpen, Sparkles, X, Loader2, AlertCircle } from 'lucide-react';
 import { Course } from '@/types';
@@ -102,7 +101,6 @@ const DIFFICULTY_FILTERS: { id: DifficultyFilter; label: string }[] = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CoursesPage() {
-  const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabId>('saved');
   useEffect(() => {
@@ -159,10 +157,6 @@ export default function CoursesPage() {
       return matchesSearch && (difficultyFilter === 'all' || c.difficulty === difficultyFilter);
     });
   }, [tabCourses, searchQuery, difficultyFilter]);
-
-  const handleCourseClick = (course: Course) => {
-    router.push(`/courses/${course.id}`);
-  };
 
   const inProgressCount = savedCourses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100).length;
   const completedCount = savedCourses.filter((c) => c.progress === 100).length;
@@ -330,7 +324,6 @@ export default function CoursesPage() {
                   >
                     <CourseCard
                       course={course}
-                      onClick={() => handleCourseClick(course)}
                     />
                   </motion.div>
                 ))}
