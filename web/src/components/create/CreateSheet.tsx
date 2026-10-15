@@ -24,6 +24,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import CreateClipModal from '@/components/clips/CreateClipModal';
+import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 type Mode = 'post' | 'clip' | 'course' | 'event';
 
@@ -92,7 +93,8 @@ export default function CreateSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('post');
+  const [mode, setMode] = useState<Mode>('course');
+  const visibleModes = MODES.filter(item => item.id === 'course' || (item.id === 'clip' && DISCOVER_LAUNCH_ENABLED) || ((item.id === 'post' || item.id === 'event') && COMMUNITY_LAUNCH_ENABLED));
   const [composingClip, setComposingClip] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -124,7 +126,7 @@ export default function CreateSheet({
     };
   }, [isOpen, onClose]);
 
-  const active = MODES.find((m) => m.id === mode)!;
+  const active = visibleModes.find((m) => m.id === mode) ?? visibleModes[0];
 
   const finish = (message: string, destination?: string) => {
     toast.success(message);
