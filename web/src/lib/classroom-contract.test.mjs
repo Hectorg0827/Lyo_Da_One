@@ -40,7 +40,8 @@ test('classroom URL preserves learner controls and course context', () => {
   assert.equal(url.searchParams.get('duration_minutes'), '20');
   assert.equal(url.searchParams.get('reduced_motion'), 'true');
   assert.equal(url.searchParams.get('language'), 'es-US');
-  assert.equal(url.searchParams.get('token'), 'token-1');
+  assert.equal(url.searchParams.has('token'), false,
+    'JWT must not appear in Classroom WebSocket URL or proxy logs');
 });
 
 test('invalid modes fail safely to solo teacher mode', () => {
