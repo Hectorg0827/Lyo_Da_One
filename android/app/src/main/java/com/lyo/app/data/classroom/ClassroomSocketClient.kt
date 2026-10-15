@@ -141,7 +141,6 @@ object ClassroomSocketClient {
             .addQueryParameter("duration_minutes", params.durationMinutes.toString())
             .addQueryParameter("language", "auto")
             .addQueryParameter("reduced_motion", params.reducedMotion.toString())
-            .addQueryParameter("token", token)
         params.courseId?.let { urlBuilder.addQueryParameter("course_id", it) }
         params.reviewConceptId?.let { urlBuilder.addQueryParameter("review_concept_id", it) }
         params.objective?.let { urlBuilder.addQueryParameter("objective", it) }
@@ -149,8 +148,8 @@ object ClassroomSocketClient {
 
         val request = Request.Builder()
             .url(urlBuilder.build())
-            // Belt-and-suspenders alongside the query token, matching iOS's
-            // LivingClassroomService (it sends both).
+            // JWT in the Authorization header only: no credential in URLs
+            // that Railway or intermediate proxies can record.
             .header("Authorization", "Bearer $token")
             .build()
 
