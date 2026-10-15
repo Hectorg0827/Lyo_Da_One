@@ -29,3 +29,7 @@ jobs:
           done
           echo "LYO public API health unavailable; cannot certify production."
           exit 1
+
+      - name: Verify required production API routes
+        working-directory: web
+        run: node scripts/probe-production-contract.mjs
