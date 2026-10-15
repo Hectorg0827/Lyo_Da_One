@@ -264,7 +264,6 @@ class LivingClassroomService: ObservableObject {
                     URLQueryItem(name: "session_id", value: resolvedSessionId),
                     URLQueryItem(name: "course_id", value: self.courseId),
                     URLQueryItem(name: "client_contract_version", value: "2"),
-                    URLQueryItem(name: "token", value: token),
                     URLQueryItem(name: "topic", value: resolvedTopic),
                     URLQueryItem(name: "language", value: language),
                     URLQueryItem(name: "mode", value: self.requestedMode),
@@ -308,8 +307,8 @@ class LivingClassroomService: ObservableObject {
                 let session = URLSession(configuration: .default)
                 self.urlSession = session
 
-                // Send the token both as a query param (required) and as a header for
-                // backends that also honor Authorization.
+                // Keep the JWT only in the Authorization header. Never place
+                // reusable credentials in URLs that proxies may log.
                 var request = URLRequest(url: url)
                 request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
