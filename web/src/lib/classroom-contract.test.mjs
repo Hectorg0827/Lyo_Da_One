@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CLASSROOM_RESUME_WINDOW_MS,
   CLASSROOM_STALL_NOTICE_MS,
@@ -178,3 +179,15 @@ test('a class that reached its end is not an unfinished one', () => {
   assert.equal(start.resumed, false, 'a finished class is started again, not resumed');
   assert.equal(start.sessionId, `course-7~2-${now}`);
 })
+
+test('Classroom authentication never adds JWT to web, iOS, or Android WebSocket URLs', () => {
+  const root = new URL('../../../', import.meta.url);
+  const web = readFileSync(new URL('web/src/stores/classroom-store.ts', root), 'utf8');
+  const ios = readFileSync(new URL('Sources/Services/LivingClassroomService.swift', root), 'utf8');
+  const android = readFileSync(new URL('android/app/src/main/java/com/lyo/app/data/classroom/ClassroomSocketClient.kt', root), 'utf8');
+  assert.match(web, /type: 'classroom_auth', token/);
+  assert.doesNotMatch(ios, /URLQueryItem\(name: "token"/);
+  assert.match(ios, /forHTTPHeaderField: "Authorization"/);
+  assert.doesNotMatch(android, /addQueryParameter\("token"/);
+  assert.match(android, /\.header\("Authorization", "Bearer \$token"\)/);
+});
